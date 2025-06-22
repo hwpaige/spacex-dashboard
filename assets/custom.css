@@ -23,17 +23,99 @@
     color: var(--text-color);
 }
 
-#bottom-bar {
+#bottom-bar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 5vh;
+    padding: 0 20px;
+}
+
+#left-bar, #right-bar {
     background-color: var(--bar-bg);
     color: var(--text-color);
     border-radius: 20px;
-    padding: 0 20px;
+    padding: 0 15px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     height: 5vh;
-    width: 100%;
     box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-family: 'D-DIN', sans-serif;
+    overflow: hidden;
+}
+
+#left-bar {
+    margin-right: 20px;
+}
+
+#right-bar {
+    margin-left: 20px;
+}
+
+#left-bar span {
+    font-size: 12px;
+    color: var(--text-color-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+#right-bar .dbc-switch {
+    width: 60px;
+    height: 24px;
+    font-size: 10px;
+    color: var(--text-color-secondary);
+    font-family: 'D-DIN', sans-serif;
+}
+
+#right-bar .custom-control-input:checked ~ .custom-control-label::before {
+    background-color: var(--text-color);
+}
+
+#right-bar .custom-control-input:checked ~ .custom-control-label::after {
+    transform: translateX(36px);
+}
+
+#right-bar .custom-control-label::before {
+    width: 20px;
+    height: 20px;
+    top: 2px;
+    left: 2px;
+}
+
+#right-bar .custom-control-label::after {
+    width: 16px;
+    height: 16px;
+    top: 4px;
+    left: 4px;
+}
+
+#right-bar .custom-control-label {
+    text-align: center;
+    line-height: 24px;
+}
+
+#right-bar .custom-control-input:not(:checked) ~ .custom-control-label::before {
+    content: 'Light';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+#right-bar .custom-control-input:checked ~ .custom-control-label::before {
+    content: 'Dark';
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+}
+
+#bottom-bar-container img {
+    width: 80px;
+    opacity: 0.3;
+    margin: 0 20px;
 }
 
 .card {

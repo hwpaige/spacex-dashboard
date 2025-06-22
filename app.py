@@ -256,7 +256,11 @@ column4 = html.Div([
 
 # Theme store and toggle
 theme_store = dcc.Store(id='theme-store', data='light')
-dark_mode_toggle = dbc.Switch(id='dark-mode-toggle', label='Dark Mode', value=False)
+dark_mode_toggle = dbc.Switch(
+    id='dark-mode-toggle',
+    value=False,
+    style={'width': '60px', 'height': '24px', 'fontSize': '10px', 'fontFamily': 'D-DIN, sans-serif'}
+)
 time_interval = dcc.Interval(id='time-interval', interval=1000, n_intervals=0)
 
 # Layout
@@ -277,28 +281,53 @@ app.layout = html.Div(
                     style={'margin': '0', 'padding': '5px'}
                 ),
                 html.Div(
-                    id='bottom-bar',
+                    id='bottom-bar-container',
                     children=[
-                        html.Div(id='left-info', children=[
-                            html.Span(id='current-time', style={'marginRight': '10px'}),
-                            html.Span('Weather: Sunny, 25°C')  # Placeholder
-                        ]),
+                        html.Div(
+                            id='left-bar',
+                            children=[
+                                html.Span(id='current-time', style={'fontSize': '12px', 'marginRight': '10px'}),
+                                html.Span('Weather: Sunny, 25°C', style={'fontSize': '12px'})
+                            ],
+                            style={
+                                'display': 'flex',
+                                'alignItems': 'center',
+                                'height': '5vh',
+                                'backgroundColor': 'var(--bar-bg)',
+                                'borderRadius': '20px',
+                                'padding': '0 15px',
+                                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                                'fontFamily': 'D-DIN, sans-serif',
+                                'marginRight': '20px'
+                            }
+                        ),
                         html.Img(
                             src='/assets/spacex-logo.png',
-                            style={'width': '80px', 'opacity': '0.3'}
+                            style={'width': '80px', 'opacity': '0.3', 'margin': '0 20px'}
                         ),
-                        html.Div(id='right-info', children=[dark_mode_toggle])
+                        html.Div(
+                            id='right-bar',
+                            children=[dark_mode_toggle],
+                            style={
+                                'display': 'flex',
+                                'alignItems': 'center',
+                                'height': '5vh',
+                                'backgroundColor': 'var(--bar-bg)',
+                                'borderRadius': '20px',
+                                'padding': '0 15px',
+                                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                                'fontFamily': 'D-DIN, sans-serif',
+                                'marginLeft': '20px'
+                            }
+                        )
                     ],
                     style={
                         'display': 'flex',
-                        'justifyContent': 'space-between',
+                        'justifyContent': 'center',
                         'alignItems': 'center',
-                        'height': '5vh',
                         'width': '100%',
-                        'backgroundColor': 'var(--bar-bg)',
-                        'borderRadius': '20px',
-                        'padding': '0 20px',
-                        'boxShadow': '0 2px 4px rgba(0,0,0,0.1)'
+                        'height': '5vh',
+                        'padding': '0 20px'
                     }
                 )
             ],
