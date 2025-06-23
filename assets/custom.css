@@ -64,69 +64,23 @@
     text-overflow: ellipsis;
 }
 
-#right-bar .custom-switch {
-    width: 100px;
-    height: 40px;
-    font-size: 14px;
-    font-family: 'D-DIN', sans-serif;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin: 0;
-    padding: 0;
-}
-
-#right-bar .custom-control-input:checked ~ .custom-control-label::before {
-    background-color: var(--text-color);
-    content: 'Dark';
-}
-
-#right-bar .custom-control-input:not(:checked) ~ .custom-control-label::before {
-    background-color: var(--text-color-secondary);
-    content: 'Light';
-}
-
-#right-bar .custom-control-label::before {
-    width: 50px;
-    height: 36px;
-    top: 2px;
-    left: 2px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    color: var(--card-bg);
-    border: none;
-    border-radius: 18px;
-}
-
-#right-bar .custom-control-input:checked ~ .custom-control-label::after {
-    transform: translateX(46px);
-}
-
-#right-bar .custom-control-label::after {
-    width: 32px;
-    height: 32px;
-    top: 4px;
-    left: 4px;
+#radar-theme-control {
     background-color: var(--card-bg);
-    border-radius: 16px;
+    color: var(--text-color);
+    border-radius: 8px;
+    padding: 5px;
 }
 
-#right-bar .custom-control-label {
-    width: 100px;
-    height: 40px;
-    margin: 0;
-    border-radius: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+#radar-theme-control .mantine-SegmentedControl-label {
+    font-size: 12px;
+    font-family: 'D-DIN', sans-serif;
+    color: var(--text-color);
+    padding: 5px 10px;
 }
 
-#bottom-bar-container img {
-    width: 80px;
-    opacity: 0.3;
-    margin: 0 10px;
+#radar-theme-control .mantine-SegmentedControl-label[data-active] {
+    background-color: var(--text-color-secondary);
+    color: var(--card-bg);
 }
 
 .card {

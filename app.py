@@ -1,8 +1,9 @@
 import sys
 import threading
-from dash import Dash, html, dcc, Input, Output
+from dash import Dash, html, dcc, Input, Output, dash
 import plotly.express as px
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 from PyQt5.QtWidgets import QApplication, QMainWindow
 from PyQt5.QtWebEngineWidgets import QWebEngineView
 from PyQt5.QtCore import QUrl
@@ -26,7 +27,7 @@ app = Dash(__name__, external_stylesheets=[
 
 # Cache for launch data
 launch_cache = {'data': None, 'timestamp': None}
-CACHE_DURATION = timedelta(minutes=12)  # Cache for 12 minutes, matching interval
+CACHE_DURATION = timedelta(minutes=12)
 
 # Sample chart data
 data = {'Category': ['A', 'B', 'C', 'D'], 'Values': [10, 20, 15, 25]}
@@ -36,14 +37,11 @@ fig = px.bar(data, x='Category', y='Values', title=None)
 def fetch_launches():
     global launch_cache
     current_time = datetime.now(pytz.UTC)
-
-    # Check if cache is valid
     if (launch_cache['data'] is not None and
             launch_cache['timestamp'] is not None and
             current_time - launch_cache['timestamp'] < CACHE_DURATION):
         logger.debug("Returning cached launch data")
         return launch_cache['data']
-
     try:
         upcoming = requests.get('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?lsp__name=SpaceX&limit=5', timeout=5).json()['results']
         past = requests.get('https://ll.thespacedevs.com/2.3.0/launches/previous/?lsp__name=SpaceX&limit=3&ordering=-net', timeout=5).json()['results']
@@ -96,9 +94,9 @@ def fetch_launches():
 launches = fetch_launches()
 
 # Categorize launches
-today = datetime(2025, 6, 23).date()  # UTC date: 00:00 UTC, June 23, 2025
+today = datetime(2025, 6, 23).date()
 this_week_end = today + timedelta(days=7)
-today_datetime = datetime(2025, 6, 23, 0, 0, tzinfo=pytz.UTC)  # 07:00 PM CDT = 00:00 UTC
+today_datetime = datetime(2025, 6, 23, 0, 10, tzinfo=pytz.UTC)
 this_week_end_datetime = datetime.combine(this_week_end, datetime.min.time(), tzinfo=pytz.UTC)
 
 # Styles with CSS variables
@@ -158,17 +156,34 @@ column1 = html.Div([
 ], style=column_style)
 
 column2 = html.Div([
-    html.Div('Controls', style=title_style),
-    html.Div([
-        dcc.Dropdown(
-            id='dropdown1',
-            options=[{'label': f'Option {i}', 'value': i} for i in range(1, 5)],
-            value=1,
-            style={'fontFamily': 'D-DIN, sans-serif'}
-        ),
-        html.P('Select an option.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)'})
-    ], style={'overflowY': 'auto', 'flex': '1'})
-], style=column_style)
+    html.Div('Weather Radar', style=title_style),
+    html.Iframe(
+        id='radar-iframe',
+        src='https://www.radaromega.com/radar?lat=25.9972&lon=-97.1553&zoom=8',
+        style={
+            'width': '100%',
+            'flex': '1',
+            'border': 'none',
+            'borderRadius': '8px'
+        }
+    ),
+    dmc.SegmentedControl(
+        id='radar-theme-control',
+        value='Dark',
+        data=[
+            {'label': 'Starbase', 'value': 'Starbase'},
+            {'label': 'Cape', 'value': 'Cape'},
+            {'label': 'Vandenberg', 'value': 'Vandenberg'},
+            {'label': 'Light', 'value': 'Light'},
+            {'label': 'Dark', 'value': 'Dark'}
+        ],
+        style={
+            'marginTop': '10px',
+            'width': '100%',
+            'fontFamily': 'D-DIN, sans-serif'
+        }
+    )
+], style={**column_style, 'paddingBottom': '50px'})
 
 def render_launches(launches):
     cdt_tz = pytz.timezone('America/Chicago')
@@ -298,13 +313,8 @@ column4 = html.Div([
     html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'marginTop': '5px'})
 ], style=column_style)
 
-# Theme store and toggle
+# Theme store
 theme_store = dcc.Store(id='theme-store', data='dark')
-dark_mode_toggle = dbc.Switch(
-    id='dark-mode-toggle',
-    value=True,
-    style={'width': '100px', 'height': '40px', 'fontSize': '14px', 'fontFamily': 'D-DIN, sans-serif'}
-)
 time_interval = dcc.Interval(id='time-interval', interval=1000, n_intervals=0)
 
 # Get next launch for countdown
@@ -377,8 +387,7 @@ app.layout = html.Div(
                         html.Div(
                             id='right-bar',
                             children=[
-                                html.Span(id='countdown', style={'fontSize': '12px', 'marginRight': '10px'}),
-                                dark_mode_toggle
+                                html.Span(id='countdown', style={'fontSize': '12px', 'marginRight': '10px'})
                             ],
                             style={
                                 'display': 'flex',
@@ -415,10 +424,19 @@ app.layout = html.Div(
 # Callbacks
 @app.callback(
     Output('theme-store', 'data'),
-    Input('dark-mode-toggle', 'value')
+    Output('radar-iframe', 'src'),
+    Input('radar-theme-control', 'value')
 )
-def update_theme(toggle_value):
-    return 'dark' if toggle_value else 'light'
+def update_radar_and_theme(value):
+    radar_urls = {
+        'Starbase': 'https://www.radaromega.com/radar?lat=25.9972&lon=-97.1553&zoom=8',
+        'Cape': 'https://www.radaromega.com/radar?lat=28.4889&lon=-80.5774&zoom=8',
+        'Vandenberg': 'https://www.radaromega.com/radar?lat=34.7320&lon=-120.5681&zoom=8'
+    }
+    if value in ['Light', 'Dark']:
+        theme = 'light' if value == 'Light' else 'dark'
+        return theme, dash.no_update
+    return dash.no_update, radar_urls.get(value, radar_urls['Starbase'])
 
 @app.callback(
     Output('root', 'className'),
@@ -458,7 +476,7 @@ def update_countdown(n):
     return calculate_countdown()
 
 def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=8050, debug=True, use_reloader=False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
