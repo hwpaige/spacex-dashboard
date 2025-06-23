@@ -9,6 +9,8 @@ from PyQt5.QtCore import QUrl
 import requests
 from datetime import datetime, timedelta
 import logging
+from dateutil.parser import parse
+import pytz
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
@@ -22,12 +24,26 @@ app = Dash(__name__, external_stylesheets=[
     'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ])
 
+# Cache for launch data
+launch_cache = {'data': None, 'timestamp': None}
+CACHE_DURATION = timedelta(minutes=12)  # Cache for 12 minutes, matching interval
+
 # Sample chart data
 data = {'Category': ['A', 'B', 'C', 'D'], 'Values': [10, 20, 15, 25]}
 fig = px.bar(data, x='Category', y='Values', title=None)
 
 # Fetch SpaceX launch data from LL2 API
 def fetch_launches():
+    global launch_cache
+    current_time = datetime.now(pytz.UTC)
+
+    # Check if cache is valid
+    if (launch_cache['data'] is not None and
+            launch_cache['timestamp'] is not None and
+            current_time - launch_cache['timestamp'] < CACHE_DURATION):
+        logger.debug("Returning cached launch data")
+        return launch_cache['data']
+
     try:
         upcoming = requests.get('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?lsp__name=SpaceX&limit=5', timeout=5).json()['results']
         past = requests.get('https://ll.thespacedevs.com/2.3.0/launches/previous/?lsp__name=SpaceX&limit=3&ordering=-net', timeout=5).json()['results']
@@ -36,6 +52,7 @@ def fetch_launches():
                            'mission': launch['name'],
                            'date': launch['net'].split('T')[0],
                            'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
+                           'net': launch['net'],
                            'status': launch['status']['name'],
                            'rocket': launch['rocket']['configuration']['name'],
                            'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
@@ -47,6 +64,7 @@ def fetch_launches():
                            'mission': launch['name'],
                            'date': launch['net'].split('T')[0],
                            'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
+                           'net': launch['net'],
                            'status': launch['status']['name'],
                            'rocket': launch['rocket']['configuration']['name'],
                            'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
@@ -55,29 +73,33 @@ def fetch_launches():
                        for launch in past
                    ]
         logger.debug(f"Fetched {len(launches)} launches from LL2 API")
+        launch_cache['data'] = launches
+        launch_cache['timestamp'] = current_time
         return launches
     except Exception as e:
         logger.error(f"LL2 API error: {e}")
+        if launch_cache['data'] is not None:
+            logger.debug("Returning cached launch data due to API failure")
+            return launch_cache['data']
         return [
-            {'mission': 'Transporter-14', 'date': '2025-06-22', 'time': '06:54:00', 'status': 'Go', 'rocket': 'Falcon 9', 'orbit': 'Sun-Synchronous', 'pad': 'SLC-40'},
-            {'mission': 'Axiom Mission 4', 'date': '2025-06-25', 'time': 'TBD', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
-            {'mission': 'Dragonfly (Titan)', 'date': '2025-07-01', 'time': 'TBD', 'status': 'TBD', 'rocket': 'Falcon Heavy', 'orbit': 'Heliocentric', 'pad': 'LC-39A'},
-            {'mission': 'TRACERS', 'date': '2025-07-15', 'time': 'TBD', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'SLC-40'},
-            {'mission': 'Crew-11', 'date': '2025-07-31', 'time': 'TBD', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
-            {'mission': 'Starship Flight 9', 'date': '2025-05-27', 'time': '14:30:00', 'status': 'Failure', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase'},
-            {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
-            {'mission': 'Starship Flight 8', 'date': '2025-03-06', 'time': '15:45:00', 'status': 'Failure', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase'}
+            {'mission': 'Transporter-14', 'date': '2025-06-22', 'time': '06:54:00', 'net': '2025-06-22T06:54:00Z', 'status': 'Go for Launch', 'rocket': 'Falcon 9', 'orbit': 'Sun-Synchronous', 'pad': 'SLC-40'},
+            {'mission': 'Axiom Mission 4', 'date': '2025-06-25', 'time': 'TBD', 'net': '2025-06-25T00:00:00Z', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
+            {'mission': 'Dragonfly (Titan)', 'date': '2025-07-01', 'time': 'TBD', 'net': '2025-07-01T00:00:00Z', 'status': 'TBD', 'rocket': 'Falcon Heavy', 'orbit': 'Heliocentric', 'pad': 'LC-39A'},
+            {'mission': 'TRACERS', 'date': '2025-07-15', 'time': 'TBD', 'net': '2025-07-15T00:00:00Z', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'SLC-40'},
+            {'mission': 'Crew-11', 'date': '2025-07-31', 'time': 'TBD', 'net': '2025-07-31T00:00:00Z', 'status': 'TBD', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
+            {'mission': 'Starship Flight 9', 'date': '2025-05-27', 'time': '14:30:00', 'net': '2025-05-27T14:30:00Z', 'status': 'Failure', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase'},
+            {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A'},
+            {'mission': 'Starship Flight 8', 'date': '2025-03-06', 'time': '15:45:00', 'net': '2025-03-06T15:45:00Z', 'status': 'Failure', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase'}
         ]
 
 # Initial launches
 launches = fetch_launches()
 
 # Categorize launches
-today = datetime(2025, 6, 22).date()
+today = datetime(2025, 6, 23).date()  # UTC date: 00:00 UTC, June 23, 2025
 this_week_end = today + timedelta(days=7)
-today_launches = [l for l in launches if l['date'] == today.strftime('%Y-%m-%d')]
-this_week_launches = [l for l in launches if today.strftime('%Y-%m-%d') < l['date'] <= this_week_end.strftime('%Y-%m-%d')]
-later_launches = [l for l in launches if l['date'] > this_week_end.strftime('%Y-%m-%d') or l['date'] < today.strftime('%Y-%m-%d')]
+today_datetime = datetime(2025, 6, 23, 0, 0, tzinfo=pytz.UTC)  # 07:00 PM CDT = 00:00 UTC
+this_week_end_datetime = datetime.combine(this_week_end, datetime.min.time(), tzinfo=pytz.UTC)
 
 # Styles with CSS variables
 column_style = {
@@ -149,9 +171,19 @@ column2 = html.Div([
 ], style=column_style)
 
 def render_launches(launches):
-    today_launches = [l for l in launches if l['date'] == today.strftime('%Y-%m-%d')]
-    this_week_launches = [l for l in launches if today.strftime('%Y-%m-%d') < l['date'] <= this_week_end.strftime('%Y-%m-%d')]
-    later_launches = [l for l in launches if l['date'] > this_week_end.strftime('%Y-%m-%d') or l['date'] < today.strftime('%Y-%m-%d')]
+    cdt_tz = pytz.timezone('America/Chicago')
+    today_launches = sorted(
+        [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() == today],
+        key=lambda x: parse(x['net'])
+    )
+    this_week_launches = sorted(
+        [l for l in launches if today < parse(l['net']).replace(tzinfo=pytz.UTC).date() <= this_week_end],
+        key=lambda x: parse(x['net'])
+    )
+    later_launches = sorted(
+        [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() > this_week_end],
+        key=lambda x: parse(x['net'])
+    )
     return html.Div([
         html.Div('Today', style=category_style) if today_launches else None,
         *[html.Div([
@@ -168,10 +200,14 @@ def render_launches(launches):
                 html.I(className='fas fa-map-marker-alt', style={'marginRight': '5px'}),
                 f"Pad: {launch['pad']}"
             ], style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
-            html.P(f"Date: {launch['date']} {launch['time']}", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(f"Date: {launch['date']} {launch['time']} UTC", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(
+                f"CDT: {parse(launch['net']).astimezone(cdt_tz).strftime('%Y-%m-%d %H:%M:%S') if launch['time'] != 'TBD' else 'TBD'}",
+                style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}
+            ),
             html.P(f"Status: {launch['status']}", style={
                 'fontSize': '12px',
-                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD'] else 'var(--status-failure)',
+                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD', 'Go for Launch'] else 'var(--status-failure)',
                 'margin': '0'
             })
         ], style=launch_card_style) for launch in today_launches],
@@ -190,10 +226,14 @@ def render_launches(launches):
                 html.I(className='fas fa-map-marker-alt', style={'marginRight': '5px'}),
                 f"Pad: {launch['pad']}"
             ], style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
-            html.P(f"Date: {launch['date']} {launch['time']}", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(f"Date: {launch['date']} {launch['time']} UTC", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(
+                f"CDT: {parse(launch['net']).astimezone(cdt_tz).strftime('%Y-%m-%d %H:%M:%S') if launch['time'] != 'TBD' else 'TBD'}",
+                style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}
+            ),
             html.P(f"Status: {launch['status']}", style={
                 'fontSize': '12px',
-                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD'] else 'var(--status-failure)',
+                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD', 'Go for Launch'] else 'var(--status-failure)',
                 'margin': '0'
             })
         ], style=launch_card_style) for launch in this_week_launches],
@@ -212,10 +252,14 @@ def render_launches(launches):
                 html.I(className='fas fa-map-marker-alt', style={'marginRight': '5px'}),
                 f"Pad: {launch['pad']}"
             ], style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
-            html.P(f"Date: {launch['date']} {launch['time']}", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(f"Date: {launch['date']} {launch['time']} UTC", style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}),
+            html.P(
+                f"CDT: {parse(launch['net']).astimezone(cdt_tz).strftime('%Y-%m-%d %H:%M:%S') if launch['time'] != 'TBD' else 'TBD'}",
+                style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '5px 0'}
+            ),
             html.P(f"Status: {launch['status']}", style={
                 'fontSize': '12px',
-                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD'] else 'var(--status-failure)',
+                'color': 'var(--status-success)' if launch['status'] in ['Success', 'Go', 'TBD', 'Go for Launch'] else 'var(--status-failure)',
                 'margin': '0'
             })
         ], style=launch_card_style) for launch in later_launches]
@@ -255,13 +299,36 @@ column4 = html.Div([
 ], style=column_style)
 
 # Theme store and toggle
-theme_store = dcc.Store(id='theme-store', data='light')
+theme_store = dcc.Store(id='theme-store', data='dark')
 dark_mode_toggle = dbc.Switch(
     id='dark-mode-toggle',
-    value=False,
-    style={'width': '60px', 'height': '24px', 'fontSize': '10px', 'fontFamily': 'D-DIN, sans-serif'}
+    value=True,
+    style={'width': '100px', 'height': '40px', 'fontSize': '14px', 'fontFamily': 'D-DIN, sans-serif'}
 )
 time_interval = dcc.Interval(id='time-interval', interval=1000, n_intervals=0)
+
+# Get next launch for countdown
+def get_next_launch():
+    current_time = datetime.now(pytz.UTC)
+    valid_launches = [l for l in launches if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
+    if not valid_launches:
+        return None
+    return min(valid_launches, key=lambda x: parse(x['net']))
+
+# Calculate countdown
+def calculate_countdown():
+    next_launch = get_next_launch()
+    if not next_launch:
+        return "No upcoming launches"
+    launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC)
+    current_time = datetime.now(pytz.UTC)
+    if launch_time <= current_time:
+        return "Launch in progress"
+    delta = launch_time - current_time
+    days = delta.days
+    hours, remainder = divmod(delta.seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
 # Layout
 app.layout = html.Div(
@@ -293,31 +360,39 @@ app.layout = html.Div(
                                 'display': 'flex',
                                 'alignItems': 'center',
                                 'height': '5vh',
+                                'flex': '1',
+                                'minWidth': '400px',
                                 'backgroundColor': 'var(--bar-bg)',
                                 'borderRadius': '20px',
                                 'padding': '0 15px',
                                 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
                                 'fontFamily': 'D-DIN, sans-serif',
-                                'marginRight': '20px'
+                                'marginRight': '10px'
                             }
                         ),
                         html.Img(
                             src='/assets/spacex-logo.png',
-                            style={'width': '80px', 'opacity': '0.3', 'margin': '0 20px'}
+                            style={'width': '80px', 'opacity': '0.3', 'margin': '0 10px'}
                         ),
                         html.Div(
                             id='right-bar',
-                            children=[dark_mode_toggle],
+                            children=[
+                                html.Span(id='countdown', style={'fontSize': '12px', 'marginRight': '10px'}),
+                                dark_mode_toggle
+                            ],
                             style={
                                 'display': 'flex',
                                 'alignItems': 'center',
+                                'justifyContent': 'flex-end',
                                 'height': '5vh',
+                                'flex': '1',
+                                'minWidth': '400px',
                                 'backgroundColor': 'var(--bar-bg)',
                                 'borderRadius': '20px',
                                 'padding': '0 15px',
                                 'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
                                 'fontFamily': 'D-DIN, sans-serif',
-                                'marginLeft': '20px'
+                                'marginLeft': '10px'
                             }
                         )
                     ],
@@ -327,7 +402,7 @@ app.layout = html.Div(
                         'alignItems': 'center',
                         'width': '100%',
                         'height': '5vh',
-                        'padding': '0 20px'
+                        'padding': '0 10px'
                     }
                 )
             ],
@@ -371,7 +446,16 @@ app.clientside_callback(
     Input('interval', 'n_intervals')
 )
 def update_launches(n):
-    return render_launches(fetch_launches())
+    global launches
+    launches = fetch_launches()
+    return render_launches(launches)
+
+@app.callback(
+    Output('countdown', 'children'),
+    Input('time-interval', 'n_intervals')
+)
+def update_countdown(n):
+    return calculate_countdown()
 
 def run_dash():
     app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
