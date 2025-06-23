@@ -169,6 +169,25 @@ radar_locations = {
 column2 = html.Div([
     html.Div('Radar', style=title_style),
     html.Div([
+        dmc.SegmentedControl(
+            id='radar-location',
+            value='Starbase',
+            data=[
+                {'label': 'Starbase', 'value': 'Starbase'},
+                {'label': 'Vandy', 'value': 'Vandy'},
+                {'label': 'Cape', 'value': 'Cape'}
+            ],
+            style={
+                'marginBottom': '6px',
+                'marginLeft': '15px',
+                'marginRight': '15px',
+                'fontFamily': 'D-DIN, sans-serif',
+                'width': 'calc(100% - 30px)',
+                'backgroundColor': 'var(--bar-bg)',
+                'padding': '1px',
+                'borderRadius': '3px'
+            }
+        ),
         html.Iframe(
             id='radar-iframe',
             src=radar_locations['Starbase'],
@@ -179,26 +198,6 @@ column2 = html.Div([
                 'borderRadius': '0 0 8px 8px'
             },
             allow='encrypted-media; fullscreen'
-        ),
-        dmc.SegmentedControl(
-            id='radar-location',
-            value='Starbase',
-            data=[
-                {'label': 'Starbase', 'value': 'Starbase'},
-                {'label': 'Vandy', 'value': 'Vandy'},
-                {'label': 'Cape', 'value': 'Cape'}
-            ],
-            style={
-                'marginTop': '6px',
-                'marginBottom': '6px',
-                'marginLeft': '15px',
-                'marginRight': '15px',
-                'fontFamily': 'D-DIN, sans-serif',
-                'width': 'calc(100% - 30px)',
-                'backgroundColor': 'var(--bar-bg)',
-                'padding': '1px',
-                'borderRadius': '3px'
-            }
         )
     ], style={
         'flex': '1',
@@ -313,6 +312,7 @@ column3 = html.Div([
 
 column4 = html.Div([
     html.Div('Videos', style=title_style),
+    html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'margin': '0 15px 6px'}),
     html.Iframe(
         id='youtube-iframe',
         src='https://www.youtube.com/embed/Pn6e1O5bEyA?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1',
@@ -323,9 +323,8 @@ column4 = html.Div([
             'borderRadius': '0 0 8px 8px'
         },
         allow='encrypted-media; autoplay; fullscreen; picture-in-picture'
-    ),
-    html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'marginTop': '5px', 'padding': '0 15px'})
-], style={**column_style, 'paddingBottom': '15px'})
+    )
+], style=column_style)
 
 # Theme store and toggle
 theme_store = dcc.Store(id='theme-store', data='dark')
@@ -414,7 +413,7 @@ app.layout = dmc.MantineProvider(
                             ),
                             html.Img(
                                 src='/assets/spacex-logo.png',
-                                style={'width': '80px', 'opacity': '0.3', 'margin': '0 10px'}
+                                style={'width': '80px', 'margin': '0 10px'}
                             ),
                             html.Div(
                                 id='right-bar',
