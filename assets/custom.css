@@ -64,25 +64,48 @@
     text-overflow: ellipsis;
 }
 
-#radar-theme-control {
-    background-color: var(--card-bg);
-    color: var(--text-color);
-    border-radius: 8px;
-    padding: 5px;
-}
-
-#radar-theme-control .mantine-SegmentedControl-label {
-    font-size: 12px;
-    font-family: 'D-DIN', sans-serif;
-    color: var(--text-color);
-    padding: 5px 10px;
-}
-
-#radar-theme-control .mantine-SegmentedControl-label[data-active] {
-    background-color: var(--text-color-secondary);
-    color: var(--card-bg);
+#bottom-bar-container img {
+    width: 80px;
+    opacity: 0.3;
+    margin: 0 10px;
 }
 
 .card {
+    background-color: var(--card-bg);
+}
+
+/* Segmented Control Styles */
+.mantine-SegmentedControl-root {
+    background-color: var(--bar-bg);
+    border-radius: 8px;
+    padding: 4px;
+    font-family: 'D-DIN', sans-serif;
+    border: 1px solid var(--text-color-secondary);
+}
+
+.mantine-SegmentedControl-label {
+    color: var(--text-color-secondary);
+    font-size: 14px;
+    padding: 10px 16px;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.mantine-SegmentedControl-label[data-active] {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.mantine-SegmentedControl-control {
+    transition: background-color 0.2s;
+}
+
+.mantine-SegmentedControl-control:hover .mantine-SegmentedControl-label:not([data-active]) {
+    background-color: rgba(255,255,255,0.15);
+    color: var(--text-color);
+}
+
+.mantine-SegmentedControl-label[data-active]:hover {
     background-color: var(--card-bg);
 }

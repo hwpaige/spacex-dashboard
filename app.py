@@ -1,6 +1,6 @@
 import sys
 import threading
-from dash import Dash, html, dcc, Input, Output, dash
+from dash import Dash, html, dcc, Input, Output
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
@@ -27,7 +27,7 @@ app = Dash(__name__, external_stylesheets=[
 
 # Cache for launch data
 launch_cache = {'data': None, 'timestamp': None}
-CACHE_DURATION = timedelta(minutes=12)
+CACHE_DURATION = timedelta(minutes=12)  # Cache for 12 minutes, matching interval
 
 # Sample chart data
 data = {'Category': ['A', 'B', 'C', 'D'], 'Values': [10, 20, 15, 25]}
@@ -37,11 +37,14 @@ fig = px.bar(data, x='Category', y='Values', title=None)
 def fetch_launches():
     global launch_cache
     current_time = datetime.now(pytz.UTC)
+
+    # Check if cache is valid
     if (launch_cache['data'] is not None and
             launch_cache['timestamp'] is not None and
             current_time - launch_cache['timestamp'] < CACHE_DURATION):
         logger.debug("Returning cached launch data")
         return launch_cache['data']
+
     try:
         upcoming = requests.get('https://ll.thespacedevs.com/2.3.0/launches/upcoming/?lsp__name=SpaceX&limit=5', timeout=5).json()['results']
         past = requests.get('https://ll.thespacedevs.com/2.3.0/launches/previous/?lsp__name=SpaceX&limit=3&ordering=-net', timeout=5).json()['results']
@@ -94,9 +97,9 @@ def fetch_launches():
 launches = fetch_launches()
 
 # Categorize launches
-today = datetime(2025, 6, 23).date()
+today = datetime(2025, 6, 23).date()  # UTC date: 00:00 UTC, June 23, 2025
 this_week_end = today + timedelta(days=7)
-today_datetime = datetime(2025, 6, 23, 0, 10, tzinfo=pytz.UTC)
+today_datetime = datetime(2025, 6, 23, 0, 0, tzinfo=pytz.UTC)  # 07:00 PM CDT = 00:00 UTC
 this_week_end_datetime = datetime.combine(this_week_end, datetime.min.time(), tzinfo=pytz.UTC)
 
 # Styles with CSS variables
@@ -124,7 +127,8 @@ title_style = {
     'top': '0',
     'backgroundColor': 'var(--card-bg)',
     'zIndex': '10',
-    'padding': '5px 0'
+    'padding': '5px 0',
+    'borderBottom': '1px solid var(--text-color-secondary)'
 }
 
 launch_card_style = {
@@ -155,35 +159,51 @@ column1 = html.Div([
     ], style={'overflowY': 'auto', 'flex': '1'})
 ], style=column_style)
 
+# Radar widget with segmented control
+radar_locations = {
+    'Starbase': 'https://embed.windy.com/embed.html?type=map&location=25.997,-97.155&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F',
+    'Vandy': 'https://embed.windy.com/embed.html?type=map&location=34.632,-120.611&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F',
+    'Cape': 'https://embed.windy.com/embed.html?type=map&location=28.392,-80.605&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F'
+}
+
 column2 = html.Div([
-    html.Div('Weather Radar', style=title_style),
-    html.Iframe(
-        id='radar-iframe',
-        src='https://www.radaromega.com/radar?lat=25.9972&lon=-97.1553&zoom=8',
-        style={
-            'width': '100%',
-            'flex': '1',
-            'border': 'none',
-            'borderRadius': '8px'
-        }
-    ),
-    dmc.SegmentedControl(
-        id='radar-theme-control',
-        value='Dark',
-        data=[
-            {'label': 'Starbase', 'value': 'Starbase'},
-            {'label': 'Cape', 'value': 'Cape'},
-            {'label': 'Vandenberg', 'value': 'Vandenberg'},
-            {'label': 'Light', 'value': 'Light'},
-            {'label': 'Dark', 'value': 'Dark'}
-        ],
-        style={
-            'marginTop': '10px',
-            'width': '100%',
-            'fontFamily': 'D-DIN, sans-serif'
-        }
-    )
-], style={**column_style, 'paddingBottom': '50px'})
+    html.Div('Radar', style=title_style),
+    html.Div([
+        html.Iframe(
+            id='radar-iframe',
+            src=radar_locations['Starbase'],
+            style={
+                'width': '100%',
+                'height': '100%',
+                'border': 'none',
+                'borderRadius': '8px'
+            },
+            allow='encrypted-media; fullscreen'
+        ),
+        dmc.SegmentedControl(
+            id='radar-location',
+            value='Starbase',
+            data=[
+                {'label': 'Starbase', 'value': 'Starbase'},
+                {'label': 'Vandy', 'value': 'Vandy'},
+                {'label': 'Cape', 'value': 'Cape'}
+            ],
+            style={
+                'marginTop': '10px',
+                'fontFamily': 'D-DIN, sans-serif',
+                'width': '100%',
+                'backgroundColor': 'var(--bar-bg)',
+                'padding': '4px',
+                'borderRadius': '6px'
+            }
+        )
+    ], style={
+        'flex': '1',
+        'display': 'flex',
+        'flexDirection': 'column',
+        'position': 'relative'
+    })
+], style=column_style)
 
 def render_launches(launches):
     cdt_tz = pytz.timezone('America/Chicago')
@@ -313,8 +333,24 @@ column4 = html.Div([
     html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'marginTop': '5px'})
 ], style=column_style)
 
-# Theme store
+# Theme store and toggle
 theme_store = dcc.Store(id='theme-store', data='dark')
+dark_mode_toggle = dmc.SegmentedControl(
+    id='dark-mode-toggle',
+    value='dark',
+    data=[
+        {'label': 'Light', 'value': 'light'},
+        {'label': 'Dark', 'value': 'dark'}
+    ],
+    style={
+        'width': '120px',
+        'fontFamily': 'D-DIN, sans-serif',
+        'fontSize': '14px',
+        'backgroundColor': 'var(--bar-bg)',
+        'padding': '4px',
+        'borderRadius': '6px'
+    }
+)
 time_interval = dcc.Interval(id='time-interval', interval=1000, n_intervals=0)
 
 # Get next launch for countdown
@@ -340,103 +376,98 @@ def calculate_countdown():
     minutes, seconds = divmod(remainder, 60)
     return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
-# Layout
-app.layout = html.Div(
-    id='root',
-    children=[
-        theme_store,
-        time_interval,
-        dbc.Container(
-            [
-                dbc.Row(
-                    [
-                        dbc.Col(column1, width=3),
-                        dbc.Col(column2, width=3),
-                        dbc.Col(column3, width=3),
-                        dbc.Col(column4, width=3),
-                    ],
-                    style={'margin': '0', 'padding': '5px'}
-                ),
-                html.Div(
-                    id='bottom-bar-container',
-                    children=[
-                        html.Div(
-                            id='left-bar',
-                            children=[
-                                html.Span(id='current-time', style={'fontSize': '12px', 'marginRight': '10px'}),
-                                html.Span('Weather: Sunny, 25°C', style={'fontSize': '12px'})
-                            ],
-                            style={
-                                'display': 'flex',
-                                'alignItems': 'center',
-                                'height': '5vh',
-                                'flex': '1',
-                                'minWidth': '400px',
-                                'backgroundColor': 'var(--bar-bg)',
-                                'borderRadius': '20px',
-                                'padding': '0 15px',
-                                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
-                                'fontFamily': 'D-DIN, sans-serif',
-                                'marginRight': '10px'
-                            }
-                        ),
-                        html.Img(
-                            src='/assets/spacex-logo.png',
-                            style={'width': '80px', 'opacity': '0.3', 'margin': '0 10px'}
-                        ),
-                        html.Div(
-                            id='right-bar',
-                            children=[
-                                html.Span(id='countdown', style={'fontSize': '12px', 'marginRight': '10px'})
-                            ],
-                            style={
-                                'display': 'flex',
-                                'alignItems': 'center',
-                                'justifyContent': 'flex-end',
-                                'height': '5vh',
-                                'flex': '1',
-                                'minWidth': '400px',
-                                'backgroundColor': 'var(--bar-bg)',
-                                'borderRadius': '20px',
-                                'padding': '0 15px',
-                                'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
-                                'fontFamily': 'D-DIN, sans-serif',
-                                'marginLeft': '10px'
-                            }
-                        )
-                    ],
-                    style={
-                        'display': 'flex',
-                        'justifyContent': 'center',
-                        'alignItems': 'center',
-                        'width': '100%',
-                        'height': '5vh',
-                        'padding': '0 10px'
-                    }
-                )
-            ],
-            fluid=True,
-            style={'width': '100vw', 'height': '100vh', 'margin': '0', 'padding': '0', 'overflow': 'hidden'}
-        )
-    ]
+# Layout with MantineProvider
+app.layout = dmc.MantineProvider(
+    theme={"fontFamily": "D-DIN, sans-serif"},
+    children=html.Div(
+        id='root',
+        children=[
+            theme_store,
+            time_interval,
+            dbc.Container(
+                [
+                    dbc.Row(
+                        [
+                            dbc.Col(column1, width=3),
+                            dbc.Col(column2, width=3),
+                            dbc.Col(column3, width=3),
+                            dbc.Col(column4, width=3),
+                        ],
+                        style={'margin': '0', 'padding': '5px'}
+                    ),
+                    html.Div(
+                        id='bottom-bar-container',
+                        children=[
+                            html.Div(
+                                id='left-bar',
+                                children=[
+                                    html.Span(id='current-time', style={'fontSize': '12px', 'marginRight': '10px'}),
+                                    html.Span('Weather: Sunny, 25°C', style={'fontSize': '12px'})
+                                ],
+                                style={
+                                    'display': 'flex',
+                                    'alignItems': 'center',
+                                    'height': '5vh',
+                                    'flex': '1',
+                                    'minWidth': '400px',
+                                    'backgroundColor': 'var(--bar-bg)',
+                                    'borderRadius': '20px',
+                                    'padding': '0 15px',
+                                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                                    'fontFamily': 'D-DIN, sans-serif',
+                                    'marginRight': '10px'
+                                }
+                            ),
+                            html.Img(
+                                src='/assets/spacex-logo.png',
+                                style={'width': '80px', 'opacity': '0.3', 'margin': '0 10px'}
+                            ),
+                            html.Div(
+                                id='right-bar',
+                                children=[
+                                    html.Span(id='countdown', style={'fontSize': '12px', 'marginRight': '10px'}),
+                                    dark_mode_toggle
+                                ],
+                                style={
+                                    'display': 'flex',
+                                    'alignItems': 'center',
+                                    'justifyContent': 'flex-end',
+                                    'height': '5vh',
+                                    'flex': '1',
+                                    'minWidth': '400px',
+                                    'backgroundColor': 'var(--bar-bg)',
+                                    'borderRadius': '20px',
+                                    'padding': '0 15px',
+                                    'boxShadow': '0 2px 4px rgba(0,0,0,0.1)',
+                                    'fontFamily': 'D-DIN, sans-serif',
+                                    'marginLeft': '10px'
+                                }
+                            )
+                        ],
+                        style={
+                            'display': 'flex',
+                            'justifyContent': 'center',
+                            'alignItems': 'center',
+                            'width': '100%',
+                            'height': '5vh',
+                            'padding': '0 10px'
+                        }
+                    )
+                ],
+                fluid=True,
+                style={'width': '100vw', 'height': '100vh', 'margin': '0', 'padding': '0', 'overflow': 'hidden'}
+            )
+        ]
+    )
 )
 
 # Callbacks
 @app.callback(
     Output('theme-store', 'data'),
-    Output('radar-iframe', 'src'),
-    Input('radar-theme-control', 'value')
+    Input('dark-mode-toggle', 'value')
 )
-def update_radar_and_theme(value):
-    radar_urls = {
-        'Starbase': 'https://www.radaromega.com/radar?lat=25.9972&lon=-97.1553&zoom=8',
-        'Cape': 'https://www.radaromega.com/radar?lat=28.4889&lon=-80.5774&zoom=8',
-        'Vandenberg': 'https://www.radaromega.com/radar?lat=34.7320&lon=-120.5681&zoom=8'
-    }
-    if value in ['Light', 'Dark']:
-        theme = 'light' if value == 'Light' else 'dark'
-        return theme, dash.no_update
-    return dash.no_update, radar_urls.get(value, radar_urls['Starbase'])
+def update_theme(toggle_value):
+    return toggle_value
 
 @app.callback(
     Output('root', 'className'),
@@ -444,6 +475,13 @@ def update_radar_and_theme(value):
 )
 def update_theme_class(theme):
     return f'theme-{theme}'
+
+@app.callback(
+    Output('radar-iframe', 'src'),
+    Input('radar-location', 'value')
+)
+def update_radar_location(location):
+    return radar_locations[location]
 
 app.clientside_callback(
     """
@@ -476,7 +514,7 @@ def update_countdown(n):
     return calculate_countdown()
 
 def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=True, use_reloader=False)
+    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
