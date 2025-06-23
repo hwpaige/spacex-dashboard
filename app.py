@@ -105,7 +105,7 @@ this_week_end_datetime = datetime.combine(this_week_end, datetime.min.time(), tz
 # Styles with CSS variables
 column_style = {
     'height': '85vh',
-    'padding': '15px',
+    'padding': '0',
     'borderRadius': '8px',
     'backgroundColor': 'var(--card-bg)',
     'boxShadow': '0 2px 8px rgba(0,0,0,0.1)',
@@ -127,7 +127,7 @@ title_style = {
     'top': '0',
     'backgroundColor': 'var(--card-bg)',
     'zIndex': '10',
-    'padding': '5px 0',
+    'padding': '10px 15px',
     'borderBottom': '1px solid var(--text-color-secondary)'
 }
 
@@ -155,15 +155,15 @@ column1 = html.Div([
     html.Div('Chart', style=title_style),
     html.Div([
         dcc.Graph(id='chart1', figure=fig, style={'margin': '0'}),
-        html.P('Sample chart widget.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)'})
+        html.P('Sample chart widget.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'padding': '15px'})
     ], style={'overflowY': 'auto', 'flex': '1'})
 ], style=column_style)
 
 # Radar widget with segmented control
 radar_locations = {
-    'Starbase': 'https://embed.windy.com/embed.html?type=map&location=25.997,-97.155&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F',
-    'Vandy': 'https://embed.windy.com/embed.html?type=map&location=34.632,-120.611&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F',
-    'Cape': 'https://embed.windy.com/embed.html?type=map&location=28.392,-80.605&zoom=8&layer=radar&pressure=false&metricWind=mph&metricTemp=%C2%B0F'
+    'Starbase': 'https://embed.windy.com/embed2.html?lat=25.997&lon=-97.155&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=25.997&detailLon=-97.155&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1',
+    'Vandy': 'https://embed.windy.com/embed2.html?lat=34.632&lon=-120.611&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=34.632&detailLon=-120.611&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1',
+    'Cape': 'https://embed.windy.com/embed2.html?lat=28.392&lon=-80.605&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=28.392&detailLon=-80.605&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1'
 }
 
 column2 = html.Div([
@@ -176,7 +176,7 @@ column2 = html.Div([
                 'width': '100%',
                 'height': '100%',
                 'border': 'none',
-                'borderRadius': '8px'
+                'borderRadius': '0 0 8px 8px'
             },
             allow='encrypted-media; fullscreen'
         ),
@@ -189,19 +189,24 @@ column2 = html.Div([
                 {'label': 'Cape', 'value': 'Cape'}
             ],
             style={
-                'marginTop': '10px',
+                'marginTop': '6px',
+                'marginBottom': '6px',
+                'marginLeft': '15px',
+                'marginRight': '15px',
                 'fontFamily': 'D-DIN, sans-serif',
-                'width': '100%',
+                'width': 'calc(100% - 30px)',
                 'backgroundColor': 'var(--bar-bg)',
-                'padding': '4px',
-                'borderRadius': '6px'
+                'padding': '1px',
+                'borderRadius': '3px'
             }
         )
     ], style={
         'flex': '1',
         'display': 'flex',
         'flexDirection': 'column',
-        'position': 'relative'
+        'position': 'relative',
+        'margin': '0',
+        'padding': '0'
     })
 ], style=column_style)
 
@@ -298,7 +303,7 @@ def render_launches(launches):
                 'margin': '0'
             })
         ], style=launch_card_style) for launch in later_launches]
-    ], style={'padding': '0'})
+    ], style={'padding': '0 15px'})
 
 column3 = html.Div([
     html.Div('Launches', style=title_style),
@@ -308,30 +313,19 @@ column3 = html.Div([
 
 column4 = html.Div([
     html.Div('Videos', style=title_style),
-    html.Div(
-        html.Iframe(
-            src='https://www.youtube.com/embed/Pn6e1O5bEyA?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1',
-            style={
-                'width': '100%',
-                'height': '100%',
-                'border': 'none',
-                'borderRadius': '8px',
-                'position': 'absolute',
-                'top': '0',
-                'left': '0'
-            },
-            allow='encrypted-media; autoplay; fullscreen; picture-in-picture'
-        ),
+    html.Iframe(
+        id='youtube-iframe',
+        src='https://www.youtube.com/embed/Pn6e1O5bEyA?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1',
         style={
-            'position': 'relative',
             'width': '100%',
-            'height': '95%',
-            'overflow': 'hidden',
-            'borderRadius': '8px'
-        }
+            'height': '100%',
+            'border': 'none',
+            'borderRadius': '0 0 8px 8px'
+        },
+        allow='encrypted-media; autoplay; fullscreen; picture-in-picture'
     ),
-    html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'marginTop': '5px'})
-], style=column_style)
+    html.P('Starship Flight 7 video.', style={'fontSize': '12px', 'color': 'var(--text-color-secondary)', 'marginTop': '5px', 'padding': '0 15px'})
+], style={**column_style, 'paddingBottom': '15px'})
 
 # Theme store and toggle
 theme_store = dcc.Store(id='theme-store', data='dark')
@@ -476,12 +470,26 @@ def update_theme(toggle_value):
 def update_theme_class(theme):
     return f'theme-{theme}'
 
-@app.callback(
-    Output('radar-iframe', 'src'),
+app.clientside_callback(
+    """
+    function(location) {
+        const radarLocations = {
+            'Starbase': 'https://embed.windy.com/embed2.html?lat=25.997&lon=-97.155&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=25.997&detailLon=-97.155&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1',
+            'Vandy': 'https://embed.windy.com/embed2.html?lat=34.632&lon=-120.611&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=34.632&detailLon=-120.611&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1',
+            'Cape': 'https://embed.windy.com/embed2.html?lat=28.392&lon=-80.605&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=28.392&detailLon=-80.605&metricWind=mph&metricTemp=%C2%B0F&radarRange=-1'
+        };
+        console.log('Updating radar to location: ' + location + ' with URL: ' + radarLocations[location]);
+        const iframe = document.getElementById('radar-iframe');
+        if (iframe) {
+            iframe.src = radarLocations[location] + '&rand=' + Math.random();
+            iframe.contentWindow.location.reload();
+        }
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output('radar-iframe', 'id'),  # Dummy output to trigger callback
     Input('radar-location', 'value')
 )
-def update_radar_location(location):
-    return radar_locations[location]
 
 app.clientside_callback(
     """
