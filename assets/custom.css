@@ -36,7 +36,7 @@
     background-color: var(--bar-bg);
     color: var(--text-color);
     border-radius: 20px;
-    padding: 0 15px;
+    padding: 0 10px;
     display: flex;
     align-items: center;
     height: 5vh;
@@ -60,8 +60,12 @@
     font-size: 12px;
     color: var(--text-color-secondary);
     white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin-right: 10px;
+}
+
+#current-weather {
+    display: inline;
+    font-size: 10px;
 }
 
 #bottom-bar-container img {
@@ -86,8 +90,8 @@
 /* Segmented Control Styles */
 .mantine-SegmentedControl-root {
     background-color: var(--bar-bg);
-    border-radius: 4px;
-    padding: 1px;
+    border-radius: 6px;
+    padding: 2px;
     font-family: 'D-DIN', sans-serif;
     border: 1px solid var(--text-color-secondary);
 }
@@ -95,8 +99,8 @@
 .mantine-SegmentedControl-label {
     color: var(--text-color-secondary);
     font-size: 11px;
-    padding: 4px 8px;
-    border-radius: 3px;
+    padding: 3px 6px;
+    border-radius: 4px;
     transition: all 0.2s;
 }
 
@@ -117,4 +121,20 @@
 
 .mantine-SegmentedControl-label[data-active]:hover {
     background-color: var(--card-bg);
+}
+
+/* Responsive adjustments for 320px width */
+@media (max-width: 320px) {
+    #left-bar, #right-bar {
+        min-width: 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 5px;
+    }
+    #left-bar span, #right-bar span, .mantine-SegmentedControl-root {
+        margin: 2px 5px;
+    }
+    #current-weather {
+        font-size: 9px;
+    }
 }
