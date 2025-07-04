@@ -10,7 +10,7 @@ import pytz
 import pandas as pd
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Initialize Dash app
@@ -740,4 +740,4 @@ def update_countdown(n):
     return calculate_countdown()
 
 if __name__ == '__main__':
-    app.run_server(host='0.0.0.0', port=8050, debug=False)
+    app.run(host='0.0.0.0', port=8050, debug=False)
