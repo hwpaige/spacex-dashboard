@@ -36,6 +36,8 @@
     background-color: var(--bar-bg);
     color: var(--text-color);
     border-radius: 20px;
+    -webkit-border-radius: 20px;
+    -moz-border-radius: 20px;
     padding: 0 10px;
     display: flex;
     align-items: center;
@@ -91,6 +93,8 @@
 .mantine-SegmentedControl-root {
     background-color: var(--bar-bg);
     border-radius: 6px;
+    -webkit-border-radius: 6px;
+    -moz-border-radius: 6px;
     padding: 2px;
     font-family: 'D-DIN', sans-serif;
     border: 1px solid var(--text-color-secondary);
@@ -98,9 +102,11 @@
 
 .mantine-SegmentedControl-label {
     color: var(--text-color-secondary);
-    font-size: 11px;
+    font-size: 10px;
     padding: 3px 6px;
     border-radius: 4px;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
     transition: all 0.2s;
 }
 
@@ -121,6 +127,32 @@
 
 .mantine-SegmentedControl-label[data-active]:hover {
     background-color: var(--card-bg);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--card-bg);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--text-color-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-color);
+}
+
+/* Fallback for non-WebKit browsers */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-color-secondary) var(--card-bg);
 }
 
 /* Responsive adjustments for 320px width */
