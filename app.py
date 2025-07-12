@@ -15,6 +15,7 @@ import pytz
 import pandas as pd
 import time
 
+# change
 # Set up logging
 logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
 logger = logging.getLogger(__name__)
