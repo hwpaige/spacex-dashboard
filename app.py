@@ -1,23 +1,17 @@
-import sys
-import threading
 import requests
 from dash import Dash, html, dcc, Input, Output
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import QUrl
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
 import pytz
 import pandas as pd
-import time
 
 # change
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Initialize Dash app
@@ -48,7 +42,7 @@ def fetch_launches():
             url = 'https://ll.thespacedevs.com/2.3.0/launches/previous/?lsp__name=SpaceX&net__gte=2025-01-01&net__lte=2025-06-24&limit=100'
             previous_launches = []
             while url:
-                print(f"Fetching previous launches: {url}")  # Debug print
+                logger.debug(f"Fetching previous launches: {url}")
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 data = response.json()
@@ -64,7 +58,7 @@ def fetch_launches():
                     'rocket': launch['rocket']['configuration']['name'],
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
-                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')  # Extract video_url
+                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
                 }
                 for launch in previous_launches
             ]
@@ -92,7 +86,7 @@ def fetch_launches():
             url = 'https://ll.thespacedevs.com/2.3.0/launches/upcoming/?lsp__name=SpaceX&limit=100'
             upcoming_launches = []
             while url:
-                print(f"Fetching upcoming launches: {url}")  # Debug print
+                logger.debug(f"Fetching upcoming launches: {url}")
                 response = requests.get(url, timeout=10)
                 response.raise_for_status()
                 data = response.json()
@@ -108,7 +102,7 @@ def fetch_launches():
                     'rocket': launch['rocket']['configuration']['name'],
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
-                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')  # Extract video_url
+                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
                 }
                 for launch in upcoming_launches
             ]
@@ -133,11 +127,11 @@ def fetch_launches():
 def fetch_weather(lat, lon, location):
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC"
-        print(f"Fetching weather for {location}: {url}")  # Debug print
+        logger.debug(f"Fetching weather for {location}: {url}")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
-        print(f"API response for {location}: {data}")  # Debug print
+        logger.debug(f"API response for {location}: {data}")
         now = datetime.now(pytz.UTC)
         hourly = data['hourly']
         times = [datetime.strptime(t, '%Y-%m-%dT%H:%M') for t in hourly['time']]
@@ -174,7 +168,7 @@ def initialize_weather():
     weather_data = {}
     for location, settings in location_settings.items():
         weather_data[location] = fetch_weather(settings['lat'], settings['lon'], location)
-    print(f"Initialized weather data: {weather_data}")  # Debug print
+    logger.debug(f"Initialized weather data: {weather_data}")
     return weather_data
 
 # Initial launches
@@ -242,7 +236,6 @@ fig.update_layout(
     height=300
 )
 fig.update_traces(line=dict(width=2))
-print(f"Chart font set to: D-DIN, color: #ffffff")  # Debug print
 
 # Categorize launches
 today = datetime(2025, 6, 24).date()
@@ -445,7 +438,7 @@ column3 = html.Div([
 
 column4 = html.Div([
     html.Div('Videos', style=title_style),
-    dcc.Store(id='video-store', data='current'),  # Store for video selection
+    dcc.Store(id='video-store', data='current'),
     html.Iframe(
         id='youtube-iframe',
         src='https://www.youtube.com/embed/Pn6e1O5bEyA?loop=1&playlist=Pn6e1O5bEyA&rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1',
@@ -496,9 +489,8 @@ location_toggle = dmc.SegmentedControl(
         'marginLeft': '10px'
     }
 )
-print(f"Location toggle data: {location_toggle.data}")  # Debug print
 time_interval = dcc.Interval(id='time-interval', interval=1000, n_intervals=0)
-weather_interval = dcc.Interval(id='weather-interval', interval=5*60*1000, n_intervals=0)  # 5 minutes
+weather_interval = dcc.Interval(id='weather-interval', interval=5*60*1000, n_intervals=0)
 
 # Get next launch for countdown
 def get_next_launch():
@@ -638,7 +630,7 @@ def update_theme_class(theme):
     Input('location-toggle', 'value')
 )
 def update_location_store(location):
-    print(f"Location toggle set to: {location}")  # Debug print
+    logger.debug(f"Location toggle set to: {location}")
     return location
 
 @app.callback(
@@ -667,7 +659,7 @@ def update_weather_cache(n):
 )
 def update_weather(location, weather_data):
     weather = weather_data.get(location, fetch_weather(location_settings[location]['lat'], location_settings[location]['lon'], location))
-    print(f"Updating weather for {location}: {weather}")  # Debug print
+    logger.debug(f"Updating weather for {location}: {weather}")
     return html.Span(
         f"Wind {weather['wind_speed_kts']:.1f} kts | {weather['wind_speed_ms']:.1f} m/s, {weather['wind_direction']}° | "
         f"Temp {weather['temperature_f']:.1f}°F | {weather['temperature_c']:.1f}°C | "
@@ -677,7 +669,7 @@ def update_weather(location, weather_data):
 @app.callback(
     [Output('youtube-iframe', 'src'),
      Output('video-description', 'children')],
-    [Input('video-toggle', 'value'),
+    [Input('video-store', 'value'),
      Input('interval', 'n_intervals')]
 )
 def update_video(video_selection, n):
@@ -690,7 +682,6 @@ def update_video(video_selection, n):
     # Fetch historical video
     historical_launch = get_historical_video()
     if historical_launch and historical_launch['video_url']:
-        # Convert YouTube URL to embed format if necessary
         video_url = historical_launch['video_url']
         if 'watch?v=' in video_url:
             video_id = video_url.split('watch?v=')[-1].split('&')[0]
@@ -749,25 +740,5 @@ app.clientside_callback(
 def update_countdown(n):
     return calculate_countdown()
 
-def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle('Dash in PyQt')
-        self.browser = QWebEngineView()
-        settings = self.browser.settings()
-        settings.setAttribute(settings.WebAttribute.PluginsEnabled, True)
-        settings.setAttribute(settings.WebAttribute.JavascriptEnabled, True)
-        settings.setAttribute(settings.WebAttribute.FullScreenSupportEnabled, True)
-        self.setCentralWidget(self.browser)
-        self.browser.setUrl(QUrl('http://localhost:8050'))
-        self.showFullScreen()
-
 if __name__ == '__main__':
-    dash_thread = threading.Thread(target=run_dash, daemon=True)
-    dash_thread.start()
-    qt_app = QApplication(sys.argv)
-    window = MainWindow()
-    sys.exit(qt_app.exec_())
+    app.run(host='0.0.0.0', port=8050, debug=False)
