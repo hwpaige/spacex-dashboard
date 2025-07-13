@@ -762,8 +762,6 @@ class MainWindow(QMainWindow):
         settings.setAttribute(settings.WebAttribute.FullScreenSupportEnabled, True)
         self.setCentralWidget(self.browser)
         self.browser.setUrl(QUrl('http://localhost:8050'))
-        # Resize small before fullscreen to avoid resize bug
-        self.resize(320, 1480)  # Match your display's native (unrotated) size
         self.showFullScreen()
 
 if __name__ == '__main__':
