@@ -18,7 +18,7 @@ import time
 from dash.exceptions import PreventUpdate
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Initialize Dash app
@@ -1283,7 +1283,7 @@ def calculate_countdown():
     return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
 def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=8050, debugTrue, use_reloader=False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
