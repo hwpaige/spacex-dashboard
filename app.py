@@ -1295,7 +1295,7 @@ class MainWindow(QMainWindow):
         self.showFullScreen()
 
 if __name__ == '__main__':
-    dash_thread = threading.Thread(target=run_dash, daemon=True)
+    dash_thread = threading.Thread(target=run_dash, daemon=False)
     dash_thread.start()
     time.sleep(3)  # Wait for Dash server to start
     qt_app = QApplication(sys.argv)
