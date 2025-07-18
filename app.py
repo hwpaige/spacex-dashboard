@@ -18,7 +18,7 @@ import time
 from dash.exceptions import PreventUpdate
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG, filename='/tmp/dash.log')
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Initialize Dash app
@@ -134,123 +134,171 @@ def fetch_launches():
             ]
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
 
-# Hardcoded F1 2025 sessions (partial, as in original; merged with fetched schedule)
+# Hardcoded F1 2025 schedule (full calendar)
+hardcoded_f1_schedule = [
+    {"meeting_key":1253,"circuit_key":63,"circuit_short_name":"Sakhir","meeting_code":"BRN","location":"Sakhir","country_key":36,"country_code":"BRN","country_name":"Bahrain","meeting_name":"Pre-Season Testing","meeting_official_name":"FORMULA 1 ARAMCO PRE-SEASON TESTING 2025","gmt_offset":"03:00:00","date_start":"2025-02-26T07:00:00+00:00","year":2025},
+    {"meeting_key":1254,"circuit_key":10,"circuit_short_name":"Melbourne","meeting_code":"AUS","location":"Melbourne","country_key":5,"country_code":"AUS","country_name":"Australia","meeting_name":"Australian Grand Prix","meeting_official_name":"FORMULA 1 LOUIS VUITTON AUSTRALIAN GRAND PRIX 2025","gmt_offset":"11:00:00","date_start":"2025-03-14T01:30:00+00:00","year":2025},
+    {"meeting_key":1255,"circuit_key":49,"circuit_short_name":"Shanghai","meeting_code":"CHN","location":"Shanghai","country_key":53,"country_code":"CHN","country_name":"China","meeting_name":"Chinese Grand Prix","meeting_official_name":"FORMULA 1 HEINEKEN CHINESE GRAND PRIX 2025","gmt_offset":"08:00:00","date_start":"2025-03-21T03:30:00+00:00","year":2025},
+    {"meeting_key":1256,"circuit_key":46,"circuit_short_name":"Suzuka","meeting_code":"JPN","location":"Suzuka","country_key":4,"country_code":"JPN","country_name":"Japan","meeting_name":"Japanese Grand Prix","meeting_official_name":"FORMULA 1 LENOVO JAPANESE GRAND PRIX 2025 ","gmt_offset":"09:00:00","date_start":"2025-04-04T02:30:00+00:00","year":2025},
+    {"meeting_key":1257,"circuit_key":63,"circuit_short_name":"Sakhir","meeting_code":"BRN","location":"Sakhir","country_key":36,"country_code":"BRN","country_name":"Bahrain","meeting_name":"Bahrain Grand Prix","meeting_official_name":"FORMULA 1 GULF AIR BAHRAIN GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-04-11T11:30:00+00:00","year":2025},
+    {"meeting_key":1258,"circuit_key":149,"circuit_short_name":"Jeddah","meeting_code":"KSA","location":"Jeddah","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","meeting_name":"Saudi Arabian Grand Prix","meeting_official_name":"FORMULA 1 STC SAUDI ARABIAN GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-04-18T13:30:00+00:00","year":2025},
+    {"meeting_key":1259,"circuit_key":151,"circuit_short_name":"Miami","meeting_code":"USA","location":"Miami","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"Miami Grand Prix","meeting_official_name":"FORMULA 1 CRYPTO.COM MIAMI GRAND PRIX 2025","gmt_offset":"-04:00:00","date_start":"2025-05-02T16:30:00+00:00","year":2025},
+    {"meeting_key":1260,"circuit_key":6,"circuit_short_name":"Imola","meeting_code":"ITA","location":"Imola","country_key":13,"country_code":"ITA","country_name":"Italy","meeting_name":"Emilia Romagna Grand Prix","meeting_official_name":"FORMULA 1 AWS GRAN PREMIO DEL MADE IN ITALY E DELL'EMILIA-ROMAGNA 2025","gmt_offset":"02:00:00","date_start":"2025-05-16T11:30:00+00:00","year":2025},
+    {"meeting_key":1261,"circuit_key":22,"circuit_short_name":"Monte Carlo","meeting_code":"MON","location":"Monaco","country_key":114,"country_code":"MON","country_name":"Monaco","meeting_name":"Monaco Grand Prix","meeting_official_name":"FORMULA 1 TAG HEUER GRAND PRIX DE MONACO 2025","gmt_offset":"02:00:00","date_start":"2025-05-23T11:30:00+00:00","year":2025},
+    {"meeting_key":1262,"circuit_key":15,"circuit_short_name":"Catalunya","meeting_code":"ESP","location":"Barcelona","country_key":1,"country_code":"ESP","country_name":"Spain","meeting_name":"Spanish Grand Prix","meeting_official_name":"FORMULA 1 ARAMCO GRAN PREMIO DE ESPAÑA 2025","gmt_offset":"02:00:00","date_start":"2025-05-30T11:30:00+00:00","year":2025},
+    {"meeting_key":1263,"circuit_key":23,"circuit_short_name":"Montreal","meeting_code":"CAN","location":"Montréal","country_key":46,"country_code":"CAN","country_name":"Canada","meeting_name":"Canadian Grand Prix","meeting_official_name":"FORMULA 1 PIRELLI GRAND PRIX DU CANADA 2025","gmt_offset":"-04:00:00","date_start":"2025-06-13T17:30:00+00:00","year":2025},
+    {"meeting_key":1264,"circuit_key":19,"circuit_short_name":"Spielberg","meeting_code":"AUT","location":"Spielberg","country_key":17,"country_code":"AUT","country_name":"Austria","meeting_name":"Austrian Grand Prix","meeting_official_name":"FORMULA 1 MSC CRUISES AUSTRIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-06-27T11:30:00+00:00","year":2025},
+    {"meeting_key":1277,"circuit_key":2,"circuit_short_name":"Silverstone","meeting_code":"GBR","location":"Silverstone","country_key":2,"country_code":"GBR","country_name":"United Kingdom","meeting_name":"British Grand Prix","meeting_official_name":"FORMULA 1 QATAR AIRWAYS BRITISH GRAND PRIX 2025","gmt_offset":"01:00:00","date_start":"2025-07-04T11:30:00+00:00","year":2025},
+    {"meeting_key":1278,"circuit_key":7,"circuit_short_name":"Spa","meeting_code":"BEL","location":"Spa","country_key":20,"country_code":"BEL","country_name":"Belgium","meeting_name":"Belgian Grand Prix","meeting_official_name":"FORMULA 1 ROLEX BELGIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-07-25T11:30:00+00:00","year":2025},
+    {"meeting_key":1279,"circuit_key":8,"circuit_short_name":"Hungaroring","meeting_code":"HUN","location":"Budapest","country_key":21,"country_code":"HUN","country_name":"Hungary","meeting_name":"Hungarian Grand Prix","meeting_official_name":"FORMULA 1 HUNGARIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-08-01T11:30:00+00:00","year":2025},
+    {"meeting_key":1280,"circuit_key":150,"circuit_short_name":"Zandvoort","meeting_code":"NED","location":"Zandvoort","country_key":22,"country_code":"NED","country_name":"Netherlands","meeting_name":"Dutch Grand Prix","meeting_official_name":"FORMULA 1 DUTCH GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-08-29T10:30:00+00:00","year":2025},
+    {"meeting_key":1281,"circuit_key":3,"circuit_short_name":"Monza","meeting_code":"ITA","location":"Monza","country_key":13,"country_code":"ITA","country_name":"Italy","meeting_name":"Italian Grand Prix","meeting_official_name":"FORMULA 1 PIRELLI GRAN PREMIO D'ITALIA 2025","gmt_offset":"02:00:00","date_start":"2025-09-05T11:30:00+00:00","year":2025},
+    {"meeting_key":1282,"circuit_key":152,"circuit_short_name":"Baku","meeting_code":"AZE","location":"Baku","country_key":23,"country_code":"AZE","country_name":"Azerbaijan","meeting_name":"Azerbaijan Grand Prix","meeting_official_name":"FORMULA 1 AZERBAIJAN GRAND PRIX 2025","gmt_offset":"04:00:00","date_start":"2025-09-19T09:30:00+00:00","year":2025},
+    {"meeting_key":1283,"circuit_key":62,"circuit_short_name":"Singapore","meeting_code":"SGP","location":"Singapore","country_key":24,"country_code":"SGP","country_name":"Singapore","meeting_name":"Singapore Grand Prix","meeting_official_name":"FORMULA 1 SINGAPORE GRAND PRIX 2025","gmt_offset":"08:00:00","date_start":"2025-10-03T09:30:00+00:00","year":2025},
+    {"meeting_key":1284,"circuit_key":4,"circuit_short_name":"Austin","meeting_code":"USA","location":"Austin","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"United States Grand Prix","meeting_official_name":"FORMULA 1 UNITED STATES GRAND PRIX 2025","gmt_offset":"-05:00:00","date_start":"2025-10-17T18:30:00+00:00","year":2025},
+    {"meeting_key":1285,"circuit_key":32,"circuit_short_name":"Mexico City","meeting_code":"MEX","location":"Mexico City","country_key":25,"country_code":"MEX","country_name":"Mexico","meeting_name":"Mexican Grand Prix","meeting_official_name":"FORMULA 1 MEXICAN GRAND PRIX 2025","gmt_offset":"-06:00:00","date_start":"2025-10-24T19:30:00+00:00","year":2025},
+    {"meeting_key":1286,"circuit_key":14,"circuit_short_name":"Sao Paulo","meeting_code":"BRA","location":"Sao Paulo","country_key":26,"country_code":"BRA","country_name":"Brazil","meeting_name":"Sao Paulo Grand Prix","meeting_official_name":"FORMULA 1 SAO PAULO GRAND PRIX 2025","gmt_offset":"-03:00:00","date_start":"2025-11-07T14:00:00+00:00","year":2025},
+    {"meeting_key":1287,"circuit_key":153,"circuit_short_name":"Las Vegas","meeting_code":"USA","location":"Las Vegas","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"Las Vegas Grand Prix","meeting_official_name":"FORMULA 1 LAS VEGAS GRAND PRIX 2025","gmt_offset":"-08:00:00","date_start":"2025-11-20T06:00:00+00:00","year":2025},
+    {"meeting_key":1288,"circuit_key":154,"circuit_short_name":"Lusail","meeting_code":"QAT","location":"Lusail","country_key":27,"country_code":"QAT","country_name":"Qatar","meeting_name":"Qatar Grand Prix","meeting_official_name":"FORMULA 1 QATAR GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-11-28T13:30:00+00:00","year":2025},
+    {"meeting_key":1289,"circuit_key":24,"circuit_short_name":"Abu Dhabi","meeting_code":"UAE","location":"Abu Dhabi","country_key":28,"country_code":"UAE","country_name":"United Arab Emirates","meeting_name":"Abu Dhabi Grand Prix","meeting_official_name":"FORMULA 1 ABU DHABI GRAND PRIX 2025","gmt_offset":"04:00:00","date_start":"2025-12-05T09:30:00+00:00","year":2025}
+]
+
 hardcoded_sessions = [
     {"meeting_key":1253,"session_key":9683,"location":"Sakhir","date_start":"2025-02-26T07:00:00+00:00","date_end":"2025-02-26T16:00:00+00:00","session_type":"Practice","session_name":"Day 1","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
     {"meeting_key":1253,"session_key":9684,"location":"Sakhir","date_start":"2025-02-27T07:00:00+00:00","date_end":"2025-02-27T16:00:00+00:00","session_type":"Practice","session_name":"Day 2","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
     {"meeting_key":1253,"session_key":9685,"location":"Sakhir","date_start":"2025-02-28T07:00:00+00:00","date_end":"2025-02-28T16:00:00+00:00","session_type":"Practice","session_name":"Day 3","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
-    # ... (your full hardcoded_sessions list here; omitted for brevity, but keep as-is in code)
+    {"meeting_key":1254,"session_key":9686,"location":"Melbourne","date_start":"2025-03-14T01:30:00+00:00","date_end":"2025-03-14T02:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9687,"location":"Melbourne","date_start":"2025-03-14T05:00:00+00:00","date_end":"2025-03-14T06:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9688,"location":"Melbourne","date_start":"2025-03-15T01:30:00+00:00","date_end":"2025-03-15T02:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9689,"location":"Melbourne","date_start":"2025-03-15T05:00:00+00:00","date_end":"2025-03-15T06:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9693,"location":"Melbourne","date_start":"2025-03-16T04:00:00+00:00","date_end":"2025-03-16T06:00:00+00:00","session_type":"Race","session_name":"Race","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9988,"location":"Shanghai","date_start":"2025-03-21T03:30:00+00:00","date_end":"2025-03-21T04:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9989,"location":"Shanghai","date_start":"2025-03-21T07:30:00+00:00","date_end":"2025-03-21T08:14:00+00:00","session_type":"Qualifying","session_name":"Sprint Qualifying","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9993,"location":"Shanghai","date_start":"2025-03-22T03:00:00+00:00","date_end":"2025-03-22T04:00:00+00:00","session_type":"Race","session_name":"Sprint","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9994,"location":"Shanghai","date_start":"2025-03-22T07:00:00+00:00","date_end":"2025-03-22T08:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9998,"location":"Shanghai","date_start":"2025-03-23T07:00:00+00:00","date_end":"2025-03-23T09:00:00+00:00","session_type":"Race","session_name":"Race","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1256,"session_key":9999,"location":"Suzuka","date_start":"2025-04-04T02:30:00+00:00","date_end":"2025-04-04T03:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10000,"location":"Suzuka","date_start":"2025-04-04T06:00:00+00:00","date_end":"2025-04-04T07:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10001,"location":"Suzuka","date_start":"2025-04-05T02:30:00+00:00","date_end":"2025-04-05T03:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10002,"location":"Suzuka","date_start":"2025-04-05T06:00:00+00:00","date_end":"2025-04-05T07:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10006,"location":"Suzuka","date_start":"2025-04-06T05:00:00+00:00","date_end":"2025-04-06T07:00:00+00:00","session_type":"Race","session_name":"Race","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10007,"location":"Sakhir","date_start":"2025-04-11T11:30:00+00:00","date_end":"2025-04-11T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10008,"location":"Sakhir","date_start":"2025-04-11T15:00:00+00:00","date_end":"2025-04-11T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10009,"location":"Sakhir","date_start":"2025-04-12T12:30:00+00:00","date_end":"2025-04-12T13:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10010,"location":"Sakhir","date_start":"2025-04-12T16:00:00+00:00","date_end":"2025-04-12T17:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10014,"location":"Sakhir","date_start":"2025-04-13T15:00:00+00:00","date_end":"2025-04-13T17:00:00+00:00","session_type":"Race","session_name":"Race","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10015,"location":"Jeddah","date_start":"2025-04-18T13:30:00+00:00","date_end":"2025-04-18T14:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10016,"location":"Jeddah","date_start":"2025-04-18T17:00:00+00:00","date_end":"2025-04-18T18:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10017,"location":"Jeddah","date_start":"2025-04-19T13:30:00+00:00","date_end":"2025-04-19T14:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10018,"location":"Jeddah","date_start":"2025-04-19T17:00:00+00:00","date_end":"2025-04-19T18:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10022,"location":"Jeddah","date_start":"2025-04-20T17:00:00+00:00","date_end":"2025-04-20T19:00:00+00:00","session_type":"Race","session_name":"Race","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10023,"location":"Miami","date_start":"2025-05-02T16:30:00+00:00","date_end":"2025-05-02T17:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10024,"location":"Miami","date_start":"2025-05-02T20:30:00+00:00","date_end":"2025-05-02T21:14:00+00:00","session_type":"Qualifying","session_name":"Sprint Qualifying","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10028,"location":"Miami","date_start":"2025-05-03T16:00:00+00:00","date_end":"2025-05-03T17:00:00+00:00","session_type":"Race","session_name":"Sprint","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10029,"location":"Miami","date_start":"2025-05-03T20:00:00+00:00","date_end":"2025-05-03T21:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10033,"location":"Miami","date_start":"2025-05-04T20:00:00+00:00","date_end":"2025-05-04T22:00:00+00:00","session_type":"Race","session_name":"Race","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9980,"location":"Imola","date_start":"2025-05-16T11:30:00+00:00","date_end":"2025-05-16T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9981,"location":"Imola","date_start":"2025-05-16T15:00:00+00:00","date_end":"2025-05-16T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9982,"location":"Imola","date_start":"2025-05-17T10:30:00+00:00","date_end":"2025-05-17T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9983,"location":"Imola","date_start":"2025-05-17T14:00:00+00:00","date_end":"2025-05-17T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9987,"location":"Imola","date_start":"2025-05-18T13:00:00+00:00","date_end":"2025-05-18T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9972,"location":"Monaco","date_start":"2025-05-23T11:30:00+00:00","date_end":"2025-05-23T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9973,"location":"Monaco","date_start":"2025-05-23T15:00:00+00:00","date_end":"2025-05-23T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9974,"location":"Monaco","date_start":"2025-05-24T10:30:00+00:00","date_end":"2025-05-24T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9975,"location":"Monaco","date_start":"2025-05-24T14:00:00+00:00","date_end":"2025-05-24T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9979,"location":"Monaco","date_start":"2025-05-25T13:00:00+00:00","date_end":"2025-05-25T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9964,"location":"Barcelona","date_start":"2025-05-30T11:30:00+00:00","date_end":"2025-05-30T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9965,"location":"Barcelona","date_start":"2025-05-30T15:00:00+00:00","date_end":"2025-05-30T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9966,"location":"Barcelona","date_start":"2025-05-31T10:30:00+00:00","date_end":"2025-05-31T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9967,"location":"Barcelona","date_start":"2025-05-31T14:00:00+00:00","date_end":"2025-05-31T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9971,"location":"Barcelona","date_start":"2025-06-01T13:00:00+00:00","date_end":"2025-06-01T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9956,"location":"Montréal","date_start":"2025-06-13T17:30:00+00:00","date_end":"2025-06-13T18:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9957,"location":"Montréal","date_start":"2025-06-13T21:00:00+00:00","date_end":"2025-06-13T22:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9958,"location":"Montréal","date_start":"2025-06-14T16:30:00+00:00","date_end":"2025-06-14T17:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9959,"location":"Montréal","date_start":"2025-06-14T20:00:00+00:00","date_end":"2025-06-14T21:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9963,"location":"Montréal","date_start":"2025-06-15T18:00:00+00:00","date_end":"2025-06-15T20:00:00+00:00","session_type":"Race","session_name":"Race","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9948,"location":"Spielberg","date_start":"2025-06-27T11:30:00+00:00","date_end":"2025-06-27T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9949,"location":"Spielberg","date_start":"2025-06-27T15:00:00+00:00","date_end":"2025-06-27T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9950,"location":"Spielberg","date_start":"2025-06-28T10:30:00+00:00","date_end":"2025-06-28T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9951,"location":"Spielberg","date_start":"2025-06-28T14:00:00+00:00","date_end":"2025-06-28T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9955,"location":"Spielberg","date_start":"2025-06-29T13:00:00+00:00","date_end":"2025-06-29T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9940,"location":"Silverstone","date_start":"2025-07-04T11:30:00+00:00","date_end":"2025-07-04T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9941,"location":"Silverstone","date_start":"2025-07-04T15:00:00+00:00","date_end":"2025-07-04T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9942,"location":"Silverstone","date_start":"2025-07-05T10:30:00+00:00","date_end":"2025-07-05T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9943,"location":"Silverstone","date_start":"2025-07-05T14:00:00+00:00","date_end":"2025-07-05T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9947,"location":"Silverstone","date_start":"2025-07-06T14:00:00+00:00","date_end":"2025-07-06T16:00:00+00:00","session_type":"Race","session_name":"Race","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025}
 ]
 
-# Fetch F1 data from Ergast API (replaces OpenF1/hardcoded)
+# Fetch F1 data from OpenF1 API
 def fetch_f1_data():
     global f1_cache
     if f1_cache is not None:
         return f1_cache
-    year = 2025
     try:
-        # Fetch schedule
-        schedule_url = f"https://ergast.com/api/f1/{year}.json"
-        schedule_resp = requests.get(schedule_url, timeout=10)
-        schedule_resp.raise_for_status()
-        schedule_data = schedule_resp.json()['MRData']['RaceTable']['Races']
-        meetings = [
-            {
-                "meeting_key": i+1,  # Simple key
-                "circuit_key": r['Circuit']['circuitId'],
-                "circuit_short_name": r['Circuit']['circuitName'],
-                "meeting_code": r['Circuit']['Location']['country'][:3].upper(),
-                "location": r['Circuit']['Location']['locality'],
-                "country_key": "",  # Not in Ergast, omit or map
-                "country_code": r['Circuit']['Location']['country'][:3].upper(),
-                "country_name": r['Circuit']['Location']['country'],
-                "meeting_name": r['raceName'],
-                "meeting_official_name": r['raceName'],
-                "gmt_offset": "",  # Not in Ergast, use hardcoded if needed
-                "date_start": f"{r['date']}T{r['time']}" if 'time' in r else f"{r['date']}T00:00:00Z",
-                "year": year
-            } for i, r in enumerate(schedule_data)
-        ]
-
-        # Merge hardcoded sessions (by meeting_key or name match)
+        meetings = hardcoded_f1_schedule
+        driver_standings = []
+        constructor_standings = []
         for meeting in meetings:
-            meeting['sessions'] = [s for s in hardcoded_sessions if s['meeting_key'] == meeting['meeting_key'] or s['circuit_short_name'] == meeting['circuit_short_name']]
+            # Assign hardcoded sessions
+            meeting['sessions'] = [s for s in hardcoded_sessions if s['meeting_key'] == meeting['meeting_key']]
 
-        # Determine current round
-        current_time = datetime.now(pytz.UTC)
-        current_round = max([i+1 for i, r in enumerate(schedule_data) if parse(r['date']).date() < current_time.date()] or [0])
+            # For standings, fetch race results if available
+            race_sessions = [s for s in meeting['sessions'] if s['session_name'] == 'Race']
+            if race_sessions:
+                session_key = race_sessions[0]['session_key']
+                results_url = f"https://api.openf1.org/v1/results?session_key={session_key}&position<=20"
+                results_resp = requests.get(results_url, timeout=10)
+                results_resp.raise_for_status()
+                results = results_resp.json()
+                # Assign points (simplified, no fastest lap)
+                points_map = {1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1}
+                for result in results:
+                    position = result['position']
+                    driver_number = result['driver_number']
+                    drivers_url = f"https://api.openf1.org/v1/drivers?session_key={session_key}&driver_number={driver_number}"
+                    drivers_resp = requests.get(drivers_url, timeout=10)
+                    drivers_resp.raise_for_status()
+                    driver = drivers_resp.json()[0]
+                    # Update driver standings
+                    for ds in driver_standings:
+                        if ds['Driver']['givenName'] == driver['first_name'] and ds['Driver']['familyName'] == driver['last_name']:
+                            ds['points'] += points_map.get(position, 0)
+                            break
+                    else:
+                        driver_standings.append({'position': len(driver_standings)+1, 'points': points_map.get(position, 0), 'Driver': {'givenName': driver['first_name'], 'familyName': driver['last_name']}})
+                    # Update constructor standings
+                    for cs in constructor_standings:
+                        if cs['Constructor']['name'] == driver['team_name']:
+                            cs['points'] += points_map.get(position, 0)
+                            break
+                    else:
+                        constructor_standings.append({'position': len(constructor_standings)+1, 'points': points_map.get(position, 0), 'Constructor': {'name': driver['team_name']}})
+        # Sort standings
+        driver_standings.sort(key=lambda x: x['points'], reverse=True)
+        for i, ds in enumerate(driver_standings):
+            ds['position'] = i+1
+        constructor_standings.sort(key=lambda x: x['points'], reverse=True)
+        for i, cs in enumerate(constructor_standings):
+            cs['position'] = i+1
 
-        # Fetch driver standings (current)
-        driver_url = f"https://ergast.com/api/f1/{year}/driverStandings.json?limit=30"
-        driver_resp = requests.get(driver_url, timeout=10)
-        driver_resp.raise_for_status()
-        driver_data = driver_resp.json()['MRData']['StandingsTable']['StandingsLists'][0]['DriverStandings'] if driver_resp.json()['MRData']['StandingsTable']['StandingsLists'] else []
-        driver_standings = [
-            {
-                'position': int(d['position']),
-                'points': int(d['points']),
-                'Driver': {'givenName': d['Driver']['givenName'], 'familyName': d['Driver']['familyName']}
-            } for d in driver_data
-        ]
-
-        # Fetch constructor standings
-        constructor_url = f"https://ergast.com/api/f1/{year}/constructorStandings.json"
-        constructor_resp = requests.get(constructor_url, timeout=10)
-        constructor_resp.raise_for_status()
-        constructor_data = constructor_resp.json()['MRData']['StandingsTable']['StandingsLists'][0]['ConstructorStandings'] if constructor_resp.json()['MRData']['StandingsTable']['StandingsLists'] else []
-        constructor_standings = [
-            {
-                'position': int(c['position']),
-                'points': int(c['points']),
-                'Constructor': {'name': c['Constructor']['name']}
-            } for c in constructor_data
-        ]
-
-        # Fetch cumulative driver points for plot (top 5 current drivers)
-        top_drivers = [d['Driver']['familyName'] for d in driver_standings[:5]]
-        cumulative_points = {driver: [] for driver in top_drivers}
-        rounds = []
-        for round_num in range(1, current_round + 1):
-            round_url = f"https://ergast.com/api/f1/{year}/{round_num}/driverStandings.json"
-            round_resp = requests.get(round_url, timeout=10)
-            if round_resp.status_code == 200:
-                round_data = round_resp.json()['MRData']['StandingsTable']['StandingsLists'][0]['DriverStandings']
-                rounds.append(f"Round {round_num}")
-                for driver in top_drivers:
-                    points = next((int(s['points']) for s in round_data if s['Driver']['familyName'] == driver), 0)
-                    cumulative_points[driver].append(points)
-
-        f1_cache = {
-            'schedule': meetings,
-            'driver_standings': driver_standings,
-            'constructor_standings': constructor_standings,
-            'cumulative_points': cumulative_points,
-            'rounds': rounds
-        }
+        f1_cache = {'schedule': meetings, 'driver_standings': driver_standings, 'constructor_standings': constructor_standings}
         return f1_cache
     except Exception as e:
-        logger.error(f"Ergast API error: {e}")
-        # Fallback hardcoded (your original)
+        logger.error(f"OpenF1 API error: {e}")
         f1_cache = {
-            'schedule': hardcoded_f1_schedule,  # Your hardcoded
+            'schedule': hardcoded_f1_schedule,  # Use hardcoded without sessions
             'driver_standings': [
-                {'position': 1, 'points': 234, 'Driver': {'givenName': 'Oscar', 'familyName': 'Piastri'}},
-                {'position': 2, 'points': 226, 'Driver': {'givenName': 'Lando', 'familyName': 'Norris'}},
-                {'position': 3, 'points': 165, 'Driver': {'givenName': 'Max', 'familyName': 'Verstappen'}},
-                # Add more as needed
+                {'position': 1, 'points': 575, 'Driver': {'givenName': 'Max', 'familyName': 'Verstappen'}},
+                {'position': 2, 'points': 285, 'Driver': {'givenName': 'Sergio', 'familyName': 'Perez'}},
+                # Add more from real data
             ],
             'constructor_standings': [
-                {'position': 1, 'points': 460, 'Constructor': {'name': 'McLaren'}},
-                {'position': 2, 'points': 165, 'Constructor': {'name': 'Red Bull'}},
-                # Add more
-            ],
-            'cumulative_points': {  # Hypothetical fallback
-                'Piastri': [25, 50, 68, 93, 118, 143, 161, 186, 211, 229, 234],
-                'Norris': [18, 36, 54, 72, 90, 108, 126, 151, 176, 194, 226],
-                # Etc.
-            },
-            'rounds': [f"Round {i}" for i in range(1, 13)]
+                {'position': 1, 'points': 860, 'Constructor': {'name': 'Red Bull'}},
+                {'position': 2, 'points': 409, 'Constructor': {'name': 'Mercedes'}},
+                # Add more from real data
+            ]
         }
+        # Add hardcoded sessions to fallback schedule
         for meeting in f1_cache['schedule']:
             meeting['sessions'] = [s for s in hardcoded_sessions if s['meeting_key'] == meeting['meeting_key']]
         return f1_cache
@@ -993,44 +1041,19 @@ def update_column2(mode):
         return column2_initial
     else:
         data = fetch_f1_data()
-        cumulative = data['cumulative_points']
-        rounds = data['rounds']
-        df = pd.DataFrame(cumulative, index=rounds).T.reset_index()
-        df_melt = pd.melt(df, id_vars=['index'], value_vars=rounds, var_name='Round', value_name='Points')
-        color_map_f1 = {'Piastri': '#FF8700', 'Norris': '#FF5733', 'Verstappen': '#0600EF', 'Russell': '#00A3FF', 'Leclerc': '#DC0000'}  # Example colors
-        fig = px.line(
-            df_melt,
-            x='Round',
-            y='Points',
-            color='index',
-            title=None,
-            labels={'Round': 'Round', 'Points': 'Cumulative Points', 'index': 'Driver'},
-            color_discrete_map=color_map_f1
-        )
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font=dict(family='D-DIN, sans-serif', color='#ffffff'),
-            xaxis=dict(gridcolor='rgba(128,128,128,0.2)', title=None),
-            yaxis=dict(gridcolor='rgba(128,128,128,0.2)', title='Cumulative Points'),
-            showlegend=False,
-            margin=dict(l=20, r=20, t=20, b=20),
-            height=300
-        )
-        fig.update_traces(line_width=2)
-        custom_legend_f1 = html.Div([
-            html.Div([
-                html.Span('■', style={'color': color_map_f1[driver]}, 'marginRight': '5px', 'fontSize': '20px'}),
-                html.Span(f"{driver}: {cumulative[driver][-1]}", style={'color': 'var(--text-color-secondary)', 'fontSize': '11px'})
-            ], style={'display': 'flex', 'alignItems': 'center', 'marginRight': '15px'})
-            for driver in cumulative.keys()
-        ], style={'display': 'flex', 'justifyContent': 'center', 'marginTop': '10px', 'padding': '0 15px'})
+        races = data['schedule']
+        df = pd.DataFrame(races)
+        df['Start'] = pd.to_datetime(df['date_start'])
+        df['End'] = df['Start'] + timedelta(days=3)  # Adjusted to cover full weekend (Fri-Sun)
+        df['Race'] = df['meeting_name']
+        fig = px.timeline(df, x_start='Start', x_end='End', y='Race', color='circuit_short_name')
+        fig.update_yaxes(autorange="reversed")
+        current = datetime.now()
+        fig.add_vline(x=current, line_dash="dash", line_color="red")
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='white', margin=dict(l=20, r=20, t=20, b=20))
         return [
-            html.Div('Driver Points Over Time', style=title_style),
-            html.Div([
-                dcc.Graph(figure=fig, style={'height': 'calc(100% - 50px)'}),
-                custom_legend_f1
-            ], style={'overflowY': 'auto', 'flex': '1', 'display': 'flex', 'flexDirection': 'column', 'marginTop': '0'})
+            html.Div('Race Calendar', style=title_style),
+            dcc.Graph(figure=fig, style={'height': '100%', 'marginTop': '0'})
         ]
 
 @app.callback(
@@ -1094,7 +1117,7 @@ def update_column4(mode):
                 'Imola': {'lat': 44.3439, 'lon': 11.7167},
                 'Monte Carlo': {'lat': 43.7347, 'lon': 7.4206},
                 'Catalunya': {'lat': 41.5700, 'lon': 2.2611},
-                'Montreal': {'lat': 45.5, 'lon': -73.5228},
+                'Montreal': {'lat': 45.5000, 'lon': -73.5228},
                 'Spielberg': {'lat': 47.2197, 'lon': 14.7647},
                 'Silverstone': {'lat': 52.0786, 'lon': -1.0169},
                 'Spa': {'lat': 50.4372, 'lon': 5.9714},
@@ -1107,12 +1130,14 @@ def update_column4(mode):
                 'Mexico City': {'lat': 19.4042, 'lon': -99.0907},
                 'Sao Paulo': {'lat': -23.7036, 'lon': -46.6997},
                 'Las Vegas': {'lat': 36.1147, 'lon': -115.1728},
-                'Lusail': {'lat': 25.49, 'lon': 51.4542},
+                'Lusail': {'lat': 25.4900, 'lon': 51.4542},
                 'Abu Dhabi': {'lat': 24.4672, 'lon': 54.6031}
             }
             coords = circuit_coords.get(next_race['circuit_short_name'], {'lat': 0, 'lon': 0})
-            df_map = pd.DataFrame({'lat': [coords['lat']], 'lon': [coords['lon']], 'name': [next_race['circuit_short_name']]})
-            fig = px.scatter_mapbox(df_map, lat='lat', lon='lon', hover_name='name', zoom=10, mapbox_style="open-street-map")
+            lat = coords['lat']
+            lon = coords['lon']
+            df_map = pd.DataFrame({'lat': [lat], 'lon': [lon], 'name': [next_race['circuit_short_name']]})
+            fig = px.scatter_mapbox(df_map, lat='lat', lon='lon', hover_name='name', zoom=13, mapbox_style="open-street-map")
             fig.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             return [
                 html.Div('Next Race Location', style=title_style),
@@ -1161,8 +1186,8 @@ def update_weather(location, weather_data):
     weather = weather_data.get(location, fetch_weather(location_settings[location]['lat'], location_settings[location]['lon'], location))
     print(f"Updating weather for {location}: {weather}")  # Debug print
     return html.Span(
-        f"Wind {weather['wind_speed_kts']:.1f} kts / {weather['wind_speed_ms']:.1f} m/s, {weather['wind_direction']}° | "
-        f"Temp {weather['temperature_f']:.1f}°F / {weather['temperature_c']:.1f}°C | "
+        f"Wind {weather['wind_speed_kts']:.1f} kts | {weather['wind_speed_ms']:.1f} m/s, {weather['wind_direction']}° | "
+        f"Temp {weather['temperature_f']:.1f}°F | {weather['temperature_c']:.1f}°C | "
         f"Clouds {weather['cloud_cover']}%"
     )
 
@@ -1204,6 +1229,29 @@ app.clientside_callback(
      Input('location-toggle', 'value')]
 )
 
+@app.callback(
+    Output('countdown', 'children'),
+    Input('time-interval', 'n_intervals'),
+    State('mode-store', 'data')
+)
+def update_countdown(n, mode):
+    if mode == 'spacex':
+        return calculate_countdown()
+    else:
+        next_race = get_next_race()
+        if not next_race:
+            return "No upcoming races"
+        time_str = next_race['date_start']
+        launch_time = parse(time_str).replace(tzinfo=pytz.UTC)
+        current_time = datetime.now(pytz.UTC)
+        if launch_time <= current_time:
+            return "Race in progress"
+        delta = launch_time - current_time
+        days = delta.days
+        hours, remainder = divmod(delta.seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s to {next_race['meeting_name']}"
+
 def get_next_launch():
     current_time = datetime.now(pytz.UTC)
     valid_launches = [l for l in upcoming_launches if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
@@ -1234,31 +1282,8 @@ def calculate_countdown():
     minutes, seconds = divmod(remainder, 60)
     return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
-@app.callback(
-    Output('countdown', 'children'),
-    Input('time-interval', 'n_intervals'),
-    State('mode-store', 'data')
-)
-def update_countdown(n, mode):
-    if mode == 'spacex':
-        return calculate_countdown()
-    else:
-        next_race = get_next_race()
-        if not next_race:
-            return "No upcoming races"
-        time_str = next_race['date_start']
-        launch_time = parse(time_str).replace(tzinfo=pytz.UTC)
-        current_time = datetime.now(pytz.UTC)
-        if launch_time <= current_time:
-            return "Race in progress"
-        delta = launch_time - current_time
-        days = delta.days
-        hours, remainder = divmod(delta.seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s to {next_race['meeting_name']}"
-
 def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
+    app.run(host='0.0.0.0', port=8050, debug=True, use_reloader=False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
