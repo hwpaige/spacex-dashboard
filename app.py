@@ -1283,7 +1283,7 @@ def calculate_countdown():
     return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
 def run_dash():
-    app.run(host='0.0.0.0', port=8050, debugTrue, use_reloader=False)
+    app.run(host='0.0.0.0', port=8050, debug=True, use_reloader=False)
 
 class MainWindow(QMainWindow):
     def __init__(self):
