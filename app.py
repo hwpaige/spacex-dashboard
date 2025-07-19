@@ -1282,22 +1282,6 @@ def calculate_countdown():
     minutes, seconds = divmod(remainder, 60)
     return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
 
-def run_dash():
-    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
-
-class MainWindow(QMainWindow):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle('Dash in PyQt5')
-        self.browser = QWebEngineView()
-        self.browser.setUrl(QUrl('http://localhost:8050'))
-        self.setCentralWidget(self.browser)
-        self.showFullScreen()
 
 if __name__ == '__main__':
-    dash_thread = threading.Thread(target=run_dash, daemon=False)
-    dash_thread.start()
-    time.sleep(3)  # Wait for Dash server to start
-    qt_app = QApplication(sys.argv)
-    window = MainWindow()
-    sys.exit(qt_app.exec_())
+    app.run(host='0.0.0.0', port=8050, debug=False, use_reloader=False)
