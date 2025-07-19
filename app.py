@@ -5,9 +5,6 @@ from dash import Dash, html, dcc, Input, Output, State
 import plotly.express as px
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from PyQt5.QtWidgets import QApplication, QMainWindow
-from PyQt5.QtWebEngineWidgets import QWebEngineView
-from PyQt5.QtCore import QUrl
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
