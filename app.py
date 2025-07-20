@@ -50,26 +50,100 @@ launch_cache = {'previous': {'data': None, 'timestamp': None}, 'upcoming': {'dat
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
 f1_cache = None
 
-# Hardcoded F1 schedule (abbreviated; add full list from original if needed)
+# Hardcoded F1 schedule (full from user)
 hardcoded_f1_schedule = [
-    {"meeting_key": 1253, "circuit_key": 63, "circuit_short_name": "Sakhir", "meeting_code": "BRN",
-     "location": "Sakhir", "country_key": 36, "country_code": "BRN", "country_name": "Bahrain",
-     "meeting_name": "Pre-Season Testing", "meeting_official_name": "FORMULA 1 ARAMCO PRE-SEASON TESTING 2025",
-     "gmt_offset": "03:00:00", "date_start": "2025-02-26T07:00:00+00:00", "year": 2025},
-    {"meeting_key": 1254, "circuit_key": 10, "circuit_short_name": "Melbourne", "meeting_code": "AUS",
-     "location": "Melbourne", "country_key": 5, "country_code": "AUS", "country_name": "Australia",
-     "meeting_name": "Australian Grand Prix",
-     "meeting_official_name": "FORMULA 1 LOUIS VUITTON AUSTRALIAN GRAND PRIX 2025", "gmt_offset": "11:00:00",
-     "date_start": "2025-03-14T01:30:00+00:00", "year": 2025},
+    {"meeting_key":1253,"circuit_key":63,"circuit_short_name":"Sakhir","meeting_code":"BRN","location":"Sakhir","country_key":36,"country_code":"BRN","country_name":"Bahrain","meeting_name":"Pre-Season Testing","meeting_official_name":"FORMULA 1 ARAMCO PRE-SEASON TESTING 2025","gmt_offset":"03:00:00","date_start":"2025-02-26T07:00:00+00:00","year":2025},
+    {"meeting_key":1254,"circuit_key":10,"circuit_short_name":"Melbourne","meeting_code":"AUS","location":"Melbourne","country_key":5,"country_code":"AUS","country_name":"Australia","meeting_name":"Australian Grand Prix","meeting_official_name":"FORMULA 1 LOUIS VUITTON AUSTRALIAN GRAND PRIX 2025","gmt_offset":"11:00:00","date_start":"2025-03-14T01:30:00+00:00","year":2025},
+    {"meeting_key":1255,"circuit_key":49,"circuit_short_name":"Shanghai","meeting_code":"CHN","location":"Shanghai","country_key":53,"country_code":"CHN","country_name":"China","meeting_name":"Chinese Grand Prix","meeting_official_name":"FORMULA 1 HEINEKEN CHINESE GRAND PRIX 2025","gmt_offset":"08:00:00","date_start":"2025-03-21T03:30:00+00:00","year":2025},
+    {"meeting_key":1256,"circuit_key":46,"circuit_short_name":"Suzuka","meeting_code":"JPN","location":"Suzuka","country_key":4,"country_code":"JPN","country_name":"Japan","meeting_name":"Japanese Grand Prix","meeting_official_name":"FORMULA 1 LENOVO JAPANESE GRAND PRIX 2025 ","gmt_offset":"09:00:00","date_start":"2025-04-04T02:30:00+00:00","year":2025},
+    {"meeting_key":1257,"circuit_key":63,"circuit_short_name":"Sakhir","meeting_code":"BRN","location":"Sakhir","country_key":36,"country_code":"BRN","country_name":"Bahrain","meeting_name":"Bahrain Grand Prix","meeting_official_name":"FORMULA 1 GULF AIR BAHRAIN GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-04-11T11:30:00+00:00","year":2025},
+    {"meeting_key":1258,"circuit_key":149,"circuit_short_name":"Jeddah","meeting_code":"KSA","location":"Jeddah","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","meeting_name":"Saudi Arabian Grand Prix","meeting_official_name":"FORMULA 1 STC SAUDI ARABIAN GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-04-18T13:30:00+00:00","year":2025},
+    {"meeting_key":1259,"circuit_key":151,"circuit_short_name":"Miami","meeting_code":"USA","location":"Miami","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"Miami Grand Prix","meeting_official_name":"FORMULA 1 CRYPTO.COM MIAMI GRAND PRIX 2025","gmt_offset":"-04:00:00","date_start":"2025-05-02T16:30:00+00:00","year":2025},
+    {"meeting_key":1260,"circuit_key":6,"circuit_short_name":"Imola","meeting_code":"ITA","location":"Imola","country_key":13,"country_code":"ITA","country_name":"Italy","meeting_name":"Emilia Romagna Grand Prix","meeting_official_name":"FORMULA 1 AWS GRAN PREMIO DEL MADE IN ITALY E DELL'EMILIA-ROMAGNA 2025","gmt_offset":"02:00:00","date_start":"2025-05-16T11:30:00+00:00","year":2025},
+    {"meeting_key":1261,"circuit_key":22,"circuit_short_name":"Monte Carlo","meeting_code":"MON","location":"Monaco","country_key":114,"country_code":"MON","country_name":"Monaco","meeting_name":"Monaco Grand Prix","meeting_official_name":"FORMULA 1 TAG HEUER GRAND PRIX DE MONACO 2025","gmt_offset":"02:00:00","date_start":"2025-05-23T11:30:00+00:00","year":2025},
+    {"meeting_key":1262,"circuit_key":15,"circuit_short_name":"Catalunya","meeting_code":"ESP","location":"Barcelona","country_key":1,"country_code":"ESP","country_name":"Spain","meeting_name":"Spanish Grand Prix","meeting_official_name":"FORMULA 1 ARAMCO GRAN PREMIO DE ESPAÑA 2025","gmt_offset":"02:00:00","date_start":"2025-05-30T11:30:00+00:00","year":2025},
+    {"meeting_key":1263,"circuit_key":23,"circuit_short_name":"Montreal","meeting_code":"CAN","location":"Montréal","country_key":46,"country_code":"CAN","country_name":"Canada","meeting_name":"Canadian Grand Prix","meeting_official_name":"FORMULA 1 PIRELLI GRAND PRIX DU CANADA 2025","gmt_offset":"-04:00:00","date_start":"2025-06-13T17:30:00+00:00","year":2025},
+    {"meeting_key":1264,"circuit_key":19,"circuit_short_name":"Spielberg","meeting_code":"AUT","location":"Spielberg","country_key":17,"country_code":"AUT","country_name":"Austria","meeting_name":"Austrian Grand Prix","meeting_official_name":"FORMULA 1 MSC CRUISES AUSTRIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-06-27T11:30:00+00:00","year":2025},
+    {"meeting_key":1277,"circuit_key":2,"circuit_short_name":"Silverstone","meeting_code":"GBR","location":"Silverstone","country_key":2,"country_code":"GBR","country_name":"United Kingdom","meeting_name":"British Grand Prix","meeting_official_name":"FORMULA 1 QATAR AIRWAYS BRITISH GRAND PRIX 2025","gmt_offset":"01:00:00","date_start":"2025-07-04T11:30:00+00:00","year":2025},
+    {"meeting_key":1278,"circuit_key":7,"circuit_short_name":"Spa","meeting_code":"BEL","location":"Spa","country_key":20,"country_code":"BEL","country_name":"Belgium","meeting_name":"Belgian Grand Prix","meeting_official_name":"FORMULA 1 ROLEX BELGIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-07-25T11:30:00+00:00","year":2025},
+    {"meeting_key":1279,"circuit_key":8,"circuit_short_name":"Hungaroring","meeting_code":"HUN","location":"Budapest","country_key":21,"country_code":"HUN","country_name":"Hungary","meeting_name":"Hungarian Grand Prix","meeting_official_name":"FORMULA 1 HUNGARIAN GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-08-01T11:30:00+00:00","year":2025},
+    {"meeting_key":1280,"circuit_key":150,"circuit_short_name":"Zandvoort","meeting_code":"NED","location":"Zandvoort","country_key":22,"country_code":"NED","country_name":"Netherlands","meeting_name":"Dutch Grand Prix","meeting_official_name":"FORMULA 1 DUTCH GRAND PRIX 2025","gmt_offset":"02:00:00","date_start":"2025-08-29T10:30:00+00:00","year":2025},
+    {"meeting_key":1281,"circuit_key":3,"circuit_short_name":"Monza","meeting_code":"ITA","location":"Monza","country_key":13,"country_code":"ITA","country_name":"Italy","meeting_name":"Italian Grand Prix","meeting_official_name":"FORMULA 1 PIRELLI GRAN PREMIO D'ITALIA 2025","gmt_offset":"02:00:00","date_start":"2025-09-05T11:30:00+00:00","year":2025},
+    {"meeting_key":1282,"circuit_key":152,"circuit_short_name":"Baku","meeting_code":"AZE","location":"Baku","country_key":23,"country_code":"AZE","country_name":"Azerbaijan","meeting_name":"Azerbaijan Grand Prix","meeting_official_name":"FORMULA 1 AZERBAIJAN GRAND PRIX 2025","gmt_offset":"04:00:00","date_start":"2025-09-19T09:30:00+00:00","year":2025},
+    {"meeting_key":1283,"circuit_key":62,"circuit_short_name":"Singapore","meeting_code":"SGP","location":"Singapore","country_key":24,"country_code":"SGP","country_name":"Singapore","meeting_name":"Singapore Grand Prix","meeting_official_name":"FORMULA 1 SINGAPORE GRAND PRIX 2025","gmt_offset":"08:00:00","date_start":"2025-10-03T09:30:00+00:00","year":2025},
+    {"meeting_key":1284,"circuit_key":4,"circuit_short_name":"Austin","meeting_code":"USA","location":"Austin","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"United States Grand Prix","meeting_official_name":"FORMULA 1 UNITED STATES GRAND PRIX 2025","gmt_offset":"-05:00:00","date_start":"2025-10-17T18:30:00+00:00","year":2025},
+    {"meeting_key":1285,"circuit_key":32,"circuit_short_name":"Mexico City","meeting_code":"MEX","location":"Mexico City","country_key":25,"country_code":"MEX","country_name":"Mexico","meeting_name":"Mexican Grand Prix","meeting_official_name":"FORMULA 1 MEXICAN GRAND PRIX 2025","gmt_offset":"-06:00:00","date_start":"2025-10-24T19:30:00+00:00","year":2025},
+    {"meeting_key":1286,"circuit_key":14,"circuit_short_name":"Sao Paulo","meeting_code":"BRA","location":"Sao Paulo","country_key":26,"country_code":"BRA","country_name":"Brazil","meeting_name":"Sao Paulo Grand Prix","meeting_official_name":"FORMULA 1 SAO PAULO GRAND PRIX 2025","gmt_offset":"-03:00:00","date_start":"2025-11-07T14:00:00+00:00","year":2025},
+    {"meeting_key":1287,"circuit_key":153,"circuit_short_name":"Las Vegas","meeting_code":"USA","location":"Las Vegas","country_key":19,"country_code":"USA","country_name":"United States","meeting_name":"Las Vegas Grand Prix","meeting_official_name":"FORMULA 1 LAS VEGAS GRAND PRIX 2025","gmt_offset":"-08:00:00","date_start":"2025-11-20T06:00:00+00:00","year":2025},
+    {"meeting_key":1288,"circuit_key":154,"circuit_short_name":"Lusail","meeting_code":"QAT","location":"Lusail","country_key":27,"country_code":"QAT","country_name":"Qatar","meeting_name":"Qatar Grand Prix","meeting_official_name":"FORMULA 1 QATAR GRAND PRIX 2025","gmt_offset":"03:00:00","date_start":"2025-11-28T13:30:00+00:00","year":2025},
+    {"meeting_key":1289,"circuit_key":24,"circuit_short_name":"Abu Dhabi","meeting_code":"UAE","location":"Abu Dhabi","country_key":28,"country_code":"UAE","country_name":"United Arab Emirates","meeting_name":"Abu Dhabi Grand Prix","meeting_official_name":"FORMULA 1 ABU DHABI GRAND PRIX 2025","gmt_offset":"04:00:00","date_start":"2025-12-05T09:30:00+00:00","year":2025}
 ]
 
 hardcoded_sessions = [
-    {"meeting_key": 1253, "session_key": 9683, "location": "Sakhir", "date_start": "2025-02-26T07:00:00+00:00",
-     "date_end": "2025-02-26T16:00:00+00:00", "session_type": "Practice", "session_name": "Day 1", "country_key": 36,
-     "country_code": "BRN", "country_name": "Bahrain", "circuit_key": 63, "circuit_short_name": "Sakhir",
-     "gmt_offset": "03:00:00", "year": 2025},
+    {"meeting_key":1253,"session_key":9683,"location":"Sakhir","date_start":"2025-02-26T07:00:00+00:00","date_end":"2025-02-26T16:00:00+00:00","session_type":"Practice","session_name":"Day 1","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1253,"session_key":9684,"location":"Sakhir","date_start":"2025-02-27T07:00:00+00:00","date_end":"2025-02-27T16:00:00+00:00","session_type":"Practice","session_name":"Day 2","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1253,"session_key":9685,"location":"Sakhir","date_start":"2025-02-28T07:00:00+00:00","date_end":"2025-02-28T16:00:00+00:00","session_type":"Practice","session_name":"Day 3","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9686,"location":"Melbourne","date_start":"2025-03-14T01:30:00+00:00","date_end":"2025-03-14T02:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9687,"location":"Melbourne","date_start":"2025-03-14T05:00:00+00:00","date_end":"2025-03-14T06:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9688,"location":"Melbourne","date_start":"2025-03-15T01:30:00+00:00","date_end":"2025-03-15T02:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9689,"location":"Melbourne","date_start":"2025-03-15T05:00:00+00:00","date_end":"2025-03-15T06:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1254,"session_key":9693,"location":"Melbourne","date_start":"2025-03-16T04:00:00+00:00","date_end":"2025-03-16T06:00:00+00:00","session_type":"Race","session_name":"Race","country_key":5,"country_code":"AUS","country_name":"Australia","circuit_key":10,"circuit_short_name":"Melbourne","gmt_offset":"11:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9988,"location":"Shanghai","date_start":"2025-03-21T03:30:00+00:00","date_end":"2025-03-21T04:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9989,"location":"Shanghai","date_start":"2025-03-21T07:30:00+00:00","date_end":"2025-03-21T08:14:00+00:00","session_type":"Qualifying","session_name":"Sprint Qualifying","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9993,"location":"Shanghai","date_start":"2025-03-22T03:00:00+00:00","date_end":"2025-03-22T04:00:00+00:00","session_type":"Race","session_name":"Sprint","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9994,"location":"Shanghai","date_start":"2025-03-22T07:00:00+00:00","date_end":"2025-03-22T08:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1255,"session_key":9998,"location":"Shanghai","date_start":"2025-03-23T07:00:00+00:00","date_end":"2025-03-23T09:00:00+00:00","session_type":"Race","session_name":"Race","country_key":53,"country_code":"CHN","country_name":"China","circuit_key":49,"circuit_short_name":"Shanghai","gmt_offset":"08:00:00","year":2025},
+    {"meeting_key":1256,"session_key":9999,"location":"Suzuka","date_start":"2025-04-04T02:30:00+00:00","date_end":"2025-04-04T03:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10000,"location":"Suzuka","date_start":"2025-04-04T06:00:00+00:00","date_end":"2025-04-04T07:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10001,"location":"Suzuka","date_start":"2025-04-05T02:30:00+00:00","date_end":"2025-04-05T03:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10002,"location":"Suzuka","date_start":"2025-04-05T06:00:00+00:00","date_end":"2025-04-05T07:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1256,"session_key":10006,"location":"Suzuka","date_start":"2025-04-06T05:00:00+00:00","date_end":"2025-04-06T07:00:00+00:00","session_type":"Race","session_name":"Race","country_key":4,"country_code":"JPN","country_name":"Japan","circuit_key":46,"circuit_short_name":"Suzuka","gmt_offset":"09:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10007,"location":"Sakhir","date_start":"2025-04-11T11:30:00+00:00","date_end":"2025-04-11T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10008,"location":"Sakhir","date_start":"2025-04-11T15:00:00+00:00","date_end":"2025-04-11T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10009,"location":"Sakhir","date_start":"2025-04-12T12:30:00+00:00","date_end":"2025-04-12T13:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10010,"location":"Sakhir","date_start":"2025-04-12T16:00:00+00:00","date_end":"2025-04-12T17:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1257,"session_key":10014,"location":"Sakhir","date_start":"2025-04-13T15:00:00+00:00","date_end":"2025-04-13T17:00:00+00:00","session_type":"Race","session_name":"Race","country_key":36,"country_code":"BRN","country_name":"Bahrain","circuit_key":63,"circuit_short_name":"Sakhir","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10015,"location":"Jeddah","date_start":"2025-04-18T13:30:00+00:00","date_end":"2025-04-18T14:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10016,"location":"Jeddah","date_start":"2025-04-18T17:00:00+00:00","date_end":"2025-04-18T18:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10017,"location":"Jeddah","date_start":"2025-04-19T13:30:00+00:00","date_end":"2025-04-19T14:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10018,"location":"Jeddah","date_start":"2025-04-19T17:00:00+00:00","date_end":"2025-04-19T18:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1258,"session_key":10022,"location":"Jeddah","date_start":"2025-04-20T17:00:00+00:00","date_end":"2025-04-20T19:00:00+00:00","session_type":"Race","session_name":"Race","country_key":153,"country_code":"KSA","country_name":"Saudi Arabia","circuit_key":149,"circuit_short_name":"Jeddah","gmt_offset":"03:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10023,"location":"Miami","date_start":"2025-05-02T16:30:00+00:00","date_end":"2025-05-02T17:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10024,"location":"Miami","date_start":"2025-05-02T20:30:00+00:00","date_end":"2025-05-02T21:14:00+00:00","session_type":"Qualifying","session_name":"Sprint Qualifying","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10028,"location":"Miami","date_start":"2025-05-03T16:00:00+00:00","date_end":"2025-05-03T17:00:00+00:00","session_type":"Race","session_name":"Sprint","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10029,"location":"Miami","date_start":"2025-05-03T20:00:00+00:00","date_end":"2025-05-03T21:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1259,"session_key":10033,"location":"Miami","date_start":"2025-05-04T20:00:00+00:00","date_end":"2025-05-04T22:00:00+00:00","session_type":"Race","session_name":"Race","country_key":19,"country_code":"USA","country_name":"United States","circuit_key":151,"circuit_short_name":"Miami","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9980,"location":"Imola","date_start":"2025-05-16T11:30:00+00:00","date_end":"2025-05-16T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9981,"location":"Imola","date_start":"2025-05-16T15:00:00+00:00","date_end":"2025-05-16T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9982,"location":"Imola","date_start":"2025-05-17T10:30:00+00:00","date_end":"2025-05-17T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9983,"location":"Imola","date_start":"2025-05-17T14:00:00+00:00","date_end":"2025-05-17T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1260,"session_key":9987,"location":"Imola","date_start":"2025-05-18T13:00:00+00:00","date_end":"2025-05-18T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":13,"country_code":"ITA","country_name":"Italy","circuit_key":6,"circuit_short_name":"Imola","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9972,"location":"Monaco","date_start":"2025-05-23T11:30:00+00:00","date_end":"2025-05-23T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9973,"location":"Monaco","date_start":"2025-05-23T15:00:00+00:00","date_end":"2025-05-23T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9974,"location":"Monaco","date_start":"2025-05-24T10:30:00+00:00","date_end":"2025-05-24T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9975,"location":"Monaco","date_start":"2025-05-24T14:00:00+00:00","date_end":"2025-05-24T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1261,"session_key":9979,"location":"Monaco","date_start":"2025-05-25T13:00:00+00:00","date_end":"2025-05-25T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":114,"country_code":"MON","country_name":"Monaco","circuit_key":22,"circuit_short_name":"Monte Carlo","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9964,"location":"Barcelona","date_start":"2025-05-30T11:30:00+00:00","date_end":"2025-05-30T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9965,"location":"Barcelona","date_start":"2025-05-30T15:00:00+00:00","date_end":"2025-05-30T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9966,"location":"Barcelona","date_start":"2025-05-31T10:30:00+00:00","date_end":"2025-05-31T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9967,"location":"Barcelona","date_start":"2025-05-31T14:00:00+00:00","date_end":"2025-05-31T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1262,"session_key":9971,"location":"Barcelona","date_start":"2025-06-01T13:00:00+00:00","date_end":"2025-06-01T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":1,"country_code":"ESP","country_name":"Spain","circuit_key":15,"circuit_short_name":"Catalunya","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9956,"location":"Montréal","date_start":"2025-06-13T17:30:00+00:00","date_end":"2025-06-13T18:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9957,"location":"Montréal","date_start":"2025-06-13T21:00:00+00:00","date_end":"2025-06-13T22:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9958,"location":"Montréal","date_start":"2025-06-14T16:30:00+00:00","date_end":"2025-06-14T17:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9959,"location":"Montréal","date_start":"2025-06-14T20:00:00+00:00","date_end":"2025-06-14T21:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1263,"session_key":9963,"location":"Montréal","date_start":"2025-06-15T18:00:00+00:00","date_end":"2025-06-15T20:00:00+00:00","session_type":"Race","session_name":"Race","country_key":46,"country_code":"CAN","country_name":"Canada","circuit_key":23,"circuit_short_name":"Montreal","gmt_offset":"-04:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9948,"location":"Spielberg","date_start":"2025-06-27T11:30:00+00:00","date_end":"2025-06-27T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9949,"location":"Spielberg","date_start":"2025-06-27T15:00:00+00:00","date_end":"2025-06-27T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9950,"location":"Spielberg","date_start":"2025-06-28T10:30:00+00:00","date_end":"2025-06-28T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9951,"location":"Spielberg","date_start":"2025-06-28T14:00:00+00:00","date_end":"2025-06-28T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1264,"session_key":9955,"location":"Spielberg","date_start":"2025-06-29T13:00:00+00:00","date_end":"2025-06-29T15:00:00+00:00","session_type":"Race","session_name":"Race","country_key":17,"country_code":"AUT","country_name":"Austria","circuit_key":19,"circuit_short_name":"Spielberg","gmt_offset":"02:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9940,"location":"Silverstone","date_start":"2025-07-04T11:30:00+00:00","date_end":"2025-07-04T12:30:00+00:00","session_type":"Practice","session_name":"Practice 1","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9941,"location":"Silverstone","date_start":"2025-07-04T15:00:00+00:00","date_end":"2025-07-04T16:00:00+00:00","session_type":"Practice","session_name":"Practice 2","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9942,"location":"Silverstone","date_start":"2025-07-05T10:30:00+00:00","date_end":"2025-07-05T11:30:00+00:00","session_type":"Practice","session_name":"Practice 3","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9943,"location":"Silverstone","date_start":"2025-07-05T14:00:00+00:00","date_end":"2025-07-05T15:00:00+00:00","session_type":"Qualifying","session_name":"Qualifying","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025},
+    {"meeting_key":1277,"session_key":9947,"location":"Silverstone","date_start":"2025-07-06T14:00:00+00:00","date_end":"2025-07-06T16:00:00+00:00","session_type":"Race","session_name":"Race","country_key":2,"country_code":"GBR","country_name":"United Kingdom","circuit_key":2,"circuit_short_name":"Silverstone","gmt_offset":"01:00:00","year":2025}
 ]
-
 
 # Fetch SpaceX launch data
 def fetch_launches(first_load=False):
@@ -368,9 +442,12 @@ class EventCard(QWidget):
         layout.addWidget(title)
 
         if event_type in ['upcoming', 'previous']:
-            layout.addWidget(QLabel(f"Rocket: {event['rocket']}"))
-            layout.addWidget(QLabel(f"Orbit: {event['orbit']}"))
-            layout.addWidget(QLabel(f"Pad: {event['pad']}"))
+            rocket_label = QLabel(f"🚀 Rocket: {event['rocket']}")
+            layout.addWidget(rocket_label)
+            orbit_label = QLabel(f"🌍 Orbit: {event['orbit']}")
+            layout.addWidget(orbit_label)
+            pad_label = QLabel(f"📍 Pad: {event['pad']}")
+            layout.addWidget(pad_label)
             layout.addWidget(QLabel(f"Date: {event['date']} {event['time']} UTC"))
             layout.addWidget(QLabel(
                 f"{str(tz).split('/')[-1]}: {parse(event['net']).astimezone(tz).strftime('%Y-%m-%d %H:%M:%S') if event['time'] != 'TBD' else 'TBD'}"))
@@ -379,7 +456,8 @@ class EventCard(QWidget):
                 f"color: {'#00ff00' if event['status'] in ['Success', 'Go', 'TBD', 'Go for Launch'] else '#ff0000'};")
             layout.addWidget(status)
         else:
-            layout.addWidget(QLabel(f"Circuit: {event['circuit_short_name']}"))
+            circuit_label = QLabel(f"🏎️ Circuit: {event['circuit_short_name']}")
+            layout.addWidget(circuit_label)
             layout.addWidget(QLabel(f"Date: {parse(event['date_start']).astimezone(tz).strftime('%Y-%m-%d')}"))
             sessions = "\n".join(f"{s['session_name']}: {s['date_start']}" for s in
                                  sorted(event.get('sessions', []), key=lambda x: parse(x['date_start'])))
@@ -467,34 +545,28 @@ class SpaceXDashboard(QMainWindow):
             col_layout = QVBoxLayout(col)
             col_layout.setContentsMargins(0, 0, 0, 0)
             col.setStyleSheet("background-color: #2a2e2e; border-radius: 8px;")
-        columns_layout.addWidget(self.column1)
-        columns_layout.addWidget(self.column2)
-        columns_layout.addWidget(self.column3)
-        columns_layout.addWidget(self.column4)
+            columns_layout.addWidget(col, stretch=1)  # Equal width
         main_layout.addLayout(columns_layout)
 
-        # Bottom bar
+        # Bottom bar (transparent container)
         bottom_bar = QFrame()
         bottom_bar.setFixedHeight(30)
         bottom_bar_layout = QHBoxLayout(bottom_bar)
         bottom_bar_layout.setContentsMargins(10, 0, 10, 0)
-        bottom_bar.setStyleSheet("background-color: #2a2e2e; border-radius: 20px;")
+        bottom_bar.setStyleSheet("background-color: transparent;")
 
-        # Left bar
-        left_bar = QHBoxLayout()
+        # Left pill (time and weather)
+        left_pill = QFrame()
+        left_pill_layout = QHBoxLayout(left_pill)
+        left_pill_layout.setContentsMargins(5, 0, 5, 0)
+        left_pill.setStyleSheet("background-color: #2a2e2e; border-radius: 20px;")
         self.time_label = QLabel("00:00:00")
         self.weather_label = QLabel("")
-        self.location_control = SegmentedControl(
-            [{'label': loc, 'value': loc} for loc in ['Starbase', 'Vandy', 'Cape', 'Hawthorne']],
-            'Starbase',
-            self.update_weather_display
-        )
-        left_bar.addWidget(self.time_label)
-        left_bar.addWidget(self.weather_label)
-        left_bar.addWidget(self.location_control)
-        bottom_bar_layout.addLayout(left_bar)
+        left_pill_layout.addWidget(self.time_label)
+        left_pill_layout.addWidget(self.weather_label)
+        bottom_bar_layout.addWidget(left_pill)
 
-        # Logo (mode toggle)
+        # Logo
         self.mode_button = QPushButton()
         logo_path = "/home/harrison/Desktop/project/assets/spacex-logo.png"  # Absolute path for Banana Pi
         if not os.path.exists(logo_path):
@@ -502,19 +574,32 @@ class SpaceXDashboard(QMainWindow):
         self.mode_button.setIcon(QIcon(logo_path))
         self.mode_button.setIconSize(QSize(80, 30))
         self.mode_button.clicked.connect(self.toggle_mode)
+        self.mode_button.setFlat(True)
+        bottom_bar_layout.addStretch()
         bottom_bar_layout.addWidget(self.mode_button)
+        bottom_bar_layout.addStretch()
 
-        # Right bar
-        right_bar = QHBoxLayout()
+        # Right pill (countdown, location, theme)
+        right_pill = QFrame()
+        right_pill_layout = QHBoxLayout(right_pill)
+        right_pill_layout.setContentsMargins(5, 0, 5, 0)
+        right_pill.setStyleSheet("background-color: #2a2e2e; border-radius: 20px;")
         self.countdown_label = QLabel("No upcoming events")
+        self.location_control = SegmentedControl(
+            [{'label': loc, 'value': loc} for loc in ['Starbase', 'Vandy', 'Cape', 'Hawthorne']],
+            'Starbase',
+            self.update_weather_display
+        )
         self.theme_control = SegmentedControl(
             [{'label': 'Light', 'value': 'light'}, {'label': 'Dark', 'value': 'dark'}],
             'dark',
             self.update_theme
         )
-        right_bar.addWidget(self.countdown_label)
-        right_bar.addWidget(self.theme_control)
-        bottom_bar_layout.addLayout(right_bar)
+        right_pill_layout.addWidget(self.countdown_label)
+        right_pill_layout.addWidget(self.location_control)
+        right_pill_layout.addWidget(self.theme_control)
+        bottom_bar_layout.addWidget(right_pill)
+
         main_layout.addWidget(bottom_bar)
 
         # Initialize content
@@ -523,11 +608,21 @@ class SpaceXDashboard(QMainWindow):
 
     def update_theme(self, theme):
         logger.info(f"Updating theme to {theme}")
-        css = {
-            'light': "QMainWindow { background-color: #ffffff; } QLabel { color: #000000; } QListWidget { background-color: #f0f0f0; color: #000000; } QChartView { background-color: #f0f0f0; } QFrame { background-color: #f0f0f0; }",
-            'dark': "QMainWindow { background-color: #1c2526; } QLabel { color: #ffffff; } QListWidget { background-color: #2a2e2e; color: #ffffff; } QChartView { background-color: #2a2e2e; } QFrame { background-color: #2a2e2e; }"
-        }
-        self.setStyleSheet(css[theme])
+        if theme == 'light':
+            self.setStyleSheet("""
+                QMainWindow { background-color: #ffffff; }
+                QLabel { color: #000000; font-family: 'D-DIN', sans-serif; }
+                QListWidget { background-color: #f0f0f0; color: #000000; font-family: 'D-DIN', sans-serif; font-size: 12px; border: none; }
+                QChartView { background-color: #f0f0f0; }
+                QFrame { background-color: #f0f0f0; }
+            """)
+        else:
+            self.setStyleSheet("""
+                QMainWindow { background-color: #1c2526; }
+                QLabel { color: #ffffff; font-family: 'D-DIN', sans-serif; }
+                QListWidget { background-color: #2a2e2e; color: #ffffff; font-family: 'D-DIN', sans-serif; font-size: 12px; border: none; }
+                QChartView { background-color: #2a2e2e; }
+            """)
 
     def toggle_mode(self):
         self.mode = 'f1' if self.mode == 'spacex' else 'spacex'
@@ -696,6 +791,24 @@ class SpaceXDashboard(QMainWindow):
             chart_view.setRenderHint(QPainter.Antialiasing)
             self.column1.layout().addWidget(title)
             self.column1.layout().addWidget(chart_view)
+
+            # Custom legend
+            legend_layout = QHBoxLayout()
+            legend_layout.setContentsMargins(0, 0, 0, 0)
+            color_map = {'Starship': '#FF5733', 'Falcon 9': '#33CFFF', 'Falcon Heavy': '#FFC107'}
+            totals = {rocket: int(df_pivot[rocket].iloc[-1]) if rocket in df_pivot.columns else 0 for rocket in color_map.keys()}
+            for rocket in color_map.keys():
+                legend_item = QHBoxLayout()
+                square = QLabel("■")
+                square.setStyleSheet(f"color: {color_map[rocket]}; font-size: 20px;")
+                label = QLabel(f"{rocket}: {totals[rocket]}")
+                label.setStyleSheet("font-size: 11px; color: #999999;")
+                legend_item.addWidget(square)
+                legend_item.addWidget(label)
+                legend_layout.addLayout(legend_item)
+            legend_widget = QWidget()
+            legend_widget.setLayout(legend_layout)
+            self.column1.layout().addWidget(legend_widget)
             logger.info("Added Launch Trends chart")
 
             # Column 2: Radar
