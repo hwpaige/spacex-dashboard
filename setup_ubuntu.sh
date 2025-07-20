@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # Banana Pi M4 Zero setup script for Armbian Ubuntu Server (e.g., 24.04 or 25.04)
-# Configures silent boot with SpaceX logo (Plymouth), SPI, WiFi, minimal GUI (Xorg, Openbox, LightDM), auto-login, Chromium kiosk mode, and launches SpaceX Dash app
+# Configures silent boot with SpaceX logo (Plymouth), SPI, WiFi, minimal GUI (Xorg, Openbox, LightDM), auto-login, and native PyQt5 SpaceX/F1 app
 # Run with: sudo bash setup_ubuntu.sh (from /home/harrison/Desktop)
 # Requires internet access, 5V 3A USB-C power supply, 16GB+ SD card
 # Logs to /home/harrison/setup_ubuntu.log
 # Assumes user 'harrison' exists; creates if not. Prompts for WiFi if not configured.
-# Uses 1024x768 for performance; adjust if needed for Waveshare 11.9inch HDMI LCD.
+# Uses 800x600 for performance; adjust if needed for Waveshare 11.9inch HDMI LCD.
 
 set -e
 
@@ -45,9 +45,9 @@ apt-get autoremove -y | tee -a "$LOG_FILE"
 apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
-# Step 3: Install system packages (Chromium for kiosk, minimal GUI, Plymouth)
+# Step 3: Install system packages (PyQt5, PyQtChart, minimal GUI, Plymouth)
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils chromium-browser unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full mesa-vulkan-drivers htop | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full mesa-vulkan-drivers htop libgbm1 libdrm2 -y | tee -a "$LOG_FILE"
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
@@ -71,7 +71,6 @@ echo "SPI enabled." | tee -a "$LOG_FILE"
 
 # Step 5: Configure silent boot with SpaceX logo and display
 echo "Configuring silent boot with SpaceX logo and display..." | tee -a "$LOG_FILE"
-# Set quiet boot parameters
 if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
     if grep -q "^extraargs=" "$CONFIG_FILE"; then
         sed -i 's/^extraargs=\(.*\)/extraargs=\1 quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CONFIG_FILE" || true
@@ -79,7 +78,6 @@ if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
         echo "extraargs=quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles" | tee -a "$CONFIG_FILE"
     fi
 fi
-# Configure Plymouth
 PLYMOUTH_CONF="/etc/plymouth/plymouth.conf"
 mkdir -p /etc/plymouth
 cat << EOF > "$PLYMOUTH_CONF"
@@ -89,10 +87,14 @@ ShowDelay=0
 DeviceTimeout=5
 EOF
 update-initramfs -u | tee -a "$LOG_FILE"
-# Xorg config for Waveshare LCD
 XORG_CONF="/etc/X11/xorg.conf.d/20-waveshare.conf"
 mkdir -p /etc/X11/xorg.conf.d | tee -a "$LOG_FILE"
 cat << EOF > "$XORG_CONF"
+Section "Device"
+    Identifier "Card0"
+    Driver "modesetting"
+    Option "AccelMethod" "glamor"
+EndSection
 Section "Monitor"
     Identifier "HDMI-1"
     Option "Rotate" "left"
@@ -103,7 +105,7 @@ Section "Screen"
     Monitor "HDMI-1"
     DefaultDepth 24
     SubSection "Display"
-        Modes "1024x768"
+        Modes "800x600"
     EndSubSection
 EndSection
 EOF
@@ -150,8 +152,8 @@ else
     echo "Warning: spacex_logo.png not found. Skipping custom logo." | tee -a "$LOG_FILE"
 fi
 
-# Step 7: Create virtual environment and install Dash dependencies
-echo "Creating virtual environment and installing dependencies..." | tee -a "$LOG_FILE"
+# Step 7: Create virtual environment and install dependencies
+echo "Creating virtual environment and install dependencies..." | tee -a "$LOG_FILE"
 VENV_DIR="$REPO_DIR/venv"
 if sudo -u "$USER" python3 -m venv "$VENV_DIR" | tee -a "$LOG_FILE"; then
     sudo -u "$USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel | tee -a "$LOG_FILE"
@@ -195,26 +197,24 @@ else
     echo "WiFi already configured." | tee -a "$LOG_FILE"
 fi
 
-# Step 10: Configure Dash app in Chromium kiosk mode
-echo "Configuring Dash app in Chromium kiosk mode..." | tee -a "$LOG_FILE"
+# Step 10: Configure PyQt app to launch
+echo "Configuring PyQt app to launch..." | tee -a "$LOG_FILE"
 OPENBOX_DIR="$HOME_DIR/.config/openbox"
 sudo -u "$USER" mkdir -p "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 AUTOSTART_FILE="$OPENBOX_DIR/autostart"
 sudo -u "$USER" rm -f "$AUTOSTART_FILE"
-# Create wrapper script
 WRAPPER_SCRIPT="$REPO_DIR/launch_app.sh"
 cat << EOF > "$WRAPPER_SCRIPT"
 #!/bin/bash
 APP_LOG="$HOME_DIR/app_launch.log"
 echo "Wrapper started at $(date)" > "\$APP_LOG"
 env >> "\$APP_LOG"
-"$VENV_DIR/bin/python" "$REPO_DIR/app.py" >> "\$APP_LOG" 2>&1 &
-sleep 5
-chromium-browser --noerrdialogs --disable-infobars --kiosk http://localhost:8050 >> "\$APP_LOG" 2>&1
+export DISPLAY=:0
+export QT_LOGGING_RULES="qt5ct.debug=false"
+"$VENV_DIR/bin/python" "$REPO_DIR/app.py" >> "\$APP_LOG" 2>&1
 EOF
 chmod +x "$WRAPPER_SCRIPT"
 chown "$USER:$USER" "$WRAPPER_SCRIPT"
-# Autostart config
 sudo -u "$USER" bash -c "cat << EOF > "$AUTOSTART_FILE"
 touch $HOME_DIR/autostart_test.txt
 xset s off
@@ -226,9 +226,9 @@ $WRAPPER_SCRIPT
 EOF"
 cat "$AUTOSTART_FILE" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
-echo "Dash app configured to start in Chromium kiosk mode." | tee -a "$LOG_FILE"
+echo "PyQt app configured to start." | tee -a "$LOG_FILE"
 
-# Step 11: Optimize performance (disable unnecessary services)
+# Step 11: Optimize performance
 echo "Optimizing performance..." | tee -a "$LOG_FILE"
 systemctl disable bluetooth | tee -a "$LOG_FILE"
 systemctl disable cups | tee -a "$LOG_FILE"
