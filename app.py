@@ -1,5 +1,4 @@
 import sys
-import threading
 import requests
 import os
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
@@ -40,7 +39,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/home/harrison/app_launch.log'),  # Banana Pi log path
+        logging.FileHandler('app_launch.log'),  # Banana Pi log path
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -409,9 +408,28 @@ class SpaceXDashboard(QMainWindow):
         # Fetch launch data at startup
         self.launch_data = fetch_launches(first_load=True)
         self.init_ui()
-        self.update_weather_thread()
-        self.update_launch_thread()
-        self.update_countdown_thread()
+        # Set up timers for updates (replaces threads)
+        self.weather_timer = QTimer(self)
+        self.weather_timer.timeout.connect(self.update_weather)
+        self.weather_timer.start(300000)  # 5 minutes in ms
+        self.launch_timer = QTimer(self)
+        self.launch_timer.timeout.connect(self.update_launches_periodic)
+        self.launch_timer.start(CACHE_REFRESH_INTERVAL * 1000)  # In ms
+        self.time_timer = QTimer(self)
+        self.time_timer.timeout.connect(self.update_time)
+        self.time_timer.start(1000)
+        self.countdown_timer = QTimer(self)
+        self.countdown_timer.timeout.connect(self.update_countdown)
+        self.countdown_timer.start(1000)
+        logger.info("Timers initialized")
+
+    def closeEvent(self, event):
+        # Stop timers to prevent warnings on exit
+        self.weather_timer.stop()
+        self.launch_timer.stop()
+        self.time_timer.stop()
+        self.countdown_timer.stop()
+        super().closeEvent(event)
 
     def load_fonts(self):
         logger.info("Loading fonts")
@@ -501,9 +519,6 @@ class SpaceXDashboard(QMainWindow):
 
         # Initialize content
         self.update_columns()
-        self.time_timer = QTimer(self)
-        self.time_timer.timeout.connect(self.update_time)
-        self.time_timer.start(1000)
         logger.info("UI initialization complete")
 
     def update_theme(self, theme):
@@ -538,34 +553,15 @@ class SpaceXDashboard(QMainWindow):
             weather_data[location] = fetch_weather(settings['lat'], settings['lon'], location)
         return weather_data
 
-    def update_weather_thread(self):
-        logger.info("Starting weather update thread")
+    def update_weather(self):
+        logger.info("Updating weather data via timer")
+        self.weather_data = self.initialize_weather()
+        self.update_weather_display(self.location_control.buttons[0][1])  # Assuming first button is current location
 
-        def thread_func():
-            while True:
-                self.weather_data = self.initialize_weather()
-                self.update_weather_display(self.location_control.buttons[0][1])
-                time.sleep(5 * 60)
-
-        threading.Thread(target=thread_func, daemon=True).start()
-
-    def update_launch_thread(self):
-        logger.info("Starting launch update thread")
-
-        def thread_func():
-            while True:
-                self.launch_data = fetch_launches(first_load=False)
-                self.update_columns()
-                logger.info("Refreshed launch data")
-                time.sleep(CACHE_REFRESH_INTERVAL)
-
-        threading.Thread(target=thread_func, daemon=True).start()
-
-    def update_countdown_thread(self):
-        logger.info("Starting countdown update thread")
-        self.countdown_timer = QTimer(self)
-        self.countdown_timer.timeout.connect(self.update_countdown)
-        self.countdown_timer.start(1000)
+    def update_launches_periodic(self):
+        logger.info("Updating launch data via timer")
+        self.launch_data = fetch_launches(first_load=False)
+        self.update_columns()
 
     def update_countdown(self):
         self.countdown_label.setText(self.calculate_countdown())
@@ -907,7 +903,6 @@ class SpaceXDashboard(QMainWindow):
 
 
 if __name__ == '__main__':
-    # Disable GPU to prevent OpenGL crashes
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist"
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
 
