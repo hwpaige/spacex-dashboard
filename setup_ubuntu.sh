@@ -47,7 +47,7 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 # Step 3: Install system packages (PyQt5, PyQtChart, minimal GUI, Plymouth)
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full mesa-vulkan-drivers htop libgbm1 libdrm2 -y | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full libgl1-mesa-dri libgles2-mesa libopengl0 mesa-utils libegl1-mesa libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 -y | tee -a "$LOG_FILE"
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
@@ -155,7 +155,7 @@ fi
 # Step 7: Create virtual environment and install dependencies
 echo "Creating virtual environment and install dependencies..." | tee -a "$LOG_FILE"
 VENV_DIR="$REPO_DIR/venv"
-if sudo -u "$USER" python3 -m venv "$VENV_DIR" | tee -a "$LOG_FILE"; then
+if sudo -u "$USER" python3 -m venv --system-site-packages "$VENV_DIR" | tee -a "$LOG_FILE"; then
     sudo -u "$USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel | tee -a "$LOG_FILE"
     if [ -f "$REPO_DIR/requirements.txt" ]; then
         sudo -u "$USER" "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" | tee -a "$LOG_FILE"

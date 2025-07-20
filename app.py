@@ -8,12 +8,32 @@ from PyQt5.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtChart import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
+from PyQt5.QtGui import QSurfaceFormat
+from PyQt5.QtQuick import QQuickWindow, QSGRendererInterface
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
 import pytz
 import pandas as pd
 import time
+
+# Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
+QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
+
+# Set default OpenGL surface format
+fmt = QSurfaceFormat()
+fmt.setVersion(3, 3)  # Modern OpenGL version; adjust to 2.1 if your hardware doesn't support 3.3 (check with glxinfo later)
+fmt.setProfile(QSurfaceFormat.CoreProfile)  # Or CompatibilityProfile if needed
+fmt.setRenderableType(QSurfaceFormat.OpenGL)
+fmt.setDepthBufferSize(24)
+fmt.setStencilBufferSize(8)
+QSurfaceFormat.setDefaultFormat(fmt)
+
+# Environment variables for Qt and Chromium
+os.environ["QT_OPENGL"] = "desktop"  # Forces desktop OpenGL on Windows (ignores ANGLE); harmless on Linux
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl --enable-logging --v=1 --log-level=0"
+os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
+os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 
 # Set up logging to console and file
 logging.basicConfig(
@@ -687,8 +707,8 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             radar_view = QWebEngineView()
-            radar_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, False)
-            radar_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, False)
+            radar_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
+            radar_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             radar_view.setUrl(QUrl(radar_locations['Starbase'] + f"&rand={time.time()}"))
             self.column2.layout().addWidget(title)
             self.column2.layout().addWidget(radar_view)
@@ -717,8 +737,8 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             video_view = QWebEngineView()
-            video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, False)
-            video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, False)
+            video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
+            video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             video_view.setUrl(QUrl(
                 'https://www.youtube.com/embed/Pn6e1O5bEyA?autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
@@ -791,8 +811,8 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             map_view = QWebEngineView()
-            map_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, False)
-            map_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, False)
+            map_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
+            map_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             next_race = self.get_next_race()
             if next_race:
                 coords = circuit_coords.get(next_race['circuit_short_name'], {'lat': 0, 'lon': 0})
