@@ -1,12 +1,13 @@
 import sys
 import requests
 import os
+import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QListWidget, QListWidgetItem, QPushButton, QFrame)
+                             QListWidget, QListWidgetItem, QPushButton, QFrame, QScrollArea)
 from PyQt5.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
-from PyQt5.QtChart import QChart, QChartView, QLineSeries, QDateTimeAxis, QValueAxis
+from PyQt5.QtChart import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from PyQt5.QtGui import QSurfaceFormat
 from PyQt5.QtQuick import QQuickWindow, QSGRendererInterface
 from datetime import datetime, timedelta
@@ -39,16 +40,32 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('app_launch.log'),  # Banana Pi log path
+        logging.FileHandler('/home/harrison/app_launch.log'),  # Banana Pi log path
         logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
 # Cache for launch data
-launch_cache = {'previous': {'data': None, 'timestamp': None}, 'upcoming': {'data': None, 'timestamp': None}}
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
+CACHE_FILE_PREVIOUS = '/home/harrison/previous_launches_cache.json'
+CACHE_FILE_UPCOMING = '/home/harrison/upcoming_launches_cache.json'
 f1_cache = None
+
+# Load cache from file
+def load_cache_from_file(cache_file):
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            cache_data = json.load(f)
+            cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp'])
+            return cache_data
+    return None
+
+# Save cache to file
+def save_cache_to_file(cache_file, data, timestamp):
+    cache_data = {'data': data, 'timestamp': timestamp.isoformat()}
+    with open(cache_file, 'w') as f:
+        json.dump(cache_data, f)
 
 # Hardcoded F1 schedule (full from user)
 hardcoded_f1_schedule = [
@@ -148,16 +165,15 @@ hardcoded_sessions = [
 # Fetch SpaceX launch data
 def fetch_launches(first_load=False):
     logger.info("Fetching SpaceX launch data")
-    global launch_cache
     current_time = datetime.now(pytz.UTC)
     current_date_str = current_time.strftime('%Y-%m-%d')
     current_year = current_time.year
 
-    # Use cache if available and not expired, unless forced refresh
-    if not first_load and launch_cache['previous']['data'] and launch_cache['previous']['timestamp'] and (
-            current_time - launch_cache['previous']['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
-        previous_launches = launch_cache['previous']['data']
-        logger.info("Using cached previous launches")
+    # Load previous launches cache
+    previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
+    if not first_load and previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+        previous_launches = previous_cache['data']
+        logger.info("Using persistent cached previous launches")
     else:
         try:
             url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_date_str}&limit=50'
@@ -179,9 +195,8 @@ def fetch_launches(first_load=False):
                 }
                 for launch in data['results']
             ]
-            launch_cache['previous']['data'] = previous_launches
-            launch_cache['previous']['timestamp'] = current_time
-            logger.info("Successfully fetched previous launches")
+            save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
+            logger.info("Successfully fetched and saved previous launches")
             time.sleep(1)  # Avoid rate limiting
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
@@ -194,10 +209,11 @@ def fetch_launches(first_load=False):
                  'video_url': ''},
             ]
 
-    if not first_load and launch_cache['upcoming']['data'] and launch_cache['upcoming']['timestamp'] and (
-            current_time - launch_cache['upcoming']['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
-        upcoming_launches = launch_cache['upcoming']['data']
-        logger.info("Using cached upcoming launches")
+    # Load upcoming launches cache
+    upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+    if not first_load and upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+        upcoming_launches = upcoming_cache['data']
+        logger.info("Using persistent cached upcoming launches")
     else:
         try:
             url = 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=50'
@@ -219,9 +235,8 @@ def fetch_launches(first_load=False):
                 }
                 for launch in data['results']
             ]
-            launch_cache['upcoming']['data'] = upcoming_launches
-            launch_cache['upcoming']['timestamp'] = current_time
-            logger.info("Successfully fetched upcoming launches")
+            save_cache_to_file(CACHE_FILE_UPCOMING, upcoming_launches, current_time)
+            logger.info("Successfully fetched and saved upcoming launches")
             time.sleep(1)  # Avoid rate limiting
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
@@ -403,7 +418,7 @@ class SegmentedControl(QWidget):
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2a2e2e; color: #ffffff; font-family: 'D-DIN', sans-serif;
-                    font-size: 10px; padding: 4px; border-radius: 4px;
+                    font-size: 12px; padding: 6px 12px; border-radius: 4px; min-width: 80px;  /* CHANGED: Larger for touch */
                 }
                 QPushButton:checked {
                     background-color: #4a4e4e; color: #ffffff;
@@ -424,21 +439,26 @@ class SegmentedControl(QWidget):
         self.callback(value)
 
 
-# Custom Launch/Race Card
+# Custom Launch/Race Card  # CHANGED: Larger fonts, more padding for touchscreen
 class EventCard(QWidget):
     def __init__(self, event, event_type, tz, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setContentsMargins(15, 15, 15, 15)  # CHANGED: Increased padding
+        layout.setSpacing(5)  # CHANGED: More spacing
+        self.setMinimumHeight(80)  # CHANGED: Taller min height for touch
         self.setStyleSheet("""
             QWidget {
-                background-color: #2a2e2e; color: #ffffff; font-family: 'D-DIN', sans-serif;
-                border-radius: 6px; padding: 10px;
+                background-color: #333838;  /* CHANGED: Softer gray */
+                color: #ffffff; font-family: 'D-DIN', sans-serif;
+                border-radius: 8px;  /* CHANGED: Softer corners */
+                border: 1px solid #444848;  /* CHANGED: Subtle border */
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);  /* CHANGED: Light shadow for depth */
             }
-            QLabel { font-size: 12px; }
+            QLabel { font-size: 12px; }  /* CHANGED: Base font larger */
         """)
         title = QLabel(event['mission'] if event_type in ['upcoming', 'previous'] else event['meeting_name'])
-        title.setStyleSheet("font-size: 14px; color: #ffffff;")
+        title.setStyleSheet("font-size: 14px; color: #ffffff; font-weight: bold;")
         layout.addWidget(title)
 
         if event_type in ['upcoming', 'previous']:
@@ -741,7 +761,7 @@ class SpaceXDashboard(QMainWindow):
                     item.widget().deleteLater()
 
         if self.mode == 'spacex':
-            # Column 1: Launch Trends (QChart)
+            # Column 1: Launch Trends (clustered vertical bar chart)
             title = QLabel("Launch Trends")
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
@@ -755,38 +775,36 @@ class SpaceXDashboard(QMainWindow):
             df = df[df['date'].dt.year == current_year]
             rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
             df = df[df['rocket'].isin(rocket_types)]
-            df_grouped = df.groupby([df['date'].dt.date, 'rocket']).size().reset_index(name='Launches')
-            df_pivot = df_grouped.pivot(index='date', columns='rocket', values='Launches').fillna(0).reset_index()
+            df['month'] = df['date'].dt.to_period('M').astype(str)  # Group by month
+            df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
+            df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
             for col in rocket_types:
                 if col not in df_pivot.columns:
                     df_pivot[col] = 0
-                df_pivot[col] = df_pivot[col].cumsum()
+            bar_series = QBarSeries()
             colors = {'Starship': QColor(255, 87, 51), 'Falcon 9': QColor(51, 207, 255),
                       'Falcon Heavy': QColor(255, 193, 7)}
             for rocket in rocket_types:
-                series = QLineSeries()
-                series.setName(rocket)
-                series.setPen(QColor(colors[rocket]))
-                for _, row in df_pivot.iterrows():
-                    # Convert date to datetime and ensure it's naive for QDateTime
-                    date = pd.to_datetime(row['date']).replace(tzinfo=None)
-                    series.append(QDateTime(date).toMSecsSinceEpoch(), row[rocket])
-                chart.addSeries(series)
-            axis_x = QDateTimeAxis()
-            axis_x.setFormat("MMM yyyy")
-            axis_x.setTitleText("Date")
+                bar_set = QBarSet(rocket)
+                bar_set.setColor(colors[rocket])
+                for value in df_pivot[rocket]:
+                    bar_set.append(value)
+                bar_series.append(bar_set)
+            chart.addSeries(bar_series)
+            axis_x = QBarCategoryAxis()
+            axis_x.setCategories(df_pivot.index.tolist())
+            axis_x.setTitleText("Month")
             axis_x.setTitleFont(QFont("D-DIN", 10))
             axis_x.setLabelsFont(QFont("D-DIN", 10))
             axis_x.setLabelsColor(QColor(255, 255, 255))
-            axis_x.setRange(QDateTime(datetime(current_year, 1, 1)), QDateTime(datetime(current_year, 12, 31)))
+            chart.setAxisX(axis_x, bar_series)
             axis_y = QValueAxis()
-            axis_y.setTitleText("Cumulative Launches")
+            axis_y.setTitleText("Launches")
             axis_y.setTitleFont(QFont("D-DIN", 10))
             axis_y.setLabelsFont(QFont("D-DIN", 10))
             axis_y.setLabelsColor(QColor(255, 255, 255))
-            axis_y.setRange(0, max(df_pivot[rocket_types].max()) + 5)
-            chart.setAxisX(axis_x, series)
-            chart.setAxisY(axis_y, series)
+            axis_y.setRange(0, df_pivot.max().max() + 5)
+            chart.setAxisY(axis_y, bar_series)
             chart_view = QChartView(chart)
             chart_view.setRenderHint(QPainter.Antialiasing)
             self.column1.layout().addWidget(title)
@@ -796,7 +814,7 @@ class SpaceXDashboard(QMainWindow):
             legend_layout = QHBoxLayout()
             legend_layout.setContentsMargins(0, 0, 0, 0)
             color_map = {'Starship': '#FF5733', 'Falcon 9': '#33CFFF', 'Falcon Heavy': '#FFC107'}
-            totals = {rocket: int(df_pivot[rocket].iloc[-1]) if rocket in df_pivot.columns else 0 for rocket in color_map.keys()}
+            totals = {rocket: int(df_pivot[rocket].sum()) if rocket in df_pivot.columns else 0 for rocket in color_map.keys()}
             for rocket in color_map.keys():
                 legend_item = QHBoxLayout()
                 square = QLabel("■")
@@ -823,12 +841,21 @@ class SpaceXDashboard(QMainWindow):
             self.column2.layout().addWidget(radar_view)
             logger.info("Added Radar view")
 
-            # Column 3: Launches
+            # Column 3: Launches  # FIXED: Create scroll/content/layout FIRST before SegmentedControl
+            self.launch_scroll = QScrollArea()
+            self.launch_scroll.setWidgetResizable(True)
+            self.launch_scroll.setStyleSheet("border: none;")
+            self.launch_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.launch_content = QWidget()
+            self.launch_content_layout = QVBoxLayout(self.launch_content)
+            self.launch_content_layout.setContentsMargins(10, 10, 10, 10)
+            self.launch_content_layout.setSpacing(10)
+            self.launch_content_layout.addStretch()
+            self.launch_scroll.setWidget(self.launch_content)
             title = QFrame()
             title_layout = QHBoxLayout(title)
             title_label = QLabel("Launches")
             title_label.setStyleSheet("font-size: 14px; text-transform: uppercase; color: #999999;")
-            self.launch_list = QListWidget()
             self.event_type_control = SegmentedControl(
                 [{'label': 'Upcoming', 'value': 'upcoming'}, {'label': 'Past', 'value': 'previous'}],
                 'upcoming',
@@ -836,10 +863,9 @@ class SpaceXDashboard(QMainWindow):
             )
             title_layout.addWidget(title_label)
             title_layout.addWidget(self.event_type_control)
-            self.update_launches('upcoming')
             self.column3.layout().addWidget(title)
-            self.column3.layout().addWidget(self.launch_list)
-            logger.info("Added Launches list")
+            self.column3.layout().addWidget(self.launch_scroll)
+            logger.info("Added Launches scroll area")
 
             # Column 4: Videos
             title = QLabel("Videos")
@@ -849,7 +875,7 @@ class SpaceXDashboard(QMainWindow):
             video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
             video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             video_view.setUrl(QUrl(
-                'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
+                'https://www.youtube.com/embed/Pn6e1O5bEyA?autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(video_view)
             logger.info("Added Videos view")
@@ -902,7 +928,6 @@ class SpaceXDashboard(QMainWindow):
             title_layout = QHBoxLayout(title)
             title_label = QLabel("Races")
             title_label.setStyleSheet("font-size: 14px; text-transform: uppercase; color: #999999;")
-            self.race_list = QListWidget()
             self.event_type_control = SegmentedControl(
                 [{'label': 'Upcoming', 'value': 'upcoming'}, {'label': 'Past', 'value': 'previous'}],
                 'upcoming',
@@ -910,6 +935,7 @@ class SpaceXDashboard(QMainWindow):
             )
             title_layout.addWidget(title_label)
             title_layout.addWidget(self.event_type_control)
+            self.race_list = QListWidget()
             self.update_races('upcoming')
             self.column3.layout().addWidget(title)
             self.column3.layout().addWidget(self.race_list)
@@ -934,7 +960,7 @@ class SpaceXDashboard(QMainWindow):
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(map_view)
 
-    def update_launches(self, event_type):
+    def update_launches(self, event_type):  # CHANGED: Rebuild grouped content in scroll area
         logger.info(f"Updating launches for {event_type}")
         tz = pytz.timezone(location_settings[self.location_control.buttons[0][1]]['timezone'])
         launches = self.launch_data['upcoming' if event_type == 'upcoming' else 'previous']
@@ -958,20 +984,24 @@ class SpaceXDashboard(QMainWindow):
                                 parse(l['net']).replace(tzinfo=pytz.UTC).date() < last_week_start]
             grouped = [('Today', today_launches), ('Last Week', last_week_launches), ('Earlier', earlier_launches)]
 
-        list_widget = self.launch_list
-        list_widget.clear()
+        # Clear and rebuild content
+        while self.launch_content_layout.count():
+            item = self.launch_content_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
         for group_name, group in grouped:
             if group:
-                item = QListWidgetItem(group_name)
-                item.setFlags(Qt.NoItemFlags)
-                item.setBackground(QColor(50, 50, 50))
-                list_widget.addItem(item)
+                header = QLabel(group_name)
+                header.setStyleSheet("""
+                    font-size: 13px; color: #aaaaaa; text-transform: uppercase; 
+                    padding: 5px 0; border-bottom: 1px solid #444848; margin-bottom: 5px;
+                """)
+                self.launch_content_layout.addWidget(header)
                 for launch in group:
-                    item = QListWidgetItem()
                     card = EventCard(launch, event_type, tz)
-                    item.setSizeHint(card.sizeHint())
-                    list_widget.addItem(item)
-                    list_widget.setItemWidget(item, card)
+                    self.launch_content_layout.addWidget(card)
+        self.launch_content_layout.addStretch()  # Responsive bottom stretch
         logger.info(f"Updated {event_type} launches")
 
     def update_races(self, event_type):
