@@ -1,22 +1,12 @@
 #!/bin/bash
 
-# Banana Pi M4 Zero setup script for Armbian Ubuntu Server (e.g., 24.04 or 25.04)
-# Configures SPI, WiFi, minimal GUI (Xorg, Openbox, LightDM), auto-login, kiosk mode, and launches PyQt-embedded SpaceX Dash app on boot
-# Run with: sudo bash setup_ubuntu.sh (from /home/harrison/Desktop or any directory)
-# Requires internet access, 5V 3A USB-C power supply, 16GB+ SD card (Samsung EVO Plus recommended)
-# Logs to /home/harrison/setup_ubuntu.log
-# Assumes user 'harrison' exists; creates if not. Prompts for WiFi if not configured.
-# Note: Waveshare 11.9inch HDMI LCD settings are adapted but may need manual tweaking for full compatibility.
-
 set -e
 
-# Log file for debugging in the user's home directory
 USER="harrison"
 HOME_DIR="/home/$USER"
 LOG_FILE="$HOME_DIR/setup_ubuntu.log"
 echo "Starting Banana Pi M4 Zero setup on Armbian Ubuntu Server at $(date)" | tee -a "$LOG_FILE"
 
-# Step 0: Create user if not exists (non-interactive, no password for auto-login)
 if ! id "$USER" &>/dev/null; then
     echo "Creating user $USER..." | tee -a "$LOG_FILE"
     adduser --disabled-password --gecos "" "$USER" | tee -a "$LOG_FILE"
@@ -24,7 +14,6 @@ if ! id "$USER" &>/dev/null; then
     chmod 0440 /etc/sudoers.d/"$USER"
 fi
 
-# Step 1: Configure swap (512MB) for memory-intensive tasks
 echo "Configuring 512MB swap file..." | tee -a "$LOG_FILE"
 if [ ! -f /swapfile ]; then
     fallocate -l 512M /swapfile | tee -a "$LOG_FILE"
@@ -35,7 +24,6 @@ if [ ! -f /swapfile ]; then
 fi
 echo "Swap configured." | tee -a "$LOG_FILE"
 
-# Step 2: Update and upgrade system, but freeze kernel to prevent WiFi breakage
 echo "Updating and upgrading Ubuntu Server (kernel held)..." | tee -a "$LOG_FILE"
 apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 | tee -a "$LOG_FILE"
 apt-get update -y | tee -a "$LOG_FILE"
@@ -45,37 +33,64 @@ apt-get autoremove -y | tee -a "$LOG_FILE"
 apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
-# Step 3: Install required system packages (PyQt5, XCB, minimal GUI, Plymouth)
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pyqt5 python3-pyqt5.qtwebengine python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils curl libxcb1 libxcb-xinerama0 libxcb-cursor0 libxcb-xinput0 libxcb-keysyms1 libxcb-shape0 libxcb-xfixes0 libxkbcommon-x11-0 libxcb-render0 libxcb-render-util0 libxcb-randr0 libxcb-sync1 libxcb-xkb1 libxcb-icccm4 libxkbcommon0 libqt5gui5 libqt5dbus5 libqt5core5a libqt5network5 libqt5widgets5 unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full | tee -a "$LOG_FILE"
-apt-get reinstall -y python3-pyqt5 python3-pyqt5.qtwebengine plymouth plymouth-themes | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics linux-firmware libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 wpa-supplicant | tee -a "$LOG_FILE"
+apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
-# Step 4: Enable SSH (already installed per error output)
+echo "Installing Docker and Buildx..." | tee -a "$LOG_FILE"
+apt-get install -y docker.io docker-buildx-plugin | tee -a "$LOG_FILE"
+systemctl enable --now docker | tee -a "$LOG_FILE"
+usermod -aG docker "$USER" | tee -a "$LOG_FILE"
+docker buildx install | tee -a "$LOG_FILE"
+docker buildx create --name mybuilder --use | tee -a "$LOG_FILE"
+echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
+
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
 systemctl enable ssh | tee -a "$LOG_FILE"
 systemctl start ssh | tee -a "$LOG_FILE"
 echo "SSH enabled." | tee -a "$LOG_FILE"
 
-# Step 4.5: Enable SPI via Armbian overlay
-echo "Enabling SPI..." | tee -a "$LOG_FILE"
+echo "Enabling SPI and WiFi/BT overlays..." | tee -a "$LOG_FILE"
 CONFIG_FILE="/boot/armbianEnv.txt"
-if ! grep -q "overlays=.*spi" "$CONFIG_FILE"; then
-    if grep -q "^overlays=" "$CONFIG_FILE"; then
-        sed -i 's/^overlays=\(.*\)/overlays=\1 spi-spidev/' "$CONFIG_FILE" || true
+OVERLAYS_TO_ADD="spi-spidev bananapi-m4-sdio-wifi-bt"
+if grep -q "^overlays=" "$CONFIG_FILE"; then
+    CURRENT_OVERLAYS=$(grep "^overlays=" "$CONFIG_FILE" | cut -d '=' -f2)
+    for overlay in $OVERLAYS_TO_ADD; do
+        if ! echo "$CURRENT_OVERLAYS" | grep -q "$overlay"; then
+            sed -i "s/^overlays=\(.*\)/overlays=\1 $overlay/" "$CONFIG_FILE" || true
+        fi
+    done
+else
+    echo "overlays=$OVERLAYS_TO_ADD" | tee -a "$CONFIG_FILE"
+fi
+echo "SPI and WiFi/BT overlays enabled." | tee -a "$LOG_FILE"
+
+echo "Configuring silent boot, SpaceX logo, and display..." | tee -a "$LOG_FILE"
+if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
+    if grep -q "^extraargs=" "$CONFIG_FILE"; then
+        sed -i 's/^extraargs=\(.*\)/extraargs=\1 quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CONFIG_FILE" || true
     else
-        echo "overlays=spi-spidev" | tee -a "$CONFIG_FILE"
+        echo "extraargs=quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles" | tee -a "$CONFIG_FILE"
     fi
 fi
-echo "SPI enabled." | tee -a "$LOG_FILE"
-
-# Step 5: Configure display rotation (using xrandr, as Armbian lacks config.txt)
-echo "Configuring display rotation for 90° left (Waveshare 11.9inch HDMI LCD)..." | tee -a "$LOG_FILE"
-# Note: HDMI timings for Waveshare may need manual adjustment; using xrandr for rotation
-# Create Xorg config for display setup
+PLYMOUTH_CONF="/etc/plymouth/plymouth.conf"
+mkdir -p /etc/plymouth
+cat << EOF > "$PLYMOUTH_CONF"
+[Daemon]
+Theme=armbian
+ShowDelay=0
+DeviceTimeout=5
+EOF
+update-initramfs -u | tee -a "$LOG_FILE"
 XORG_CONF="/etc/X11/xorg.conf.d/20-waveshare.conf"
 mkdir -p /etc/X11/xorg.conf.d | tee -a "$LOG_FILE"
 cat << EOF > "$XORG_CONF"
+Section "Device"
+    Identifier "Card0"
+    Driver "modesetting"
+    Option "AccelMethod" "none"
+EndSection
 Section "Monitor"
     Identifier "HDMI-1"
     Option "Rotate" "left"
@@ -86,36 +101,21 @@ Section "Screen"
     Monitor "HDMI-1"
     DefaultDepth 24
     SubSection "Display"
-        Modes "320x1480"
+        Modes "1480x320"
     EndSubSection
 EndSection
 EOF
 cat "$XORG_CONF" | tee -a "$LOG_FILE"
-echo "Display rotation configured (check resolution/timings if display issues occur)." | tee -a "$LOG_FILE"
+echo "Silent boot, logo, and display configured." | tee -a "$LOG_FILE"
 
-# Step 5.5: Configure clean boot splash (quiet mode)
-echo "Configuring clean boot splash..." | tee -a "$LOG_FILE"
-CMDLINE_FILE="/boot/armbianEnv.txt"
-if ! grep -q "extraargs=.*quiet" "$CMDLINE_FILE"; then
-    if grep -q "^extraargs=" "$CMDLINE_FILE"; then
-        sed -i 's/^extraargs=\(.*\)/extraargs=\1 quiet splash plymouth.ignore-serial-consoles/' "$CMDLINE_FILE" || true
-    else
-        echo "extraargs=quiet splash plymouth.ignore-serial-consoles" | tee -a "$CMDLINE_FILE"
-    fi
-fi
-cat "$CMDLINE_FILE" | tee -a "$LOG_FILE"
-echo "Clean boot splash configured." | tee -a "$LOG_FILE"
-
-# Step 5.6: Configure touch rotation (for Waveshare touchscreen)
 echo "Configuring touch rotation for 90° left..." | tee -a "$LOG_FILE"
 TOUCH_RULES="/etc/udev/rules.d/99-touch-rotation.rules"
 cat << EOF > "$TOUCH_RULES"
 ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 1 0 -1 0 1"
 EOF
 udevadm control --reload-rules | tee -a "$LOG_FILE"
-echo "Touch rotation configured (verify touchscreen ID if not working)." | tee -a "$LOG_FILE"
+echo "Touch rotation configured." | tee -a "$LOG_FILE"
 
-# Step 6: Clone GitHub repository to Desktop
 echo "Cloning GitHub repository to Desktop..." | tee -a "$LOG_FILE"
 REPO_URL="https://github.com/hwpaige/spacex-dashboard"
 REPO_DIR="$HOME_DIR/Desktop/project"
@@ -130,7 +130,6 @@ if [ ! -d "$REPO_DIR" ]; then
 fi
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
-# Step 6.5: Apply custom SpaceX boot logo after cloning
 echo "Applying custom SpaceX boot logo..." | tee -a "$LOG_FILE"
 LOGO_SRC="$HOME_DIR/Desktop/project/spacex_logo.png"
 THEME_DIR="/usr/share/plymouth/themes/armbian"
@@ -138,17 +137,15 @@ LOGO_DEST="$THEME_DIR/armbian_logo.png"
 mkdir -p "$THEME_DIR" | tee -a "$LOG_FILE"
 if [ -f "$LOGO_SRC" ]; then
     cp "$LOGO_SRC" "$LOGO_DEST" | tee -a "$LOG_FILE"
-    # Set armbian theme as default (Armbian uses its own theme)
     update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/armbian.plymouth" 150 | tee -a "$LOG_FILE"
     update-alternatives --set default.plymouth "$THEME_DIR/armbian.plymouth" | tee -a "$LOG_FILE"
     update-initramfs -u | tee -a "$LOG_FILE"
-    echo "Custom SpaceX boot logo applied using armbian theme." | tee -a "$LOG_FILE"
+    echo "Custom SpaceX boot logo applied." | tee -a "$LOG_FILE"
 else
-    echo "Warning: spacex_logo.png not found in project folder. Skipping custom logo." | tee -a "$LOG_FILE"
+    echo "Warning: spacex_logo.png not found. Skipping custom logo." | tee -a "$LOG_FILE"
 fi
 
-# Step 7: Create virtual environment with Python 3, enable system site-packages for PyQt5
-echo "Creating virtual environment and installing dependencies..." | tee -a "$LOG_FILE"
+echo "Creating virtual environment and install dependencies..." | tee -a "$LOG_FILE"
 VENV_DIR="$REPO_DIR/venv"
 if sudo -u "$USER" python3 -m venv --system-site-packages "$VENV_DIR" | tee -a "$LOG_FILE"; then
     sudo -u "$USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel | tee -a "$LOG_FILE"
@@ -164,8 +161,7 @@ else
 fi
 echo "Virtual environment created and dependencies installed." | tee -a "$LOG_FILE"
 
-# Step 8: Configure desktop auto-login and kiosk mode with LightDM
-echo "Configuring desktop auto-login and kiosk mode..." | tee -a "$LOG_FILE"
+echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
 cat << EOF > "$LIGHTDM_CONF"
 [Seat:*]
@@ -176,62 +172,85 @@ EOF
 cat "$LIGHTDM_CONF" | tee -a "$LOG_FILE"
 usermod -a -G nopasswdlogin "$USER" | tee -a "$LOG_FILE"
 systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target | tee -a "$LOG_FILE"
-echo "Desktop auto-login and kiosk mode configured." | tee -a "$LOG_FILE"
+sudo -u "$USER" bash -c "export DISPLAY=:0 && xauth generate :0 . trusted && xauth add \$HOSTNAME/unix:0 . \$(mcookie) && xhost +local:docker" | tee -a "$LOG_FILE"
+echo "Desktop auto-login, kiosk mode, and Xauth configured." | tee -a "$LOG_FILE"
 
-# Step 9: Configure Wi-Fi if not set (using armbian-config for reliability)
 echo "Configuring Wi-Fi if not set..." | tee -a "$LOG_FILE"
 if ! ip addr show wlan0 | grep -q "inet "; then
-    echo "No WiFi connection detected. Launching armbian-config for WiFi setup..." | tee -a "$LOG_FILE"
+    echo "No WiFi connection detected. Launching armbian-config..." | tee -a "$LOG_FILE"
     armbian-config
-    # Verify connection
     if ip addr show wlan0 | grep -q "inet "; then
         echo "WiFi configured via armbian-config." | tee -a "$LOG_FILE"
     else
-        echo "Warning: WiFi setup may have failed. Please check armbian-config or configure manually." | tee -a "$LOG_FILE"
+        echo "Warning: WiFi setup failed. Falling back to manual config..." | tee -a "$LOG_FILE"
+        read -p "Enter WiFi SSID: " SSID
+        read -p "Enter WiFi password: " -s PASSWORD
+        echo
+        cat << EOF > /etc/wpa_supplicant.conf
+network={
+    ssid="$SSID"
+    psk="$PASSWORD"
+}
+EOF
+        wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf | tee -a "$LOG_FILE"
+        dhclient wlan0 | tee -a "$LOG_FILE"
+        if ip addr show wlan0 | grep -q "inet "; then
+            echo "WiFi configured manually." | tee -a "$LOG_FILE"
+        else
+            echo "Error: WiFi setup failed. Check hardware." | tee -a "$LOG_FILE"
+            exit 1
+        fi
     fi
 else
     echo "WiFi already configured." | tee -a "$LOG_FILE"
 fi
 
-# Step 10: Configure PyQt app to launch via Openbox autostart for kiosk mode
-echo "Configuring PyQt kiosk mode via Openbox autostart..." | tee -a "$LOG_FILE"
+echo "Configuring Docker container to launch..." | tee -a "$LOG_FILE"
 OPENBOX_DIR="$HOME_DIR/.config/openbox"
 sudo -u "$USER" mkdir -p "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 AUTOSTART_FILE="$OPENBOX_DIR/autostart"
 sudo -u "$USER" rm -f "$AUTOSTART_FILE"
-# Create wrapper script
-WRAPPER_SCRIPT="$REPO_DIR/launch_app.sh"
-cat << EOF > "$WRAPPER_SCRIPT"
-#!/bin/bash
-APP_LOG="$HOME_DIR/app_launch.log"
-echo "Wrapper started at $(date)" > "\$APP_LOG"
-env >> "\$APP_LOG"
-export DISPLAY=:0
-export QT_QPA_PLATFORM=xcb
-export QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/qt5/plugins/platforms
-export QT_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/qt5/plugins
-"$VENV_DIR/bin/python" "$REPO_DIR/app.py" >> "\$APP_LOG" 2>&1 || {
-    echo "App failed with exit code $?" >> "\$APP_LOG"
-    exit 1
-}
-EOF
-chmod +x "$WRAPPER_SCRIPT"
-chown "$USER:$USER" "$WRAPPER_SCRIPT"
-# Autostart config
-sudo -u "$USER" bash -c "cat << EOF > "$AUTOSTART_FILE"
+if ! docker image inspect spacex-dashboard:latest &>/dev/null; then
+    echo "Building Docker image with Buildx..." | tee -a "$LOG_FILE"
+    sudo -u "$USER" docker buildx build --platform linux/arm64 -t spacex-dashboard:latest "$REPO_DIR" | tee -a "$LOG_FILE"
+fi
+sudo -u "$USER" bash -c "cat << EOF > \"$AUTOSTART_FILE\"
 touch $HOME_DIR/autostart_test.txt
 xset s off
 xset -dpms
 xset s noblank
 unclutter -idle 0 -root &
 xrandr --output HDMI-1 --rotate left
-$WRAPPER_SCRIPT
+for i in {1..60}; do
+    export DISPLAY=:0
+    if xset -q >/dev/null 2>&1; then
+        xhost +local:docker
+        break
+    fi
+    sleep 1
+done
+docker start spacex-dashboard-app || docker run -d --name spacex-dashboard-app --restart unless-stopped \\
+  -e DISPLAY=:0 \\
+  -v /tmp/.X11-unix:/tmp/.X11-unix \\
+  -v $HOME_DIR/.Xauthority:/app/.Xauthority \\
+  -e XAUTHORITY=/app/.Xauthority \\
+  -v /dev/dri:/dev/dri \\
+  -v /dev/fb0:/dev/fb0 \\
+  --device /dev/input/event0 \\
+  --network host \\
+  --security-opt seccomp=unconfined \\
+  --privileged \\
+  -v $HOME_DIR/Desktop/project:/app \\
+  spacex-dashboard:latest
 EOF"
 cat "$AUTOSTART_FILE" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
-echo "PyQt app configured to start in kiosk mode." | tee -a "$LOG_FILE"
+echo "Docker container configured to start." | tee -a "$LOG_FILE"
 
-# Step 11: Finalize and reboot
+echo "Optimizing performance..." | tee -a "$LOG_FILE"
+systemctl disable bluetooth cups | tee -a "$LOG_FILE"
+echo "Performance optimizations applied." | tee -a "$LOG_FILE"
+
 echo "Setup complete. Rebooting in 10 seconds..." | tee -a "$LOG_FILE"
 sleep 10
 reboot

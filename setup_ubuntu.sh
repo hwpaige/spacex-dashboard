@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Banana Pi M4 Zero setup script for Armbian Ubuntu Server (e.g., 24.04 or 25.04)
-# Configures silent boot with SpaceX logo (Plymouth), SPI, WiFi, minimal GUI (Xorg, Openbox, LightDM), auto-login, and native PyQt5 SpaceX/F1 app
+# Configures silent boot with SpaceX logo (Plymouth), SPI, WiFi, minimal GUI (Xorg, Openbox, LightDM), auto-login, and containerized PyQt5 SpaceX/F1 app
 # Run with: sudo bash setup_ubuntu.sh (from /home/harrison/Desktop)
 # Requires internet access, 5V 3A USB-C power supply, 16GB+ SD card
 # Logs to /home/harrison/setup_ubuntu.log
@@ -47,9 +47,21 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 # Step 3: Install system packages (PyQt5, PyQtChart, minimal GUI, Plymouth)
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics armbian-firmware-full libgl1-mesa-dri libgles2-mesa libopengl0 mesa-utils libegl1-mesa libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 -y | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg openbox lightdm lightdm-gtk-greeter x11-xserver-utils \
+    python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart unclutter plymouth plymouth-themes \
+    xserver-xorg-input-libinput xserver-xorg-input-synaptics linux-firmware libgl1-mesa-dri libgles2 \
+    libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 | tee -a "$LOG_FILE"
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
+
+# Step 3.5: Install Docker and Buildx
+echo "Installing Docker and Buildx..." | tee -a "$LOG_FILE"
+apt-get install -y docker.io docker-buildx-plugin | tee -a "$LOG_FILE"
+systemctl enable --now docker | tee -a "$LOG_FILE"
+usermod -aG docker "$USER" | tee -a "$LOG_FILE"
+docker buildx install | tee -a "$LOG_FILE"
+docker buildx create --use | tee -a "$LOG_FILE"
+echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
 
 # Step 4: Enable SSH
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
@@ -197,41 +209,50 @@ else
     echo "WiFi already configured." | tee -a "$LOG_FILE"
 fi
 
-# Step 10: Configure PyQt app to launch
-echo "Configuring PyQt app to launch..." | tee -a "$LOG_FILE"
+# Step 10: Configure Docker container to launch (replaces direct app launch)
+echo "Configuring Docker container to launch..." | tee -a "$LOG_FILE"
 OPENBOX_DIR="$HOME_DIR/.config/openbox"
 sudo -u "$USER" mkdir -p "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 AUTOSTART_FILE="$OPENBOX_DIR/autostart"
 sudo -u "$USER" rm -f "$AUTOSTART_FILE"
-WRAPPER_SCRIPT="$REPO_DIR/launch_app.sh"
-cat << EOF > "$WRAPPER_SCRIPT"
-#!/bin/bash
-APP_LOG="$HOME_DIR/app_launch.log"
-echo "Wrapper started at $(date)" > "\$APP_LOG"
-env >> "\$APP_LOG"
-export DISPLAY=:0
-export QT_LOGGING_RULES="qt5ct.debug=false"
-"$VENV_DIR/bin/python" "$REPO_DIR/app.py" >> "\$APP_LOG" 2>&1
-EOF
-chmod +x "$WRAPPER_SCRIPT"
-chown "$USER:$USER" "$WRAPPER_SCRIPT"
-sudo -u "$USER" bash -c "cat << EOF > "$AUTOSTART_FILE"
+# Build Docker image if not exists
+if ! docker image inspect spacex-dashboard:latest &>/dev/null; then
+    echo "Building Docker image with Buildx..." | tee -a "$LOG_FILE"
+    sudo -u "$USER" docker buildx build --platform linux/arm64 -t spacex-dashboard:latest "$REPO_DIR" | tee -a "$LOG_FILE"
+fi
+sudo -u "$USER" bash -c "cat << EOF > \"$AUTOSTART_FILE\"
+# Wait for X server to be ready
+for i in {1..30}; do
+    export DISPLAY=:0
+    if xset -q >/dev/null 2>&1; then
+        xhost +local:docker
+        break
+    fi
+    sleep 1
+done
 touch $HOME_DIR/autostart_test.txt
 xset s off
 xset -dpms
 xset s noblank
 unclutter -idle 0 -root &
 xrandr --output HDMI-1 --rotate left
-$WRAPPER_SCRIPT
+docker start spacex-dashboard-app || docker run -d --name spacex-dashboard-app --restart unless-stopped \
+  -e DISPLAY=:0 \
+  -v /tmp/.X11-unix:/tmp/.X11-unix \
+  -v /dev/dri:/dev/dri \
+  -v /dev/fb0:/dev/fb0 \
+  --device /dev/input/event0 \
+  --network host \
+  -v $HOME_DIR/Desktop/project:/home/harrison/Desktop/project \
+  spacex-dashboard:latest
 EOF"
 cat "$AUTOSTART_FILE" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
-echo "PyQt app configured to start." | tee -a "$LOG_FILE"
+echo "Docker container configured to start." | tee -a "$LOG_FILE"
 
 # Step 11: Optimize performance
 echo "Optimizing performance..." | tee -a "$LOG_FILE"
-systemctl disable bluetooth | tee -a "$LOG_FILE"
-systemctl disable cups | tee -a "$LOG_FILE"
+systemctl disable bluetooth cups | tee -a "$LOG_FILE"
 echo "Performance optimizations applied." | tee -a "$LOG_FILE"
 
 # Step 12: Finalize and reboot
