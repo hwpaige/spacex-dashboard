@@ -116,7 +116,10 @@ echo "Warning: spacex_logo.png not found. Skipping custom logo." | tee -a "$LOG_
 fi
 echo "Creating virtual environment and install dependencies..." | tee -a "$LOG_FILE"
 VENV_DIR="$REPO_DIR/venv"
-if sudo -u "$USER" python3 -m venv --system-site-packages "$VENV_DIR" | tee -a "$LOG_FILE"; then
+if ! sudo -u "$USER" python3 -m venv --system-site-packages "$VENV_DIR"; then
+echo "Error: Failed to create virtual environment in $VENV_DIR" | tee -a "$LOG_FILE"
+exit 1
+fi
 sudo -u "$USER" "$VENV_DIR/bin/pip" install --upgrade pip setuptools wheel | tee -a "$LOG_FILE"
 if [ -f "$REPO_DIR/requirements.txt" ]; then
 sudo -u "$USER" "$VENV_DIR/bin/pip" install -r "$REPO_DIR/requirements.txt" | tee -a "$LOG_FILE"
@@ -124,14 +127,10 @@ else
 echo "Error: requirements.txt not found in $REPO_DIR" | tee -a "$LOG_FILE"
 exit 1
 fi
-else
-echo "Error: Failed to create virtual environment in $VENV_DIR" | tee -a "$LOG_FILE"
-exit 1
-fi
 echo "Virtual environment created and dependencies installed." | tee -a "$LOG_FILE"
 echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
-mkdir -p /etc/lightdm  # Added this to create the directory
+mkdir -p /etc/lightdm
 cat << EOF > "$LIGHTDM_CONF"
 [Seat:*]
 autologin-user=$USER
