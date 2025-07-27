@@ -12,4 +12,4 @@ ENV QT_LOGGING_RULES="qt.webenginecontext=true;qt5ct.debug=false"
 ENV QTWEBENGINE_DISABLE_SANDBOX=1
 ENV DISPLAY=:0
 RUN echo '#!/bin/bash' > start_app.sh && echo '. venv/bin/activate' >> start_app.sh && echo 'python app.py' >> start_app.sh && chmod +x start_app.sh
-CMD ["./start_app.sh"]
+CMD ["/app/start_app.sh"]
