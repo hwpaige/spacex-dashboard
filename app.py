@@ -3,7 +3,7 @@ import requests
 import os
 import json
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QListWidget, QListWidgetItem, QPushButton, QFrame, QScrollArea)
+                             QListWidget, QListWidgetItem, QPushButton, QFrame)
 from PyQt5.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
@@ -22,8 +22,8 @@ QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
 
 # Set default OpenGL surface format
 fmt = QSurfaceFormat()
-fmt.setVersion(3, 3)  # Modern OpenGL version; adjust to 2.1 if your hardware doesn't support 3.3 (check with glxinfo later)
-fmt.setProfile(QSurfaceFormat.CoreProfile)  # Or CompatibilityProfile if needed
+fmt.setVersion(3, 3)
+fmt.setProfile(QSurfaceFormat.CompatibilityProfile)  # Changed to Compatibility for robustness
 fmt.setRenderableType(QSurfaceFormat.OpenGL)
 fmt.setDepthBufferSize(24)
 fmt.setStencilBufferSize(8)
@@ -40,7 +40,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('/home/harrison/app_launch.log'),  # Banana Pi log path
+        logging.FileHandler('/app/app_launch.log'),  # Banana Pi log path
         logging.StreamHandler(sys.stdout)
     ]
 )
@@ -48,8 +48,8 @@ logger = logging.getLogger(__name__)
 
 # Cache for launch data
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
-CACHE_FILE_PREVIOUS = '/home/harrison/previous_launches_cache.json'
-CACHE_FILE_UPCOMING = '/home/harrison/upcoming_launches_cache.json'
+CACHE_FILE_PREVIOUS = '/app/previous_launches_cache.json'
+CACHE_FILE_UPCOMING = '/app/upcoming_launches_cache.json'
 f1_cache = None
 
 # Load cache from file
@@ -418,7 +418,7 @@ class SegmentedControl(QWidget):
             btn.setStyleSheet("""
                 QPushButton {
                     background-color: #2a2e2e; color: #ffffff; font-family: 'D-DIN', sans-serif;
-                    font-size: 12px; padding: 6px 12px; border-radius: 4px; min-width: 80px;  /* CHANGED: Larger for touch */
+                    font-size: 10px; padding: 4px; border-radius: 4px;
                 }
                 QPushButton:checked {
                     background-color: #4a4e4e; color: #ffffff;
@@ -439,26 +439,21 @@ class SegmentedControl(QWidget):
         self.callback(value)
 
 
-# Custom Launch/Race Card  # CHANGED: Larger fonts, more padding for touchscreen
+# Custom Launch/Race Card
 class EventCard(QWidget):
     def __init__(self, event, event_type, tz, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)  # CHANGED: Increased padding
-        layout.setSpacing(5)  # CHANGED: More spacing
-        self.setMinimumHeight(80)  # CHANGED: Taller min height for touch
+        layout.setContentsMargins(10, 10, 10, 10)
         self.setStyleSheet("""
             QWidget {
-                background-color: #333838;  /* CHANGED: Softer gray */
-                color: #ffffff; font-family: 'D-DIN', sans-serif;
-                border-radius: 8px;  /* CHANGED: Softer corners */
-                border: 1px solid #444848;  /* CHANGED: Subtle border */
-                box-shadow: 0 2px 4px rgba(0,0,0,0.2);  /* CHANGED: Light shadow for depth */
+                background-color: #2a2e2e; color: #ffffff; font-family: 'D-DIN', sans-serif;
+                border-radius: 6px; padding: 10px;
             }
-            QLabel { font-size: 12px; }  /* CHANGED: Base font larger */
+            QLabel { font-size: 12px; }
         """)
         title = QLabel(event['mission'] if event_type in ['upcoming', 'previous'] else event['meeting_name'])
-        title.setStyleSheet("font-size: 14px; color: #ffffff; font-weight: bold;")
+        title.setStyleSheet("font-size: 14px; color: #ffffff;")
         layout.addWidget(title)
 
         if event_type in ['upcoming', 'previous']:
@@ -532,7 +527,7 @@ class SpaceXDashboard(QMainWindow):
     def load_fonts(self):
         logger.info("Loading fonts")
         font_db = QFontDatabase()
-        font_path = "/home/harrison/Desktop/project/assets/D-DIN.ttf"  # Absolute path for Banana Pi
+        font_path = "/app/assets/D-DIN.ttf"  # Absolute path for Banana Pi
         if not os.path.exists(font_path):
             logger.error(f"Font file not found: {font_path}, falling back to Arial")
             self.setFont(QFont("Arial", 12))
@@ -588,7 +583,7 @@ class SpaceXDashboard(QMainWindow):
 
         # Logo
         self.mode_button = QPushButton()
-        logo_path = "/home/harrison/Desktop/project/assets/spacex-logo.png"  # Absolute path for Banana Pi
+        logo_path = "/app/assets/spacex-logo.png"  # Absolute path for Banana Pi
         if not os.path.exists(logo_path):
             logger.error(f"Logo file not found: {logo_path}")
         self.mode_button.setIcon(QIcon(logo_path))
@@ -634,7 +629,6 @@ class SpaceXDashboard(QMainWindow):
                 QLabel { color: #000000; font-family: 'D-DIN', sans-serif; }
                 QListWidget { background-color: #f0f0f0; color: #000000; font-family: 'D-DIN', sans-serif; font-size: 12px; border: none; }
                 QChartView { background-color: #f0f0f0; }
-                QFrame { background-color: #f0f0f0; }
             """)
         else:
             self.setStyleSheet("""
@@ -646,7 +640,7 @@ class SpaceXDashboard(QMainWindow):
 
     def toggle_mode(self):
         self.mode = 'f1' if self.mode == 'spacex' else 'spacex'
-        logo_path = f"/home/harrison/Desktop/project/assets/{'f1' if self.mode == 'f1' else 'spacex'}-logo.png"
+        logo_path = f"/app/assets/{'f1' if self.mode == 'f1' else 'spacex'}-logo.png"
         if not os.path.exists(logo_path):
             logger.error(f"Logo file not found: {logo_path}")
         self.mode_button.setIcon(QIcon(logo_path))
@@ -841,21 +835,12 @@ class SpaceXDashboard(QMainWindow):
             self.column2.layout().addWidget(radar_view)
             logger.info("Added Radar view")
 
-            # Column 3: Launches  # FIXED: Create scroll/content/layout FIRST before SegmentedControl
-            self.launch_scroll = QScrollArea()
-            self.launch_scroll.setWidgetResizable(True)
-            self.launch_scroll.setStyleSheet("border: none;")
-            self.launch_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-            self.launch_content = QWidget()
-            self.launch_content_layout = QVBoxLayout(self.launch_content)
-            self.launch_content_layout.setContentsMargins(10, 10, 10, 10)
-            self.launch_content_layout.setSpacing(10)
-            self.launch_content_layout.addStretch()
-            self.launch_scroll.setWidget(self.launch_content)
+            # Column 3: Launches
             title = QFrame()
             title_layout = QHBoxLayout(title)
             title_label = QLabel("Launches")
             title_label.setStyleSheet("font-size: 14px; text-transform: uppercase; color: #999999;")
+            self.launch_list = QListWidget()
             self.event_type_control = SegmentedControl(
                 [{'label': 'Upcoming', 'value': 'upcoming'}, {'label': 'Past', 'value': 'previous'}],
                 'upcoming',
@@ -863,9 +848,10 @@ class SpaceXDashboard(QMainWindow):
             )
             title_layout.addWidget(title_label)
             title_layout.addWidget(self.event_type_control)
+            self.update_launches('upcoming')
             self.column3.layout().addWidget(title)
-            self.column3.layout().addWidget(self.launch_scroll)
-            logger.info("Added Launches scroll area")
+            self.column3.layout().addWidget(self.launch_list)
+            logger.info("Added Launches list")
 
             # Column 4: Videos
             title = QLabel("Videos")
@@ -928,6 +914,7 @@ class SpaceXDashboard(QMainWindow):
             title_layout = QHBoxLayout(title)
             title_label = QLabel("Races")
             title_label.setStyleSheet("font-size: 14px; text-transform: uppercase; color: #999999;")
+            self.race_list = QListWidget()
             self.event_type_control = SegmentedControl(
                 [{'label': 'Upcoming', 'value': 'upcoming'}, {'label': 'Past', 'value': 'previous'}],
                 'upcoming',
@@ -935,7 +922,6 @@ class SpaceXDashboard(QMainWindow):
             )
             title_layout.addWidget(title_label)
             title_layout.addWidget(self.event_type_control)
-            self.race_list = QListWidget()
             self.update_races('upcoming')
             self.column3.layout().addWidget(title)
             self.column3.layout().addWidget(self.race_list)
@@ -960,7 +946,7 @@ class SpaceXDashboard(QMainWindow):
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(map_view)
 
-    def update_launches(self, event_type):  # CHANGED: Rebuild grouped content in scroll area
+    def update_launches(self, event_type):
         logger.info(f"Updating launches for {event_type}")
         tz = pytz.timezone(location_settings[self.location_control.buttons[0][1]]['timezone'])
         launches = self.launch_data['upcoming' if event_type == 'upcoming' else 'previous']
@@ -984,24 +970,20 @@ class SpaceXDashboard(QMainWindow):
                                 parse(l['net']).replace(tzinfo=pytz.UTC).date() < last_week_start]
             grouped = [('Today', today_launches), ('Last Week', last_week_launches), ('Earlier', earlier_launches)]
 
-        # Clear and rebuild content
-        while self.launch_content_layout.count():
-            item = self.launch_content_layout.takeAt(0)
-            if item.widget():
-                item.widget().deleteLater()
-
+        list_widget = self.launch_list
+        list_widget.clear()
         for group_name, group in grouped:
             if group:
-                header = QLabel(group_name)
-                header.setStyleSheet("""
-                    font-size: 13px; color: #aaaaaa; text-transform: uppercase; 
-                    padding: 5px 0; border-bottom: 1px solid #444848; margin-bottom: 5px;
-                """)
-                self.launch_content_layout.addWidget(header)
+                item = QListWidgetItem(group_name)
+                item.setFlags(Qt.NoItemFlags)
+                item.setBackground(QColor(50, 50, 50))
+                list_widget.addItem(item)
                 for launch in group:
+                    item = QListWidgetItem()
                     card = EventCard(launch, event_type, tz)
-                    self.launch_content_layout.addWidget(card)
-        self.launch_content_layout.addStretch()  # Responsive bottom stretch
+                    item.setSizeHint(card.sizeHint())
+                    list_widget.addItem(item)
+                    list_widget.setItemWidget(item, card)
         logger.info(f"Updated {event_type} launches")
 
     def update_races(self, event_type):
