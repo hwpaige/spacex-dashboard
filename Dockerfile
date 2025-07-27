@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip python3-venv git py
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 WORKDIR /app
 COPY . .
-RUN python3 -m venv venv --system-site-packages && . venv/bin/activate && pip install --upgrade pip && pip install --upgrade --ignore-installed setuptools wheel && pip install -r requirements.txt
+RUN python3 -m venv venv --system-site-packages && . venv/bin/activate && pip install -r requirements.txt
 RUN chown -R 1000:1000 /app
 USER 1000
 ENV QT_OPENGL=desktop
