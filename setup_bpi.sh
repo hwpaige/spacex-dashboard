@@ -39,32 +39,14 @@ apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
 echo "Installing Docker and Buildx..." | tee -a "$LOG_FILE"
-apt-get install -y docker.io docker-buildx-plugin | tee -a "$LOG_FILE"
+apt-get install -y docker.io docker-buildx | tee -a "$LOG_FILE"
 systemctl enable --now docker | tee -a "$LOG_FILE"
 usermod -aG docker "$USER" | tee -a "$LOG_FILE"
 docker buildx install | tee -a "$LOG_FILE"
 docker buildx create --name mybuilder --use | tee -a "$LOG_FILE"
 echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
 
-echo "Enabling SSH..." | tee -a "$LOG_FILE"
-systemctl enable ssh | tee -a "$LOG_FILE"
-systemctl start ssh | tee -a "$LOG_FILE"
-echo "SSH enabled." | tee -a "$LOG_FILE"
-
-echo "Enabling SPI and WiFi/BT overlays..." | tee -a "$LOG_FILE"
 CONFIG_FILE="/boot/armbianEnv.txt"
-OVERLAYS_TO_ADD="spi-spidev bananapi-m4-sdio-wifi-bt"
-if grep -q "^overlays=" "$CONFIG_FILE"; then
-    CURRENT_OVERLAYS=$(grep "^overlays=" "$CONFIG_FILE" | cut -d '=' -f2)
-    for overlay in $OVERLAYS_TO_ADD; do
-        if ! echo "$CURRENT_OVERLAYS" | grep -q "$overlay"; then
-            sed -i "s/^overlays=\(.*\)/overlays=\1 $overlay/" "$CONFIG_FILE" || true
-        fi
-    done
-else
-    echo "overlays=$OVERLAYS_TO_ADD" | tee -a "$CONFIG_FILE"
-fi
-echo "SPI and WiFi/BT overlays enabled." | tee -a "$LOG_FILE"
 
 echo "Configuring silent boot, SpaceX logo, and display..." | tee -a "$LOG_FILE"
 if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
@@ -248,7 +230,7 @@ chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 echo "Docker container configured to start." | tee -a "$LOG_FILE"
 
 echo "Optimizing performance..." | tee -a "$LOG_FILE"
-systemctl disable bluetooth cups | tee -a "$LOG_FILE"
+systemctl disable bluetooth | tee -a "$LOG_FILE"
 echo "Performance optimizations applied." | tee -a "$LOG_FILE"
 
 echo "Setup complete. Rebooting in 10 seconds..." | tee -a "$LOG_FILE"
