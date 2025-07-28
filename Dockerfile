@@ -3,7 +3,7 @@ RUN apt-get update && apt-get install -y python3 python3-pip git pyqt5-dev-tools
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 WORKDIR /app
 COPY . .
-RUN pip3 install --upgrade pip setuptools wheel && pip3 install -r requirements.txt
+RUN pip3 install --upgrade --ignore-installed pip setuptools wheel && pip3 install -r requirements.txt
 RUN chown -R 1000:1000 /app
 USER 1000
 ENV QT_OPENGL=desktop
