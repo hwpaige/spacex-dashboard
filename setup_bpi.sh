@@ -43,11 +43,7 @@ apt-get install -y docker.io docker-buildx | tee -a "$LOG_FILE"
 systemctl enable --now docker | tee -a "$LOG_FILE"
 usermod -aG docker "$USER" | tee -a "$LOG_FILE"
 docker buildx install | tee -a "$LOG_FILE"
-if ! docker buildx inspect mybuilder &>/dev/null; then
-    docker buildx create --name mybuilder --use | tee -a "$LOG_FILE"
-else
-    docker buildx use mybuilder | tee -a "$LOG_FILE"
-fi
+docker buildx create --name mybuilder --use | tee -a "$LOG_FILE"
 echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
 
 CONFIG_FILE="/boot/armbianEnv.txt"
@@ -116,23 +112,11 @@ if [ ! -d "$REPO_DIR" ]; then
 fi
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
-echo "Applying custom SpaceX boot logo..." | tee -a "$LOG_FILE"
-LOGO_SRC="$HOME_DIR/Desktop/project/spacex_logo.png"
-THEME_DIR="/usr/share/plymouth/themes/armbian"
-LOGO_DEST="$THEME_DIR/armbian_logo.png"
-mkdir -p "$THEME_DIR" | tee -a "$LOG_FILE"
-if [ -f "$LOGO_SRC" ]; then
-    cp "$LOGO_SRC" "$LOGO_DEST" | tee -a "$LOG_FILE"
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/armbian.plymouth" 150 | tee -a "$LOG_FILE"
-    update-alternatives --set default.plymouth "$THEME_DIR/armbian.plymouth" | tee -a "$LOG_FILE"
-    update-initramfs -u | tee -a "$LOG_FILE"
-    echo "Custom SpaceX boot logo applied." | tee -a "$LOG_FILE"
-else
-    echo "Warning: spacex_logo.png not found. Skipping custom logo." | tee -a "$LOG_FILE"
-fi
+echo "Creating start_app.sh on host..." | tee -a "$LOG_FILE"
+sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
+echo "start_app.sh created." | tee -a "$LOG_FILE"
 
 echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
-addgroup --system nopasswdlogin | tee -a "$LOG_FILE"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
 mkdir -p /etc/lightdm
 cat << EOF > "$LIGHTDM_CONF"
@@ -220,10 +204,6 @@ echo "Docker container configured to start." | tee -a "$LOG_FILE"
 echo "Optimizing performance..." | tee -a "$LOG_FILE"
 systemctl disable bluetooth | tee -a "$LOG_FILE"
 echo "Performance optimizations applied." | tee -a "$LOG_FILE"
-
-echo "Enabling graphical boot..." | tee -a "$LOG_FILE"
-systemctl set-default graphical.target | tee -a "$LOG_FILE"
-systemctl enable lightdm | tee -a "$LOG_FILE"
 
 echo "Setup complete. Rebooting in 10 seconds..." | tee -a "$LOG_FILE"
 sleep 10
