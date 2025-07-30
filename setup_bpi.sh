@@ -24,8 +24,8 @@ if [ ! -f /swapfile ]; then
 fi
 echo "Swap configured." | tee -a "$LOG_FILE"
 
-echo "Updating and upgrading Ubuntu Server (kernel held)..." | tee -a "$LOG_FILE"
-apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 | tee -a "$LOG_FILE"
+echo "Updating and upgrading Ubuntu Server (kernel unheld for better GPU support)..." | tee -a "$LOG_FILE"
+apt-mark unhold linux-image-current-sunxi64 linux-dtb-current-sunxi64 | tee -a "$LOG_FILE"  # Unhold for Panfrost improvements
 apt-get update -y | tee -a "$LOG_FILE"
 apt-get upgrade -y | tee -a "$LOG_FILE"
 apt-get dist-upgrade -y | tee -a "$LOG_FILE"
@@ -34,9 +34,9 @@ apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 wpasupplicant accountsservice unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics linux-firmware xbitmaps | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics linux-firmware libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 wpasupplicant accountsservice libgles2-mesa-dev libegl-mesa0 libglapi-mesa | tee -a "$LOG_FILE"  # Added GLES dev packages
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
-apt-get install --reinstall -y xserver-xorg-core xorg openbox | tee -a "$LOG_FILE"
+apt-get install --reinstall -y xserver-xorg-core xorg | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
 echo "Ensuring xauth is installed..." | tee -a "$LOG_FILE"
@@ -77,6 +77,7 @@ Section "Device"
     Identifier "Card0"
     Driver "modesetting"
     Option "AccelMethod" "none"
+    Option "DRI" "3"  # Enable DRI3 for better GLES support
 EndSection
 Section "Monitor"
     Identifier "HDMI-1"
@@ -135,7 +136,6 @@ cat "$LIGHTDM_CONF" | tee -a "$LOG_FILE"
 usermod -a -G nopasswdlogin "$USER" | tee -a "$LOG_FILE"
 systemctl mask sleep.target suspend.target hibernate.target hybrid-sleep.target | tee -a "$LOG_FILE"
 sudo -u "$USER" bash -c "export DISPLAY=:0 && xauth generate :0 . trusted && xauth add \$HOSTNAME/unix:0 . \$(mcookie) && xhost +local:docker" | tee -a "$LOG_FILE"
-sudo -u "$USER" echo "exec openbox-session" > "$HOME_DIR/.xinitrc"
 echo "Desktop auto-login, kiosk mode, and Xauth configured." | tee -a "$LOG_FILE"
 
 echo "Configuring LightDM startup delay..." | tee -a "$LOG_FILE"
@@ -203,14 +203,15 @@ echo "Building Docker image with Buildx..." | tee -a "$LOG_FILE"
 sudo -u "$USER" docker buildx build --platform linux/arm64 -t spacex-dashboard:latest "$REPO_DIR" | tee -a "$LOG_FILE"
 sudo -u "$USER" bash -c "cat << EOF > \"$AUTOSTART_FILE\"
 touch $HOME_DIR/autostart_test.txt
-xset s off
-xset -dpms
-xset s noblank
-unclutter -idle 0 -root &
-xrandr --output HDMI-1 --rotate left
 for i in {1..60}; do
     export DISPLAY=:0
     if xset -q >/dev/null 2>&1; then
+        xset s off
+        xset -dpms
+        xset dpms 0 0 0
+        xset s noblank
+        unclutter -idle 0 -root &
+        xrandr --output HDMI-1 --rotate left
         xauth generate :0 . trusted
         xauth add \$HOSTNAME/unix:0 . \$(mcookie)
         xhost +local:docker

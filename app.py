@@ -20,13 +20,13 @@ import time
 # Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
 QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
 
-# Set default OpenGL surface format
 fmt = QSurfaceFormat()
-fmt.setVersion(3, 3)
-fmt.setProfile(QSurfaceFormat.CompatibilityProfile)  # Changed to Compatibility for robustness
-fmt.setRenderableType(QSurfaceFormat.OpenGL)
+fmt.setVersion(3, 2)  # GLES 3.2 supported by Mali G31
+fmt.setProfile(QSurfaceFormat.NoProfile)  # GLES has no profiles; use NoProfile
+fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Switch to GLES for ARM HW accel
 fmt.setDepthBufferSize(24)
 fmt.setStencilBufferSize(8)
+fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
 QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
