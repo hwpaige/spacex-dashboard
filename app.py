@@ -23,11 +23,10 @@ QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
 # Set default OpenGL surface format
 fmt = QSurfaceFormat()
 fmt.setVersion(3, 3)
-# fmt.setProfile(QSurfaceFormat.CompatibilityProfile)  # Changed to Compatibility for robustness
-# fmt.setProfile(QSurfaceFormat.OpenGL)
-# fmt.setRenderableType(QSurfaceFormat.OpenGL)
-# fmt.setDepthBufferSize(24)
-# fmt.setStencilBufferSize(8)
+fmt.setProfile(QSurfaceFormat.CompatibilityProfile)  # Changed to Compatibility for robustness
+fmt.setRenderableType(QSurfaceFormat.OpenGL)
+fmt.setDepthBufferSize(24)
+fmt.setStencilBufferSize(8)
 QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
