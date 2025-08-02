@@ -477,7 +477,7 @@ class EventCard(QWidget):
             sessions = "\n".join(f"{s['session_name']}: {s['date_start']}" for s in
                                  sorted(event.get('sessions', []), key=lambda x: parse(x['date_start'])))
             layout.addWidget(QLabel(sessions if sessions else "No session info"))
-        logger.info(f"Created EventCard for {event_type}: {event.get('mission', event.get('meeting_name'))}")
+        # logger.info(f"Created EventCard for {event_type}: {event.get('mission', event.get('meeting_name'))}")
 
 
 # Main application
@@ -728,7 +728,7 @@ class SpaceXDashboard(QMainWindow):
                           l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
         if valid_launches:
             next_launch = min(valid_launches, key=lambda x: parse(x['net']))
-            logger.info(f"Next launch: {next_launch['mission']}")
+            # logger.info(f"Next launch: {next_launch['mission']}")
             return next_launch
         logger.info("No valid upcoming launches")
         return None
@@ -740,7 +740,7 @@ class SpaceXDashboard(QMainWindow):
         upcoming = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC) > current]
         if upcoming:
             next_race = min(upcoming, key=lambda r: parse(r['date_start']))
-            logger.info(f"Next race: {next_race['meeting_name']}")
+            # logger.info(f"Next race: {next_race['meeting_name']}")
             return next_race
         logger.info("No upcoming races")
         return None
@@ -939,7 +939,7 @@ class SpaceXDashboard(QMainWindow):
                 coords = circuit_coords.get(next_race['circuit_short_name'], {'lat': 0, 'lon': 0})
                 map_url = f"https://www.openstreetmap.org/export/embed.html?bbox={coords['lon'] - 0.01},{coords['lat'] - 0.01},{coords['lon'] + 0.01},{coords['lat'] + 0.01}&layer=mapnik&marker={coords['lat']},{coords['lon']}"
                 map_view.setUrl(QUrl(map_url))
-                logger.info(f"Added Next Race Map for {next_race['circuit_short_name']}")
+                # logger.info(f"Added Next Race Map for {next_race['circuit_short_name']}")
             else:
                 map_view = QLabel("No upcoming races")
                 logger.info("No upcoming races for map")
