@@ -76,8 +76,6 @@ cat << EOF > "$XORG_CONF"
 Section "Device"
     Identifier "Card0"
     Driver "modesetting"
-    Option "AccelMethod" "glamor"
-    Option "DRI" "true"
 EndSection
 Section "Monitor"
     Identifier "HDMI-1"
