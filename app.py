@@ -17,16 +17,14 @@ import pytz
 import pandas as pd
 import time
 
-# Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
-QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
-
 fmt = QSurfaceFormat()
-fmt.setVersion(3, 2)  # GLES 3.2 supported by Mali G31
-fmt.setProfile(QSurfaceFormat.NoProfile)  # GLES has no profiles; use NoProfile
-fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Switch to GLES for ARM HW accel
+fmt.setVersion(3, 2)  # GLES 3.2 for Mali G31
+fmt.setProfile(QSurfaceFormat.NoProfile)
+fmt.setRenderableType(QSurfaceFormat.OpenGLES)
 fmt.setDepthBufferSize(24)
 fmt.setStencilBufferSize(8)
-fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
+fmt.setSwapInterval(1)  # Vsync for reduced lag/tearing
+fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)  # Double buffering for smooth updates
 QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
