@@ -30,8 +30,8 @@ fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
 QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
-# os.environ["QT_OPENGL"] = "desktop"  # Forces desktop OpenGL on Windows (ignores ANGLE); harmless on Linux
-# os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl --enable-logging --v=1 --log-level=0"
+os.environ["QT_OPENGL"] = "desktop"  # Forces desktop OpenGL on Windows (ignores ANGLE); harmless on Linux
+os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl --enable-logging --v=1 --log-level=0"
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 
