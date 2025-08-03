@@ -25,7 +25,7 @@ fi
 echo "Swap configured." | tee -a "$LOG_FILE"
 
 echo "Updating and upgrading Ubuntu Server (kernel held)..." | tee -a "$LOG_FILE"
-apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 | tee -a "$LOG_FILE"
+apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 wpasupplicant | tee -a "$LOG_FILE"
 apt-get update -y | tee -a "$LOG_FILE"
 apt-get upgrade -y | tee -a "$LOG_FILE"
 apt-get dist-upgrade -y | tee -a "$LOG_FILE"
@@ -76,7 +76,6 @@ cat << EOF > "$XORG_CONF"
 Section "Device"
     Identifier "Card0"
     Driver "modesetting"
-    Option "AccelMethod" "none"
 EndSection
 Section "Monitor"
     Identifier "HDMI-1"
