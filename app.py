@@ -21,7 +21,7 @@ import time
 QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
 
 fmt = QSurfaceFormat()
-fmt.setVersion(3, 2)  # GLES 3.2 supported by Mali G31
+fmt.setVersion(3, 1)  # GLES 3.2 supported by Mali G31
 fmt.setProfile(QSurfaceFormat.NoProfile)  # GLES has no profiles; use NoProfile
 fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Switch to GLES for ARM HW accel
 fmt.setDepthBufferSize(24)
