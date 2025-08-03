@@ -861,7 +861,7 @@ class SpaceXDashboard(QMainWindow):
             video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
             video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             video_view.setUrl(QUrl(
-                'https://www.youtube.com/embed/Pn6e1O5bEyA?autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
+                'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(video_view)
             logger.info("Added Videos view")

@@ -14,15 +14,6 @@ if ! id "$USER" &>/dev/null; then
     chmod 0440 /etc/sudoers.d/"$USER"
 fi
 
-echo "Configuring 512MB swap file..." | tee -a "$LOG_FILE"
-if [ ! -f /swapfile ]; then
-    fallocate -l 512M /swapfile | tee -a "$LOG_FILE"
-    chmod 600 /swapfile | tee -a "$LOG_FILE"
-    mkswap /swapfile | tee -a "$LOG_FILE"
-    swapon /swapfile | tee -a "$LOG_FILE"
-    echo "/swapfile none swap sw 0 0" | tee -a /etc/fstab
-fi
-echo "Swap configured." | tee -a "$LOG_FILE"
 
 echo "Updating and upgrading Ubuntu Server (kernel held)..." | tee -a "$LOG_FILE"
 apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 wpasupplicant | tee -a "$LOG_FILE"
@@ -54,13 +45,7 @@ echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
 CONFIG_FILE="/boot/armbianEnv.txt"
 
 echo "Configuring silent boot, SpaceX logo, and display..." | tee -a "$LOG_FILE"
-if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
-    if grep -q "^extraargs=" "$CONFIG_FILE"; then
-        sed -i 's/^extraargs=\(.*\)/extraargs=\1 quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CONFIG_FILE" || true
-    else
-        echo "extraargs=quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles" | tee -a "$CONFIG_FILE"
-    fi
-fi
+
 PLYMOUTH_CONF="/etc/plymouth/plymouth.conf"
 mkdir -p /etc/plymouth
 cat << EOF > "$PLYMOUTH_CONF"
@@ -162,36 +147,6 @@ echo "Ensuring X server symlink..." | tee -a "$LOG_FILE"
 ln -s -f /usr/bin/Xorg /usr/bin/X
 echo "X server symlink ensured." | tee -a "$LOG_FILE"
 
-echo "Configuring Wi-Fi if not set..." | tee -a "$LOG_FILE"
-if ! ip addr show wlan0 | grep -q "inet "; then
-    echo "No WiFi connection detected. Launching armbian-config..." | tee -a "$LOG_FILE"
-    armbian-config
-    if ip addr show wlan0 | grep -q "inet "; then
-        echo "WiFi configured via armbian-config." | tee -a "$LOG_FILE"
-    else
-        echo "Warning: WiFi setup failed. Falling back to manual config..." | tee -a "$LOG_FILE"
-        read -p "Enter WiFi SSID: " SSID
-        read -p "Enter WiFi password: " -s PASSWORD
-        echo
-        cat << EOF > /etc/wpa_supplicant.conf
-network={
-    ssid="$SSID"
-    psk="$PASSWORD"
-}
-EOF
-        wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf | tee -a "$LOG_FILE"
-        dhclient wlan0 | tee -a "$LOG_FILE"
-        if ip addr show wlan0 | grep -q "inet "; then
-            echo "WiFi configured manually." | tee -a "$LOG_FILE"
-        else
-            echo "Error: WiFi setup failed. Check hardware." | tee -a "$LOG_FILE"
-            exit 1
-        fi
-    fi
-else
-    echo "WiFi already configured." | tee -a "$LOG_FILE"
-fi
-
 echo "Configuring Docker container to launch..." | tee -a "$LOG_FILE"
 OPENBOX_DIR="$HOME_DIR/.config/openbox"
 sudo -u "$USER" mkdir -p "$OPENBOX_DIR" | tee -a "$LOG_FILE"
@@ -234,10 +189,6 @@ EOF"
 cat "$AUTOSTART_FILE" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 echo "Docker container configured to start." | tee -a "$LOG_FILE"
-
-echo "Optimizing performance..." | tee -a "$LOG_FILE"
-systemctl disable bluetooth | tee -a "$LOG_FILE"
-echo "Performance optimizations applied." | tee -a "$LOG_FILE"
 
 echo "Setup complete. Rebooting in 10 seconds..." | tee -a "$LOG_FILE"
 sleep 10
