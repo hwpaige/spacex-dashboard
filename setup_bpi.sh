@@ -162,36 +162,6 @@ echo "Ensuring X server symlink..." | tee -a "$LOG_FILE"
 ln -s -f /usr/bin/Xorg /usr/bin/X
 echo "X server symlink ensured." | tee -a "$LOG_FILE"
 
-echo "Configuring Wi-Fi if not set..." | tee -a "$LOG_FILE"
-if ! ip addr show wlan0 | grep -q "inet "; then
-    echo "No WiFi connection detected. Launching armbian-config..." | tee -a "$LOG_FILE"
-    armbian-config
-    if ip addr show wlan0 | grep -q "inet "; then
-        echo "WiFi configured via armbian-config." | tee -a "$LOG_FILE"
-    else
-        echo "Warning: WiFi setup failed. Falling back to manual config..." | tee -a "$LOG_FILE"
-        read -p "Enter WiFi SSID: " SSID
-        read -p "Enter WiFi password: " -s PASSWORD
-        echo
-        cat << EOF > /etc/wpa_supplicant.conf
-network={
-    ssid="$SSID"
-    psk="$PASSWORD"
-}
-EOF
-        wpa_supplicant -B -i wlan0 -c /etc/wpa_supplicant.conf | tee -a "$LOG_FILE"
-        dhclient wlan0 | tee -a "$LOG_FILE"
-        if ip addr show wlan0 | grep -q "inet "; then
-            echo "WiFi configured manually." | tee -a "$LOG_FILE"
-        else
-            echo "Error: WiFi setup failed. Check hardware." | tee -a "$LOG_FILE"
-            exit 1
-        fi
-    fi
-else
-    echo "WiFi already configured." | tee -a "$LOG_FILE"
-fi
-
 echo "Configuring Docker container to launch..." | tee -a "$LOG_FILE"
 OPENBOX_DIR="$HOME_DIR/.config/openbox"
 sudo -u "$USER" mkdir -p "$OPENBOX_DIR" | tee -a "$LOG_FILE"
