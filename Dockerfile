@@ -6,7 +6,6 @@ COPY . .
 RUN pip3 install --upgrade --ignore-installed pip setuptools wheel && pip3 install -r requirements.txt
 RUN chown -R 1000:1000 /app
 USER 1000
-ENV QT_OPENGL=desktop
 ENV QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl --enable-logging --v=1 --log-level=0"
 ENV QT_LOGGING_RULES="qt.webenginecontext=true;qt5ct.debug=false"
 ENV QTWEBENGINE_DISABLE_SANDBOX=1
