@@ -178,7 +178,7 @@ for i in {1..60}; do
         xset -dpms
         xset dpms 0 0 0
         xset s noblank
-        unclutter -idle 0 -root &
+        unclutter -idle 0 -root -noevents -grab &
         xrandr --output HDMI-1 --rotate left
         xauth generate :0 . trusted
         xauth add \$HOSTNAME/unix:0 . \$(mcookie)
