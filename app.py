@@ -21,7 +21,7 @@ import time
 QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
 
 fmt = QSurfaceFormat()
-fmt.setVersion(3, 2)  # GLES 3.2 supported by Mali G31
+fmt.setVersion(3, 1)  # GLES 3.1 supported by Mali G31
 fmt.setProfile(QSurfaceFormat.NoProfile)  # GLES has no profiles; use NoProfile
 fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Switch to GLES for ARM HW accel
 fmt.setDepthBufferSize(24)
@@ -30,7 +30,6 @@ fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
 QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
-os.environ["QT_OPENGL"] = "desktop"  # Forces desktop OpenGL on Windows (ignores ANGLE); harmless on Linux
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl --enable-logging --v=1 --log-level=0"
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
@@ -203,7 +202,7 @@ def fetch_launches(first_load=False):
             previous_launches = [
                 {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00',
                  'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital',
-                 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/Pn6e1O5bEyA'},
+                 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z',
                  'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A',
                  'video_url': ''},
@@ -861,7 +860,7 @@ class SpaceXDashboard(QMainWindow):
             video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
             video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
             video_view.setUrl(QUrl(
-                'https://www.youtube.com/embed/Pn6e1O5bEyA?autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
+                'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(video_view)
             logger.info("Added Videos view")
