@@ -100,6 +100,9 @@ cat << EOF > "$TOUCH_RULES"
 ENV{ID_INPUT_TOUCHSCREEN}=="1", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 1 0 -1 0 1"
 EOF
 udevadm control --reload-rules | tee -a "$LOG_FILE"
+echo "Verifying multi-touch support..." | tee -a "$LOG_FILE"
+apt-get install -y libinput-tools | tee -a "$LOG_FILE"
+libinput list-devices | tee -a "$LOG_FILE"
 echo "Touch rotation configured." | tee -a "$LOG_FILE"
 
 echo "Cloning GitHub repository to Desktop..." | tee -a "$LOG_FILE"
@@ -117,7 +120,7 @@ fi
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
 echo "Creating start_app.sh on host..." | tee -a "$LOG_FILE"
-sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
+sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'dbus-run-session -- python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
 echo "start_app.sh created." | tee -a "$LOG_FILE"
 
 echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
