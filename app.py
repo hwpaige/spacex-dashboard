@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter
 from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
 from PyQt5.QtChart import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
-from PyQt5.QtGui import QSurfaceFormat
+from PyQt5.QtGui import QSurfaceFormat, QCursor
 from PyQt5.QtQuick import QQuickWindow, QSGRendererInterface
 from datetime import datetime, timedelta
 import logging
@@ -483,6 +483,7 @@ class EventCard(QWidget):
 class SpaceXDashboard(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.setAttribute(Qt.WA_AcceptTouchEvents, True)
         logger.info("Initializing SpaceXDashboard")
         self.setWindowTitle("SpaceX/F1 Dashboard")
         self.setGeometry(0, 0, 1480, 320)  # Match Waveshare 320x1480 rotated display
@@ -832,6 +833,7 @@ class SpaceXDashboard(QMainWindow):
             radar_view.setUrl(QUrl(radar_locations['Starbase'] + f"&rand={time.time()}"))
             self.column2.layout().addWidget(title)
             self.column2.layout().addWidget(radar_view)
+            radar_view.setAttribute(Qt.WA_AcceptTouchEvents, True)
             logger.info("Added Radar view")
 
             # Column 3: Launches
@@ -863,6 +865,7 @@ class SpaceXDashboard(QMainWindow):
                 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(video_view)
+            video_view.setAttribute(Qt.WA_AcceptTouchEvents, True)
             logger.info("Added Videos view")
         else:
             # Column 1: Driver Standings
@@ -1031,6 +1034,7 @@ if __name__ == '__main__':
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
 
     app = QApplication(sys.argv)
+    app.setOverrideCursor(QCursor(Qt.BlankCursor))  # Blank cursor globally
     try:
         logger.info("Starting SpaceXDashboard application")
         window = SpaceXDashboard()
