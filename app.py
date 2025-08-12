@@ -2,8 +2,7 @@ import sys
 import requests
 import os
 import json
-from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget,
-                             QListWidgetItem, QPushButton, QFrame)
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QListWidgetItem, QPushButton, QFrame)
 from PyQt6.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter, QSurfaceFormat, QCursor
 from PyQt6.QtWebEngineWidgets import QWebEngineView
