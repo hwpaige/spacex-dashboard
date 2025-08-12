@@ -6,7 +6,8 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QH
                              QListWidget, QListWidgetItem, QPushButton, QFrame)
 from PyQt6.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
 from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter, QSurfaceFormat, QCursor
-from PyQt6.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtCharts import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
 from PyQt6.QtQuick import QQuickWindow
 from datetime import datetime, timedelta
