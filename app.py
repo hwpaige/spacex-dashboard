@@ -2,14 +2,13 @@ import sys
 import requests
 import os
 import json
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QListWidget, QListWidgetItem, QPushButton, QFrame)
-from PyQt5.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
-from PyQt5.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter
-from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
-from PyQt5.QtChart import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
-from PyQt5.QtGui import QSurfaceFormat, QCursor
-from PyQt5.QtQuick import QQuickWindow, QSGRendererInterface
+from PyQt6.QtCore import Qt, QTimer, QUrl, QSize, QDateTime
+from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter, QSurfaceFormat, QCursor
+from PyQt6.QtWebEngineWidgets import QWebEngineView, QWebEngineSettings
+from PyQt6.QtCharts import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
+from PyQt6.QtQuick import QQuickWindow
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
@@ -18,12 +17,12 @@ import pandas as pd
 import time
 
 # Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
-QQuickWindow.setSceneGraphBackend(QSGRendererInterface.GraphicsApi.OpenGL)
+QQuickWindow.setGraphicsApi(QQuickWindow.GraphicsApi.OpenGLRhi)
 
 fmt = QSurfaceFormat()
 fmt.setVersion(3, 1)  # GLES 3.1 supported by Mali G31
-fmt.setProfile(QSurfaceFormat.NoProfile)  # GLES has no profiles; use NoProfile
-fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Switch to GLES for ARM HW accel
+fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.NoProfile)  # GLES has no profiles; use NoProfile
+fmt.setRenderableType(QSurfaceFormat.RenderableType.OpenGLES)  # Switch to GLES for ARM HW accel
 fmt.setDepthBufferSize(24)
 fmt.setStencilBufferSize(8)
 fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
@@ -31,7 +30,7 @@ QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-    "--enable-gpu --ignore-gpu-blacklist --enable-accelerated-video-decode --enable-webgl "
+    "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
     "--enable-logging --v=1 --log-level=0 --enable-touch-drag-drop"
 )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
@@ -486,7 +485,7 @@ class EventCard(QWidget):
 class SpaceXDashboard(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setAttribute(Qt.WA_AcceptTouchEvents, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
         logger.info("Initializing SpaceXDashboard")
         self.setWindowTitle("SpaceX/F1 Dashboard")
         self.setGeometry(0, 0, 1480, 320)  # Match Waveshare 320x1480 rotated display
@@ -803,7 +802,7 @@ class SpaceXDashboard(QMainWindow):
             axis_y.setRange(0, df_pivot.max().max() + 5)
             chart.setAxisY(axis_y, bar_series)
             chart_view = QChartView(chart)
-            chart_view.setRenderHint(QPainter.Antialiasing)
+            chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
             self.column1.layout().addWidget(title)
             self.column1.layout().addWidget(chart_view)
 
@@ -831,12 +830,12 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             radar_view = QWebEngineView()
-            radar_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
-            radar_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
+            radar_view.settings().setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
+            radar_view.settings().setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
             radar_view.setUrl(QUrl(radar_locations['Starbase'] + f"&rand={time.time()}"))
             self.column2.layout().addWidget(title)
             self.column2.layout().addWidget(radar_view)
-            radar_view.setAttribute(Qt.WA_AcceptTouchEvents, True)
+            radar_view.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
             logger.info("Added Radar view")
 
             # Column 3: Launches
@@ -862,13 +861,13 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             video_view = QWebEngineView()
-            video_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
-            video_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
+            video_view.settings().setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
+            video_view.settings().setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
             video_view.setUrl(QUrl(
                 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'))
             self.column4.layout().addWidget(title)
             self.column4.layout().addWidget(video_view)
-            video_view.setAttribute(Qt.WA_AcceptTouchEvents, True)
+            video_view.setAttribute(Qt.WidgetAttribute.WA_AcceptTouchEvents, True)
             logger.info("Added Videos view")
         else:
             # Column 1: Driver Standings
@@ -937,8 +936,8 @@ class SpaceXDashboard(QMainWindow):
             title.setStyleSheet(
                 "font-size: 14px; text-transform: uppercase; color: #999999; border-bottom: 1px solid #999999; padding: 10px;")
             map_view = QWebEngineView()
-            map_view.settings().setAttribute(QWebEngineSettings.WebGLEnabled, True)
-            map_view.settings().setAttribute(QWebEngineSettings.Accelerated2dCanvasEnabled, True)
+            map_view.settings().setAttribute(QWebEngineSettings.WebAttribute.WebGLEnabled, True)
+            map_view.settings().setAttribute(QWebEngineSettings.WebAttribute.Accelerated2dCanvasEnabled, True)
             next_race = self.get_next_race()
             if next_race:
                 coords = circuit_coords.get(next_race['circuit_short_name'], {'lat': 0, 'lon': 0})
@@ -980,7 +979,7 @@ class SpaceXDashboard(QMainWindow):
         for group_name, group in grouped:
             if group:
                 item = QListWidgetItem(group_name)
-                item.setFlags(Qt.NoItemFlags)
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
                 item.setBackground(QColor(50, 50, 50))
                 list_widget.addItem(item)
                 for launch in group:
@@ -1020,7 +1019,7 @@ class SpaceXDashboard(QMainWindow):
         for group_name, group in grouped:
             if group:
                 item = QListWidgetItem(group_name)
-                item.setFlags(Qt.NoItemFlags)
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
                 item.setBackground(QColor(50, 50, 50))
                 list_widget.addItem(item)
                 for race in group:
@@ -1037,12 +1036,12 @@ if __name__ == '__main__':
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
 
     app = QApplication(sys.argv)
-    app.setOverrideCursor(QCursor(Qt.BlankCursor))  # Blank cursor globally
+    app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
     try:
         logger.info("Starting SpaceXDashboard application")
         window = SpaceXDashboard()
         window.showFullScreen()  # Fullscreen for Banana Pi 320x1480 display
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
     except Exception as e:
         logger.error(f"Application crashed: {e}")
         raise
