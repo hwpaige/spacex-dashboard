@@ -800,13 +800,12 @@ class SpaceXDashboard(QMainWindow):
 
     def load_fonts(self):
         logger.info("Loading fonts")
-        font_db = QFontDatabase()
         font_path = "/app/assets/D-DIN.ttf"  # Absolute path for Banana Pi
         if not os.path.exists(font_path):
             logger.error(f"Font file not found: {font_path}, falling back to Arial")
             self.setFont(QFont("Arial", 12))
         else:
-            font_id = font_db.addApplicationFont(font_path)
+            font_id = QFontDatabase.addApplicationFont(font_path)
             if font_id == -1:
                 logger.error(f"Failed to load font: {font_path}, falling back to Arial")
                 self.setFont(QFont("Arial", 12))
