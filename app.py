@@ -8,7 +8,7 @@ from PyQt6.QtGui import QFont, QFontDatabase, QIcon, QColor, QPainter, QSurfaceF
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEngineSettings
 from PyQt6.QtCharts import QChart, QChartView, QBarSeries, QBarSet, QBarCategoryAxis, QValueAxis
-from PyQt6.QtQuick import QQuickWindow
+from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
@@ -17,7 +17,7 @@ import pandas as pd
 import time
 
 # Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
-QQuickWindow.setGraphicsApi(QQuickWindow.GraphicsApi.OpenGLRhi)
+QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGLRhi)
 
 fmt = QSurfaceFormat()
 fmt.setVersion(3, 1)  # GLES 3.1 supported by Mali G31
