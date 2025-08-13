@@ -19,14 +19,14 @@ import time
 # Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
 QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGLRhi)
 
-fmt = QSurfaceFormat()
-fmt.setVersion(3, 1)  # GLES 3.1 supported by Mali G31
-fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.NoProfile)  # GLES has no profiles; use NoProfile
-fmt.setRenderableType(QSurfaceFormat.RenderableType.OpenGLES)  # Switch to GLES for ARM HW accel
-fmt.setDepthBufferSize(24)
-fmt.setStencilBufferSize(8)
-fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
-QSurfaceFormat.setDefaultFormat(fmt)
+# fmt = QSurfaceFormat()
+# fmt.setVersion(3, 1)  # GLES 3.1 supported by Mali G31
+# fmt.setProfile(QSurfaceFormat.OpenGLContextProfile.NoProfile)  # GLES has no profiles; use NoProfile
+# fmt.setRenderableType(QSurfaceFormat.RenderableType.OpenGLES)  # Switch to GLES for ARM HW accel
+# fmt.setDepthBufferSize(24)
+# fmt.setStencilBufferSize(8)
+# fmt.setSwapInterval(1)  # Enable vsync to reduce tearing/lag spikes
+# QSurfaceFormat.setDefaultFormat(fmt)
 
 # Environment variables for Qt and Chromium
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -828,7 +828,7 @@ class SpaceXDashboard(QMainWindow):
         self.column3 = QFrame()
         self.column4 = QFrame()
         for col in [self.column1, self.column2, self.column3, self.column4]:
-            col.setFrameShape(QFrame.StyledPanel)
+            col.setFrameShape(QFrame.Shape.StyledPanel)
             col.setFixedHeight(int(0.85 * 320))  # 85% of 320px height
             col_layout = QVBoxLayout(col)
             col_layout.setContentsMargins(0, 0, 0, 0)
@@ -856,7 +856,7 @@ class SpaceXDashboard(QMainWindow):
 
         # Logo
         self.mode_button = QPushButton()
-        logo_path = "/app/assets/spacex-logo.png"  # Absolute path for Banana Pi
+        logo_path = os.path.join(os.path.dirname(__file__), "assets", "spacex-logo.png")  # Relative path
         if not os.path.exists(logo_path):
             logger.error(f"Logo file not found: {logo_path}")
         self.mode_button.setIcon(QIcon(logo_path))
@@ -913,7 +913,7 @@ class SpaceXDashboard(QMainWindow):
 
     def toggle_mode(self):
         self.mode = 'f1' if self.mode == 'spacex' else 'spacex'
-        logo_path = f"/app/assets/{'f1' if self.mode == 'f1' else 'spacex'}-logo.png"
+        logo_path = os.path.join(os.path.dirname(__file__), "assets", f"{'f1' if self.mode == 'f1' else 'spacex'}-logo.png")
         if not os.path.exists(logo_path):
             logger.error(f"Logo file not found: {logo_path}")
         self.mode_button.setIcon(QIcon(logo_path))
@@ -1064,14 +1064,16 @@ class SpaceXDashboard(QMainWindow):
             axis_x.setTitleFont(QFont("D-DIN", 10))
             axis_x.setLabelsFont(QFont("D-DIN", 10))
             axis_x.setLabelsColor(QColor(255, 255, 255))
-            chart.setAxisX(axis_x, bar_series)
+            chart.addAxis(axis_x, Qt.AlignmentFlag.AlignBottom)
+            bar_series.attachAxis(axis_x)
             axis_y = QValueAxis()
             axis_y.setTitleText("Launches")
             axis_y.setTitleFont(QFont("D-DIN", 10))
             axis_y.setLabelsFont(QFont("D-DIN", 10))
             axis_y.setLabelsColor(QColor(255, 255, 255))
             axis_y.setRange(0, df_pivot.max().max() + 5)
-            chart.setAxisY(axis_y, bar_series)
+            chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
+            bar_series.attachAxis(axis_y)
             chart_view = QChartView(chart)
             chart_view.setRenderHint(QPainter.RenderHint.Antialiasing)
             self.column1.layout().addWidget(title)
