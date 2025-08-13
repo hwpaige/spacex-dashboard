@@ -49,8 +49,8 @@ logger = logging.getLogger(__name__)
 
 # Cache for launch data
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
-CACHE_FILE_PREVIOUS = '/app/previous_launches_cache.json'
-CACHE_FILE_UPCOMING = '/app/upcoming_launches_cache.json'
+CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), 'previous_launches_cache.json')
+CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), 'upcoming_launches_cache.json')
 f1_cache = None
 
 
@@ -800,7 +800,7 @@ class SpaceXDashboard(QMainWindow):
 
     def load_fonts(self):
         logger.info("Loading fonts")
-        font_path = "/app/assets/D-DIN.ttf"  # Absolute path for Banana Pi
+        font_path = os.path.join(os.path.dirname(__file__), "assets", "D-DIN.ttf")  # Relative path
         if not os.path.exists(font_path):
             logger.error(f"Font file not found: {font_path}, falling back to Arial")
             self.setFont(QFont("Arial", 12))
