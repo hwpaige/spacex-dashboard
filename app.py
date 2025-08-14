@@ -51,6 +51,9 @@ logger = logging.getLogger(__name__)
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), 'previous_launches_cache.json')
 CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), 'upcoming_launches_cache.json')
+
+# Cache for F1 data
+CACHE_FILE_F1 = os.path.join(os.path.dirname(__file__), 'f1_cache.json')
 f1_cache = None
 
 
@@ -433,7 +436,7 @@ hardcoded_sessions = [
 
 
 # Fetch SpaceX launch data
-def fetch_launches(first_load=False):
+def fetch_launches():
     logger.info("Fetching SpaceX launch data")
     current_time = datetime.now(pytz.UTC)
     current_date_str = current_time.strftime('%Y-%m-%d')
@@ -441,8 +444,7 @@ def fetch_launches(first_load=False):
 
     # Load previous launches cache
     previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
-    if not first_load and previous_cache and (
-            current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
         previous_launches = previous_cache['data']
         logger.info("Using persistent cached previous launches")
     else:
@@ -459,8 +461,7 @@ def fetch_launches(first_load=False):
                     'net': launch['net'],
                     'status': launch['status']['name'],
                     'rocket': launch['rocket']['configuration']['name'],
-                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch[
-                        'mission'] else 'Unknown',
+                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
                 }
@@ -483,8 +484,7 @@ def fetch_launches(first_load=False):
 
     # Load upcoming launches cache
     upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
-    if not first_load and upcoming_cache and (
-            current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+    if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
         upcoming_launches = upcoming_cache['data']
         logger.info("Using persistent cached upcoming launches")
     else:
@@ -501,8 +501,7 @@ def fetch_launches(first_load=False):
                     'net': launch['net'],
                     'status': launch['status']['name'],
                     'rocket': launch['rocket']['configuration']['name'],
-                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch[
-                        'mission'] else 'Unknown',
+                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
                 }
@@ -529,73 +528,157 @@ def fetch_f1_data():
     global f1_cache
     if f1_cache:
         return f1_cache
-    try:
-        meetings = hardcoded_f1_schedule
-        driver_standings = []
-        constructor_standings = []
-        for meeting in meetings:
-            meeting['sessions'] = [s for s in hardcoded_sessions if s['meeting_key'] == meeting['meeting_key']]
-            race_sessions = [s for s in meeting['sessions'] if s['session_name'] == 'Race']
-            if race_sessions:
-                session_key = race_sessions[0]['session_key']
-                results_url = f"https://api.openf1.org/v1/results?session_key={session_key}&position<=20"
-                response = requests.get(results_url, timeout=5)
-                response.raise_for_status()
-                results = response.json()
-                points_map = {1: 25, 2: 18, 3: 15, 4: 12, 5: 10, 6: 8, 7: 6, 8: 4, 9: 2, 10: 1}
-                for result in results:
-                    position = result['position']
-                    driver_number = result['driver_number']
-                    drivers_url = f"https://api.openf1.org/v1/drivers?session_key={session_key}&driver_number={driver_number}"
-                    drivers_resp = requests.get(drivers_url, timeout=5)
-                    drivers_resp.raise_for_status()
-                    driver = drivers_resp.json()[0]
-                    for ds in driver_standings:
-                        if ds['Driver']['givenName'] == driver.get('first_name') and ds['Driver'][
-                            'familyName'] == driver.get('last_name'):
-                            ds['points'] += points_map.get(position, 0)
-                            break
-                    else:
-                        driver_standings.append(
-                            {'position': len(driver_standings) + 1, 'points': points_map.get(position, 0),
-                             'Driver': {'givenName': driver.get('first_name', ''),
-                                        'familyName': driver.get('last_name', '')}})
-                    for cs in constructor_standings:
-                        if cs['Constructor']['name'] == driver.get('team_name'):
-                            cs['points'] += points_map.get(position, 0)
-                            break
-                    else:
-                        constructor_standings.append(
-                            {'position': len(constructor_standings) + 1, 'points': points_map.get(position, 0),
-                             'Constructor': {'name': driver.get('team_name', '')}})
-                time.sleep(1)  # Avoid rate limiting
-        driver_standings.sort(key=lambda x: x['points'], reverse=True)
-        for i, ds in enumerate(driver_standings):
-            ds['position'] = i + 1
-        constructor_standings.sort(key=lambda x: x['points'], reverse=True)
-        for i, cs in enumerate(constructor_standings):
-            cs['position'] = i + 1
-        f1_cache = {'schedule': meetings, 'driver_standings': driver_standings,
-                    'constructor_standings': constructor_standings}
-        logger.info("Successfully fetched F1 data")
+    current_time = datetime.now(pytz.UTC)
+    cache = load_cache_from_file(CACHE_FILE_F1)
+    if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+        f1_cache = cache['data']
+        logger.info("Using persistent cached F1 data")
         return f1_cache
-    except Exception as e:
-        logger.error(f"OpenF1 API error: {e}")
-        f1_cache = {
-            'schedule': hardcoded_f1_schedule,
-            'driver_standings': [
-                {'position': 1, 'points': 575, 'Driver': {'givenName': 'Max', 'familyName': 'Verstappen'}},
-                {'position': 2, 'points': 285, 'Driver': {'givenName': 'Sergio', 'familyName': 'Perez'}},
-            ],
-            'constructor_standings': [
-                {'position': 1, 'points': 860, 'Constructor': {'name': 'Red Bull'}},
-                {'position': 2, 'points': 409, 'Constructor': {'name': 'Mercedes'}},
-            ]
-        }
-        for meeting in f1_cache['schedule']:
-            meeting['sessions'] = [s for s in hardcoded_sessions if s['meeting_key'] == meeting['meeting_key']]
-        return f1_cache
-
+    else:
+        try:
+            current_year = current_time.year
+            # Fetch schedule
+            url = f"https://api.jolpi.ca/ergast/f1/{current_year}.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            races = data['MRData']['RaceTable']['Races']
+            meetings = []
+            short_name_map = {
+                'albert_park': 'Melbourne',
+                'shanghai': 'Shanghai',
+                'suzuka': 'Suzuka',
+                'bahrain': 'Sakhir',
+                'jeddah': 'Jeddah',
+                'miami': 'Miami',
+                'imola': 'Imola',
+                'monaco': 'Monte Carlo',
+                'catalunya': 'Catalunya',
+                'villeneuve': 'Montreal',
+                'red_bull_ring': 'Spielberg',
+                'silverstone': 'Silverstone',
+                'spa': 'Spa',
+                'hungaroring': 'Hungaroring',
+                'zandvoort': 'Zandvoort',
+                'monza': 'Monza',
+                'baku': 'Baku',
+                'marina_bay': 'Singapore',
+                'americas': 'Austin',
+                'rodriguez': 'Mexico City',
+                'interlagos': 'Sao Paulo',
+                'vegas': 'Las Vegas',
+                'losail': 'Lusail',
+                'yas_marina': 'Abu Dhabi'
+            }
+            for race in races:
+                meeting = {
+                    "circuit_short_name": short_name_map.get(race['Circuit']['circuitId'], race['Circuit']['circuitName']),
+                    "location": race['Circuit']['Location']['locality'],
+                    "country_name": race['Circuit']['Location']['country'],
+                    "meeting_name": race['raceName'],
+                    "year": current_year
+                }
+                # Parse sessions
+                sessions = []
+                if 'FirstPractice' in race:
+                    date_start = f"{race['FirstPractice']['date']}T{race['FirstPractice']['time']}"
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": date_start,
+                        "session_type": "Practice",
+                        "session_name": "Practice 1",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                    meeting['date_start'] = date_start  # Set meeting start to FP1
+                if 'SecondPractice' in race:
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": f"{race['SecondPractice']['date']}T{race['SecondPractice']['time']}",
+                        "session_type": "Practice",
+                        "session_name": "Practice 2",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                if 'ThirdPractice' in race:
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": f"{race['ThirdPractice']['date']}T{race['ThirdPractice']['time']}",
+                        "session_type": "Practice",
+                        "session_name": "Practice 3",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                if 'SprintQualifying' in race:
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": f"{race['SprintQualifying']['date']}T{race['SprintQualifying']['time']}",
+                        "session_type": "Qualifying",
+                        "session_name": "Sprint Qualifying",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                if 'Sprint' in race:
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": f"{race['Sprint']['date']}T{race['Sprint']['time']}",
+                        "session_type": "Race",
+                        "session_name": "Sprint",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                if 'Qualifying' in race:
+                    sessions.append({
+                        "location": meeting['location'],
+                        "date_start": f"{race['Qualifying']['date']}T{race['Qualifying']['time']}",
+                        "session_type": "Qualifying",
+                        "session_name": "Qualifying",
+                        "country_name": meeting['country_name'],
+                        "circuit_short_name": meeting['circuit_short_name'],
+                        "year": current_year
+                    })
+                # Always add Race
+                sessions.append({
+                    "location": meeting['location'],
+                    "date_start": f"{race['date']}T{race['time']}",
+                    "session_type": "Race",
+                    "session_name": "Race",
+                    "country_name": meeting['country_name'],
+                    "circuit_short_name": meeting['circuit_short_name'],
+                    "year": current_year
+                })
+                meeting['sessions'] = sessions
+                meetings.append(meeting)
+            # Fetch driver standings
+            url = f"https://api.jolpi.ca/ergast/f1/{current_year}/driverStandings.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            standings_lists = data['MRData']['StandingsTable']['StandingsLists']
+            driver_standings = standings_lists[0]['DriverStandings'] if standings_lists else []
+            # Fetch constructor standings
+            url = f"https://api.jolpi.ca/ergast/f1/{current_year}/constructorStandings.json"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            standings_lists = data['MRData']['StandingsTable']['StandingsLists']
+            constructor_standings = standings_lists[0]['ConstructorStandings'] if standings_lists else []
+            f1_data = {'schedule': meetings, 'driver_standings': driver_standings,
+                       'constructor_standings': constructor_standings}
+            save_cache_to_file(CACHE_FILE_F1, f1_data, current_time)
+            f1_cache = f1_data
+            logger.info("Successfully fetched and saved F1 data")
+            time.sleep(1)  # Avoid rate limiting
+            return f1_cache
+        except Exception as e:
+            logger.error(f"Ergast API error: {e}")
+            f1_cache = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+            return f1_cache
 
 # Fetch weather data
 def fetch_weather(lat, lon, location):
@@ -725,11 +808,11 @@ class EventCard(QWidget):
             }
             QLabel { font-size: 12px; }
         """)
-        title = QLabel(event['mission'] if event_type in ['upcoming', 'previous'] else event['meeting_name'])
+        title = QLabel(event.get('mission', event.get('meeting_name', 'Event')))
         title.setStyleSheet("font-size: 14px; color: #ffffff;")
         layout.addWidget(title)
 
-        if event_type in ['upcoming', 'previous']:
+        if 'mission' in event:  # SpaceX launch
             rocket_label = QLabel(f"🚀 Rocket: {event['rocket']}")
             layout.addWidget(rocket_label)
             orbit_label = QLabel(f"🌍 Orbit: {event['orbit']}")
@@ -743,7 +826,7 @@ class EventCard(QWidget):
             status.setStyleSheet(
                 f"color: {'#00ff00' if event['status'] in ['Success', 'Go', 'TBD', 'Go for Launch'] else '#ff0000'};")
             layout.addWidget(status)
-        else:
+        else:  # F1 race
             circuit_label = QLabel(f"🏎️ Circuit: {event['circuit_short_name']}")
             layout.addWidget(circuit_label)
             layout.addWidget(QLabel(f"Date: {parse(event['date_start']).astimezone(tz).strftime('%Y-%m-%d')}"))
@@ -773,7 +856,7 @@ class SpaceXDashboard(QMainWindow):
         self.event_type = 'upcoming'
         self.weather_data = self.initialize_weather()
         # Fetch launch data at startup
-        self.launch_data = fetch_launches(first_load=True)
+        self.launch_data = fetch_launches()  # No first_load; always checks cache
         self.init_ui()
         # Set up timers for updates (replaces threads)
         self.weather_timer = QTimer(self)
