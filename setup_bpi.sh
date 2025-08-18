@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+
 USER="harrison"
 HOME_DIR="/home/$USER"
 LOG_FILE="$HOME_DIR/setup_ubuntu.log"
@@ -18,12 +19,12 @@ apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 wpasupplican
 apt-get update -y | tee -a "$LOG_FILE"
 apt-get upgrade -y | tee -a "$LOG_FILE"
 apt-get dist-upgrade -y | tee -a "$LOG_FILE"
-apt-get autoremove -y | tee -a "$LOG_FILE"
-apt-get autoclean -y | tee -a "$LOG_FILE"
+#apt-get autoremove -y | tee -a "$LOG_FILE"
+#apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice xinput python3-requests python3-tz python3-dateutil python3-pandas upower | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice xinput python3-requests python3-tz python3-dateutil python3-pandas upower wireless-tools | tee -a "$LOG_FILE"
 systemctl enable --now upower | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
 
@@ -33,23 +34,31 @@ echo "xauth ensured." | tee -a "$LOG_FILE"
 
 CONFIG_FILE="/boot/armbianEnv.txt"
 echo "Configuring silent boot, SpaceX logo, and display..." | tee -a "$LOG_FILE"
-if ! grep -q "extraargs=.*quiet" "$CONFIG_FILE"; then
-    if grep -q "^extraargs=" "$CONFIG_FILE"; then
-        sed -i 's/^extraargs=\(.*\)/extraargs=\1 quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles video=HDMI-A-1:320x1480@60,rotate=270/' "$CONFIG_FILE" || true
-    else
-        echo "extraargs=quiet splash loglevel=0 console=blank vt.global_cursor_default=0 plymouth.ignore-serial-consoles video=HDMI-A-1:320x1480@60,rotate=270" | tee -a "$CONFIG_FILE"
-    fi
+
+# Update extraargs with new parameters
+if grep -q "^extraargs=" "$CONFIG_FILE"; then
+    sed -i 's/^extraargs=.*/extraargs=vt.global_cursor_default=0 quiet splash plymouth.ignore-serial-consoles video=HDMI-A-1:320x1480@60,rotate=270/' "$CONFIG_FILE" || true
+else
+    echo "extraargs=vt.global_cursor_default=0 quiet splash plymouth.ignore-serial-consoles video=HDMI-A-1:320x1480@60,rotate=270" | tee -a "$CONFIG_FILE"
 fi
 
-PLYMOUTH_CONF="/etc/plymouth/plymouth.conf"
-mkdir -p /etc/plymouth
-cat << EOF > "$PLYMOUTH_CONF"
-[Daemon]
-Theme=armbian
-ShowDelay=0
-DeviceTimeout=5
-EOF
-update-initramfs -u | tee -a "$LOG_FILE"
+# Add or update other boot parameters
+sed -i '/^verbosity=/d' "$CONFIG_FILE"
+echo "verbosity=0" >> "$CONFIG_FILE"
+sed -i '/^console=/d' "$CONFIG_FILE"
+echo "console=custom" >> "$CONFIG_FILE"
+sed -i '/^consoleargs=/d' "$CONFIG_FILE"
+echo "consoleargs=console=ttyS0,115200 console=tty7" >> "$CONFIG_FILE"
+sed -i '/^stdout=/d' "$CONFIG_FILE"
+echo "stdout=serial" >> "$CONFIG_FILE"
+
+# Set initramfs compression for faster rebuilds
+if ! grep -q "^COMPRESS=lz4" /etc/initramfs-tools/initramfs.conf; then
+    echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
+fi
+
+# Set Plymouth theme to spinner and rebuild initramfs
+plymouth-set-default-theme spinner -R | tee -a "$LOG_FILE"
 
 XORG_CONF="/etc/X11/xorg.conf.d/20-waveshare.conf"
 mkdir -p /etc/X11/xorg.conf.d | tee -a "$LOG_FILE"
@@ -58,12 +67,14 @@ Section "Device"
     Identifier "Card0"
     Driver "modesetting"
 EndSection
+
 Section "Monitor"
     Identifier "HDMI-1"
-    Modeline "320x1480_60.00"  42.00  320 336 368 448  1480 1484 1492 1512 -hsync +vsync
+    Modeline "320x1480_60.00" 42.00 320 336 368 448 1480 1484 1492 1512 -hsync +vsync
     Option "PreferredMode" "320x1480_60.00"
     Option "Rotate" "left"
 EndSection
+
 Section "Screen"
     Identifier "Screen0"
     Device "Card0"
@@ -76,6 +87,7 @@ EndSection
 EOF
 cat "$XORG_CONF" | tee -a "$LOG_FILE"
 echo "Silent boot, logo, and display configured." | tee -a "$LOG_FILE"
+
 echo "Configuring touch rotation for 90° left..." | tee -a "$LOG_FILE"
 TOUCH_RULES="/etc/udev/rules.d/99-touch-rotation.rules"
 cat << EOF > "$TOUCH_RULES"
@@ -103,7 +115,7 @@ fi
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
 echo "Creating start_app.sh on host..." | tee -a "$LOG_FILE"
-sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'dbus-run-session -- python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
+sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'export QT_QPA_PLATFORM=xcb' >> start_app.sh && echo 'dbus-run-session -- python3 app.py > $HOME_DIR/app.log 2>&1' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
 echo "start_app.sh created." | tee -a "$LOG_FILE"
 
 echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
@@ -154,7 +166,7 @@ AUTOSTART_FILE="$OPENBOX_DIR/autostart"
 sudo -u "$USER" rm -f "$AUTOSTART_FILE"
 sudo -u "$USER" bash -c "cat << EOF > \"$AUTOSTART_FILE\"
 touch $HOME_DIR/autostart_test.txt
-for i in {1..60}; do
+for i in {1..120}; do
     export DISPLAY=:0
     if xset -q >/dev/null 2>&1; then
         xset s off
@@ -168,16 +180,29 @@ for i in {1..60}; do
     fi
     sleep 1
 done
-$REPO_DIR/start_app.sh &
+$REPO_DIR/start_app.sh > $HOME_DIR/autostart_app.log 2>&1 &
 EOF"
 cat "$AUTOSTART_FILE" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$OPENBOX_DIR" | tee -a "$LOG_FILE"
 echo "App configured to start." | tee -a "$LOG_FILE"
 
 echo "Optimizing performance..." | tee -a "$LOG_FILE"
-systemctl disable bluetooth | tee -a "$LOG_FILE"
 echo "Performance optimizations applied." | tee -a "$LOG_FILE"
-
+echo "options brcmfmac p2p=0" | tee /etc/modprobe.d/brcmfmac.conf | tee -a "$LOG_FILE"
+# Disable WiFi power saving to prevent drops after GUI start
+iw dev wlan0 set power_save off | tee -a "$LOG_FILE" || true  # '|| true' in case interface name differs or not up yet
+modprobe -r brcmfmac | tee -a "$LOG_FILE"
+modprobe brcmfmac | tee -a "$LOG_FILE"
+echo "Configuring persistent WiFi power save disable..." | tee -a "$LOG_FILE"
+cat << EOF > /etc/rc.local
+#!/bin/sh -e
+sleep 10  # Wait for network to initialize
+iw dev wlan0 set power_save off
+exit 0
+EOF
+chmod +x /etc/rc.local
+systemctl enable rc-local | tee -a "$LOG_FILE" || true
+echo "WiFi power save disable configured." | tee -a "$LOG_FILE"
 echo "Setup complete. Rebooting in 10 seconds..." | tee -a "$LOG_FILE"
 sleep 10
 reboot

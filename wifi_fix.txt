@@ -14,3 +14,17 @@ Since you're on a fresh minimal/server install without internet, we'll use built
 Bring up the interface:
 
 sudo ip link set wlan0 up
+
+
+2. Disable WiFi Direct (P2P) in the Driver
+This directly addresses the "Unknown Frame" warning by turning off P2P support, which isn't needed for standard WiFi.
+
+Create a modprobe config file:
+echo "options brcmfmac p2p=0" | sudo tee /etc/modprobe.d/brcmfmac.conf
+
+Reload the module:
+textsudo modprobe -r brcmfmac
+sudo modprobe brcmfmac
+
+Reboot to apply persistently:
+textsudo reboot
