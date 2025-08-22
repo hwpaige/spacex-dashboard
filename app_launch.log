@@ -1,0 +1,78 @@
+2025-08-21 22:06:09,909 - INFO - Fetching SpaceX launch data
+2025-08-21 22:06:12,131 - INFO - Successfully fetched and saved previous launches
+2025-08-21 22:06:14,763 - INFO - Successfully fetched and saved upcoming launches
+2025-08-21 22:06:14,763 - INFO - Fetching F1 data
+2025-08-21 22:06:16,218 - INFO - Successfully fetched and saved F1 data
+2025-08-21 22:06:17,219 - INFO - Fetching weather data for Starbase
+2025-08-21 22:06:17,932 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:06:18,933 - INFO - Fetching weather data for Vandy
+2025-08-21 22:06:19,670 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:06:20,672 - INFO - Fetching weather data for Cape
+2025-08-21 22:06:21,364 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:06:22,365 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:06:23,101 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-21 22:10:21,283 - INFO - Fetching SpaceX launch data
+2025-08-21 22:10:21,283 - INFO - Using persistent cached previous launches
+2025-08-21 22:10:21,284 - INFO - Using persistent cached upcoming launches
+2025-08-21 22:10:21,284 - INFO - Fetching F1 data
+2025-08-21 22:10:21,284 - INFO - Using persistent cached F1 data
+2025-08-21 22:10:21,284 - INFO - Fetching weather data for Starbase
+2025-08-21 22:10:21,976 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:10:22,977 - INFO - Fetching weather data for Vandy
+2025-08-21 22:10:23,658 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:10:24,660 - INFO - Fetching weather data for Cape
+2025-08-21 22:10:25,287 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:10:26,289 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:10:27,077 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-21 22:12:30,863 - INFO - Fetching SpaceX launch data
+2025-08-21 22:12:30,864 - INFO - Using persistent cached previous launches
+2025-08-21 22:12:30,864 - INFO - Using persistent cached upcoming launches
+2025-08-21 22:12:30,864 - INFO - Fetching F1 data
+2025-08-21 22:12:30,865 - INFO - Using persistent cached F1 data
+2025-08-21 22:12:30,865 - INFO - Fetching weather data for Starbase
+2025-08-21 22:12:31,665 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:12:32,666 - INFO - Fetching weather data for Vandy
+2025-08-21 22:12:33,347 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:12:34,349 - INFO - Fetching weather data for Cape
+2025-08-21 22:12:35,024 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:12:36,025 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:12:36,805 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-21 22:12:43,167 - INFO - Fetching SpaceX launch data
+2025-08-21 22:12:43,168 - INFO - Using persistent cached previous launches
+2025-08-21 22:12:43,168 - INFO - Using persistent cached upcoming launches
+2025-08-21 22:12:43,168 - INFO - Fetching F1 data
+2025-08-21 22:12:43,169 - INFO - Using persistent cached F1 data
+2025-08-21 22:12:43,169 - INFO - Fetching weather data for Starbase
+2025-08-21 22:12:43,850 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:12:44,851 - INFO - Fetching weather data for Vandy
+2025-08-21 22:12:45,515 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:12:46,516 - INFO - Fetching weather data for Cape
+2025-08-21 22:12:47,224 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:12:48,225 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:12:48,986 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-21 22:17:10,916 - INFO - Fetching SpaceX launch data
+2025-08-21 22:17:10,916 - INFO - Using persistent cached previous launches
+2025-08-21 22:17:10,916 - INFO - Using persistent cached upcoming launches
+2025-08-21 22:17:10,916 - INFO - Fetching F1 data
+2025-08-21 22:17:10,916 - INFO - Using persistent cached F1 data
+2025-08-21 22:17:10,916 - INFO - Fetching weather data for Starbase
+2025-08-21 22:17:11,714 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:17:12,716 - INFO - Fetching weather data for Vandy
+2025-08-21 22:17:13,332 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:17:14,333 - INFO - Fetching weather data for Cape
+2025-08-21 22:17:15,000 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:17:16,000 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:17:16,671 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-21 22:17:43,284 - INFO - Fetching SpaceX launch data
+2025-08-21 22:17:43,285 - INFO - Using persistent cached previous launches
+2025-08-21 22:17:43,285 - INFO - Using persistent cached upcoming launches
+2025-08-21 22:17:43,285 - INFO - Fetching F1 data
+2025-08-21 22:17:43,285 - INFO - Using persistent cached F1 data
+2025-08-21 22:17:43,285 - INFO - Fetching weather data for Starbase
+2025-08-21 22:17:44,210 - INFO - Successfully fetched weather data for Starbase
+2025-08-21 22:17:45,211 - INFO - Fetching weather data for Vandy
+2025-08-21 22:17:45,987 - INFO - Successfully fetched weather data for Vandy
+2025-08-21 22:17:46,989 - INFO - Fetching weather data for Cape
+2025-08-21 22:17:47,670 - INFO - Successfully fetched weather data for Cape
+2025-08-21 22:17:48,671 - INFO - Fetching weather data for Hawthorne
+2025-08-21 22:17:49,405 - INFO - Successfully fetched weather data for Hawthorne
