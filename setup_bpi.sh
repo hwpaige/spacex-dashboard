@@ -1,18 +1,21 @@
 #!/bin/bash
 set -e
 
-USER="harrison"
+if [ $(id -u) -ne 0 ]; then
+    echo "This script must be run as root"
+    exit 1
+fi
+
+if [ -z "$SUDO_USER" ]; then
+    echo "This script must be run with sudo from your user account."
+    exit 1
+fi
+
+USER="$SUDO_USER"
 HOME_DIR="/home/$USER"
 LOG_FILE="$HOME_DIR/setup_ubuntu.log"
 
 echo "Starting Banana Pi M4 Zero setup on Armbian Ubuntu Server at $(date)" | tee -a "$LOG_FILE"
-
-if ! id "$USER" &>/dev/null; then
-    echo "Creating user $USER..." | tee -a "$LOG_FILE"
-    adduser --disabled-password --gecos "" "$USER" | tee -a "$LOG_FILE"
-    echo "$USER ALL=(ALL) NOPASSWD:ALL" | tee -a /etc/sudoers.d/"$USER"
-    chmod 0440 /etc/sudoers.d/"$USER"
-fi
 
 echo "Updating and upgrading Ubuntu Server (kernel held)..." | tee -a "$LOG_FILE"
 apt-mark hold linux-image-current-sunxi64 linux-dtb-current-sunxi64 wpasupplicant | tee -a "$LOG_FILE"
