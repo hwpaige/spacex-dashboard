@@ -7,6 +7,7 @@ from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QA
 from PyQt6.QtGui import QFontDatabase, QCursor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
+from PyQt6.QtWebEngineQuick import QtWebEngineQuick  # Added this import
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
@@ -45,7 +46,6 @@ CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), 'upcoming_launches
 CACHE_FILE_F1 = os.path.join(os.path.dirname(__file__), 'f1_cache.json')
 f1_cache = None
 
-
 # Load cache from file
 def load_cache_from_file(cache_file):
     if os.path.exists(cache_file):
@@ -55,13 +55,11 @@ def load_cache_from_file(cache_file):
             return cache_data
     return None
 
-
 # Save cache to file
 def save_cache_to_file(cache_file, data, timestamp):
     cache_data = {'data': data, 'timestamp': timestamp.isoformat()}
     with open(cache_file, 'w') as f:
         json.dump(cache_data, f)
-
 
 # Fetch SpaceX launch data
 def fetch_launches():
@@ -92,8 +90,7 @@ def fetch_launches():
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
-                }
-                for launch in data['results']
+                } for launch in data['results']
             ]
             save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
             logger.info("Successfully fetched and saved previous launches")
@@ -101,13 +98,8 @@ def fetch_launches():
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00',
-                 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital',
-                 'pad': 'Starbase',
-                 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'},
-                {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z',
-                 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A',
-                 'video_url': ''},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'},
+                {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
             ]
 
     # Load upcoming launches cache
@@ -132,8 +124,7 @@ def fetch_launches():
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
-                }
-                for launch in data['results']
+                } for launch in data['results']
             ]
             save_cache_to_file(CACHE_FILE_UPCOMING, upcoming_launches, current_time)
             logger.info("Successfully fetched and saved upcoming launches")
@@ -142,7 +133,6 @@ def fetch_launches():
             upcoming_launches = []
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
-
 
 # Fetch F1 data
 def fetch_f1_data():
@@ -167,13 +157,30 @@ def fetch_f1_data():
             races = data['MRData']['RaceTable']['Races']
             meetings = []
             short_name_map = {
-                'albert_park': 'Melbourne', 'shanghai': 'Shanghai', 'suzuka': 'Suzuka', 'bahrain': 'Sakhir',
-                'jeddah': 'Jeddah', 'miami': 'Miami', 'imola': 'Imola', 'monaco': 'Monte Carlo',
-                'catalunya': 'Catalunya', 'villeneuve': 'Montreal', 'red_bull_ring': 'Spielberg',
-                'silverstone': 'Silverstone', 'spa': 'Spa', 'hungaroring': 'Hungaroring',
-                'zandvoort': 'Zandvoort', 'monza': 'Monza', 'baku': 'Baku', 'marina_bay': 'Singapore',
-                'americas': 'Austin', 'rodriguez': 'Mexico City', 'interlagos': 'Sao Paulo',
-                'vegas': 'Las Vegas', 'losail': 'Lusail', 'yas_marina': 'Abu Dhabi'
+                'albert_park': 'Melbourne',
+                'shanghai': 'Shanghai',
+                'suzuka': 'Suzuka',
+                'bahrain': 'Sakhir',
+                'jeddah': 'Jeddah',
+                'miami': 'Miami',
+                'imola': 'Imola',
+                'monaco': 'Monte Carlo',
+                'catalunya': 'Catalunya',
+                'villeneuve': 'Montreal',
+                'red_bull_ring': 'Spielberg',
+                'silverstone': 'Silverstone',
+                'spa': 'Spa',
+                'hungaroring': 'Hungaroring',
+                'zandvoort': 'Zandvoort',
+                'monza': 'Monza',
+                'baku': 'Baku',
+                'marina_bay': 'Singapore',
+                'americas': 'Austin',
+                'rodriguez': 'Mexico City',
+                'interlagos': 'Sao Paulo',
+                'vegas': 'Las Vegas',
+                'losail': 'Lusail',
+                'yas_marina': 'Abu Dhabi'
             }
             for race in races:
                 meeting = {
@@ -259,6 +266,7 @@ def fetch_f1_data():
                 })
                 meeting['sessions'] = sessions
                 meetings.append(meeting)
+
             # Fetch driver standings
             url = f"https://api.jolpi.ca/ergast/f1/{current_year}/driverStandings.json"
             response = requests.get(url, timeout=10)
@@ -266,6 +274,7 @@ def fetch_f1_data():
             data = response.json()
             standings_lists = data['MRData']['StandingsTable']['StandingsLists']
             driver_standings = standings_lists[0]['DriverStandings'] if standings_lists else []
+
             # Fetch constructor standings
             url = f"https://api.jolpi.ca/ergast/f1/{current_year}/constructorStandings.json"
             response = requests.get(url, timeout=10)
@@ -273,8 +282,8 @@ def fetch_f1_data():
             data = response.json()
             standings_lists = data['MRData']['StandingsTable']['StandingsLists']
             constructor_standings = standings_lists[0]['ConstructorStandings'] if standings_lists else []
-            f1_data = {'schedule': meetings, 'driver_standings': driver_standings,
-                       'constructor_standings': constructor_standings}
+
+            f1_data = {'schedule': meetings, 'driver_standings': driver_standings, 'constructor_standings': constructor_standings}
             save_cache_to_file(CACHE_FILE_F1, f1_data, current_time)
             f1_cache = f1_data
             logger.info("Successfully fetched and saved F1 data")
@@ -284,7 +293,6 @@ def fetch_f1_data():
             logger.error(f"Ergast API error: {e}")
             f1_cache = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
             return f1_cache
-
 
 # Fetch weather data
 def fetch_weather(lat, lon, location):
@@ -318,7 +326,6 @@ def fetch_weather(lat, lon, location):
             'wind_direction': 90,
             'cloud_cover': 50
         }
-
 
 # Location settings
 location_settings = {
@@ -435,7 +442,7 @@ class EventModel(QAbstractListModel):
                     return item.get('sessions', [])
                 elif role == self.DateStartRole:
                     return item.get('date_start', '')
-        return None
+            return None
 
     def roleNames(self):
         roles = super().roleNames()
@@ -527,7 +534,6 @@ class EventModel(QAbstractListModel):
                     grouped.extend(earlier_races)
         self._grouped_data = grouped
         self.endResetModel()
-
 
 class Backend(QObject):
     modeChanged = pyqtSignal()
@@ -690,8 +696,7 @@ class Backend(QObject):
 
     def get_next_launch(self):
         current_time = datetime.now(pytz.UTC)
-        valid_launches = [l for l in self._launch_data['upcoming'] if
-                          l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
+        valid_launches = [l for l in self._launch_data['upcoming'] if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
         if valid_launches:
             return min(valid_launches, key=lambda x: parse(x['net']))
         return None
@@ -729,10 +734,11 @@ class Backend(QObject):
         self._event_model.update_data()
         self.eventModelChanged.emit()
 
-
 if __name__ == '__main__':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist"
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
+
+    QtWebEngineQuick.initialize()  # Added this line
 
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -743,7 +749,6 @@ if __name__ == '__main__':
         QFontDatabase.addApplicationFont(font_path)
 
     engine = QQmlApplicationEngine()
-
     backend = Backend()
     context = engine.rootContext()
     context.setContextProperty("backend", backend)
@@ -767,7 +772,6 @@ Window {
     height: 320
     title: "SpaceX/F1 Dashboard"
     color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
-
     Behavior on color { ColorAnimation { duration: 300 } }
 
     ColumnLayout {
@@ -788,6 +792,7 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+
                     Text {
                         text: backend.mode === "spacex" ? "Launch Trends" : "Driver Standings"
                         font.pixelSize: 14
@@ -795,27 +800,28 @@ Window {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                     }
+
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: backend.mode === "spacex"
+
                         ChartView {
                             anchors.fill: parent
                             antialiasing: true
                             legend.visible: false
+
                             BarSeries {
                                 axisX: BarCategoryAxis { categories: backend.launchTrends.months }
                                 axisY: ValueAxis { min: 0; max: 20 }
                                 Repeater {
                                     model: backend.launchTrends.series
-                                    delegate: BarSet {
-                                        label: modelData.label
-                                        values: modelData.values
-                                    }
+                                    delegate: BarSet { label: modelData.label; values: modelData.values }
                                 }
                             }
                         }
                     }
+
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -844,6 +850,7 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+
                     Text {
                         text: backend.mode === "spacex" ? "Radar" : "Race Calendar"
                         font.pixelSize: 14
@@ -851,6 +858,7 @@ Window {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                     }
+
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -858,6 +866,7 @@ Window {
                         url: radarLocations[backend.location] + "&rand=" + new Date().getTime()
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                     }
+
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -887,12 +896,14 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+
                     RowLayout {
                         Text {
                             text: backend.mode === "spacex" ? "Launches" : "Races"
                             font.pixelSize: 14
                             color: "#999999"
                         }
+
                         Row {
                             Repeater {
                                 model: ["Upcoming", "Past"]
@@ -906,6 +917,7 @@ Window {
                             }
                         }
                     }
+
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -913,10 +925,12 @@ Window {
                         delegate: Item {
                             width: parent.width
                             height: model.isGroup ? 30 : 100
+
                             Rectangle {
                                 anchors.fill: parent
                                 color: model.isGroup ? "transparent" : "#2a2e2e"
                                 radius: model.isGroup ? 0 : 6
+
                                 Text {
                                     anchors.centerIn: parent
                                     text: model.isGroup ? model.groupName : ""
@@ -924,10 +938,12 @@ Window {
                                     color: "#999999"
                                     visible: model.isGroup
                                 }
+
                                 Column {
                                     anchors.fill: parent
                                     anchors.margins: 10
                                     visible: !model.isGroup
+
                                     Text { text: model.mission || model.meetingName; font.pixelSize: 14; color: "white" }
                                     Text { text: "Date: " + (model.date || model.dateStart); color: "white" }
                                     Text { text: "Time: " + model.time; color: "white" }
@@ -937,9 +953,7 @@ Window {
                             }
                             Behavior on y { SpringAnimation { spring: 2; damping: 0.2 } }
                         }
-                        transitions: Transition {
-                            NumberAnimation { properties: "x,y"; duration: 200 }
-                        }
+                        transitions: Transition { NumberAnimation { properties: "x,y"; duration: 200 } }
                     }
                 }
             }
@@ -953,6 +967,7 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+
                     Text {
                         text: backend.mode === "spacex" ? "Videos" : "Next Race Location"
                         font.pixelSize: 14
@@ -960,6 +975,7 @@ Window {
                         Layout.fillWidth: true
                         horizontalAlignment: Text.AlignHCenter
                     }
+
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -986,10 +1002,12 @@ Window {
                     height: 30
                     radius: 15
                     color: "#2a2e2e"
+
                     Row {
                         id: leftRow
                         anchors.centerIn: parent
                         spacing: 10
+
                         Text { text: backend.currentTime; color: "white"; font.pixelSize: 12 }
                         Text { text: "Wind " + backend.weather.wind_speed_kts.toFixed(1) + " kts | " + backend.weather.wind_speed_ms.toFixed(1) + " m/s, " + backend.weather.wind_direction + "° | Temp " + backend.weather.temperature_f.toFixed(1) + "°F | " + backend.weather.temperature_c.toFixed(1) + "°C | Clouds " + backend.weather.cloud_cover + "%"; color: "white"; font.pixelSize: 12 }
                     }
@@ -1002,6 +1020,7 @@ Window {
                     source: backend.mode === "f1" ? "assets/f1-logo.png" : "assets/spacex-logo.png"
                     width: 80
                     height: 30
+
                     MouseArea {
                         anchors.fill: parent
                         onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
@@ -1016,11 +1035,14 @@ Window {
                     height: 30
                     radius: 15
                     color: "#2a2e2e"
+
                     Row {
                         id: rightRow
                         anchors.centerIn: parent
                         spacing: 10
+
                         Text { text: backend.countdown; color: "white"; font.pixelSize: 12 }
+
                         Row {
                             spacing: 5
                             Repeater {
@@ -1035,6 +1057,7 @@ Window {
                                 }
                             }
                         }
+
                         Row {
                             spacing: 5
                             Repeater {
@@ -1056,7 +1079,6 @@ Window {
     }
 }
     """
-
     # Load QML from string (for complete single file)
     engine.loadData(qml_code.encode(), QUrl())
 
