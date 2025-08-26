@@ -39,7 +39,7 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 # Install system packages, including X11 for easy rotation and SSH
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg xserver-xorg-core openbox x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice python3-requests python3-dateutil python3-tz python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine openssh-server xserver-xorg-video-modesetting | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git xorg xserver-xorg-core openbox x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice python3-requests python3-dateutil python3-tz python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine openssh-server xserver-xorg-video-modesetting plymouth-theme-spinner | tee -a "$LOG_FILE"
 
 # Enable SSH
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
@@ -86,7 +86,21 @@ echo "Adding modules to initramfs for Plymouth splash..." | tee -a "$LOG_FILE"
 echo "drm" >> /etc/initramfs-tools/modules
 echo "vc4" >> /etc/initramfs-tools/modules
 
-# Set Plymouth theme using Ubuntu's method
+# Clone GitHub repository to Desktop
+echo "Cloning GitHub repository to Desktop..." | tee -a "$LOG_FILE"
+REPO_URL="https://github.com/hwpaige/spacex-dashboard"
+REPO_DIR="$HOME_DIR/Desktop/project"
+if [ -d "$REPO_DIR" ]; then rm -rf "$REPO_DIR" | tee -a "$LOG_FILE"; fi
+sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR" | tee -a "$LOG_FILE"
+chown -R "$USER:$USER" "$REPO_DIR" | tee -a "$LOG_FILE"
+echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
+
+# Customize Plymouth spinner theme with SpaceX logo
+echo "Customizing Plymouth spinner theme with SpaceX logo..." | tee -a "$LOG_FILE"
+cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/watermark.png
+cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/ubuntu-logo.png
+
+# Set Plymouth theme to spinner (default with custom logo)
 echo "Setting Plymouth theme to spinner..." | tee -a "$LOG_FILE"
 update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth 100 | tee -a "$LOG_FILE"
 update-alternatives --set default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth | tee -a "$LOG_FILE"
@@ -102,15 +116,6 @@ SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_C
 EOF
 udevadm control --reload-rules | tee -a "$LOG_FILE"
 echo "Touch rotation configured." | tee -a "$LOG_FILE"
-
-# Clone GitHub repository to Desktop
-echo "Cloning GitHub repository to Desktop..." | tee -a "$LOG_FILE"
-REPO_URL="https://github.com/hwpaige/spacex-dashboard"
-REPO_DIR="$HOME_DIR/Desktop/project"
-if [ -d "$REPO_DIR" ]; then rm -rf "$REPO_DIR" | tee -a "$LOG_FILE"; fi
-sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR" | tee -a "$LOG_FILE"
-chown -R "$USER:$USER" "$REPO_DIR" | tee -a "$LOG_FILE"
-echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
 # Configure Openbox for borderless fullscreen kiosk mode
 echo "Configuring Openbox for borderless fullscreen..." | tee -a "$LOG_FILE"
