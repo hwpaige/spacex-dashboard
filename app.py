@@ -7,16 +7,13 @@ from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QA
 from PyQt6.QtGui import QFontDatabase, QCursor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
-from PyQt6.QtWebEngineQuick import QtWebEngineQuick  # Added this import
+from PyQt6.QtWebEngineQuick import QtWebEngineQuick
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
 import pytz
 import pandas as pd
 import time
-
-# Force OpenGL backend for QtQuick (QtWebEngine uses this under the hood)
-QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGLRhi)
 
 # Environment variables for Qt and Chromium
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -25,6 +22,7 @@ os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
 )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
+os.environ["QSG_RHI_BACKEND"] = "gl"
 
 # Set up logging to console and file
 logging.basicConfig(
@@ -157,29 +155,12 @@ def fetch_f1_data():
             races = data['MRData']['RaceTable']['Races']
             meetings = []
             short_name_map = {
-                'albert_park': 'Melbourne',
-                'shanghai': 'Shanghai',
-                'suzuka': 'Suzuka',
-                'bahrain': 'Sakhir',
-                'jeddah': 'Jeddah',
-                'miami': 'Miami',
-                'imola': 'Imola',
-                'monaco': 'Monte Carlo',
-                'catalunya': 'Catalunya',
-                'villeneuve': 'Montreal',
-                'red_bull_ring': 'Spielberg',
-                'silverstone': 'Silverstone',
-                'spa': 'Spa',
-                'hungaroring': 'Hungaroring',
-                'zandvoort': 'Zandvoort',
-                'monza': 'Monza',
-                'baku': 'Baku',
-                'marina_bay': 'Singapore',
-                'americas': 'Austin',
-                'rodriguez': 'Mexico City',
-                'interlagos': 'Sao Paulo',
-                'vegas': 'Las Vegas',
-                'losail': 'Lusail',
+                'albert_park': 'Melbourne', 'shanghai': 'Shanghai', 'suzuka': 'Suzuka', 'bahrain': 'Sakhir',
+                'jeddah': 'Jeddah', 'miami': 'Miami', 'imola': 'Imola', 'monaco': 'Monte Carlo',
+                'catalunya': 'Catalunya', 'villeneuve': 'Montreal', 'red_bull_ring': 'Spielberg',
+                'silverstone': 'Silverstone', 'spa': 'Spa', 'hungaroring': 'Hungaroring', 'zandvoort': 'Zandvoort',
+                'monza': 'Monza', 'baku': 'Baku', 'marina_bay': 'Singapore', 'americas': 'Austin',
+                'rodriguez': 'Mexico City', 'interlagos': 'Sao Paulo', 'vegas': 'Las Vegas', 'losail': 'Lusail',
                 'yas_marina': 'Abu Dhabi'
             }
             for race in races:
@@ -442,7 +423,7 @@ class EventModel(QAbstractListModel):
                     return item.get('sessions', [])
                 elif role == self.DateStartRole:
                     return item.get('date_start', '')
-            return None
+        return None
 
     def roleNames(self):
         roles = super().roleNames()
@@ -737,9 +718,7 @@ class Backend(QObject):
 if __name__ == '__main__':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist"
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
-
-    QtWebEngineQuick.initialize()  # Added this line
-
+    QtWebEngineQuick.initialize()
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
@@ -758,317 +737,360 @@ if __name__ == '__main__':
 
     # Embedded QML for completeness (main.qml content)
     qml_code = """
-import QtQuick
-import QtQuick.Window
-import QtQuick.Controls
-import QtQuick.Layouts
-import QtCharts
-import QtWebEngine
+    import QtQuick
+    import QtQuick.Window
+    import QtQuick.Controls
+    import QtQuick.Layouts
+    import QtCharts
+    import QtWebEngine
 
-Window {
-    id: root
-    visible: true
-    width: 1480
-    height: 320
-    title: "SpaceX/F1 Dashboard"
-    color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
-    Behavior on color { ColorAnimation { duration: 300 } }
+    Window {
+        id: root
+        visible: true
+        width: 1480
+        height: 320
+        title: "SpaceX/F1 Dashboard"
+        color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
+        Behavior on color { ColorAnimation { duration: 300 } }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 5
-
-        RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
+        ColumnLayout {
+            anchors.fill: parent
             spacing: 5
 
-            // Column 1: Launch Trends or Driver Standings
-            Rectangle {
+            RowLayout {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                radius: 8
+                spacing: 5
 
-                ColumnLayout {
-                    anchors.fill: parent
+                // Column 1: Launch Trends or Driver Standings
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    radius: 8
 
-                    Text {
-                        text: backend.mode === "spacex" ? "Launch Trends" : "Driver Standings"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    ColumnLayout {
+                        anchors.fill: parent
 
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend.mode === "spacex"
-
-                        ChartView {
-                            anchors.fill: parent
-                            antialiasing: true
-                            legend.visible: false
-
-                            BarSeries {
-                                axisX: BarCategoryAxis { categories: backend.launchTrends.months }
-                                axisY: ValueAxis { min: 0; max: 20 }
-                                Repeater {
-                                    model: backend.launchTrends.series
-                                    delegate: BarSet { label: modelData.label; values: modelData.values }
-                                }
-                            }
-                        }
-                    }
-
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend.mode === "f1"
-                        model: backend.driverStandings
-                        delegate: Rectangle {
-                            width: parent.width
-                            height: 40
-                            color: "transparent"
-                            Row {
-                                Text { text: modelData.position; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.Driver.givenName + " " + modelData.Driver.familyName; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.points; color: backend.theme === "dark" ? "white" : "black" }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Column 2: Radar or Race Calendar
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                radius: 8
-
-                ColumnLayout {
-                    anchors.fill: parent
-
-                    Text {
-                        text: backend.mode === "spacex" ? "Radar" : "Race Calendar"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    WebEngineView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend.mode === "spacex"
-                        url: radarLocations[backend.location] + "&rand=" + new Date().getTime()
-                        onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
-                    }
-
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend.mode === "f1"
-                        model: backend.raceCalendar
-                        delegate: Rectangle {
-                            width: parent.width
-                            height: 40
-                            color: "transparent"
-                            Column {
-                                Text { text: modelData.meeting_name; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.circuit_short_name; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.date_start; color: backend.theme === "dark" ? "white" : "black" }
-                            }
-                        }
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
-                    }
-                }
-            }
-
-            // Column 3: Launches or Races
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                radius: 8
-
-                ColumnLayout {
-                    anchors.fill: parent
-
-                    RowLayout {
                         Text {
-                            text: backend.mode === "spacex" ? "Launches" : "Races"
+                            text: backend.mode === "spacex" ? "Launch Trends" : "Driver Standings"
                             font.pixelSize: 14
                             color: "#999999"
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
                         }
 
-                        Row {
-                            Repeater {
-                                model: ["Upcoming", "Past"]
-                                Button {
-                                    text: modelData
-                                    checkable: true
-                                    checked: backend.eventType === modelData.toLowerCase()
-                                    onClicked: backend.eventType = modelData.toLowerCase()
-                                    flat: true
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: backend.mode === "spacex"
+
+                            ChartView {
+                                anchors.fill: parent
+                                antialiasing: true
+                                legend.visible: false
+
+                                BarSeries {
+                                    axisX: BarCategoryAxis { categories: backend.launchTrends.months }
+                                    axisY: ValueAxis { min: 0; max: 20 }
+
+                                    Repeater {
+                                        model: backend.launchTrends.series
+                                        delegate: BarSet { label: modelData.label; values: modelData.values }
+                                    }
+                                }
+                            }
+                        }
+
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: backend.mode === "f1"
+                            model: backend.driverStandings
+                            delegate: Rectangle {
+                                width: parent.width
+                                height: 40
+                                color: "transparent"
+
+                                Row {
+                                    Text { text: modelData.position; color: backend.theme === "dark" ? "white" : "black" }
+                                    Text { text: modelData.Driver.givenName + " " + modelData.Driver.familyName; color: backend.theme === "dark" ? "white" : "black" }
+                                    Text { text: modelData.points; color: backend.theme === "dark" ? "white" : "black" }
                                 }
                             }
                         }
                     }
+                }
 
-                    ListView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        model: backend.eventModel
-                        delegate: Item {
-                            width: parent.width
-                            height: model.isGroup ? 30 : 100
+                // Column 2: Radar or Race Calendar
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    radius: 8
 
-                            Rectangle {
-                                anchors.fill: parent
-                                color: model.isGroup ? "transparent" : "#2a2e2e"
-                                radius: model.isGroup ? 0 : 6
+                    ColumnLayout {
+                        anchors.fill: parent
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: model.isGroup ? model.groupName : ""
-                                    font.pixelSize: 12
-                                    color: "#999999"
-                                    visible: model.isGroup
-                                }
+                        Text {
+                            text: backend.mode === "spacex" ? "Radar" : "Race Calendar"
+                            font.pixelSize: 14
+                            color: "#999999"
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        WebEngineView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: backend.mode === "spacex"
+                            url: radarLocations[backend.location] + "&rand=" + new Date().getTime()
+                            onFullScreenRequested: function(request) {
+                                request.accept();
+                                root.visibility = Window.FullScreen
+                            }
+                        }
+
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: backend.mode === "f1"
+                            model: backend.raceCalendar
+                            delegate: Rectangle {
+                                width: parent.width
+                                height: 40
+                                color: "transparent"
 
                                 Column {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
-                                    visible: !model.isGroup
-
-                                    Text { text: model.mission || model.meetingName; font.pixelSize: 14; color: "white" }
-                                    Text { text: "Date: " + (model.date || model.dateStart); color: "white" }
-                                    Text { text: "Time: " + model.time; color: "white" }
-                                    Text { text: "Status: " + model.status; color: "white" }
-                                    // Add more fields as needed
+                                    Text { text: modelData.meeting_name; color: backend.theme === "dark" ? "white" : "black" }
+                                    Text { text: modelData.circuit_short_name; color: backend.theme === "dark" ? "white" : "black" }
+                                    Text { text: modelData.date_start; color: backend.theme === "dark" ? "white" : "black" }
                                 }
                             }
-                            Behavior on y { SpringAnimation { spring: 2; damping: 0.2 } }
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
                         }
-                        transitions: Transition { NumberAnimation { properties: "x,y"; duration: 200 } }
+                    }
+                }
+
+                // Column 3: Launches or Races
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    radius: 8
+
+                    ColumnLayout {
+                        anchors.fill: parent
+
+                        RowLayout {
+                            Text {
+                                text: backend.mode === "spacex" ? "Launches" : "Races"
+                                font.pixelSize: 14
+                                color: "#999999"
+                            }
+
+                            Row {
+                                Repeater {
+                                    model: ["Upcoming", "Past"]
+                                    Button {
+                                        text: modelData
+                                        checkable: true
+                                        checked: backend.eventType === modelData.toLowerCase()
+                                        onClicked: backend.eventType = modelData.toLowerCase()
+                                        flat: true
+                                    }
+                                }
+                            }
+                        }
+
+                        ListView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            model: backend.eventModel
+                            delegate: Item {
+                                width: parent.width
+                                height: model.isGroup ? 30 : 100
+
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: model.isGroup ? "transparent" : "#2a2e2e"
+                                    radius: model.isGroup ? 0 : 6
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: model.isGroup ? model.groupName : ""
+                                        font.pixelSize: 12
+                                        color: "#999999"
+                                        visible: model.isGroup
+                                    }
+
+                                    Column {
+                                        anchors.fill: parent
+                                        anchors.margins: 10
+                                        visible: !model.isGroup
+
+                                        Text { text: model.mission || model.meetingName; font.pixelSize: 14; color: "white" }
+                                        Text { text: "Date: " + (model.date || model.dateStart); color: "white" }
+                                        Text { text: "Time: " + model.time; color: "white" }
+                                        Text { text: "Status: " + model.status; color: "white" }
+                                        // Add more fields as needed
+                                    }
+                                }
+                                Behavior on y { SpringAnimation { spring: 2; damping: 0.2 } }
+                            }
+                            transitions: Transition {
+                                NumberAnimation { properties: "x,y"; duration: 200 }
+                            }
+                        }
+                    }
+                }
+
+                // Column 4: Videos or Next Race Location
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    radius: 8
+
+                    ColumnLayout {
+                        anchors.fill: parent
+
+                        Text {
+                            text: backend.mode === "spacex" ? "Videos" : "Next Race Location"
+                            font.pixelSize: 14
+                            color: "#999999"
+                            Layout.fillWidth: true
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+
+                        WebEngineView {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            url: backend.mode === "spacex" ? videoUrl : (backend.get_next_race() ? "https://www.openstreetmap.org/export/embed.html?bbox=" + circuitCoords[backend.get_next_race().circuit_short_name].lon - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon + 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat + 0.01 + "&layer=mapnik&marker=" + circuitCoords[backend.get_next_race().circuit_short_name].lat + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon : "")
+                            onFullScreenRequested: function(request) {
+                                request.accept();
+                                root.visibility = Window.FullScreen
+                            }
+                        }
                     }
                 }
             }
 
-            // Column 4: Videos or Next Race Location
+            // Bottom bar
             Rectangle {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                radius: 8
+                Layout.preferredHeight: 30
+                color: "transparent"
 
-                ColumnLayout {
+                RowLayout {
                     anchors.fill: parent
+                    anchors.leftMargin: 10
+                    anchors.rightMargin: 10
 
-                    Text {
-                        text: backend.mode === "spacex" ? "Videos" : "Next Race Location"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    WebEngineView {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        url: backend.mode === "spacex" ? videoUrl : (backend.get_next_race() ? "https://www.openstreetmap.org/export/embed.html?bbox=" + circuitCoords[backend.get_next_race().circuit_short_name].lon - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon + 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat + 0.01 + "&layer=mapnik&marker=" + circuitCoords[backend.get_next_race().circuit_short_name].lat + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon : "")
-                        onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
-                    }
-                }
-            }
-        }
-
-        // Bottom bar
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 30
-            color: "transparent"
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.margins: 10
-
-                // Left pill (time and weather)
-                Rectangle {
-                    width: leftRow.width + 20
-                    height: 30
-                    radius: 15
-                    color: "#2a2e2e"
-
-                    Row {
-                        id: leftRow
-                        anchors.centerIn: parent
-                        spacing: 10
-
-                        Text { text: backend.currentTime; color: "white"; font.pixelSize: 12 }
-                        Text { text: "Wind " + backend.weather.wind_speed_kts.toFixed(1) + " kts | " + backend.weather.wind_speed_ms.toFixed(1) + " m/s, " + backend.weather.wind_direction + "° | Temp " + backend.weather.temperature_f.toFixed(1) + "°F | " + backend.weather.temperature_c.toFixed(1) + "°C | Clouds " + backend.weather.cloud_cover + "%"; color: "white"; font.pixelSize: 12 }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Logo toggle
-                Image {
-                    source: backend.mode === "f1" ? "assets/f1-logo.png" : "assets/spacex-logo.png"
-                    width: 80
-                    height: 30
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Right pill (countdown, location, theme)
-                Rectangle {
-                    width: rightRow.width + 20
-                    height: 30
-                    radius: 15
-                    color: "#2a2e2e"
-
-                    Row {
-                        id: rightRow
-                        anchors.centerIn: parent
-                        spacing: 10
-
-                        Text { text: backend.countdown; color: "white"; font.pixelSize: 12 }
+                    // Left pill (time and weather)
+                    Rectangle {
+                        width: leftRow.width + 20
+                        height: 30
+                        radius: 15
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
 
                         Row {
-                            spacing: 5
-                            Repeater {
-                                model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
-                                Button {
-                                    text: modelData
-                                    checkable: true
-                                    checked: backend.location === modelData
-                                    onClicked: backend.location = modelData
-                                    flat: true
-                                    font.pixelSize: 10
+                            id: leftRow
+                            anchors.centerIn: parent
+                            spacing: 10
+
+                            Text { text: backend.currentTime; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
+                            Text { text: "Wind " + backend.weather.wind_speed_kts.toFixed(1) + " kts | " + backend.weather.wind_speed_ms.toFixed(1) + " m/s, " + backend.weather.wind_direction + "° | Temp " + backend.weather.temperature_f.toFixed(1) + "°F | " + backend.weather.temperature_c.toFixed(1) + "°C | Clouds " + backend.weather.cloud_cover + "%"; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Logo toggle
+                    Image {
+                        source: backend.mode === "f1" ? "assets/f1-logo.png" : "assets/spacex-logo.png"
+                        width: 80
+                        height: 30
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
+                        }
+                    }
+
+                    Item { Layout.fillWidth: true }
+
+                    // Right pill (countdown, location, theme)
+                    Rectangle {
+                        width: rightRow.width + 20
+                        height: 30
+                        radius: 15
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+
+                        Row {
+                            id: rightRow
+                            anchors.centerIn: parent
+                            spacing: 10
+
+                            Text { text: backend.countdown; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
+
+                            Row {
+                                spacing: 2
+
+                                Repeater {
+                                    model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
+
+                                    Rectangle {
+                                        width: locationText.width + 10
+                                        height: 20
+                                        color: backend.location === modelData ? (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                        radius: 4
+                                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                        border.width: 1
+
+                                        Text {
+                                            id: locationText
+                                            anchors.centerIn: parent
+                                            text: modelData
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 10
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: backend.location = modelData
+                                        }
+                                    }
                                 }
                             }
-                        }
 
-                        Row {
-                            spacing: 5
-                            Repeater {
-                                model: ["Light", "Dark"]
-                                Button {
-                                    text: modelData
-                                    checkable: true
-                                    checked: backend.theme === modelData.toLowerCase()
-                                    onClicked: backend.theme = modelData.toLowerCase()
-                                    flat: true
-                                    font.pixelSize: 10
+                            Row {
+                                spacing: 2
+
+                                Repeater {
+                                    model: ["Light", "Dark"]
+
+                                    Rectangle {
+                                        width: themeText.width + 10
+                                        height: 20
+                                        color: backend.theme === modelData.toLowerCase() ? (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                        radius: 4
+                                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                        border.width: 1
+
+                                        Text {
+                                            id: themeText
+                                            anchors.centerIn: parent
+                                            text: modelData
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 10
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: backend.theme = modelData.toLowerCase()
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1077,12 +1099,10 @@ Window {
             }
         }
     }
-}
     """
+
     # Load QML from string (for complete single file)
     engine.loadData(qml_code.encode(), QUrl())
-
     if not engine.rootObjects():
         sys.exit(-1)
-
     sys.exit(app.exec())
