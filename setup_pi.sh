@@ -112,12 +112,30 @@ sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR" | tee -a "$LOG_FILE"
 chown -R "$USER:$USER" "$REPO_DIR" | tee -a "$LOG_FILE"
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
-# Create .xinitrc for X11 start with rotation
-echo "Creating .xinitrc for X11 with rotation..." | tee -a "$LOG_FILE"
+# Configure Openbox for borderless fullscreen kiosk mode
+echo "Configuring Openbox for borderless fullscreen..." | tee -a "$LOG_FILE"
+sudo -u "$USER" mkdir -p "$HOME_DIR/.config/openbox"
+sudo -u "$USER" bash -c "cat << EOF > $HOME_DIR/.config/openbox/rc.xml
+<openbox_config xmlns=\"http://openbox.org/3.4/rc\">
+  <applications>
+    <application class=\"*\">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+    </application>
+  </applications>
+</openbox_config>
+EOF"
+echo "Openbox configured." | tee -a "$LOG_FILE"
+
+# Create .xinitrc for X11 start with rotation and no screen timeout
+echo "Creating .xinitrc for X11 with rotation and no screen timeout..." | tee -a "$LOG_FILE"
 sudo -u "$USER" bash -c "cat << EOF > ~/.xinitrc
 openbox-session &
 sleep 2
 xrandr --output HDMI-1 --rotate left 2>&1 | tee ~/xrandr.log
+xset s off
+xset -dpms
+xset s noblank
 unclutter -idle 0 -root &
 export QT_QPA_PLATFORM=xcb
 export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl\"
