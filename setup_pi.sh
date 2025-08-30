@@ -39,9 +39,9 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 # Install system packages, including X11 for easy rotation and SSH
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git xorg xserver-xorg-core openbox x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice python3-requests python3-dateutil python3-tz python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine openssh-server xserver-xorg-video-modesetting plymouth-theme-spinner | tee -a "$LOG_FILE"
-
-# Enable SSH
+# Install system packages, including X11 for easy rotation
+echo "Installing system packages..." | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv git python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 upower iw python3-requests python3-tz python3-dateutil python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine lz4 plymouth-theme-spinner xserver-xorg xinit x11-xserver-utils openbox libinput-tools ubuntu-raspi-settings xserver-xorg-video-modesetting libxcb-cursor0 | tee -a "$LOG_FILE"# Enable SSH
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
 systemctl enable --now ssh | tee -a "$LOG_FILE"
 
@@ -97,8 +97,7 @@ echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
 # Customize Plymouth spinner theme with SpaceX logo
 echo "Customizing Plymouth spinner theme with SpaceX logo..." | tee -a "$LOG_FILE"
-cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/watermark.png
-cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/ubuntu-logo.png
+cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
 
 # Set Plymouth theme to spinner (default with custom logo)
 echo "Setting Plymouth theme to spinner..." | tee -a "$LOG_FILE"
@@ -148,6 +147,10 @@ exec python3 $REPO_DIR/app.py > $HOME_DIR/app.log 2>&1
 EOF"
 echo ".xinitrc created." | tee -a "$LOG_FILE"
 
+# Allow any user to start X server (required for reliable autologin on Pi)
+echo "Configuring Xwrapper for anybody..." | tee -a "$LOG_FILE"
+echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
+
 # Configure console autologin and start X
 echo "Configuring console autologin and start X..." | tee -a "$LOG_FILE"
 mkdir -p /etc/systemd/system/getty@tty1.service.d
@@ -158,9 +161,13 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
 EOF
 systemctl daemon-reload | tee -a "$LOG_FILE"
 
-# Launch X from .bash_profile
-sudo -u "$USER" bash -c "echo 'startx' >> ~/.bash_profile"
-echo "X configured to start directly." | tee -a "$LOG_FILE"
+# Launch X from .bash_profile only on tty1
+sudo -u "$USER" bash -c "cat << EOF >> ~/.bash_profile
+if [ \"\$(tty)\" = \"/dev/tty1\" ] && [ -z \"\$DISPLAY\" ]; then
+  startx
+fi
+EOF"
+echo "X configured to start directly on console." | tee -a "$LOG_FILE"
 
 # WiFi and other optimizations
 echo "options brcmfmac p2p=0" | tee /etc/modprobe.d/brcmfmac.conf | tee -a "$LOG_FILE"
