@@ -736,7 +736,7 @@ if __name__ == '__main__':
         QFontDatabase.addApplicationFont(font_path)
 
     # Load Font Awesome (assuming you place 'Font-Awesome.otf' in assets; download from fontawesome.com if needed)
-    fa_path = os.path.join(os.path.dirname(__file__), "assets", "Font-Awesome.otf")
+    fa_path = os.path.join(os.path.dirname(__file__), "assets", "Font Awesome 5 Free-Solid-900.otf")
     if os.path.exists(fa_path):
         QFontDatabase.addApplicationFont(fa_path)
 
