@@ -43,6 +43,15 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 echo "Installing system packages..." | tee -a "$LOG_FILE"
 apt-get install -y python3 python3-pip python3-venv git python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 upower iw python3-requests python3-tz python3-dateutil python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine lz4 plymouth-theme-spinner xserver-xorg xinit x11-xserver-utils openbox libinput-tools ubuntu-raspi-settings xserver-xorg-video-modesetting libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg | tee -a "$LOG_FILE"
 
+# Install Python packages via pip
+echo "Installing additional Python packages..." | tee -a "$LOG_FILE"
+python3 -m pip install --upgrade pip | tee -a "$LOG_FILE"
+python3 -m pip install pyqtgraph | tee -a "$LOG_FILE"
+
+# Install additional system packages for QtWebEngine kiosk mode
+echo "Installing additional packages for QtWebEngine..." | tee -a "$LOG_FILE"
+apt-get install -y libqt6webengine6 libqt6webenginecore6 libqt6webenginewidgets6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0 libdrm2 libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1 libasound2 libgtk-3-0 | tee -a "$LOG_FILE"
+
 # Enable SSH
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
 systemctl enable --now ssh | tee -a "$LOG_FILE"

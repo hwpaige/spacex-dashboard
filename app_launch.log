@@ -9397,3 +9397,1514 @@ Init Parameters:
 2025-08-31 22:10:34,925 - ERROR - [QT-QtDebugMsg] inline.qml:362 WebEngineView loaded successfully for wind
 2025-08-31 22:10:34,952 - ERROR - [QT-QtDebugMsg] inline.qml:362 WebEngineView loaded successfully for temp
 2025-08-31 22:10:35,206 - ERROR - [QT-QtDebugMsg] inline.qml:362 WebEngineView loaded successfully for gust
+2025-08-31 22:11:27,382 - INFO - Fetching SpaceX launch data
+2025-08-31 22:11:27,384 - INFO - Using persistent cached previous launches
+2025-08-31 22:11:27,385 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:11:27,385 - INFO - Fetching F1 data
+2025-08-31 22:11:27,385 - INFO - Using persistent cached F1 data
+2025-08-31 22:11:27,385 - INFO - Fetching weather data for Starbase
+2025-08-31 22:11:28,441 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:11:29,444 - INFO - Fetching weather data for Vandy
+2025-08-31 22:11:30,278 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:11:31,282 - INFO - Fetching weather data for Cape
+2025-08-31 22:11:32,125 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:11:33,127 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:11:34,195 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:11:35,557 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:11:35,608 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Python312\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:11:36,245 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f333b0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,245 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f333b0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,270 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f32690, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,271 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f32690, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,280 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f308d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,280 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f308d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,287 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33b90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,287 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33b90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,295 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33f10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,295 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33f10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,300 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f339d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,300 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f339d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,304 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33ab0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,304 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0f33ab0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,313 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bc8ab1cd90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,313 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bc8ab1cd90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,321 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc3e10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,321 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc3e10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,327 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc2d70, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,327 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc2d70, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,336 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc3010, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,336 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc3010, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,348 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc4350, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,350 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1bca0fc4350, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:11:36,505 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:11:41,414 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:11:45,072 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:11:45,077 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:11:45,082 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:11:45,094 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:11:45,103 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:12:21,833 - INFO - Fetching SpaceX launch data
+2025-08-31 22:12:21,847 - INFO - Using persistent cached previous launches
+2025-08-31 22:12:21,853 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:12:21,854 - INFO - Fetching F1 data
+2025-08-31 22:12:21,858 - INFO - Using persistent cached F1 data
+2025-08-31 22:12:21,859 - INFO - Fetching weather data for Starbase
+2025-08-31 22:12:22,927 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:12:23,949 - INFO - Fetching weather data for Vandy
+2025-08-31 22:12:24,746 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:12:25,763 - INFO - Fetching weather data for Cape
+2025-08-31 22:12:26,665 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:12:27,668 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:12:28,555 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:12:31,186 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:12:31,381 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:12:34,305 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c48a0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,315 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c48a0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,571 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6740, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,580 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6740, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,708 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c5cc0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,712 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c5cc0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,784 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6ac0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,787 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6ac0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,840 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c3b80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,846 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c3b80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,966 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6ba0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:34,973 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6ba0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,127 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c47c0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,139 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c47c0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,255 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c4440, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,257 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c4440, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,327 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6c80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,347 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c6c80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,401 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c5f60, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,402 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c5f60, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,473 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c3fe0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,483 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c3fe0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,569 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c62e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:35,569 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x19e466c62e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:12:36,261 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:12:45,005 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:12:48,869 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:12:49,217 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:12:49,464 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:12:49,853 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:12:49,963 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:12:57,921 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:12:57,934 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:12:57,936 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:12:57,952 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:12:57,957 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:12:57,958 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:10,740 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:10,763 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:10,775 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:10,784 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:10,843 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:10,868 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:19,123 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:19,126 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:19,128 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:19,145 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:19,148 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:19,150 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:22,195 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:22,210 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:22,218 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:22,232 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:22,244 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:22,253 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:26,475 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:26,476 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:26,479 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:26,480 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:26,482 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:26,483 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:28,065 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:28,066 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:28,067 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:28,068 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:28,069 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:28,070 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:29,495 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:29,496 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:13:29,498 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:29,498 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:13:29,499 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:13:29,502 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:16:21,536 - INFO - Fetching SpaceX launch data
+2025-08-31 22:16:25,068 - INFO - Successfully fetched and saved previous launches
+2025-08-31 22:16:33,492 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 22:16:33,492 - INFO - Fetching F1 data
+2025-08-31 22:16:35,439 - INFO - Successfully fetched and saved F1 data
+2025-08-31 22:16:36,440 - INFO - Fetching weather data for Starbase
+2025-08-31 22:16:37,582 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:16:38,589 - INFO - Fetching weather data for Vandy
+2025-08-31 22:16:39,428 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:16:40,429 - INFO - Fetching weather data for Cape
+2025-08-31 22:16:41,779 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:16:42,783 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:16:43,733 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:16:45,178 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:16:45,229 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:16:45,847 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51d3f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,847 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51d3f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,874 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51c190, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,874 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51c190, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,886 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51d850, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,886 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51d850, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,892 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ad70, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,892 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ad70, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,897 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51b7f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,901 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51b7f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,905 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ca50, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,905 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ca50, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,913 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51a830, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,914 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51a830, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,922 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ba90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,922 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51ba90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,932 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51aad0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,932 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51aad0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,939 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51c430, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,939 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51c430, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,949 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51e1f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,949 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51e1f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,953 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51e030, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:45,953 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1eacf51e030, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:16:46,146 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:16:51,066 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:16:54,030 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:16:54,169 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:16:54,219 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:16:54,235 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:16:54,356 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:19:24,797 - INFO - Fetching SpaceX launch data
+2025-08-31 22:19:24,808 - INFO - Using persistent cached previous launches
+2025-08-31 22:19:24,822 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:19:24,825 - INFO - Fetching F1 data
+2025-08-31 22:19:24,829 - INFO - Using persistent cached F1 data
+2025-08-31 22:19:24,829 - INFO - Fetching weather data for Starbase
+2025-08-31 22:19:25,570 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:19:26,571 - INFO - Fetching weather data for Vandy
+2025-08-31 22:19:27,350 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:19:28,352 - INFO - Fetching weather data for Cape
+2025-08-31 22:19:29,058 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:19:30,060 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:19:30,739 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:19:32,572 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:19:32,687 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Python312\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:19:35,007 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd398570, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,016 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd398570, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,162 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3aca80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,165 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3aca80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,235 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3abac0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,246 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3abac0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,360 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3abc80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,362 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3abc80, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,458 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ab2e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,460 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ab2e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,485 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ad6c0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,487 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ad6c0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,528 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac700, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,544 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac700, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,622 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac7e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,622 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac7e0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,678 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac540, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,687 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac540, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,783 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac620, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,790 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ac620, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,858 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ab900, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,860 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ab900, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,891 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ad340, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:35,891 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x216fd3ad340, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:19:36,357 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:19:44,833 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:19:49,008 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:19:49,110 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:19:49,298 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:19:49,526 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:19:49,689 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:21:44,802 - INFO - Fetching weather data for Starbase
+2025-08-31 22:21:45,716 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:21:46,719 - INFO - Fetching weather data for Vandy
+2025-08-31 22:21:47,555 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:21:48,558 - INFO - Fetching weather data for Cape
+2025-08-31 22:21:49,396 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:21:50,399 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:21:51,238 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:23:42,253 - INFO - Fetching SpaceX launch data
+2025-08-31 22:23:42,257 - INFO - Using persistent cached previous launches
+2025-08-31 22:23:42,257 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:23:42,257 - INFO - Fetching F1 data
+2025-08-31 22:23:42,257 - INFO - Using persistent cached F1 data
+2025-08-31 22:23:42,257 - INFO - Fetching weather data for Starbase
+2025-08-31 22:23:43,089 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:23:44,090 - INFO - Fetching weather data for Vandy
+2025-08-31 22:23:44,858 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:23:45,860 - INFO - Fetching weather data for Cape
+2025-08-31 22:23:46,748 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:23:47,750 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:23:48,506 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:23:49,882 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:23:49,937 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Python312\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:23:50,598 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a8139f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,598 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a8139f0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,626 - ERROR - QML warning: inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a815430, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,626 - ERROR - [QT-QtWarningMsg] inline.qml:549 inline.qml:549:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a815430, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,634 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a8150b0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,634 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a8150b0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,638 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a813c90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,638 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a813c90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,643 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982510, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,645 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982510, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,651 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a983a10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,651 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a983a10, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,655 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982190, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,658 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982190, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,662 - ERROR - QML warning: inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a9826d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,662 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432:45: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a9826d0, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,675 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982270, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,675 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982270, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,680 - ERROR - QML warning: inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982890, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,680 - ERROR - [QT-QtWarningMsg] inline.qml:261 inline.qml:261:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a982890, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,688 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a984570, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,688 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a984570, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,692 - ERROR - QML warning: inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a983d90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:50,692 - ERROR - [QT-QtWarningMsg] inline.qml:219 inline.qml:219:57: QML QQuickRectangle: The current style does not support customization of this control (property: "background" item: QQuickRectangle(0x1f82a983d90, parent=0x0, geometry=0,0 0x0)). Please customize a non-native style (such as Basic, Fusion, Material, etc). For more information, see: https://doc.qt.io/qt-6/qtquickcontrols2-customize.html#customization-reference
+2025-08-31 22:23:51,019 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:23:56,152 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:23:58,816 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:23:59,091 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:23:59,128 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:23:59,236 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:23:59,331 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:24:04,392 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:24:04,412 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:24:49,823 - INFO - Fetching SpaceX launch data
+2025-08-31 22:24:49,823 - INFO - Using persistent cached previous launches
+2025-08-31 22:24:49,823 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:24:49,823 - INFO - Fetching F1 data
+2025-08-31 22:24:49,823 - INFO - Using persistent cached F1 data
+2025-08-31 22:24:49,823 - INFO - Fetching weather data for Starbase
+2025-08-31 22:24:50,751 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:24:51,753 - INFO - Fetching weather data for Vandy
+2025-08-31 22:24:52,586 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:24:53,590 - INFO - Fetching weather data for Cape
+2025-08-31 22:24:54,431 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:24:55,431 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:24:56,280 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:24:57,699 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:24:57,771 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Python312\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:24:58,776 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:25:03,921 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:25:08,266 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:25:08,490 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:25:08,528 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:25:08,551 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:25:08,572 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:26:17,374 - INFO - Fetching SpaceX launch data
+2025-08-31 22:26:17,374 - INFO - Using persistent cached previous launches
+2025-08-31 22:26:17,382 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:26:17,382 - INFO - Fetching F1 data
+2025-08-31 22:26:17,383 - INFO - Using persistent cached F1 data
+2025-08-31 22:26:17,383 - INFO - Fetching weather data for Starbase
+2025-08-31 22:26:18,307 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:26:19,309 - INFO - Fetching weather data for Vandy
+2025-08-31 22:26:20,142 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:26:21,144 - INFO - Fetching weather data for Cape
+2025-08-31 22:26:22,088 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:26:23,089 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:26:24,036 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:26:25,469 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:26:25,526 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:26:26,435 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:26:31,053 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:26:32,873 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:26:32,929 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:26:33,014 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:26:33,063 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:26:33,088 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:26:42,480 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:26:42,529 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:27:01,422 - ERROR - QML warning: inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:27:01,423 - ERROR - [QT-QtWarningMsg] inline.qml:181 inline.qml:181: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:27:01,423 - ERROR - QML warning: inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:27:01,424 - ERROR - [QT-QtWarningMsg] inline.qml:154 inline.qml:154: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:27:01,424 - ERROR - QML warning: inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:27:01,425 - ERROR - [QT-QtWarningMsg] inline.qml:127 inline.qml:127: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:29:17,083 - INFO - Fetching SpaceX launch data
+2025-08-31 22:29:19,632 - INFO - Successfully fetched and saved previous launches
+2025-08-31 22:29:22,420 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 22:29:22,420 - INFO - Fetching F1 data
+2025-08-31 22:29:24,369 - INFO - Successfully fetched and saved F1 data
+2025-08-31 22:29:25,373 - INFO - Fetching weather data for Starbase
+2025-08-31 22:29:26,185 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:29:27,187 - INFO - Fetching weather data for Vandy
+2025-08-31 22:29:28,047 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:29:29,050 - INFO - Fetching weather data for Cape
+2025-08-31 22:29:29,900 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:29:30,902 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:29:31,725 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:29:33,152 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:29:33,204 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:29:33,991 - ERROR - [QT-QtDebugMsg] inline.qml:331 SwipeView completed, count: 6
+2025-08-31 22:29:39,251 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for radar
+2025-08-31 22:29:41,713 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for wind
+2025-08-31 22:29:41,730 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for pressure
+2025-08-31 22:29:41,763 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for temp
+2025-08-31 22:29:41,783 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for gust
+2025-08-31 22:29:41,977 - ERROR - [QT-QtDebugMsg] inline.qml:358 WebEngineView loaded successfully for clouds
+2025-08-31 22:29:49,707 - ERROR - QML warning: inline.qml:189: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:29:49,707 - ERROR - [QT-QtWarningMsg] inline.qml:189 inline.qml:189: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:29:49,708 - ERROR - QML warning: inline.qml:162: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:29:49,708 - ERROR - [QT-QtWarningMsg] inline.qml:162 inline.qml:162: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:29:49,709 - ERROR - QML warning: inline.qml:135: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:29:49,709 - ERROR - [QT-QtWarningMsg] inline.qml:135 inline.qml:135: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:31:23,555 - INFO - Fetching SpaceX launch data
+2025-08-31 22:31:23,555 - INFO - Using persistent cached previous launches
+2025-08-31 22:31:23,563 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:31:23,563 - INFO - Fetching F1 data
+2025-08-31 22:31:23,566 - INFO - Using persistent cached F1 data
+2025-08-31 22:31:23,566 - INFO - Fetching weather data for Starbase
+2025-08-31 22:31:24,381 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:31:25,383 - INFO - Fetching weather data for Vandy
+2025-08-31 22:31:26,219 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:31:27,221 - INFO - Fetching weather data for Cape
+2025-08-31 22:31:28,151 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:31:29,153 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:31:30,110 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:31:31,536 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:31:31,605 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:31:32,564 - ERROR - [QT-QtDebugMsg] inline.qml:334 SwipeView completed, count: 6
+2025-08-31 22:31:32,566 - ERROR - QML warning: inline.qml:187: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:31:32,566 - ERROR - [QT-QtWarningMsg] inline.qml:187 inline.qml:187: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:31:32,566 - ERROR - QML warning: inline.qml:168: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:31:32,566 - ERROR - [QT-QtWarningMsg] inline.qml:168 inline.qml:168: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:31:32,567 - ERROR - QML warning: inline.qml:149: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:31:32,567 - ERROR - [QT-QtWarningMsg] inline.qml:149 inline.qml:149: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:31:36,329 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for radar
+2025-08-31 22:31:42,872 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for clouds
+2025-08-31 22:31:44,149 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for wind
+2025-08-31 22:31:48,954 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for temp
+2025-08-31 22:31:49,670 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for gust
+2025-08-31 22:31:50,216 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for pressure
+2025-08-31 22:34:07,403 - INFO - Fetching SpaceX launch data
+2025-08-31 22:34:07,407 - INFO - Using persistent cached previous launches
+2025-08-31 22:34:07,407 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:34:07,407 - INFO - Fetching F1 data
+2025-08-31 22:34:07,407 - INFO - Using persistent cached F1 data
+2025-08-31 22:34:07,407 - INFO - Fetching weather data for Starbase
+2025-08-31 22:34:08,527 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:34:09,532 - INFO - Fetching weather data for Vandy
+2025-08-31 22:34:10,369 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:34:11,371 - INFO - Fetching weather data for Cape
+2025-08-31 22:34:12,312 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:34:13,319 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:34:14,262 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:34:15,819 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:34:15,871 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:34:16,913 - ERROR - [QT-QtDebugMsg] inline.qml:334 SwipeView completed, count: 6
+2025-08-31 22:34:16,914 - ERROR - QML warning: inline.qml:187: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:34:16,914 - ERROR - [QT-QtWarningMsg] inline.qml:187 inline.qml:187: ReferenceError: updateFalconHeavyLine is not defined
+2025-08-31 22:34:16,915 - ERROR - QML warning: inline.qml:168: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:34:16,915 - ERROR - [QT-QtWarningMsg] inline.qml:168 inline.qml:168: ReferenceError: updateFalcon9Line is not defined
+2025-08-31 22:34:16,916 - ERROR - QML warning: inline.qml:149: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:34:16,916 - ERROR - [QT-QtWarningMsg] inline.qml:149 inline.qml:149: ReferenceError: updateStarshipLine is not defined
+2025-08-31 22:34:20,714 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for radar
+2025-08-31 22:34:23,311 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for wind
+2025-08-31 22:34:23,780 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for gust
+2025-08-31 22:34:23,902 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for pressure
+2025-08-31 22:34:24,185 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for clouds
+2025-08-31 22:34:24,684 - ERROR - [QT-QtDebugMsg] inline.qml:361 WebEngineView loaded successfully for temp
+2025-08-31 22:36:30,454 - INFO - Fetching SpaceX launch data
+2025-08-31 22:36:30,454 - INFO - Using persistent cached previous launches
+2025-08-31 22:36:30,454 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:36:30,454 - INFO - Fetching F1 data
+2025-08-31 22:36:30,459 - INFO - Using persistent cached F1 data
+2025-08-31 22:36:30,459 - INFO - Fetching weather data for Starbase
+2025-08-31 22:36:31,478 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:36:32,484 - INFO - Fetching weather data for Vandy
+2025-08-31 22:36:33,430 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:36:34,435 - INFO - Fetching weather data for Cape
+2025-08-31 22:36:35,272 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:36:36,291 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:36:37,323 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:36:38,876 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:36:38,927 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:36:39,924 - ERROR - [QT-QtDebugMsg] inline.qml:337 SwipeView completed, count: 6
+2025-08-31 22:36:47,045 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for radar
+2025-08-31 22:36:53,303 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for wind
+2025-08-31 22:36:54,298 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for temp
+2025-08-31 22:36:58,172 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for clouds
+2025-08-31 22:36:58,839 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for pressure
+2025-08-31 22:36:59,585 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for gust
+2025-08-31 22:37:51,303 - INFO - Fetching SpaceX launch data
+2025-08-31 22:37:51,305 - INFO - Using persistent cached previous launches
+2025-08-31 22:37:51,305 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:37:51,305 - INFO - Fetching F1 data
+2025-08-31 22:37:51,305 - INFO - Using persistent cached F1 data
+2025-08-31 22:37:51,307 - INFO - Fetching weather data for Starbase
+2025-08-31 22:37:51,983 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:37:52,987 - INFO - Fetching weather data for Vandy
+2025-08-31 22:37:53,797 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:37:54,799 - INFO - Fetching weather data for Cape
+2025-08-31 22:37:55,564 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:37:56,568 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:37:57,294 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:37:58,590 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:37:58,625 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:37:59,261 - ERROR - [QT-QtDebugMsg] inline.qml:337 SwipeView completed, count: 6
+2025-08-31 22:38:00,666 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for wind
+2025-08-31 22:38:00,676 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for pressure
+2025-08-31 22:38:00,719 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for gust
+2025-08-31 22:38:00,723 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for clouds
+2025-08-31 22:38:00,736 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for temp
+2025-08-31 22:38:01,504 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for radar
+2025-08-31 22:40:04,393 - INFO - Fetching SpaceX launch data
+2025-08-31 22:40:04,393 - INFO - Using persistent cached previous launches
+2025-08-31 22:40:04,398 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:40:04,398 - INFO - Fetching F1 data
+2025-08-31 22:40:04,399 - INFO - Using persistent cached F1 data
+2025-08-31 22:40:04,400 - INFO - Fetching weather data for Starbase
+2025-08-31 22:40:05,119 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:40:06,122 - INFO - Fetching weather data for Vandy
+2025-08-31 22:40:06,795 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:40:07,796 - INFO - Fetching weather data for Cape
+2025-08-31 22:40:08,467 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:40:09,468 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:40:10,157 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:40:11,437 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:40:11,476 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:40:12,065 - ERROR - [QT-QtDebugMsg] inline.qml:337 SwipeView completed, count: 6
+2025-08-31 22:40:13,857 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for radar
+2025-08-31 22:40:14,812 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for wind
+2025-08-31 22:40:14,816 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for gust
+2025-08-31 22:40:14,837 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for temp
+2025-08-31 22:40:14,858 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for pressure
+2025-08-31 22:40:14,866 - ERROR - [QT-QtDebugMsg] inline.qml:364 WebEngineView loaded successfully for clouds
+2025-08-31 22:43:33,585 - INFO - Fetching SpaceX launch data
+2025-08-31 22:43:35,749 - INFO - Successfully fetched and saved previous launches
+2025-08-31 22:43:38,717 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 22:43:38,717 - INFO - Fetching F1 data
+2025-08-31 22:43:40,142 - INFO - Successfully fetched and saved F1 data
+2025-08-31 22:43:41,145 - INFO - Fetching weather data for Starbase
+2025-08-31 22:43:41,813 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:43:42,815 - INFO - Fetching weather data for Vandy
+2025-08-31 22:43:43,555 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:43:44,556 - INFO - Fetching weather data for Cape
+2025-08-31 22:43:45,242 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:43:46,244 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:43:46,959 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:43:48,253 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:43:48,294 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:43:48,799 - ERROR - [QT-QtDebugMsg] inline.qml:346 SwipeView completed, count: 6
+2025-08-31 22:43:49,825 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for clouds
+2025-08-31 22:43:49,838 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for pressure
+2025-08-31 22:43:49,859 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for wind
+2025-08-31 22:43:49,862 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for temp
+2025-08-31 22:43:50,718 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for radar
+2025-08-31 22:43:51,933 - ERROR - [QT-QtDebugMsg] inline.qml:373 WebEngineView loaded successfully for gust
+2025-08-31 22:43:56,744 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:43:56,745 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:50:44,184 - INFO - Fetching SpaceX launch data
+2025-08-31 22:50:44,184 - INFO - Using persistent cached previous launches
+2025-08-31 22:50:44,186 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:50:44,186 - INFO - Fetching F1 data
+2025-08-31 22:50:44,186 - INFO - Using persistent cached F1 data
+2025-08-31 22:50:44,186 - INFO - Fetching weather data for Starbase
+2025-08-31 22:50:44,889 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:50:45,894 - INFO - Fetching weather data for Vandy
+2025-08-31 22:50:46,557 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:50:47,562 - INFO - Fetching weather data for Cape
+2025-08-31 22:50:48,273 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:50:49,277 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:50:50,006 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:50:51,357 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:50:51,397 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:50:51,871 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 22:50:53,104 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 22:50:53,130 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 22:50:53,936 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 22:50:55,125 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 22:50:55,136 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 22:50:55,218 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 22:51:16,423 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:51:16,423 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-08-31 22:51:58,310 - INFO - Fetching SpaceX launch data
+2025-08-31 22:51:58,311 - INFO - Using persistent cached previous launches
+2025-08-31 22:51:58,312 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:51:58,312 - INFO - Fetching F1 data
+2025-08-31 22:51:58,313 - INFO - Using persistent cached F1 data
+2025-08-31 22:51:58,313 - INFO - Fetching weather data for Starbase
+2025-08-31 22:51:58,952 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:51:59,954 - INFO - Fetching weather data for Vandy
+2025-08-31 22:52:00,724 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:52:01,727 - INFO - Fetching weather data for Cape
+2025-08-31 22:52:02,356 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:52:03,361 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:52:03,994 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:52:05,300 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:52:05,336 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:52:05,841 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 22:52:06,878 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 22:52:06,886 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 22:52:06,899 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 22:52:06,919 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 22:52:06,936 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 22:52:07,765 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 22:53:50,011 - INFO - Fetching SpaceX launch data
+2025-08-31 22:53:50,011 - INFO - Using persistent cached previous launches
+2025-08-31 22:53:50,011 - INFO - Using persistent cached upcoming launches
+2025-08-31 22:53:50,011 - INFO - Fetching F1 data
+2025-08-31 22:53:50,011 - INFO - Using persistent cached F1 data
+2025-08-31 22:53:50,011 - INFO - Fetching weather data for Starbase
+2025-08-31 22:53:50,708 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:53:51,714 - INFO - Fetching weather data for Vandy
+2025-08-31 22:53:52,342 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:53:53,345 - INFO - Fetching weather data for Cape
+2025-08-31 22:53:53,973 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:53:54,975 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:53:55,675 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:53:56,988 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:53:57,025 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:53:57,556 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 22:53:59,350 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 22:54:00,662 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 22:54:00,692 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 22:54:00,707 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 22:54:00,744 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 22:54:00,773 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 22:57:56,818 - INFO - Fetching SpaceX launch data
+2025-08-31 22:57:59,374 - INFO - Successfully fetched and saved previous launches
+2025-08-31 22:58:02,486 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 22:58:02,487 - INFO - Fetching F1 data
+2025-08-31 22:58:04,005 - INFO - Successfully fetched and saved F1 data
+2025-08-31 22:58:05,007 - INFO - Fetching weather data for Starbase
+2025-08-31 22:58:05,743 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 22:58:06,744 - INFO - Fetching weather data for Vandy
+2025-08-31 22:58:07,431 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 22:58:08,433 - INFO - Fetching weather data for Cape
+2025-08-31 22:58:09,096 - INFO - Successfully fetched weather data for Cape
+2025-08-31 22:58:10,097 - INFO - Fetching weather data for Hawthorne
+2025-08-31 22:58:10,718 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 22:58:12,043 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 22:58:12,082 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 22:58:12,545 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 22:58:12,634 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 22:58:14,553 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 22:58:15,787 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 22:58:15,792 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 22:58:15,803 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 22:58:15,826 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 22:58:15,835 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 22:58:29,223 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 22:58:36,696 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 22:58:44,266 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 22:58:47,415 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 22:58:52,275 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:00:39,393 - INFO - Fetching SpaceX launch data
+2025-08-31 23:00:39,393 - INFO - Using persistent cached previous launches
+2025-08-31 23:00:39,393 - INFO - Using persistent cached upcoming launches
+2025-08-31 23:00:39,393 - INFO - Fetching F1 data
+2025-08-31 23:00:39,393 - INFO - Using persistent cached F1 data
+2025-08-31 23:00:39,393 - INFO - Fetching weather data for Starbase
+2025-08-31 23:00:40,013 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:00:41,021 - INFO - Fetching weather data for Vandy
+2025-08-31 23:00:41,631 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:00:42,641 - INFO - Fetching weather data for Cape
+2025-08-31 23:00:43,253 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:00:44,254 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:00:44,898 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:00:46,209 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:00:46,247 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:00:46,699 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:00:46,817 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:00:47,906 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:00:47,936 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:00:48,719 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:00:49,988 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:00:50,009 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:00:50,034 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:00:53,706 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:00:54,801 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:00:56,301 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:00:57,368 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:02:06,830 - INFO - Fetching SpaceX launch data
+2025-08-31 23:02:06,830 - INFO - Using persistent cached previous launches
+2025-08-31 23:02:06,830 - INFO - Using persistent cached upcoming launches
+2025-08-31 23:02:06,830 - INFO - Fetching F1 data
+2025-08-31 23:02:06,830 - INFO - Using persistent cached F1 data
+2025-08-31 23:02:06,830 - INFO - Fetching weather data for Starbase
+2025-08-31 23:02:07,467 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:02:08,470 - INFO - Fetching weather data for Vandy
+2025-08-31 23:02:09,073 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:02:10,080 - INFO - Fetching weather data for Cape
+2025-08-31 23:02:11,013 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:02:12,014 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:02:12,615 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:02:13,913 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:02:13,952 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:02:14,429 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:02:14,500 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:02:16,494 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:02:17,777 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:02:17,808 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:02:17,920 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:02:17,923 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:02:17,956 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:04:06,065 - INFO - Fetching SpaceX launch data
+2025-08-31 23:04:06,065 - INFO - Using persistent cached previous launches
+2025-08-31 23:04:06,065 - INFO - Using persistent cached upcoming launches
+2025-08-31 23:04:06,065 - INFO - Fetching F1 data
+2025-08-31 23:04:06,065 - INFO - Using persistent cached F1 data
+2025-08-31 23:04:06,065 - INFO - Fetching weather data for Starbase
+2025-08-31 23:04:06,714 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:04:07,715 - INFO - Fetching weather data for Vandy
+2025-08-31 23:04:08,318 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:04:09,327 - INFO - Fetching weather data for Cape
+2025-08-31 23:04:09,951 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:04:10,959 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:04:11,602 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:04:12,912 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:04:12,949 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:04:13,383 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:04:13,415 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:04:14,592 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:04:15,527 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:04:16,829 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:04:16,840 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:04:16,954 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:04:16,957 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:06:21,702 - INFO - Fetching SpaceX launch data
+2025-08-31 23:06:21,702 - INFO - Using persistent cached previous launches
+2025-08-31 23:06:21,702 - INFO - Using persistent cached upcoming launches
+2025-08-31 23:06:21,702 - INFO - Fetching F1 data
+2025-08-31 23:06:21,702 - INFO - Using persistent cached F1 data
+2025-08-31 23:06:21,702 - INFO - Fetching weather data for Starbase
+2025-08-31 23:06:24,122 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:06:25,123 - INFO - Fetching weather data for Vandy
+2025-08-31 23:06:25,766 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:06:26,772 - INFO - Fetching weather data for Cape
+2025-08-31 23:06:27,423 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:06:28,428 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:06:29,068 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:06:30,379 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:06:30,416 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:06:30,889 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:06:30,989 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:06:32,876 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:06:34,203 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:06:34,228 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:06:34,251 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:06:34,268 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:06:34,290 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:10:13,426 - INFO - Fetching SpaceX launch data
+2025-08-31 23:10:16,745 - INFO - Successfully fetched and saved previous launches
+2025-08-31 23:10:20,214 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 23:10:20,214 - INFO - Fetching F1 data
+2025-08-31 23:10:21,670 - INFO - Successfully fetched and saved F1 data
+2025-08-31 23:10:22,672 - INFO - Fetching weather data for Starbase
+2025-08-31 23:10:23,325 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:10:24,329 - INFO - Fetching weather data for Vandy
+2025-08-31 23:10:24,950 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:10:25,953 - INFO - Fetching weather data for Cape
+2025-08-31 23:10:26,564 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:10:27,567 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:10:28,220 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:10:29,541 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:10:29,575 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Python312\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:10:29,925 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-08-31 23:10:29,933 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-08-31 23:10:29,940 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-08-31 23:10:29,942 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:10:29,943 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:10:29,958 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:10:29,958 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:10:30,058 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:10:30,091 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:10:32,131 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:10:33,391 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:10:33,395 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:10:33,417 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:10:33,421 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:10:33,440 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:10:34,270 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:10:39,270 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:10:44,275 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:10:49,269 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:10:54,268 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:10:59,270 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:04,271 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:09,272 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:14,276 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:19,283 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:24,284 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:29,273 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:34,276 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:39,283 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:44,283 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:49,272 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:54,274 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:11:59,283 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:04,284 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:09,282 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:14,277 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:19,279 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:24,275 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:29,275 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:34,277 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:39,272 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:44,285 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:49,276 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:54,277 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:12:59,280 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:04,279 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:09,279 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:14,289 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:19,287 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:24,280 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:29,289 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:34,282 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:39,286 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:44,286 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:49,279 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:54,289 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:13:59,278 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:04,279 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:09,284 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:14,287 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:19,287 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:24,281 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:29,291 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:34,295 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:39,284 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:44,280 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:49,282 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:54,287 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:14:59,280 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:04,291 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:09,283 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:14,284 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:19,282 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:24,292 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:29,283 - INFO - Fetching weather data for Starbase
+2025-08-31 23:15:29,944 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:15:30,946 - INFO - Fetching weather data for Vandy
+2025-08-31 23:15:31,584 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:15:32,589 - INFO - Fetching weather data for Cape
+2025-08-31 23:15:33,225 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:15:34,227 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:15:34,827 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:15:35,831 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:39,291 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:44,295 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:49,293 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:54,285 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:15:59,300 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:04,302 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:09,286 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:14,288 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:19,301 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:24,296 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:29,288 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:34,289 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:39,291 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:44,299 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:49,293 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:54,294 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:16:59,299 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:04,288 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:09,298 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:14,293 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:19,294 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:24,300 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:29,291 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:34,300 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:39,301 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:44,292 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:47,307 - INFO - Fetching SpaceX launch data
+2025-08-31 23:17:47,309 - INFO - Using persistent cached previous launches
+2025-08-31 23:17:47,310 - INFO - Using persistent cached upcoming launches
+2025-08-31 23:17:47,310 - INFO - Fetching F1 data
+2025-08-31 23:17:47,312 - INFO - Using persistent cached F1 data
+2025-08-31 23:17:47,312 - INFO - Fetching weather data for Starbase
+2025-08-31 23:17:47,930 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:17:48,931 - INFO - Fetching weather data for Vandy
+2025-08-31 23:17:49,302 - ERROR - Error updating WiFi status: [WinError 2] The system cannot find the file specified
+2025-08-31 23:17:49,570 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:17:50,575 - INFO - Fetching weather data for Cape
+2025-08-31 23:17:51,203 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:17:52,211 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:17:52,844 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:17:54,218 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:17:54,254 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:17:54,629 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-08-31 23:17:54,636 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-08-31 23:17:54,644 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-08-31 23:17:54,645 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:17:54,646 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:17:54,659 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:17:54,660 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:17:54,761 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:17:54,796 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:17:57,065 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:17:58,418 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:17:58,585 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:17:58,613 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:17:58,647 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:17:58,702 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:22:49,063 - INFO - Fetching SpaceX launch data
+2025-08-31 23:22:54,845 - INFO - Successfully fetched and saved previous launches
+2025-08-31 23:22:57,952 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 23:22:57,952 - INFO - Fetching F1 data
+2025-08-31 23:22:59,450 - INFO - Successfully fetched and saved F1 data
+2025-08-31 23:23:00,452 - INFO - Fetching weather data for Starbase
+2025-08-31 23:23:01,132 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:23:02,134 - INFO - Fetching weather data for Vandy
+2025-08-31 23:23:02,774 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:23:03,776 - INFO - Fetching weather data for Cape
+2025-08-31 23:23:04,418 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:23:05,423 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:23:06,072 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:23:07,334 - WARNING - No WiFi interface detected on Windows
+2025-08-31 23:23:07,614 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:23:07,651 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:23:08,040 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-08-31 23:23:08,046 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-08-31 23:23:08,052 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-08-31 23:23:08,054 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:23:08,055 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:23:08,068 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:23:08,069 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:23:08,204 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:23:08,244 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:23:10,221 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:23:11,381 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:23:11,400 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:23:11,418 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:23:11,427 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:23:11,444 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
