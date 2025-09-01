@@ -2,11 +2,12 @@ import sys
 import requests
 import os
 import json
-from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler
-from PyQt6.QtGui import QFontDatabase, QCursor
-from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext
-from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
+import platform
+from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint
+from PyQt6.QtGui import QFontDatabase, QCursor, QRegion
+from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
+from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
@@ -15,6 +16,9 @@ from dateutil.parser import parse
 import pytz
 import pandas as pd
 import time
+import pyqtgraph as pg
+import subprocess
+import re
 
 # Environment variables for Qt and Chromium
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -49,7 +53,12 @@ def _qt_message_handler(mode, context, message):
     location = ''
     if context and context.file and context.line:
         location = f" {context.file}:{context.line}"
-    logger.error(f"[QT-{level_name}]{location} {message}")
+    try:
+        logger.error(f"[QT-{level_name}]{location} {message}")
+    except UnicodeEncodeError:
+        # Handle encoding issues by sanitizing the message
+        sanitized_message = message.encode('utf-8', errors='replace').decode('utf-8')
+        logger.error(f"[QT-{level_name}]{location} {sanitized_message}")
 
 # Install the handler only once
 try:
@@ -559,6 +568,9 @@ class Backend(QObject):
     themeChanged = pyqtSignal()
     locationChanged = pyqtSignal()
     eventModelChanged = pyqtSignal()
+    wifiNetworksChanged = pyqtSignal()
+    wifiConnectedChanged = pyqtSignal()
+    wifiConnectingChanged = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -573,6 +585,13 @@ class Backend(QObject):
         self._weather_data = self.initialize_weather()
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
+        self._launch_trends_cache = {}  # Cache for launch trends series
+        
+        # WiFi properties
+        self._wifi_networks = []
+        self._wifi_connected = False
+        self._wifi_connecting = False
+        self._current_wifi_ssid = ""
 
         # Timers
         self.weather_timer = QTimer(self)
@@ -590,6 +609,14 @@ class Backend(QObject):
         self.countdown_timer = QTimer(self)
         self.countdown_timer.timeout.connect(self.update_countdown)
         self.countdown_timer.start(1000)
+
+        # WiFi timer for status updates
+        self.wifi_timer = QTimer(self)
+        self.wifi_timer.timeout.connect(self.update_wifi_status)
+        self.wifi_timer.start(5000)  # Check every 5 seconds
+        
+        # Check WiFi interface availability on startup
+        self.check_wifi_interface()
 
     @pyqtProperty(str, notify=modeChanged)
     def mode(self):
@@ -663,6 +690,22 @@ class Backend(QObject):
     @pyqtProperty(EventModel, notify=eventModelChanged)
     def eventModel(self):
         return self._event_model
+
+    @pyqtProperty(list, notify=wifiNetworksChanged)
+    def wifiNetworks(self):
+        return self._wifi_networks
+
+    @pyqtProperty(bool, notify=wifiConnectedChanged)
+    def wifiConnected(self):
+        return self._wifi_connected
+
+    @pyqtProperty(bool, notify=wifiConnectingChanged)
+    def wifiConnecting(self):
+        return self._wifi_connecting
+
+    @pyqtProperty(str, notify=wifiConnectedChanged)
+    def currentWifiSsid(self):
+        return self._current_wifi_ssid
 
     @pyqtProperty(str, notify=timeChanged)
     def currentTime(self):
@@ -828,15 +871,21 @@ class Backend(QObject):
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrendsSeries(self):
+        cache_key = (self._chart_type, self._chart_view_mode, len(self._launch_data['previous']))
+        if cache_key in self._launch_trends_cache:
+            return self._launch_trends_cache[cache_key]
+        
         try:
             launches = self._launch_data['previous']
             if not launches:
                 default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-                return [
+                data = [
                     {'label': 'Starship', 'values': default_values},
                     {'label': 'Falcon 9', 'values': default_values},
                     {'label': 'Falcon Heavy', 'values': default_values}
                 ]
+                self._launch_trends_cache[cache_key] = data
+                return data
             df = pd.DataFrame(launches)
             df['date'] = pd.to_datetime(df['date'])
             current_year = datetime.now(pytz.UTC).year
@@ -845,11 +894,13 @@ class Backend(QObject):
             df = df[df['rocket'].isin(rocket_types)]
             if df.empty:
                 default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-                return [
+                data = [
                     {'label': 'Starship', 'values': default_values},
                     {'label': 'Falcon 9', 'values': default_values},
                     {'label': 'Falcon Heavy', 'values': default_values}
                 ]
+                self._launch_trends_cache[cache_key] = data
+                return data
             
             if self._chart_type == 'bar':
                 # Monthly aggregation for bar chart
@@ -882,15 +933,24 @@ class Backend(QObject):
                     'label': rocket,
                     'values': values
                 })
+            self._launch_trends_cache[cache_key] = data
             return data
         except Exception as e:
             logger.error(f"Error in launchTrendsSeries: {e}")
             default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-            return [
+            data = [
                 {'label': 'Starship', 'values': default_values},
                 {'label': 'Falcon 9', 'values': default_values},
                 {'label': 'Falcon Heavy', 'values': default_values}
             ]
+            self._launch_trends_cache[cache_key] = data
+            return data
+
+    @pyqtProperty(list, notify=launchesChanged)
+    def launchTrendsMonths(self):
+        if self._chart_type == 'bar':
+            return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        return []
 
     @pyqtProperty(list, notify=f1Changed)
     def driverStandings(self):
@@ -928,6 +988,7 @@ class Backend(QObject):
 
     def update_launches_periodic(self):
         self._launch_data = fetch_launches()
+        self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.update_event_model()
 
@@ -941,10 +1002,553 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
 
+    @pyqtSlot()
+    def scanWifiNetworks(self):
+        """Scan for available WiFi networks"""
+        try:
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                # Use Windows netsh command to scan for WiFi networks
+                result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'], 
+                                      capture_output=True, text=True, timeout=10)
+                
+                networks = []
+                current_network = {}
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    
+                    # Look for SSID
+                    if line.startswith('SSID'):
+                        if current_network and current_network.get('ssid'):
+                            networks.append(current_network)
+                        ssid_match = re.search(r'SSID\s+\d+\s*:\s*(.+)', line)
+                        if ssid_match:
+                            current_network = {'ssid': ssid_match.group(1).strip(), 'signal': 0, 'encrypted': False}
+                    
+                    # Look for signal strength
+                    elif 'Signal' in line and current_network:
+                        signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
+                        if signal_match:
+                            # Convert percentage to dBm (rough approximation)
+                            percentage = int(signal_match.group(1))
+                            # Convert percentage to dBm (rough approximation: 100% = -30dBm, 0% = -100dBm)
+                            dbm = -30 - ((100 - percentage) * 0.7)
+                            current_network['signal'] = int(dbm)
+                    
+                    # Look for authentication
+                    elif 'Authentication' in line and current_network:
+                        if 'WPA' in line or 'WPA2' in line or 'WPA3' in line:
+                            current_network['encrypted'] = True
+                
+                # Add the last network
+                if current_network and current_network.get('ssid'):
+                    networks.append(current_network)
+            else:
+                # Use Linux iwlist command for Raspberry Pi/Ubuntu
+                # Try different interface names if wlan0 doesn't work
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                interface = None
+                
+                for iface in interfaces:
+                    try:
+                        test_result = subprocess.run(['ip', 'link', 'show', iface], 
+                                                   capture_output=True, timeout=2)
+                        if test_result.returncode == 0:
+                            interface = iface
+                            break
+                    except:
+                        continue
+                
+                if not interface:
+                    logger.error("No wireless interface found on Linux system")
+                    self._wifi_networks = []
+                    self.wifiNetworksChanged.emit()
+                    return
+                
+                # Try with sudo first, then without if it fails
+                try:
+                    result = subprocess.run(['sudo', 'iwlist', interface, 'scan'], 
+                                          capture_output=True, text=True, timeout=15)
+                except:
+                    # Try without sudo
+                    try:
+                        result = subprocess.run(['iwlist', interface, 'scan'], 
+                                              capture_output=True, text=True, timeout=15)
+                    except Exception as e:
+                        logger.error(f"Failed to scan WiFi networks: {e}")
+                        self._wifi_networks = []
+                        self.wifiNetworksChanged.emit()
+                        return
+                
+                networks = []
+                current_network = {}
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    
+                    # Look for ESSID
+                    essid_match = re.search(r'ESSID:"([^"]*)"', line)
+                    if essid_match:
+                        if current_network and current_network.get('ssid'):
+                            networks.append(current_network)
+                        current_network = {'ssid': essid_match.group(1), 'signal': 0, 'encrypted': False}
+                    
+                    # Look for signal level
+                    signal_match = re.search(r'Signal level=(-?\d+)', line)
+                    if signal_match and current_network:
+                        current_network['signal'] = int(signal_match.group(1))
+                    
+                    # Look for encryption
+                    if 'Encryption key:on' in line and current_network:
+                        current_network['encrypted'] = True
+                
+                # Add the last network
+                if current_network and current_network.get('ssid'):
+                    networks.append(current_network)
+            
+            # Remove duplicates and sort by signal strength
+            seen_ssids = set()
+            unique_networks = []
+            for network in networks:
+                if network['ssid'] not in seen_ssids and network['ssid'] and network['ssid'] != '<disconnected>':
+                    seen_ssids.add(network['ssid'])
+                    unique_networks.append(network)
+            
+            self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
+            self.wifiNetworksChanged.emit()
+            
+        except Exception as e:
+            logger.error(f"Error scanning WiFi networks: {e}")
+            self._wifi_networks = []
+            self.wifiNetworksChanged.emit()
+
+    @pyqtSlot(str, str)
+    def connectToWifi(self, ssid, password):
+        """Connect to a WiFi network"""
+        try:
+            self._wifi_connecting = True
+            self.wifiConnectingChanged.emit()
+            
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                # Create a temporary XML profile for Windows WiFi connection
+                profile_xml = f'''<?xml version="1.0"?>
+<WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
+    <name>{ssid}</name>
+    <SSIDConfig>
+        <SSID>
+            <name>{ssid}</name>
+        </SSID>
+    </SSIDConfig>
+    <connectionType>ESS</connectionType>
+    <connectionMode>auto</connectionMode>
+    <MSM>
+        <security>
+            <authEncryption>
+                <authentication>WPA2PSK</authentication>
+                <encryption>AES</encryption>
+                <useOneX>false</useOneX>
+            </authEncryption>
+            <sharedKey>
+                <keyType>passPhrase</keyType>
+                <protected>false</protected>
+                <keyMaterial>{password}</keyMaterial>
+            </sharedKey>
+        </security>
+    </MSM>
+</WLANProfile>'''
+                
+                # Write profile to temp file
+                profile_path = f'C:\\temp\\wifi_profile_{ssid}.xml'
+                os.makedirs('C:\\temp', exist_ok=True)
+                with open(profile_path, 'w') as f:
+                    f.write(profile_xml)
+                
+                # Add the profile
+                subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'], 
+                             capture_output=True, timeout=10)
+                
+                # Connect to the network
+                subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'], 
+                             capture_output=True, timeout=10)
+                
+                # Clean up
+                try:
+                    os.remove(profile_path)
+                except:
+                    pass
+            else:
+                # Use wpa_supplicant for Linux/Raspberry Pi
+                # Find the wireless interface
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                interface = None
+                
+                for iface in interfaces:
+                    try:
+                        test_result = subprocess.run(['ip', 'link', 'show', iface], 
+                                                   capture_output=True, timeout=2)
+                        if test_result.returncode == 0:
+                            interface = iface
+                            break
+                    except:
+                        continue
+                
+                if not interface:
+                    logger.error("No wireless interface found for connection")
+                    self._wifi_connecting = False
+                    self.wifiConnectingChanged.emit()
+                    return
+                
+                config_content = f'''network={{
+    ssid="{ssid}"
+    psk="{password}"
+    key_mgmt=WPA-PSK
+}}'''
+                
+                # Write to temp file
+                with open('/tmp/wifi_config.conf', 'w') as f:
+                    f.write(config_content)
+                
+                # Try with sudo first, then without if it fails
+                try:
+                    # Use wpa_supplicant to connect
+                    subprocess.run(['sudo', 'wpa_supplicant', '-B', '-i', interface, '-c', '/tmp/wifi_config.conf'], 
+                                 capture_output=True, timeout=10)
+                    
+                    # Get IP address
+                    subprocess.run(['sudo', 'dhclient', interface], 
+                                 capture_output=True, timeout=10)
+                except:
+                    # Try without sudo
+                    try:
+                        subprocess.run(['wpa_supplicant', '-B', '-i', interface, '-c', '/tmp/wifi_config.conf'], 
+                                     capture_output=True, timeout=10)
+                        subprocess.run(['dhclient', interface], 
+                                     capture_output=True, timeout=10)
+                    except Exception as e:
+                        logger.error(f"Failed to connect to WiFi: {e}")
+                        self._wifi_connecting = False
+                        self.wifiConnectingChanged.emit()
+                        return
+                
+                # Clean up
+                try:
+                    os.remove('/tmp/wifi_config.conf')
+                except:
+                    pass
+            
+            self._wifi_connecting = False
+            self.wifiConnectingChanged.emit()
+            
+            # Check if connected
+            self.update_wifi_status()
+            
+        except Exception as e:
+            logger.error(f"Error connecting to WiFi: {e}")
+            self._wifi_connecting = False
+            self.wifiConnectingChanged.emit()
+
+    @pyqtSlot()
+    def disconnectWifi(self):
+        """Disconnect from current WiFi network"""
+        try:
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                subprocess.run(['netsh', 'wlan', 'disconnect'], capture_output=True)
+            else:
+                # For Linux, kill wpa_supplicant and release DHCP
+                try:
+                    subprocess.run(['sudo', 'killall', 'wpa_supplicant'], capture_output=True)
+                    subprocess.run(['sudo', 'dhclient', '-r', 'wlan0'], capture_output=True)
+                except:
+                    # Try without sudo
+                    try:
+                        subprocess.run(['killall', 'wpa_supplicant'], capture_output=True)
+                        subprocess.run(['dhclient', '-r', 'wlan0'], capture_output=True)
+                    except Exception as e:
+                        logger.error(f"Error disconnecting WiFi: {e}")
+            
+            self._wifi_connected = False
+            self._current_wifi_ssid = ""
+            self.wifiConnectedChanged.emit()
+        except Exception as e:
+            logger.error(f"Error disconnecting WiFi: {e}")
+
+    def update_wifi_status(self):
+        """Update WiFi connection status"""
+        try:
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                # Check WiFi interface status using Windows commands
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                                      capture_output=True, text=True, timeout=5)
+                
+                connected = False
+                current_ssid = ""
+                
+                for line in result.stdout.split('\n'):
+                    line = line.strip()
+                    
+                    if 'State' in line and 'connected' in line.lower():
+                        connected = True
+                    
+                    if 'SSID' in line and 'BSSID' not in line:
+                        ssid_match = re.search(r'SSID\s*:\s*(.+)', line)
+                        if ssid_match:
+                            current_ssid = ssid_match.group(1).strip()
+            else:
+                # Check wireless interfaces for Linux
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                has_ip = False
+                current_ssid = ""
+                
+                for interface in interfaces:
+                    try:
+                        # Check if interface has an IP address
+                        result = subprocess.run(['ip', 'addr', 'show', interface], 
+                                              capture_output=True, text=True, timeout=5)
+                        
+                        if 'inet ' in result.stdout:
+                            has_ip = True
+                            break
+                    except:
+                        continue
+                
+                # Get current SSID
+                try:
+                    ssid_result = subprocess.run(['iwgetid', '-r'], 
+                                               capture_output=True, text=True, timeout=5)
+                    current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
+                except:
+                    current_ssid = ""
+                
+                connected = has_ip
+            
+            # Update properties
+            wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
+            
+            self._wifi_connected = connected
+            self._current_wifi_ssid = current_ssid
+            
+            if wifi_changed:
+                self.wifiConnectedChanged.emit()
+                
+        except Exception as e:
+            logger.error(f"Error updating WiFi status: {e}")
+            self._wifi_connected = False
+            self._current_wifi_ssid = ""
+            self.wifiConnectedChanged.emit()
+
+    def check_wifi_interface(self):
+        """Check if WiFi interface is available and log status"""
+        try:
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                # Check if WLAN interface exists on Windows
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                                      capture_output=True, text=True, timeout=5)
+                if 'wlan' in result.stdout.lower() or 'wireless' in result.stdout.lower():
+                    logger.info("WiFi interface detected on Windows")
+                else:
+                    logger.warning("No WiFi interface detected on Windows")
+            else:
+                # Check wireless interfaces on Linux
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                wifi_found = False
+                
+                for interface in interfaces:
+                    try:
+                        result = subprocess.run(['ip', 'link', 'show', interface], 
+                                              capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            logger.info(f"WiFi interface {interface} detected on Linux")
+                            wifi_found = True
+                            break
+                    except:
+                        continue
+                
+                if not wifi_found:
+                    logger.warning("No WiFi interface detected on Linux")
+                
+                # Check if required tools are available
+                tools = ['iwlist', 'iwgetid', 'wpa_supplicant', 'dhclient']
+                for tool in tools:
+                    try:
+                        tool_check = subprocess.run(['which', tool], capture_output=True, timeout=2)
+                        if tool_check.returncode != 0:
+                            logger.warning(f"WiFi tool '{tool}' not found. WiFi functionality may be limited.")
+                    except:
+                        logger.warning(f"Error checking for tool '{tool}'")
+                
+                # Check sudo availability
+                try:
+                    sudo_check = subprocess.run(['sudo', '-n', 'true'], capture_output=True, timeout=2)
+                    if sudo_check.returncode != 0:
+                        logger.warning("sudo not available or requires password. WiFi functionality may require manual sudo setup.")
+                except:
+                    logger.warning("Error checking sudo availability")
+        except Exception as e:
+            logger.error(f"Error checking WiFi interface: {e}")
+
+    @pyqtSlot(result=str)
+    def getWifiInterfaceInfo(self):
+        """Get information about the WiFi interface for debugging"""
+        try:
+            is_windows = platform.system() == 'Windows'
+            
+            if is_windows:
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                                      capture_output=True, text=True, timeout=5)
+                return f"Windows WiFi Interfaces:\n{result.stdout}"
+            else:
+                # Get interface info for all wireless interfaces
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                info_lines = ["Linux Wireless Interfaces:"]
+                
+                for interface in interfaces:
+                    try:
+                        # Get interface info
+                        ip_result = subprocess.run(['ip', 'addr', 'show', interface], 
+                                                 capture_output=True, text=True, timeout=5)
+                        
+                        if ip_result.returncode == 0:
+                            info_lines.append(f"\n--- {interface} ---")
+                            info_lines.append(ip_result.stdout.strip())
+                            
+                            # Get wireless info
+                            try:
+                                iw_result = subprocess.run(['iwconfig', interface], 
+                                                         capture_output=True, text=True, timeout=5)
+                                info_lines.append("Wireless Info:")
+                                info_lines.append(iw_result.stdout.strip())
+                            except:
+                                info_lines.append("Wireless Info: Not available (iwconfig not found)")
+                    except:
+                        continue
+                
+                if len(info_lines) == 1:
+                    info_lines.append("No wireless interfaces found")
+                
+                return "\n".join(info_lines)
+        except Exception as e:
+            return f"Error getting WiFi interface info: {e}"
+
+class PyQtGraphItem(QQuickPaintedItem):
+    dataChanged = pyqtSignal()
+    chartTypeChanged = pyqtSignal()
+    monthsChanged = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._data = []
+        self._chart_type = 'bar'
+        self._months = []
+        self.widget = pg.PlotWidget()
+        self.plot_item = self.widget.plotItem
+        self.plot_item.addLegend()
+        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
+        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+        self.bar_items = []
+        self.line_items = []
+
+    @pyqtProperty('QVariantList', notify=dataChanged)
+    def data(self):
+        return self._data
+
+    @data.setter
+    def data(self, value):
+        self._data = value
+        self.update_plot()
+
+    @pyqtProperty(str, notify=chartTypeChanged)
+    def chartType(self):
+        return self._chart_type
+
+    @chartType.setter
+    def chartType(self, value):
+        self._chart_type = value
+        self.update_plot()
+
+    @pyqtProperty('QVariantList', notify=monthsChanged)
+    def months(self):
+        return self._months
+
+    @months.setter
+    def months(self, value):
+        self._months = value
+        self.update_plot()
+
+    def update_plot(self):
+        self.plot_item.clear()
+        max_y = 0
+        for series in self._data:
+            if isinstance(series, dict) and 'values' in series and series['values']:
+                max_y = max(max_y, max(series['values']))
+        if max_y == 0:
+            max_y = 10
+        if self._chart_type == 'bar':
+            for i, series in enumerate(self._data):
+                if isinstance(series, dict) and 'values' in series and series['values']:
+                    x = list(range(len(series['values'])))
+                    height = series['values']
+                    bar = pg.BarGraphItem(x=x, height=height, width=0.8, brush=pg.mkBrush(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
+                    self.plot_item.addItem(bar)
+            if self._months:
+                ticks = [[(i, month) for i, month in enumerate(self._months)]]
+                self.plot_item.getAxis('bottom').setTicks(ticks)
+            self.plot_item.setLabel('bottom', 'Months')
+        else:
+            for i, series in enumerate(self._data):
+                if isinstance(series, dict) and 'values' in series and series['values']:
+                    x = list(range(len(series['values'])))
+                    y = series['values']
+                    self.plot_item.plot(x, y, pen=pg.mkPen(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
+            self.plot_item.setLabel('bottom', 'Day of Year')
+        self.plot_item.setLabel('left', 'Number of Launches')
+        x_len = len(self._data[0]['values']) if self._data and self._data[0]['values'] else (12 if self._chart_type == 'bar' else 365)
+        if self._chart_type == 'bar':
+            x_range = (-0.5, x_len - 0.5)
+        else:
+            x_range = (0, x_len - 1)
+        self.plot_item.getViewBox().setRange(xRange=x_range, yRange=(0, max_y))
+        self.plot_item.getViewBox().update()
+        self.widget.update()
+        self.update()
+
+    def get_color(self, index):
+        colors = ['#ff6b6b', '#4ecdc4', '#ffe66d']
+        return colors[index % len(colors)]
+
+    def paint(self, painter):
+        rect = QRectF(0, 0, self.width(), self.height())
+        self.widget.resize(int(self.width()), int(self.height()))
+        self.widget.scene().setSceneRect(0, 0, self.width(), self.height())
+        self.widget.render(painter, rect, rect.toRect())
+
 if __name__ == '__main__':
+    # Set console encoding to UTF-8 to handle Unicode characters properly
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
+    
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist"
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
+    # Set QML style to Fusion
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
     QtWebEngineQuick.initialize()
+    
+    # Set style to Fusion before creating QApplication
+    fusion_style = QStyleFactory.create("Fusion")
+    if fusion_style:
+        QApplication.setStyle(fusion_style)
+    
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
@@ -959,11 +1563,16 @@ if __name__ == '__main__':
         QFontDatabase.addApplicationFont(fa_path)
 
     engine = QQmlApplicationEngine()
+    qmlRegisterType(PyQtGraphItem, 'MyModule', 1, 0, 'PyQtGraphItem')
     # Connect QML warnings signal (list of QQmlError objects)
     def _log_qml_warnings(errors):
         for e in errors:
             try:
                 logger.error(f"QML warning: {e.toString()}")
+            except UnicodeEncodeError:
+                # Handle encoding issues by sanitizing the message
+                sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
+                logger.error(f"QML warning: {sanitized_message}")
             except Exception:
                 logger.error(f"QML warning (unformatted): {e}")
     try:
@@ -987,6 +1596,7 @@ import QtQuick.Controls 2.15
 import QtQuick.Layouts 1.15
 import QtCharts 2.15
 import QtWebEngine 1.10
+import MyModule 1.0
 
 Window {
     id: root
@@ -1043,135 +1653,12 @@ Window {
                             anchors.fill: parent
                             spacing: 5
 
-                            ChartView {
+                            PyQtGraphItem {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                antialiasing: true
-                                legend.visible: true
-                                legend.alignment: Qt.AlignBottom
-                                backgroundColor: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-
-                                BarCategoryAxis {
-                                    id: sharedAxisX
-                                    categories: backend.launchTrendsMonths
-                                    labelsColor: backend.theme === "dark" ? "white" : "black"
-                                    gridVisible: false
-                                }
-
-                                ValueAxis {
-                                    id: sharedAxisY
-                                    min: 0
-                                    max: backend.launchTrendsMaxValue
-                                    labelsColor: backend.theme === "dark" ? "white" : "black"
-                                    gridVisible: true
-                                    titleText: "Number of Launches"
-                                }
-
-                                BarSeries {
-                                    visible: backend.chartType === "bar"
-                                    axisX: sharedAxisX
-                                    axisY: sharedAxisY
-
-                                    BarSet {
-                                        label: "Starship"
-                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 0 && backend.launchTrendsSeries[0]) ? backend.launchTrendsSeries[0].values : [0, 0, 0, 0]
-                                        color: "#ff6b6b"
-                                        borderColor: "#ff5252"
-                                    }
-                                    BarSet {
-                                        label: "Falcon 9"
-                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 1 && backend.launchTrendsSeries[1]) ? backend.launchTrendsSeries[1].values : [0, 0, 0, 0]
-                                        color: "#4ecdc4"
-                                        borderColor: "#45b7aa"
-                                    }
-                                    BarSet {
-                                        label: "Falcon Heavy"
-                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 2 && backend.launchTrendsSeries[2]) ? backend.launchTrendsSeries[2].values : [0, 0, 0, 0]
-                                        color: "#ffe66d"
-                                        borderColor: "#ffd93d"
-                                    }
-                                }
-
-                                LineSeries {
-                                    id: starshipLine
-                                    visible: backend.chartType === "line"
-                                    axisX: sharedAxisX
-                                    axisY: sharedAxisY
-                                    name: "Starship"
-                                    color: "#ff6b6b"
-                                    pointsVisible: false
-                                    Component.onCompleted: {
-                                        updateStarshipLine()
-                                    }
-                                    Connections {
-                                        target: backend
-                                        function onLaunchesChanged() {
-                                            updateStarshipLine()
-                                        }
-                                    }
-                                    function updateStarshipLine() {
-                                        starshipLine.clear()
-                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 0 && backend.launchTrendsSeries[0]) {
-                                            for (var i = 0; i < backend.launchTrendsSeries[0].values.length; i++) {
-                                                starshipLine.append(i, backend.launchTrendsSeries[0].values[i])
-                                            }
-                                        }
-                                    }
-                                }
-
-                                LineSeries {
-                                    id: falcon9Line
-                                    visible: backend.chartType === "line"
-                                    axisX: sharedAxisX
-                                    axisY: sharedAxisY
-                                    name: "Falcon 9"
-                                    color: "#4ecdc4"
-                                    pointsVisible: false
-                                    Component.onCompleted: {
-                                        updateFalcon9Line()
-                                    }
-                                    Connections {
-                                        target: backend
-                                        function onLaunchesChanged() {
-                                            updateFalcon9Line()
-                                        }
-                                    }
-                                    function updateFalcon9Line() {
-                                        falcon9Line.clear()
-                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 1 && backend.launchTrendsSeries[1]) {
-                                            for (var i = 0; i < backend.launchTrendsSeries[1].values.length; i++) {
-                                                falcon9Line.append(i, backend.launchTrendsSeries[1].values[i])
-                                            }
-                                        }
-                                    }
-                                }
-
-                                LineSeries {
-                                    id: falconHeavyLine
-                                    visible: backend.chartType === "line"
-                                    axisX: sharedAxisX
-                                    axisY: sharedAxisY
-                                    name: "Falcon Heavy"
-                                    color: "#ffe66d"
-                                    pointsVisible: false
-                                    Component.onCompleted: {
-                                        updateFalconHeavyLine()
-                                    }
-                                    Connections {
-                                        target: backend
-                                        function onLaunchesChanged() {
-                                            updateFalconHeavyLine()
-                                        }
-                                    }
-                                    function updateFalconHeavyLine() {
-                                        falconHeavyLine.clear()
-                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 2 && backend.launchTrendsSeries[2]) {
-                                            for (var i = 0; i < backend.launchTrendsSeries[2].values.length; i++) {
-                                                falconHeavyLine.append(i, backend.launchTrendsSeries[2].values[i])
-                                            }
-                                        }
-                                    }
-                                }
+                                data: backend.launchTrendsSeries
+                                chartType: backend.chartType
+                                months: backend.launchTrendsMonths
                             }
 
                             // Chart control buttons
@@ -1601,6 +2088,27 @@ Window {
 
                 Item { Layout.fillWidth: true }
 
+                // WiFi icon
+                Rectangle {
+                    width: 30; height: 30; radius: 15
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    
+                    Text {
+                        anchors.centerIn: parent
+                        text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                        font.family: "Font Awesome 5 Free"
+                        font.pixelSize: 14
+                        color: backend.wifiConnected ? "#4CAF50" : (backend.theme === "dark" ? "white" : "black")
+                    }
+                    
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: wifiPopup.open()
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
                 // Logo toggle
                 Image {
                     source: backend.mode === "f1" ? f1LogoPath : spacexLogoPath
@@ -1657,6 +2165,378 @@ Window {
                                 }
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // WiFi popup
+        Popup {
+            id: wifiPopup
+            width: 300
+            height: 400
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 10
+
+                Text {
+                    text: "WiFi Networks"
+                    font.pixelSize: 18
+                    font.bold: true
+                    color: backend.theme === "dark" ? "white" : "black"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Current connection status
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+                    
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        
+                        Text {
+                            text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 16
+                            color: backend.wifiConnected ? "#4CAF50" : "#F44336"
+                        }
+                        
+                        Text {
+                            text: backend.wifiConnected ? ("Connected to " + backend.currentWifiSsid) : "Not connected"
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 12
+                            Layout.fillWidth: true
+                        }
+                        
+                        Button {
+                            text: "Disconnect"
+                            visible: backend.wifiConnected
+                            onClicked: {
+                                backend.disconnectWifi()
+                                wifiPopup.close()
+                            }
+                            background: Rectangle {
+                                color: "#F44336"
+                                radius: 4
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: "white"
+                                font.pixelSize: 10
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                // Scan button
+                Button {
+                    text: backend.wifiConnecting ? "Connecting..." : "Scan Networks"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 35
+                    enabled: !backend.wifiConnecting
+                    onClicked: backend.scanWifiNetworks()
+                    
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // Debug info button (for troubleshooting)
+                Button {
+                    text: "Interface Info"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    onClicked: debugDialog.open()
+                    
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                        font.pixelSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // Networks list
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: backend.wifiNetworks
+                    clip: true
+                    spacing: 5
+                    
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 50
+                        color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                        radius: 4
+                        
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 2
+                                
+                                Text {
+                                    text: modelData.ssid
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                                
+                                RowLayout {
+                                    spacing: 5
+                                    
+                                    Text {
+                                        text: modelData.encrypted ? "\uf023" : "\uf09c"
+                                        font.family: "Font Awesome 5 Free"
+                                        font.pixelSize: 10
+                                        color: modelData.encrypted ? "#FF9800" : "#4CAF50"
+                                    }
+                                    
+                                    Text {
+                                        text: "Signal: " + modelData.signal + " dBm"
+                                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                        font.pixelSize: 10
+                                    }
+                                }
+                            }
+                            
+                            Button {
+                                text: "Connect"
+                                Layout.preferredWidth: 70
+                                Layout.preferredHeight: 30
+                                onClicked: {
+                                    selectedNetwork = modelData.ssid
+                                    passwordDialog.open()
+                                }
+                                
+                                background: Rectangle {
+                                    color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                    radius: 4
+                                }
+                                
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    font.pixelSize: 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Password dialog
+        Popup {
+            id: passwordDialog
+            width: 280
+            height: 180
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            property string selectedNetwork: ""
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 15
+
+                Text {
+                    text: "Enter password for " + passwordDialog.selectedNetwork
+                    color: backend.theme === "dark" ? "white" : "black"
+                    font.pixelSize: 14
+                    wrapMode: Text.Wrap
+                    Layout.fillWidth: true
+                }
+
+                TextField {
+                    id: passwordField
+                    placeholderText: "Password"
+                    echoMode: TextField.Password
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 35
+                    
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                        border.width: 1
+                        radius: 4
+                    }
+                }
+
+                RowLayout {
+                    spacing: 10
+                    
+                    Button {
+                        text: "Cancel"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 35
+                        onClicked: {
+                            passwordField.text = ""
+                            passwordDialog.close()
+                        }
+                        
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            radius: 4
+                        }
+                        
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                    
+                    Button {
+                        text: "Connect"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 35
+                        onClicked: {
+                            backend.connectToWifi(passwordDialog.selectedNetwork, passwordField.text)
+                            passwordField.text = ""
+                            passwordDialog.close()
+                            wifiPopup.close()
+                        }
+                        
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 4
+                        }
+                        
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        // Debug info dialog
+        Popup {
+            id: debugDialog
+            width: 400
+            height: 300
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 15
+
+                Text {
+                    text: "WiFi Interface Information"
+                    color: backend.theme === "dark" ? "white" : "black"
+                    font.pixelSize: 16
+                    font.bold: true
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    
+                    TextArea {
+                        id: debugText
+                        text: backend.getWifiInterfaceInfo()
+                        readOnly: true
+                        wrapMode: TextArea.Wrap
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            border.width: 1
+                            radius: 4
+                        }
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 10
+                        font.family: "Courier New"
+                    }
+                }
+
+                Button {
+                    text: "Refresh"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 35
+                    onClicked: debugText.text = backend.getWifiInterfaceInfo()
+                    
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        radius: 4
+                    }
+                    
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 12
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
                     }
                 }
             }
