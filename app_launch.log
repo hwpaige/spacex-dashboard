@@ -10908,3 +10908,737 @@ Init Parameters:
 2025-08-31 23:23:11,418 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
 2025-08-31 23:23:11,427 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
 2025-08-31 23:23:11,444 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:47:41,119 - INFO - Fetching SpaceX launch data
+2025-08-31 23:47:43,455 - INFO - Successfully fetched and saved previous launches
+2025-08-31 23:47:46,547 - INFO - Successfully fetched and saved upcoming launches
+2025-08-31 23:47:46,548 - INFO - Fetching F1 data
+2025-08-31 23:47:48,001 - INFO - Successfully fetched and saved F1 data
+2025-08-31 23:47:49,002 - INFO - Fetching weather data for Starbase
+2025-08-31 23:47:49,654 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:47:50,658 - INFO - Fetching weather data for Vandy
+2025-08-31 23:47:51,303 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:47:52,304 - INFO - Fetching weather data for Cape
+2025-08-31 23:47:52,943 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:47:53,947 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:47:54,599 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:47:55,871 - WARNING - No WiFi interface detected on Windows
+2025-08-31 23:47:56,133 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-08-31 23:47:56,169 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-speech-api 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  ignore-gpu-blacklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-08-31 23:47:56,582 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-08-31 23:47:56,586 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-08-31 23:47:56,590 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-08-31 23:47:56,591 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:47:56,591 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-08-31 23:47:56,606 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:47:56,607 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-08-31 23:47:56,703 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-08-31 23:47:56,739 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-08-31 23:47:59,050 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-08-31 23:47:59,890 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-08-31 23:47:59,982 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-08-31 23:47:59,988 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-08-31 23:47:59,994 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-08-31 23:47:59,998 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-08-31 23:52:55,662 - INFO - Fetching weather data for Starbase
+2025-08-31 23:52:56,331 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:52:57,332 - INFO - Fetching weather data for Vandy
+2025-08-31 23:52:57,968 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:52:58,969 - INFO - Fetching weather data for Cape
+2025-08-31 23:52:59,594 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:53:00,594 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:53:01,691 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:57:55,665 - INFO - Fetching weather data for Starbase
+2025-08-31 23:57:56,312 - INFO - Successfully fetched weather data for Starbase
+2025-08-31 23:57:57,314 - INFO - Fetching weather data for Vandy
+2025-08-31 23:57:57,924 - INFO - Successfully fetched weather data for Vandy
+2025-08-31 23:57:58,926 - INFO - Fetching weather data for Cape
+2025-08-31 23:57:59,563 - INFO - Successfully fetched weather data for Cape
+2025-08-31 23:58:00,565 - INFO - Fetching weather data for Hawthorne
+2025-08-31 23:58:01,280 - INFO - Successfully fetched weather data for Hawthorne
+2025-08-31 23:59:55,679 - INFO - Fetching SpaceX launch data
+2025-08-31 23:59:58,018 - INFO - Successfully fetched and saved previous launches
+2025-09-01 00:00:09,094 - ERROR - LL2 API error: HTTPSConnectionPool(host='ll.thespacedevs.com', port=443): Read timed out. (read timeout=10)
+2025-09-01 00:00:09,204 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 00:02:55,685 - INFO - Fetching weather data for Starbase
+2025-09-01 00:02:56,341 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:02:57,345 - INFO - Fetching weather data for Vandy
+2025-09-01 00:02:57,985 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:02:58,989 - INFO - Fetching weather data for Cape
+2025-09-01 00:02:59,621 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:03:00,630 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:03:01,349 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:07:04,805 - ERROR - [QT-QtWarningMsg] Retrying to obtain clipboard.
+2025-09-01 00:07:55,687 - INFO - Fetching weather data for Starbase
+2025-09-01 00:07:56,356 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:07:57,357 - INFO - Fetching weather data for Vandy
+2025-09-01 00:07:57,991 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:07:58,993 - INFO - Fetching weather data for Cape
+2025-09-01 00:07:59,642 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:08:00,650 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:08:01,313 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:11:55,706 - INFO - Fetching SpaceX launch data
+2025-09-01 00:11:58,092 - INFO - Successfully fetched and saved previous launches
+2025-09-01 00:12:00,968 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 00:12:01,092 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 00:12:55,703 - INFO - Fetching weather data for Starbase
+2025-09-01 00:12:56,333 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:12:57,336 - INFO - Fetching weather data for Vandy
+2025-09-01 00:12:57,934 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:12:58,935 - INFO - Fetching weather data for Cape
+2025-09-01 00:12:59,571 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:13:00,572 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:13:01,221 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:17:55,707 - INFO - Fetching weather data for Starbase
+2025-09-01 00:17:56,363 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:17:57,365 - INFO - Fetching weather data for Vandy
+2025-09-01 00:17:58,015 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:17:59,016 - INFO - Fetching weather data for Cape
+2025-09-01 00:17:59,630 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:18:00,634 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:18:01,304 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:22:55,709 - INFO - Fetching weather data for Starbase
+2025-09-01 00:22:56,433 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:22:57,436 - INFO - Fetching weather data for Vandy
+2025-09-01 00:22:58,088 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:22:59,090 - INFO - Fetching weather data for Cape
+2025-09-01 00:22:59,752 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:23:00,753 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:23:01,438 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:23:55,719 - INFO - Fetching SpaceX launch data
+2025-09-01 00:23:58,631 - INFO - Successfully fetched and saved previous launches
+2025-09-01 00:24:01,520 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 00:24:01,632 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 00:27:55,716 - INFO - Fetching weather data for Starbase
+2025-09-01 00:27:56,438 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:27:57,439 - INFO - Fetching weather data for Vandy
+2025-09-01 00:27:58,071 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:27:59,072 - INFO - Fetching weather data for Cape
+2025-09-01 00:27:59,728 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:28:00,730 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:28:01,397 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:32:55,733 - INFO - Fetching weather data for Starbase
+2025-09-01 00:32:56,435 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:32:57,437 - INFO - Fetching weather data for Vandy
+2025-09-01 00:32:58,058 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:32:59,059 - INFO - Fetching weather data for Cape
+2025-09-01 00:32:59,682 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:33:00,683 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:33:01,418 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:35:55,745 - INFO - Fetching SpaceX launch data
+2025-09-01 00:35:58,220 - INFO - Successfully fetched and saved previous launches
+2025-09-01 00:36:02,258 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 00:36:02,379 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 00:37:55,731 - INFO - Fetching weather data for Starbase
+2025-09-01 00:37:56,389 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:37:57,390 - INFO - Fetching weather data for Vandy
+2025-09-01 00:37:58,057 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:37:59,059 - INFO - Fetching weather data for Cape
+2025-09-01 00:37:59,675 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:38:00,676 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:38:01,320 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:42:55,738 - INFO - Fetching weather data for Starbase
+2025-09-01 00:42:56,413 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:42:57,414 - INFO - Fetching weather data for Vandy
+2025-09-01 00:42:58,038 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:42:59,039 - INFO - Fetching weather data for Cape
+2025-09-01 00:42:59,674 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:43:00,675 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:43:01,351 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:47:55,746 - INFO - Fetching SpaceX launch data
+2025-09-01 00:47:58,781 - INFO - Successfully fetched and saved previous launches
+2025-09-01 00:48:02,285 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 00:48:02,305 - INFO - Fetching weather data for Starbase
+2025-09-01 00:48:02,942 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:48:03,944 - INFO - Fetching weather data for Vandy
+2025-09-01 00:48:09,138 - ERROR - Open-Meteo API error for Vandy: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=5)
+2025-09-01 00:48:09,138 - INFO - Fetching weather data for Cape
+2025-09-01 00:48:09,779 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:48:10,780 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:48:11,431 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:48:12,529 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 00:52:55,749 - INFO - Fetching weather data for Starbase
+2025-09-01 00:52:56,384 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:52:57,385 - INFO - Fetching weather data for Vandy
+2025-09-01 00:52:58,010 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 00:52:59,012 - INFO - Fetching weather data for Cape
+2025-09-01 00:52:59,661 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:53:00,662 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:53:01,339 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:57:55,755 - INFO - Fetching weather data for Starbase
+2025-09-01 00:57:56,456 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 00:57:57,457 - INFO - Fetching weather data for Vandy
+2025-09-01 00:58:02,648 - ERROR - Open-Meteo API error for Vandy: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=5)
+2025-09-01 00:58:02,649 - INFO - Fetching weather data for Cape
+2025-09-01 00:58:03,318 - INFO - Successfully fetched weather data for Cape
+2025-09-01 00:58:04,320 - INFO - Fetching weather data for Hawthorne
+2025-09-01 00:58:04,961 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 00:59:55,757 - INFO - Fetching SpaceX launch data
+2025-09-01 00:59:58,047 - INFO - Successfully fetched and saved previous launches
+2025-09-01 01:00:09,132 - ERROR - LL2 API error: HTTPSConnectionPool(host='ll.thespacedevs.com', port=443): Read timed out. (read timeout=10)
+2025-09-01 01:00:09,221 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:02:55,769 - INFO - Fetching weather data for Starbase
+2025-09-01 01:02:56,409 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:02:57,410 - INFO - Fetching weather data for Vandy
+2025-09-01 01:02:58,052 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:02:59,054 - INFO - Fetching weather data for Cape
+2025-09-01 01:02:59,680 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:03:00,682 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:03:01,358 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:07:55,797 - INFO - Fetching weather data for Starbase
+2025-09-01 01:07:56,440 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:07:57,442 - INFO - Fetching weather data for Vandy
+2025-09-01 01:07:58,120 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:07:59,121 - INFO - Fetching weather data for Cape
+2025-09-01 01:07:59,766 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:08:00,767 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:08:01,390 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:11:55,779 - INFO - Fetching SpaceX launch data
+2025-09-01 01:11:58,571 - INFO - Successfully fetched and saved previous launches
+2025-09-01 01:12:03,228 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 01:12:03,319 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:12:55,773 - INFO - Fetching weather data for Starbase
+2025-09-01 01:12:56,418 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:12:57,420 - INFO - Fetching weather data for Vandy
+2025-09-01 01:12:58,100 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:12:59,101 - INFO - Fetching weather data for Cape
+2025-09-01 01:12:59,740 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:13:00,742 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:13:10,755 - ERROR - Open-Meteo API error for Hawthorne: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Max retries exceeded with url: /v1/forecast?latitude=33.916&longitude=-118.352&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000024A2298E270>, 'Connection to api.open-meteo.com timed out. (connect timeout=5)'))
+2025-09-01 01:17:55,807 - INFO - Fetching weather data for Starbase
+2025-09-01 01:17:56,454 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:17:57,455 - INFO - Fetching weather data for Vandy
+2025-09-01 01:17:58,062 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:17:59,064 - INFO - Fetching weather data for Cape
+2025-09-01 01:17:59,691 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:18:00,693 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:18:01,356 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:22:55,785 - INFO - Fetching weather data for Starbase
+2025-09-01 01:22:56,438 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:22:57,439 - INFO - Fetching weather data for Vandy
+2025-09-01 01:22:58,082 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:22:59,083 - INFO - Fetching weather data for Cape
+2025-09-01 01:22:59,717 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:23:00,718 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:23:01,432 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:23:55,785 - INFO - Fetching SpaceX launch data
+2025-09-01 01:23:58,111 - INFO - Successfully fetched and saved previous launches
+2025-09-01 01:24:01,287 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 01:24:01,383 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:27:55,788 - INFO - Fetching weather data for Starbase
+2025-09-01 01:27:56,443 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:27:57,445 - INFO - Fetching weather data for Vandy
+2025-09-01 01:27:58,129 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:27:59,132 - INFO - Fetching weather data for Cape
+2025-09-01 01:27:59,820 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:28:00,822 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:28:01,482 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:32:55,806 - INFO - Fetching weather data for Starbase
+2025-09-01 01:32:56,487 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:32:57,491 - INFO - Fetching weather data for Vandy
+2025-09-01 01:32:58,122 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:32:59,124 - INFO - Fetching weather data for Cape
+2025-09-01 01:32:59,762 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:33:00,765 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:33:01,429 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:35:55,796 - INFO - Fetching SpaceX launch data
+2025-09-01 01:35:58,308 - INFO - Successfully fetched and saved previous launches
+2025-09-01 01:36:01,058 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 01:36:01,163 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:37:55,803 - INFO - Fetching weather data for Starbase
+2025-09-01 01:37:56,471 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:37:57,473 - INFO - Fetching weather data for Vandy
+2025-09-01 01:37:58,140 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:37:59,140 - INFO - Fetching weather data for Cape
+2025-09-01 01:37:59,819 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:38:00,823 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:38:01,470 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:42:55,802 - INFO - Fetching weather data for Starbase
+2025-09-01 01:42:56,451 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:42:57,452 - INFO - Fetching weather data for Vandy
+2025-09-01 01:42:58,058 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:42:59,059 - INFO - Fetching weather data for Cape
+2025-09-01 01:42:59,714 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:43:00,715 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:43:01,366 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:46:59,478 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:47:55,811 - INFO - Fetching SpaceX launch data
+2025-09-01 01:47:59,264 - INFO - Successfully fetched and saved previous launches
+2025-09-01 01:48:02,383 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 01:48:02,409 - INFO - Fetching weather data for Starbase
+2025-09-01 01:48:03,054 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:48:04,057 - INFO - Fetching weather data for Vandy
+2025-09-01 01:48:04,662 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:48:05,663 - INFO - Fetching weather data for Cape
+2025-09-01 01:48:06,276 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:48:07,277 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:48:07,922 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:48:09,018 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 01:52:55,827 - INFO - Fetching weather data for Starbase
+2025-09-01 01:52:56,495 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:52:57,497 - INFO - Fetching weather data for Vandy
+2025-09-01 01:52:58,117 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:52:59,118 - INFO - Fetching weather data for Cape
+2025-09-01 01:53:03,351 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:53:04,352 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:53:04,985 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:57:55,819 - INFO - Fetching weather data for Starbase
+2025-09-01 01:57:56,494 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 01:57:57,495 - INFO - Fetching weather data for Vandy
+2025-09-01 01:58:00,777 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 01:58:01,778 - INFO - Fetching weather data for Cape
+2025-09-01 01:58:02,385 - INFO - Successfully fetched weather data for Cape
+2025-09-01 01:58:03,387 - INFO - Fetching weather data for Hawthorne
+2025-09-01 01:58:04,025 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 01:59:55,841 - INFO - Fetching SpaceX launch data
+2025-09-01 01:59:58,202 - INFO - Successfully fetched and saved previous launches
+2025-09-01 02:00:09,289 - ERROR - LL2 API error: HTTPSConnectionPool(host='ll.thespacedevs.com', port=443): Read timed out. (read timeout=10)
+2025-09-01 02:00:09,433 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 02:02:55,824 - INFO - Fetching weather data for Starbase
+2025-09-01 02:02:56,493 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:02:57,498 - INFO - Fetching weather data for Vandy
+2025-09-01 02:02:58,125 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:02:59,127 - INFO - Fetching weather data for Cape
+2025-09-01 02:02:59,759 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:03:00,761 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:03:01,461 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:07:55,837 - INFO - Fetching weather data for Starbase
+2025-09-01 02:07:56,504 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:07:57,505 - INFO - Fetching weather data for Vandy
+2025-09-01 02:07:58,144 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:07:59,145 - INFO - Fetching weather data for Cape
+2025-09-01 02:07:59,785 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:08:00,789 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:08:01,444 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:11:56,000 - INFO - Fetching SpaceX launch data
+2025-09-01 02:11:58,852 - INFO - Successfully fetched and saved previous launches
+2025-09-01 02:12:03,075 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 02:12:03,703 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 02:12:55,863 - INFO - Fetching weather data for Starbase
+2025-09-01 02:12:56,636 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:12:57,638 - INFO - Fetching weather data for Vandy
+2025-09-01 02:12:58,626 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:12:59,630 - INFO - Fetching weather data for Cape
+2025-09-01 02:13:00,502 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:13:01,525 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:13:02,286 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:17:55,920 - INFO - Fetching weather data for Starbase
+2025-09-01 02:17:56,778 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:17:57,782 - INFO - Fetching weather data for Vandy
+2025-09-01 02:17:58,660 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:17:59,664 - INFO - Fetching weather data for Cape
+2025-09-01 02:18:00,403 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:18:01,406 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:18:02,244 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:22:55,873 - INFO - Fetching weather data for Starbase
+2025-09-01 02:23:03,081 - ERROR - Open-Meteo API error for Starbase: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Read timed out. (read timeout=5)
+2025-09-01 02:23:03,081 - INFO - Fetching weather data for Vandy
+2025-09-01 02:23:03,919 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:23:04,920 - INFO - Fetching weather data for Cape
+2025-09-01 02:23:05,677 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:23:06,679 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:23:07,607 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:23:55,858 - INFO - Fetching SpaceX launch data
+2025-09-01 02:23:55,862 - INFO - Using persistent cached previous launches
+2025-09-01 02:23:55,872 - INFO - Using persistent cached upcoming launches
+2025-09-01 02:23:56,020 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 02:27:55,862 - INFO - Fetching weather data for Starbase
+2025-09-01 02:27:56,785 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:27:57,788 - INFO - Fetching weather data for Vandy
+2025-09-01 02:27:58,629 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:27:59,635 - INFO - Fetching weather data for Cape
+2025-09-01 02:28:00,880 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:28:01,886 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:28:02,732 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 02:32:56,003 - INFO - Fetching weather data for Starbase
+2025-09-01 02:32:56,924 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 02:32:57,926 - INFO - Fetching weather data for Vandy
+2025-09-01 02:32:58,804 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 02:32:59,807 - INFO - Fetching weather data for Cape
+2025-09-01 02:33:00,541 - INFO - Successfully fetched weather data for Cape
+2025-09-01 02:33:01,542 - INFO - Fetching weather data for Hawthorne
+2025-09-01 02:33:02,251 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 03:07:34,100 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 03:07:34,205 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 10:54:14,090 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,097 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,102 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,229 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 10:54:14,231 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 10:54:14,233 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,235 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,238 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,239 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,341 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,347 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,431 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,436 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,439 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,484 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,488 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,489 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,490 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,492 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,492 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,494 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Product Minifest load/parsing failed Error: Failed to fetch
+2025-09-01 10:54:14,496 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,496 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: Failed to fetch
+2025-09-01 10:54:14,727 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 10:54:14,764 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 10:54:21,149 - INFO - Fetching SpaceX launch data
+2025-09-01 10:54:26,051 - INFO - Successfully fetched and saved previous launches
+2025-09-01 10:54:33,955 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 10:54:34,080 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 10:56:21,149 - INFO - Fetching weather data for Starbase
+2025-09-01 10:56:22,082 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 10:56:23,085 - INFO - Fetching weather data for Vandy
+2025-09-01 10:56:23,927 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 10:56:24,929 - INFO - Fetching weather data for Cape
+2025-09-01 10:56:25,757 - INFO - Successfully fetched weather data for Cape
+2025-09-01 10:56:26,760 - INFO - Fetching weather data for Hawthorne
+2025-09-01 10:56:27,609 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:01:21,149 - INFO - Fetching weather data for Starbase
+2025-09-01 11:01:22,009 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:01:23,013 - INFO - Fetching weather data for Vandy
+2025-09-01 11:01:23,834 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:01:24,836 - INFO - Fetching weather data for Cape
+2025-09-01 11:01:25,699 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:01:26,701 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:01:27,527 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:02:29,525 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:02:29,547 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:05:47,575 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:05:56,500 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:06:21,170 - INFO - Fetching SpaceX launch data
+2025-09-01 11:06:23,385 - INFO - Successfully fetched and saved previous launches
+2025-09-01 11:06:26,060 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 11:06:26,156 - INFO - Fetching weather data for Starbase
+2025-09-01 11:06:27,017 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:06:28,018 - INFO - Fetching weather data for Vandy
+2025-09-01 11:06:28,884 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:06:29,886 - INFO - Fetching weather data for Cape
+2025-09-01 11:06:30,743 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:06:31,746 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:06:32,607 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:06:33,777 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 11:11:21,170 - INFO - Fetching weather data for Starbase
+2025-09-01 11:11:22,073 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:11:23,075 - INFO - Fetching weather data for Vandy
+2025-09-01 11:11:23,918 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:11:24,921 - INFO - Fetching weather data for Cape
+2025-09-01 11:11:25,706 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:11:26,715 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:11:27,607 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:11:44,229 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:16:21,198 - INFO - Fetching weather data for Starbase
+2025-09-01 11:16:22,017 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:16:23,020 - INFO - Fetching weather data for Vandy
+2025-09-01 11:16:23,834 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:16:24,837 - INFO - Fetching weather data for Cape
+2025-09-01 11:16:25,621 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:16:26,623 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:16:27,455 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:18:21,205 - INFO - Fetching SpaceX launch data
+2025-09-01 11:18:23,501 - INFO - Successfully fetched and saved previous launches
+2025-09-01 11:18:27,722 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 11:18:27,962 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 11:21:21,220 - INFO - Fetching weather data for Starbase
+2025-09-01 11:21:22,188 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:21:23,190 - INFO - Fetching weather data for Vandy
+2025-09-01 11:21:23,933 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:21:24,935 - INFO - Fetching weather data for Cape
+2025-09-01 11:21:25,674 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:21:26,677 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:21:27,615 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:25:22,708 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:26:21,267 - INFO - Fetching weather data for Starbase
+2025-09-01 11:26:22,237 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:26:23,239 - INFO - Fetching weather data for Vandy
+2025-09-01 11:26:24,171 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:26:25,174 - INFO - Fetching weather data for Cape
+2025-09-01 11:26:26,125 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:26:27,128 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:26:28,452 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:30:21,267 - INFO - Fetching SpaceX launch data
+2025-09-01 11:30:31,557 - ERROR - LL2 API error: HTTPSConnectionPool(host='ll.thespacedevs.com', port=443): Read timed out. (read timeout=10)
+2025-09-01 11:30:33,526 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 11:30:33,798 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 11:31:21,276 - INFO - Fetching weather data for Starbase
+2025-09-01 11:31:22,205 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:31:23,207 - INFO - Fetching weather data for Vandy
+2025-09-01 11:31:23,987 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:31:24,992 - INFO - Fetching weather data for Cape
+2025-09-01 11:31:25,845 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:31:26,847 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:31:27,591 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:32:08,383 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:32:31,608 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:33:15,462 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:33:36,345 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:34:16,505 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:34:45,130 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:35:35,751 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:35:36,151 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:36:08,571 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:36:21,290 - INFO - Fetching weather data for Starbase
+2025-09-01 11:36:22,172 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:36:23,174 - INFO - Fetching weather data for Vandy
+2025-09-01 11:36:24,053 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:36:25,056 - INFO - Fetching weather data for Cape
+2025-09-01 11:36:25,890 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:36:26,900 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:36:27,745 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:37:36,949 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:38:26,502 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:38:27,047 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:40:37,542 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:40:46,707 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:41:21,321 - INFO - Fetching weather data for Starbase
+2025-09-01 11:41:22,258 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:41:23,265 - INFO - Fetching weather data for Vandy
+2025-09-01 11:41:24,049 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:41:25,050 - INFO - Fetching weather data for Cape
+2025-09-01 11:41:25,822 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:41:26,825 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:41:27,516 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:41:34,964 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:42:21,326 - INFO - Fetching SpaceX launch data
+2025-09-01 11:42:23,652 - INFO - Successfully fetched and saved previous launches
+2025-09-01 11:42:26,567 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 11:42:26,855 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 11:43:23,992 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:45:37,079 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:45:37,457 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:46:21,347 - INFO - Fetching weather data for Starbase
+2025-09-01 11:46:22,212 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:46:23,214 - INFO - Fetching weather data for Vandy
+2025-09-01 11:46:24,049 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:46:25,056 - INFO - Fetching weather data for Cape
+2025-09-01 11:46:26,509 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:46:27,510 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:46:28,274 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:51:12,984 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 11:51:21,348 - INFO - Fetching weather data for Starbase
+2025-09-01 11:51:22,254 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:51:23,255 - INFO - Fetching weather data for Vandy
+2025-09-01 11:51:24,095 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:51:25,098 - INFO - Fetching weather data for Cape
+2025-09-01 11:51:25,939 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:51:26,944 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:51:27,789 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 11:54:21,375 - INFO - Fetching SpaceX launch data
+2025-09-01 11:54:24,192 - INFO - Successfully fetched and saved previous launches
+2025-09-01 11:54:26,637 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 11:54:27,008 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 11:56:21,357 - INFO - Fetching weather data for Starbase
+2025-09-01 11:56:22,301 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 11:56:23,303 - INFO - Fetching weather data for Vandy
+2025-09-01 11:56:24,094 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 11:56:25,099 - INFO - Fetching weather data for Cape
+2025-09-01 11:56:25,953 - INFO - Successfully fetched weather data for Cape
+2025-09-01 11:56:26,959 - INFO - Fetching weather data for Hawthorne
+2025-09-01 11:56:27,824 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:01:21,375 - INFO - Fetching weather data for Starbase
+2025-09-01 12:01:22,209 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:01:23,210 - INFO - Fetching weather data for Vandy
+2025-09-01 12:01:24,093 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:01:25,094 - INFO - Fetching weather data for Cape
+2025-09-01 12:01:25,918 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:01:26,920 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:01:27,663 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:06:21,468 - INFO - Fetching SpaceX launch data
+2025-09-01 12:06:23,934 - INFO - Successfully fetched and saved previous launches
+2025-09-01 12:06:26,426 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 12:06:26,558 - INFO - Fetching weather data for Starbase
+2025-09-01 12:06:27,495 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:06:28,497 - INFO - Fetching weather data for Vandy
+2025-09-01 12:06:29,346 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:06:30,350 - INFO - Fetching weather data for Cape
+2025-09-01 12:06:31,190 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:06:32,193 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:06:33,072 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:06:34,244 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:11:21,396 - INFO - Fetching weather data for Starbase
+2025-09-01 12:11:22,438 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:11:23,440 - INFO - Fetching weather data for Vandy
+2025-09-01 12:11:24,193 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:11:25,194 - INFO - Fetching weather data for Cape
+2025-09-01 12:11:25,885 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:11:26,888 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:11:27,686 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:11:30,935 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:11:30,935 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:14:25,230 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 12:14:25,232 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 12:15:39,179 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:16:21,406 - INFO - Fetching weather data for Starbase
+2025-09-01 12:16:22,113 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:16:23,116 - INFO - Fetching weather data for Vandy
+2025-09-01 12:16:23,798 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:16:24,801 - INFO - Fetching weather data for Cape
+2025-09-01 12:16:25,524 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:16:26,532 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:16:27,194 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:20:46,317 - ERROR - [QT-QtWarningMsg] Could not find the Qt platform plugin "xcb" in ""
+2025-09-01 12:20:46,317 - ERROR - [QT-QtFatalMsg] This application failed to start because no Qt platform plugin could be initialized. Reinstalling the application may fix this problem.
+
+Available platform plugins are: minimal, offscreen, windows.
+
+2025-09-01 12:22:39,518 - INFO - Fetching SpaceX launch data
+2025-09-01 12:22:41,848 - INFO - Successfully fetched and saved previous launches
+2025-09-01 12:22:44,339 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 12:22:44,339 - INFO - Fetching F1 data
+2025-09-01 12:22:46,175 - INFO - Successfully fetched and saved F1 data
+2025-09-01 12:22:47,179 - INFO - Fetching weather data for Starbase
+2025-09-01 12:22:47,993 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:22:48,998 - INFO - Fetching weather data for Vandy
+2025-09-01 12:22:49,849 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:22:50,852 - INFO - Fetching weather data for Cape
+2025-09-01 12:22:51,644 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:22:52,652 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:22:53,539 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:22:55,006 - WARNING - No WiFi interface detected on Windows
+2025-09-01 12:22:55,736 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 12:22:55,736 - ERROR - [QT-QtWarningMsg] Only --use-gl=angle is supported on this platform.
+2025-09-01 12:22:55,818 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: desktop
+Chromium ANGLE Backend: disabled
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-sandbox 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-hardware-overlays 
+ *  enable-logging 
+ *  enable-native-gpu-memory-buffers 
+ *  enable-touch-drag-drop 
+ *  enable-webgl 
+ *  enable-zero-copy 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  log-level 0
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl desktop
+ *  v 1
+
+2025-09-01 12:22:59,144 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 12:22:59,151 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 12:22:59,158 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 12:22:59,160 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:22:59,161 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:22:59,181 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:22:59,182 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:22:59,425 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:22:59,573 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 12:23:25,941 - ERROR - [QT-QtWarningMsg] Retrying to obtain clipboard.
+2025-09-01 12:26:32,243 - INFO - Fetching SpaceX launch data
+2025-09-01 12:26:32,245 - INFO - Using persistent cached previous launches
+2025-09-01 12:26:32,246 - INFO - Using persistent cached upcoming launches
+2025-09-01 12:26:32,246 - INFO - Fetching F1 data
+2025-09-01 12:26:32,247 - INFO - Using persistent cached F1 data
+2025-09-01 12:26:32,248 - INFO - Fetching weather data for Starbase
+2025-09-01 12:26:33,088 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:26:34,091 - INFO - Fetching weather data for Vandy
+2025-09-01 12:26:34,936 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:26:35,938 - INFO - Fetching weather data for Cape
+2025-09-01 12:26:36,733 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:26:37,736 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:26:38,618 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:26:39,804 - WARNING - No WiFi interface detected on Windows
+2025-09-01 12:26:40,178 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 12:26:40,231 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-driver-bug-workarounds 
+ *  disable-gpu-sandbox 
+ *  disable-software-rasterizer 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-logging 
+ *  enable-touch-drag-drop 
+ *  enable-webgl 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  log-level 0
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+ *  v 1
+
+2025-09-01 12:26:40,812 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 12:26:40,818 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 12:26:40,825 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 12:26:40,827 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:26:40,827 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:26:40,847 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:26:40,848 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:26:41,073 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:26:41,142 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 12:26:45,152 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-09-01 12:26:47,931 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-09-01 12:26:47,964 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-09-01 12:26:48,003 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-09-01 12:26:48,127 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-09-01 12:26:48,186 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-09-01 12:27:57,876 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:27:57,996 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu

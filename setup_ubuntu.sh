@@ -22,7 +22,7 @@ apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice wireless-tools | tee -a "$LOG_FILE"
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 apt-get install --reinstall -y xserver-xorg-core xorg | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"

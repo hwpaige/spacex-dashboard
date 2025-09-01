@@ -20,15 +20,44 @@ import pyqtgraph as pg
 import subprocess
 import re
 
-# Environment variables for Qt and Chromium
-os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-    "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
-    "--enable-logging --v=1 --log-level=0 --enable-touch-drag-drop "
-    "--disable-web-security --allow-running-insecure-content"
-)
+# Environment variables for Qt and Chromium - Force Hardware Acceleration
+if platform.system() == 'Windows':
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+        "--disable-web-security --allow-running-insecure-content "
+        "--disable-gpu-sandbox --disable-software-rasterizer "
+        "--disable-gpu-driver-bug-workarounds --no-sandbox"
+    )
+elif platform.system() == 'Linux':
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+        "--disable-web-security --allow-running-insecure-content "
+        "--disable-gpu-sandbox --use-gl=desktop "
+        "--enable-hardware-overlays --enable-accelerated-video "
+        "--enable-native-gpu-memory-buffers --enable-zero-copy"
+    )
+else:
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+        "--disable-web-security --allow-running-insecure-content "
+        "--disable-gpu-sandbox"
+    )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 os.environ["QSG_RHI_BACKEND"] = "gl"
+
+# Set platform-specific Qt platform plugin
+if platform.system() == 'Windows':
+    os.environ["QT_QPA_PLATFORM"] = "windows"
+    # Windows-specific GPU settings
+    os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
+elif platform.system() == 'Linux':
+    os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force XCB platform for better hardware acceleration
+    os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"  # Force EGL for hardware acceleration
+    os.environ["EGL_PLATFORM"] = "drm"  # Use DRM for EGL when available
+    os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"  # Force OpenGL 3.3 compatibility
+    os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Force GLSL 3.30 compatibility
+    os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
 
 # Set up logging to console and file
 logging.basicConfig(
@@ -1319,13 +1348,41 @@ class Backend(QObject):
                     except:
                         continue
                 
-                # Get current SSID
-                try:
-                    ssid_result = subprocess.run(['iwgetid', '-r'], 
-                                               capture_output=True, text=True, timeout=5)
-                    current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
-                except:
-                    current_ssid = ""
+                # Get current SSID - try multiple methods
+                current_ssid = ""
+                if has_ip:
+                    # Try nmcli first (NetworkManager)
+                    try:
+                        nmcli_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'dev', 'wifi'], 
+                                                    capture_output=True, text=True, timeout=5)
+                        if nmcli_result.returncode == 0:
+                            for line in nmcli_result.stdout.split('\n'):
+                                if line.startswith('yes:'):
+                                    current_ssid = line.split(':', 1)[1].strip()
+                                    break
+                    except:
+                        pass
+                    
+                    # If nmcli failed, try iw
+                    if not current_ssid:
+                        try:
+                            iw_result = subprocess.run(['iw', 'dev', interface, 'link'], 
+                                                     capture_output=True, text=True, timeout=5)
+                            if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
+                                ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
+                                if ssid_match:
+                                    current_ssid = ssid_match.group(1).strip()
+                        except:
+                            pass
+                    
+                    # If iw failed, try iwgetid
+                    if not current_ssid:
+                        try:
+                            ssid_result = subprocess.run(['iwgetid', '-r'], 
+                                                       capture_output=True, text=True, timeout=5)
+                            current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
+                        except:
+                            pass
                 
                 connected = has_ip
             
@@ -1377,7 +1434,7 @@ class Backend(QObject):
                     logger.warning("No WiFi interface detected on Linux")
                 
                 # Check if required tools are available
-                tools = ['iwlist', 'iwgetid', 'wpa_supplicant', 'dhclient']
+                tools = ['nmcli', 'iw', 'iwlist', 'iwgetid', 'wpa_supplicant', 'dhclient']
                 for tool in tools:
                     try:
                         tool_check = subprocess.run(['which', tool], capture_output=True, timeout=2)
@@ -1538,10 +1595,53 @@ if __name__ == '__main__':
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
     
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --ignore-gpu-blacklist"
+    # GPU permissions are now handled by the setup script
+    # No runtime permission checks needed
+    
+    # Force hardware acceleration for Qt and Chromium
+    if platform.system() == 'Windows':
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+            "--disable-web-security --allow-running-insecure-content "
+            "--disable-gpu-sandbox --disable-software-rasterizer "
+            "--disable-gpu-driver-bug-workarounds --no-sandbox"
+        )
+    elif platform.system() == 'Linux':
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+            "--disable-web-security --allow-running-insecure-content "
+            "--disable-gpu-sandbox --use-gl=desktop "
+            "--enable-hardware-overlays --enable-accelerated-video "
+            "--enable-native-gpu-memory-buffers --enable-zero-copy"
+        )
+    else:
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+            "--disable-web-security --allow-running-insecure-content "
+            "--disable-gpu-sandbox"
+        )
     os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
+    
+    # Set platform-specific Qt platform plugin
+    if platform.system() == 'Windows':
+        os.environ["QT_QPA_PLATFORM"] = "windows"
+        os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
+    elif platform.system() == 'Linux':
+        os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force XCB platform for hardware acceleration
+        os.environ["QSG_RHI_BACKEND"] = "gl"  # Force OpenGL hardware acceleration
+        os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"  # Force EGL for hardware acceleration
+        os.environ["EGL_PLATFORM"] = "drm"  # Use DRM for EGL when available
+        os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"  # Force OpenGL 3.3 compatibility
+        os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Force GLSL 3.30 compatibility
+        os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
+    else:
+        os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
+    
     # Set QML style to Fusion
     os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
+    # Set QML style to Fusion
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
+    
     QtWebEngineQuick.initialize()
     
     # Set style to Fusion before creating QApplication
