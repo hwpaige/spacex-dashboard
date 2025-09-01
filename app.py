@@ -3,11 +3,12 @@ import requests
 import os
 import json
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler
 from PyQt6.QtGui import QFontDatabase, QCursor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
+from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
@@ -18,7 +19,8 @@ import time
 # Environment variables for Qt and Chromium
 os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
     "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
-    "--enable-logging --v=1 --log-level=0 --enable-touch-drag-drop"
+    "--enable-logging --v=1 --log-level=0 --enable-touch-drag-drop "
+    "--disable-web-security --allow-running-insecure-content"
 )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
@@ -34,6 +36,26 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+# Qt message handler to surface QML / Qt internal messages (errors, warnings, info)
+# Install as early as possible after logger initialization
+
+def _qt_message_handler(mode, context, message):
+    try:
+        level_name = mode.name if hasattr(mode, 'name') else str(mode)
+    except Exception:
+        level_name = str(mode)
+    # Compose location info if available
+    location = ''
+    if context and context.file and context.line:
+        location = f" {context.file}:{context.line}"
+    logger.error(f"[QT-{level_name}]{location} {message}")
+
+# Install the handler only once
+try:
+    qInstallMessageHandler(_qt_message_handler)
+except Exception as _e:  # Fallback (should not normally occur)
+    logger.warning(f"Failed to install Qt message handler: {_e}")
 
 # Cache for launch data
 CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
@@ -158,10 +180,10 @@ def fetch_f1_data():
                 'albert_park': 'Melbourne', 'shanghai': 'Shanghai', 'suzuka': 'Suzuka', 'bahrain': 'Sakhir',
                 'jeddah': 'Jeddah', 'miami': 'Miami', 'imola': 'Imola', 'monaco': 'Monte Carlo',
                 'catalunya': 'Catalunya', 'villeneuve': 'Montreal', 'red_bull_ring': 'Spielberg',
-                'silverstone': 'Silverstone', 'spa': 'Spa', 'hungaroring': 'Hungaroring',
-                'zandvoort': 'Zandvoort', 'monza': 'Monza', 'baku': 'Baku', 'marina_bay': 'Singapore',
-                'americas': 'Austin', 'rodriguez': 'Mexico City', 'interlagos': 'Sao Paulo',
-                'vegas': 'Las Vegas', 'losail': 'Lusail', 'yas_marina': 'Abu Dhabi'
+                'silverstone': 'Silverstone', 'spa': 'Spa', 'hungaroring': 'Hungaroring', 'zandvoort': 'Zandvoort',
+                'monza': 'Monza', 'baku': 'Baku', 'marina_bay': 'Singapore', 'americas': 'Austin',
+                'rodriguez': 'Mexico City', 'interlagos': 'Sao Paulo', 'vegas': 'Las Vegas',
+                'losail': 'Lusail', 'yas_marina': 'Abu Dhabi'
             }
             for race in races:
                 meeting = {
@@ -430,7 +452,7 @@ class EventModel(QAbstractListModel):
                     if time_str != 'TBD' and net:
                         return parse(net).astimezone(self._tz).strftime('%Y-%m-%d %H:%M:%S')
                     return 'TBD'
-        return None
+            return None
 
     def roleNames(self):
         roles = super().roleNames()
@@ -531,6 +553,8 @@ class Backend(QObject):
     timeChanged = pyqtSignal()
     weatherChanged = pyqtSignal()
     launchesChanged = pyqtSignal()
+    chartViewModeChanged = pyqtSignal()
+    chartTypeChanged = pyqtSignal()
     f1Changed = pyqtSignal()
     themeChanged = pyqtSignal()
     locationChanged = pyqtSignal()
@@ -542,6 +566,8 @@ class Backend(QObject):
         self._event_type = 'upcoming'
         self._theme = 'dark'
         self._location = 'Starbase'
+        self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
+        self._chart_type = 'bar'  # 'bar' or 'line'
         self._launch_data = fetch_launches()
         self._f1_data = fetch_f1_data()
         self._weather_data = self.initialize_weather()
@@ -586,6 +612,30 @@ class Backend(QObject):
             self._event_type = value
             self.eventTypeChanged.emit()
             self.update_event_model()
+
+    @pyqtProperty(str, notify=chartViewModeChanged)
+    def chartViewMode(self):
+        return self._chart_view_mode
+
+    @chartViewMode.setter
+    def chartViewMode(self, value):
+        if self._chart_view_mode != value:
+            self._chart_view_mode = value
+            self.chartViewModeChanged.emit()
+            # Also emit launchesChanged to refresh the chart
+            self.launchesChanged.emit()
+
+    @pyqtProperty(str, notify=chartTypeChanged)
+    def chartType(self):
+        return self._chart_type
+
+    @chartType.setter
+    def chartType(self, value):
+        if self._chart_type != value:
+            self._chart_type = value
+            self.chartTypeChanged.emit()
+            # Also emit launchesChanged to refresh the chart
+            self.launchesChanged.emit()
 
     @pyqtProperty(str, notify=themeChanged)
     def theme(self):
@@ -675,6 +725,173 @@ class Backend(QObject):
             })
         return {'months': months, 'series': data}
 
+    @pyqtProperty(QVariant, notify=launchesChanged)
+    def launchTrendsMonths(self):
+        try:
+            launches = self._launch_data['previous']
+            if not launches:
+                return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
+            
+            df = pd.DataFrame(launches)
+            df['date'] = pd.to_datetime(df['date'])
+            current_year = datetime.now(pytz.UTC).year
+            df = df[df['date'].dt.year == current_year]
+            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+            df = df[df['rocket'].isin(rocket_types)]
+            
+            if df.empty:
+                return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
+            
+            if self._chart_type == 'bar':
+                # Monthly labels for bar chart
+                df['period'] = df['date'].dt.to_period('M').astype(str)
+                unique_periods = sorted(df['period'].unique())
+                month_names = []
+                for period in unique_periods:
+                    year_month = period.split('-')
+                    if len(year_month) == 2:
+                        year, month_num = int(year_month[0]), int(year_month[1])
+                        month_name = datetime(year, month_num, 1).strftime('%b')
+                        month_names.append(month_name)
+                    else:
+                        month_names.append(period)
+                return month_names
+            else:
+                # For line chart, return month labels for daily data
+                return self._generate_month_labels_for_days()
+                
+        except Exception as e:
+            logger.error(f"Error in launchTrendsMonths: {e}")
+            return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
+
+    @pyqtProperty(int, notify=launchesChanged)
+    def launchTrendsMaxValue(self):
+        try:
+            launches = self._launch_data['previous']
+            if not launches:
+                return 5
+            df = pd.DataFrame(launches)
+            df['date'] = pd.to_datetime(df['date'])
+            current_year = datetime.now(pytz.UTC).year
+            df = df[df['date'].dt.year == current_year]
+            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+            df = df[df['rocket'].isin(rocket_types)]
+            if df.empty:
+                return 5
+            
+            if self._chart_type == 'bar':
+                # Monthly aggregation for bar chart
+                df['period'] = df['date'].dt.to_period('M').astype(str)
+                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
+                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
+            else:
+                # Daily aggregation for line chart
+                df['period'] = df['date'].dt.date.astype(str)
+                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
+                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
+                # Reindex to include all days of the year
+                start_date = datetime(current_year, 1, 1).date()
+                end_date = datetime(current_year, 12, 31).date()
+                all_dates = [str(start_date + timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
+                df_pivot = df_pivot.reindex(all_dates, fill_value=0)
+            
+            for col in rocket_types:
+                if col not in df_pivot.columns:
+                    df_pivot[col] = 0
+            
+            # Apply cumulative view if selected
+            if self._chart_view_mode == 'cumulative':
+                df_pivot = df_pivot.cumsum()
+            
+            max_value = df_pivot.values.max()
+            # Round up to nearest 5, with minimum of 5
+            return max(5, int((max_value + 4) // 5 * 5))
+        except Exception as e:
+            logger.error(f"Error in launchTrendsMaxValue: {e}")
+            return 5
+
+    def _generate_month_labels_for_days(self):
+        """Generate month labels for daily data points - show month name on first day of month, empty otherwise"""
+        current_year = datetime.now(pytz.UTC).year
+        labels = []
+        for day in range(1, 366):  # 365 days in a year
+            try:
+                date = datetime(current_year, 1, 1) + timedelta(days=day-1)
+                if date.day == 1:  # First day of month
+                    labels.append(date.strftime('%b'))
+                else:
+                    labels.append('')
+            except ValueError:
+                # Handle leap year case where day 366 doesn't exist
+                break
+        return labels
+
+    @pyqtProperty(QVariant, notify=launchesChanged)
+    def launchTrendsSeries(self):
+        try:
+            launches = self._launch_data['previous']
+            if not launches:
+                default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
+                return [
+                    {'label': 'Starship', 'values': default_values},
+                    {'label': 'Falcon 9', 'values': default_values},
+                    {'label': 'Falcon Heavy', 'values': default_values}
+                ]
+            df = pd.DataFrame(launches)
+            df['date'] = pd.to_datetime(df['date'])
+            current_year = datetime.now(pytz.UTC).year
+            df = df[df['date'].dt.year == current_year]
+            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+            df = df[df['rocket'].isin(rocket_types)]
+            if df.empty:
+                default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
+                return [
+                    {'label': 'Starship', 'values': default_values},
+                    {'label': 'Falcon 9', 'values': default_values},
+                    {'label': 'Falcon Heavy', 'values': default_values}
+                ]
+            
+            if self._chart_type == 'bar':
+                # Monthly aggregation for bar chart
+                df['period'] = df['date'].dt.to_period('M').astype(str)
+                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
+                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
+            else:
+                # Daily aggregation for line chart
+                df['period'] = df['date'].dt.date.astype(str)
+                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
+                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
+                # Reindex to include all days of the year
+                start_date = datetime(current_year, 1, 1).date()
+                end_date = datetime(current_year, 12, 31).date()
+                all_dates = [str(start_date + timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
+                df_pivot = df_pivot.reindex(all_dates, fill_value=0)
+            
+            for col in rocket_types:
+                if col not in df_pivot.columns:
+                    df_pivot[col] = 0
+            
+            # Apply cumulative view if selected
+            if self._chart_view_mode == 'cumulative':
+                df_pivot = df_pivot.cumsum()
+            
+            data = []
+            for rocket in rocket_types:
+                values = df_pivot[rocket].tolist()
+                data.append({
+                    'label': rocket,
+                    'values': values
+                })
+            return data
+        except Exception as e:
+            logger.error(f"Error in launchTrendsSeries: {e}")
+            default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
+            return [
+                {'label': 'Starship', 'values': default_values},
+                {'label': 'Falcon 9', 'values': default_values},
+                {'label': 'Falcon Heavy', 'values': default_values}
+            ]
+
     @pyqtProperty(list, notify=f1Changed)
     def driverStandings(self):
         return self._f1_data['driver_standings']
@@ -690,6 +907,7 @@ class Backend(QObject):
             return min(valid_launches, key=lambda x: parse(x['net']))
         return None
 
+    @pyqtSlot(result=QVariant)
     def get_next_race(self):
         races = self._f1_data['schedule']
         current = datetime.now(pytz.UTC)
@@ -741,21 +959,34 @@ if __name__ == '__main__':
         QFontDatabase.addApplicationFont(fa_path)
 
     engine = QQmlApplicationEngine()
+    # Connect QML warnings signal (list of QQmlError objects)
+    def _log_qml_warnings(errors):
+        for e in errors:
+            try:
+                logger.error(f"QML warning: {e.toString()}")
+            except Exception:
+                logger.error(f"QML warning (unformatted): {e}")
+    try:
+        engine.warnings.connect(_log_qml_warnings)
+    except Exception as _e:
+        logger.warning(f"Could not connect engine warnings signal: {_e}")
     backend = Backend()
     context = engine.rootContext()
     context.setContextProperty("backend", backend)
     context.setContextProperty("radarLocations", radar_locations)
     context.setContextProperty("circuitCoords", circuit_coords)
-    context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1')
+    context.setContextProperty("spacexLogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'spacex_logo.png')}")
+    context.setContextProperty("f1LogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png')}")
+    context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1')
 
     # Embedded QML for completeness (main.qml content)
     qml_code = """
-import QtQuick
-import QtQuick.Window
-import QtQuick.Controls
-import QtQuick.Layouts
-import QtCharts
-import QtWebEngine
+import QtQuick 2.15
+import QtQuick.Window 2.15
+import QtQuick.Controls 2.15
+import QtQuick.Layouts 1.15
+import QtCharts 2.15
+import QtWebEngine 1.10
 
 Window {
     id: root
@@ -766,8 +997,13 @@ Window {
     color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
     Behavior on color { ColorAnimation { duration: 300 } }
 
+    // Cache expensive / repeated lookups
+    property var nextRace: backend.get_next_race()
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: nextRace = backend.get_next_race() }
+
     ColumnLayout {
         anchors.fill: parent
+        anchors.margins: 5
         spacing: 5
 
         RowLayout {
@@ -781,12 +1017,17 @@ Window {
                 Layout.fillHeight: true
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
+                clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
 
                     Text {
-                        text: backend.mode === "spacex" ? "Launch Trends" : "Driver Standings"
+                        text: backend.mode === "spacex" ? 
+                               (backend.chartViewMode === "cumulative" ? 
+                                (backend.chartType === "bar" ? "Cumulative Launch Trends (Bar)" : "Cumulative Launch Trends (Line)") : 
+                                (backend.chartType === "bar" ? "Monthly Launch Trends (Bar)" : "Monthly Launch Trends (Line)")) : 
+                               "Driver Standings"
                         font.pixelSize: 14
                         color: "#999999"
                         Layout.fillWidth: true
@@ -798,17 +1039,229 @@ Window {
                         Layout.fillHeight: true
                         visible: backend.mode === "spacex"
 
-                        ChartView {
+                        ColumnLayout {
                             anchors.fill: parent
-                            antialiasing: true
-                            legend.visible: false
+                            spacing: 5
 
-                            BarSeries {
-                                axisX: BarCategoryAxis { categories: backend.launchTrends.months }
-                                axisY: ValueAxis { min: 0; max: 20 }
-                                Repeater {
-                                    model: backend.launchTrends.series
-                                    delegate: BarSet { label: modelData.label; values: modelData.values }
+                            ChartView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                antialiasing: true
+                                legend.visible: true
+                                legend.alignment: Qt.AlignBottom
+                                backgroundColor: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+
+                                BarCategoryAxis {
+                                    id: sharedAxisX
+                                    categories: backend.launchTrendsMonths
+                                    labelsColor: backend.theme === "dark" ? "white" : "black"
+                                    gridVisible: false
+                                }
+
+                                ValueAxis {
+                                    id: sharedAxisY
+                                    min: 0
+                                    max: backend.launchTrendsMaxValue
+                                    labelsColor: backend.theme === "dark" ? "white" : "black"
+                                    gridVisible: true
+                                    titleText: "Number of Launches"
+                                }
+
+                                BarSeries {
+                                    visible: backend.chartType === "bar"
+                                    axisX: sharedAxisX
+                                    axisY: sharedAxisY
+
+                                    BarSet {
+                                        label: "Starship"
+                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 0 && backend.launchTrendsSeries[0]) ? backend.launchTrendsSeries[0].values : [0, 0, 0, 0]
+                                        color: "#ff6b6b"
+                                        borderColor: "#ff5252"
+                                    }
+                                    BarSet {
+                                        label: "Falcon 9"
+                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 1 && backend.launchTrendsSeries[1]) ? backend.launchTrendsSeries[1].values : [0, 0, 0, 0]
+                                        color: "#4ecdc4"
+                                        borderColor: "#45b7aa"
+                                    }
+                                    BarSet {
+                                        label: "Falcon Heavy"
+                                        values: (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 2 && backend.launchTrendsSeries[2]) ? backend.launchTrendsSeries[2].values : [0, 0, 0, 0]
+                                        color: "#ffe66d"
+                                        borderColor: "#ffd93d"
+                                    }
+                                }
+
+                                LineSeries {
+                                    id: starshipLine
+                                    visible: backend.chartType === "line"
+                                    axisX: sharedAxisX
+                                    axisY: sharedAxisY
+                                    name: "Starship"
+                                    color: "#ff6b6b"
+                                    pointsVisible: false
+                                    Component.onCompleted: {
+                                        updateStarshipLine()
+                                    }
+                                    Connections {
+                                        target: backend
+                                        function onLaunchesChanged() {
+                                            updateStarshipLine()
+                                        }
+                                    }
+                                    function updateStarshipLine() {
+                                        starshipLine.clear()
+                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 0 && backend.launchTrendsSeries[0]) {
+                                            for (var i = 0; i < backend.launchTrendsSeries[0].values.length; i++) {
+                                                starshipLine.append(i, backend.launchTrendsSeries[0].values[i])
+                                            }
+                                        }
+                                    }
+                                }
+
+                                LineSeries {
+                                    id: falcon9Line
+                                    visible: backend.chartType === "line"
+                                    axisX: sharedAxisX
+                                    axisY: sharedAxisY
+                                    name: "Falcon 9"
+                                    color: "#4ecdc4"
+                                    pointsVisible: false
+                                    Component.onCompleted: {
+                                        updateFalcon9Line()
+                                    }
+                                    Connections {
+                                        target: backend
+                                        function onLaunchesChanged() {
+                                            updateFalcon9Line()
+                                        }
+                                    }
+                                    function updateFalcon9Line() {
+                                        falcon9Line.clear()
+                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 1 && backend.launchTrendsSeries[1]) {
+                                            for (var i = 0; i < backend.launchTrendsSeries[1].values.length; i++) {
+                                                falcon9Line.append(i, backend.launchTrendsSeries[1].values[i])
+                                            }
+                                        }
+                                    }
+                                }
+
+                                LineSeries {
+                                    id: falconHeavyLine
+                                    visible: backend.chartType === "line"
+                                    axisX: sharedAxisX
+                                    axisY: sharedAxisY
+                                    name: "Falcon Heavy"
+                                    color: "#ffe66d"
+                                    pointsVisible: false
+                                    Component.onCompleted: {
+                                        updateFalconHeavyLine()
+                                    }
+                                    Connections {
+                                        target: backend
+                                        function onLaunchesChanged() {
+                                            updateFalconHeavyLine()
+                                        }
+                                    }
+                                    function updateFalconHeavyLine() {
+                                        falconHeavyLine.clear()
+                                        if (backend.launchTrendsSeries && backend.launchTrendsSeries.length > 2 && backend.launchTrendsSeries[2]) {
+                                            for (var i = 0; i < backend.launchTrendsSeries[2].values.length; i++) {
+                                                falconHeavyLine.append(i, backend.launchTrendsSeries[2].values[i])
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Chart control buttons
+                            RowLayout {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.margins: 5
+                                spacing: 10
+
+                                // Chart type buttons
+                                RowLayout {
+                                    spacing: 3
+                                    Repeater {
+                                        model: [
+                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"}
+                                        ]
+                                        Button {
+                                            property var chartData: modelData
+                                            Layout.preferredWidth: 35
+                                            Layout.preferredHeight: 25
+                                            font.pixelSize: 12
+                                            font.family: "Font Awesome 5 Free"
+                                            text: chartData.icon
+                                            onClicked: {
+                                                backend.chartType = chartData.type
+                                            }
+                                            background: Rectangle {
+                                                color: backend.chartType === chartData.type ? 
+                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                                border.width: 1
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.chartData.icon
+                                                font: parent.font
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            ToolTip {
+                                                text: parent.chartData.tooltip
+                                                visible: parent.hovered
+                                                delay: 500
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Chart view mode buttons
+                                RowLayout {
+                                    spacing: 3
+                                    Repeater {
+                                        model: [
+                                            {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
+                                            {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
+                                        ]
+                                        Button {
+                                            property var chartData: modelData
+                                            Layout.preferredWidth: 35
+                                            Layout.preferredHeight: 25
+                                            font.pixelSize: 12
+                                            font.family: "Font Awesome 5 Free"
+                                            text: chartData.icon
+                                            onClicked: {
+                                                backend.chartViewMode = chartData.type
+                                            }
+                                            background: Rectangle {
+                                                color: backend.chartViewMode === chartData.type ? 
+                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                                border.width: 1
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.chartData.icon
+                                                font: parent.font
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            ToolTip {
+                                                text: parent.chartData.tooltip
+                                                visible: parent.hovered
+                                                delay: 500
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -820,7 +1273,7 @@ Window {
                         visible: backend.mode === "f1"
                         model: backend.driverStandings
                         delegate: Rectangle {
-                            width: parent.width
+                            width: ListView.view.width
                             height: 40
                             color: "transparent"
 
@@ -840,26 +1293,76 @@ Window {
                 Layout.fillHeight: true
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
+                clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
+                    spacing: 0
 
-                    Text {
-                        text: backend.mode === "spacex" ? "Radar" : "Race Calendar"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
-
-                    WebEngineView {
+                    SwipeView {
+                        id: weatherSwipe
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: backend.mode === "spacex"
-                        url: radarLocations[backend.location] + "&rand=" + new Date().getTime()
-                        onFullScreenRequested: function(request) {
-                            request.accept();
-                            root.visibility = Window.FullScreen
+                        orientation: Qt.Vertical
+                        clip: true
+                        interactive: true
+                        currentIndex: 0
+
+                        Component.onCompleted: {
+                            console.log("SwipeView completed, count:", count);
+                        }
+
+                        Repeater {
+                            model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
+
+                            Item {
+                                WebEngineView {
+                                    id: webView
+                                    objectName: "webView"
+                                    anchors.fill: parent
+                                    url: radarLocations[backend.location].replace("radar", modelData) + "&rand=" + new Date().getTime()
+                                    settings {
+                                        webGLEnabled: true
+                                        accelerated2dCanvasEnabled: true
+                                        allowRunningInsecureContent: true
+                                        javascriptEnabled: true
+                                        localContentCanAccessRemoteUrls: true
+                                    }
+                                    onFullScreenRequested: function(request) {
+                                        request.accept();
+                                        root.visibility = Window.FullScreen
+                                    }
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                            console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
+                                        } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            console.log("WebEngineView loaded successfully for", modelData);
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    anchors.top: parent.top
+                                    anchors.horizontalCenter: parent.horizontalCenter
+                                    text: {
+                                        var icons = {
+                                            "radar": "\uf7c0",
+                                            "wind": "\uf72e", 
+                                            "gust": "\uf72e",
+                                            "clouds": "\uf0c2",
+                                            "temp": "\uf2c7",
+                                            "pressure": "\uf6c4"
+                                        };
+                                        return icons[modelData] || modelData.charAt(0).toUpperCase() + modelData.slice(1);
+                                    }
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: "#ffffff"
+                                    style: Text.Outline
+                                    styleColor: "#000000"
+                                }
+                            }
                         }
                     }
 
@@ -869,9 +1372,10 @@ Window {
                         visible: backend.mode === "f1"
                         model: backend.raceCalendar
                         delegate: Rectangle {
-                            width: parent.width
+                            width: ListView.view.width
                             height: 40
                             color: "transparent"
+
                             Column {
                                 Text { text: modelData.meeting_name; color: backend.theme === "dark" ? "white" : "black" }
                                 Text { text: modelData.circuit_short_name; color: backend.theme === "dark" ? "white" : "black" }
@@ -880,7 +1384,53 @@ Window {
                         }
                         Behavior on opacity { NumberAnimation { duration: 200 } }
                     }
+
+                    // Weather view buttons
+                    RowLayout {
+                        Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
+                        Layout.margins: 2
+                        visible: backend.mode === "spacex"
+                        spacing: 3
+
+                        Repeater {
+                            model: [
+                                {"type": "radar", "icon": "\uf7c0"},
+                                {"type": "wind", "icon": "\uf72e"},
+                                {"type": "gust", "icon": "\uf72e"},
+                                {"type": "clouds", "icon": "\uf0c2"},
+                                {"type": "temp", "icon": "\uf2c7"},
+                                {"type": "pressure", "icon": "\uf6c4"}
+                            ]
+                            Button {
+                                property var weatherData: modelData
+                                Layout.preferredWidth: 35
+                                Layout.preferredHeight: 25
+                                font.pixelSize: 12
+                                font.family: "Font Awesome 5 Free"
+                                text: weatherData.icon
+                                onClicked: {
+                                    weatherSwipe.currentIndex = index
+                                }
+                                background: Rectangle {
+                                    color: weatherSwipe.currentIndex === index ? 
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.width: 1
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: parent.weatherData.icon
+                                    font: parent.font
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                    }
                 }
+
             }
 
             // Column 3: Launches or Races
@@ -889,150 +1439,112 @@ Window {
                 Layout.fillHeight: true
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
+                clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
 
-                    RowLayout {
-                        Text {
-                            text: backend.mode === "spacex" ? "Launches" : "Races"
-                            font.pixelSize: 14
-                            color: "#999999"
-                        }
-
-                        Row {
-                            Repeater {
-                                model: ["Upcoming", "Past"]
-                                Button {
-                                    text: modelData
-                                    checkable: true
-                                    checked: backend.eventType === modelData.toLowerCase()
-                                    onClicked: backend.eventType = modelData.toLowerCase()
-                                    flat: true
-                                }
-                            }
-                        }
+                    Text {
+                        text: backend.mode === "spacex" ? "Launches" : "Races"
+                        font.pixelSize: 14
+                        color: "#999999"
                     }
 
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         model: backend.eventModel
-                        clip: true  // Prevent content from extending past container
+                        clip: true
                         spacing: 5
+
                         delegate: Item {
-                            width: parent.width
+                            width: ListView.view.width
                             height: model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : 40)
 
-                            Rectangle {
-                                anchors.fill: parent
-                                color: model.isGroup ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                radius: model.isGroup ? 0 : 6
-                            }
+                            Rectangle { anchors.fill: parent; color: model.isGroup ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: model.isGroup ? 0 : 6 }
 
                             Text {
                                 anchors.left: parent.left
                                 anchors.leftMargin: 15
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: model.isGroup ? model.groupName : ""
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: "#999999"
-                                visible: model.isGroup
+                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: model.isGroup
                             }
 
                             Column {
                                 id: launchColumn
-                                anchors.left: parent.left
-                                anchors.right: parent.right
-                                anchors.top: parent.top
-                                anchors.margins: 10
+                                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
                                 spacing: 5
                                 visible: !model.isGroup && backend.mode === "spacex"
 
-                                Text {
-                                    text: model.mission
-                                    font.pixelSize: 14
-                                    color: backend.theme === "dark" ? "white" : "black"
+                                Text { text: model.mission ? model.mission : ""; font.pixelSize: 14; color: backend.theme === "dark" ? "white" : "black" }
+                                Row { spacing: 5
+                                    Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Rocket: " + (model.rocket ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-
-                                Row {
-                                    spacing: 5
-                                    Text {
-                                        text: "\\uf135"  // Font Awesome rocket icon
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
-                                    Text {
-                                        text: "Rocket: " + model.rocket
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
+                                Row { spacing: 5
+                                    Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Orbit: " + (model.orbit ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-
-                                Row {
-                                    spacing: 5
-                                    Text {
-                                        text: "\\uf0ac"  // Font Awesome globe icon
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
-                                    Text {
-                                        text: "Orbit: " + model.orbit
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
+                                Row { spacing: 5
+                                    Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Pad: " + (model.pad ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-
-                                Row {
-                                    spacing: 5
-                                    Text {
-                                        text: "\\uf3c5"  // Font Awesome map-marker-alt icon
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
-                                    Text {
-                                        text: "Pad: " + model.pad
-                                        font.pixelSize: 12
-                                        color: "#999999"
-                                    }
-                                }
-
-                                Text {
-                                    text: "Date: " + model.date + " " + model.time + " UTC"
-                                    font.pixelSize: 12
-                                    color: "#999999"
-                                }
-
-                                Text {
-                                    text: backend.location + ": " + model.localTime
-                                    font.pixelSize: 12
-                                    color: "#999999"
-                                }
-
-                                Text {
-                                    text: "Status: " + model.status
-                                    font.pixelSize: 12
-                                    color: (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch") ? "#4CAF50" : "#F44336"  // Green for success, red for failure
-                                }
+                                Text { text: "Date: " + (model.date ? model.date : "") + (model.time ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                Text { text: backend.location + ": " + (model.localTime ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { text: "Status: " + (model.status ? model.status : ""); font.pixelSize: 12; color: (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch") ? "#4CAF50" : "#F44336" }
                             }
 
-                            // F1 delegate (kept simple, but can be enhanced similarly if needed)
                             Column {
-                                anchors.fill: parent
-                                anchors.margins: 10
+                                anchors.fill: parent; anchors.margins: 10
                                 visible: !model.isGroup && backend.mode === "f1"
-                                Text { text: model.meetingName; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
-                                Text { text: "Date: " + model.dateStart; color: "#999999"; font.pixelSize: 12 }
-                                Text { text: model.circuitShortName; color: "#999999"; font.pixelSize: 12 }
-                                Text { text: model.location; color: "#999999"; font.pixelSize: 12 }
+                                Text { text: model.meetingName ? model.meetingName : ""; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
+                                Text { text: model.dateStart ? ("Date: " + model.dateStart) : ""; color: "#999999"; font.pixelSize: 12 }
+                                Text { text: model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
+                                Text { text: model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
                             }
                         }
-                        Behavior on y { SpringAnimation { spring: 2; damping: 0.2 } }
-                        transitions: Transition { NumberAnimation { properties: "x,y"; duration: 200; easing.type: Easing.InOutQuad } }
+                    }
+
+                    // Launch view buttons
+                    RowLayout {
+                        Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
+                        Layout.margins: 2
+                        visible: backend.mode === "spacex"
+                        spacing: 3
+
+                        Repeater {
+                            model: [
+                                {"type": "upcoming", "icon": "\uf135"},
+                                {"type": "past", "icon": "\uf1da"}
+                            ]
+                            Button {
+                                property var launchData: modelData
+                                Layout.preferredWidth: 35
+                                Layout.preferredHeight: 25
+                                font.pixelSize: 12
+                                font.family: "Font Awesome 5 Free"
+                                text: launchData.icon
+                                onClicked: {
+                                    backend.eventType = launchData.type
+                                }
+                                background: Rectangle {
+                                    color: backend.eventType === launchData.type ? 
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.width: 1
+                                    radius: 3
+                                }
+                                contentItem: Text {
+                                    text: parent.launchData.icon
+                                    font: parent.font
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1043,26 +1555,17 @@ Window {
                 Layout.fillHeight: true
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
+                clip: true
 
                 ColumnLayout {
                     anchors.fill: parent
-
-                    Text {
-                        text: backend.mode === "spacex" ? "Videos" : "Next Race Location"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+                    spacing: 0
 
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        url: backend.mode === "spacex" ? videoUrl : (backend.get_next_race() ? "https://www.openstreetmap.org/export/embed.html?bbox=" + circuitCoords[backend.get_next_race().circuit_short_name].lon - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat - 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon + 0.01 + "," + circuitCoords[backend.get_next_race().circuit_short_name].lat + 0.01 + "&layer=mapnik&marker=" + circuitCoords[backend.get_next_race().circuit_short_name].lat + "," + circuitCoords[backend.get_next_race().circuit_short_name].lon : "")
-                        onFullScreenRequested: function(request) {
-                            request.accept();
-                            root.visibility = Window.FullScreen
-                        }
+                        url: backend.mode === "spacex" ? videoUrl : (nextRace ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")
+                        onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                     }
                 }
             }
@@ -1081,9 +1584,9 @@ Window {
 
                 // Left pill (time and weather)
                 Rectangle {
-                    width: leftRow.width + 20
-                    height: 30
-                    radius: 15
+                    id: leftPill
+                    implicitWidth: leftRow.implicitWidth + 20
+                    height: 30; radius: 15
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
 
                     Row {
@@ -1100,9 +1603,10 @@ Window {
 
                 // Logo toggle
                 Image {
-                    source: backend.mode === "f1" ? "assets/f1-logo.png" : "assets/spacex-logo.png"
+                    source: backend.mode === "f1" ? f1LogoPath : spacexLogoPath
                     width: 80
                     height: 30
+
                     MouseArea {
                         anchors.fill: parent
                         onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
@@ -1113,9 +1617,9 @@ Window {
 
                 // Right pill (countdown, location, theme)
                 Rectangle {
-                    width: rightRow.width + 20
-                    height: 30
-                    radius: 15
+                    id: rightPill
+                    implicitWidth: rightRow.implicitWidth + 20
+                    height: 30; radius: 15
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
 
                     Row {
@@ -1130,53 +1634,26 @@ Window {
                             Repeater {
                                 model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
                                 Rectangle {
-                                    width: locationText.width + 10
+                                    width: (locationText ? locationText.paintedWidth + 10 : 50)
                                     height: 20
                                     color: backend.location === modelData ? (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    radius: 4
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
-
-                                    Text {
-                                        id: locationText
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 10
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: backend.location = modelData
-                                    }
+                                    radius: 4; border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"; border.width: 1
+                                    Text { id: locationText; anchors.centerIn: parent; text: modelData; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 10 }
+                                    MouseArea { anchors.fill: parent; onClicked: backend.location = modelData }
                                 }
                             }
                         }
-
                         Row {
                             spacing: 2
                             Repeater {
                                 model: ["Light", "Dark"]
                                 Rectangle {
-                                    width: themeText.width + 10
+                                    width: (themeText ? themeText.paintedWidth + 10 : 50)
                                     height: 20
                                     color: backend.theme === modelData.toLowerCase() ? (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    radius: 4
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
-
-                                    Text {
-                                        id: themeText
-                                        anchors.centerIn: parent
-                                        text: modelData
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 10
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: backend.theme = modelData.toLowerCase()
-                                    }
+                                    radius: 4; border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"; border.width: 1
+                                    Text { id: themeText; anchors.centerIn: parent; text: modelData; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 10 }
+                                    MouseArea { anchors.fill: parent; onClicked: backend.theme = modelData.toLowerCase() }
                                 }
                             }
                         }
@@ -1187,8 +1664,12 @@ Window {
     }
 }
     """
+
     # Load QML from string (for complete single file)
-    engine.loadData(qml_code.encode(), QUrl())
+    qml_code = qml_code.replace('PointerHandler {', 'DragHandler {\n    target: null')
+    engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
     if not engine.rootObjects():
+        logger.error("QML root object creation failed (see earlier QML errors above).")
+        print("QML load failed. Check console for Qt errors.")
         sys.exit(-1)
     sys.exit(app.exec())
