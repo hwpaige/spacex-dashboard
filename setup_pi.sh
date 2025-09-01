@@ -1,3 +1,5 @@
+
+
 #!/bin/bash
 set -e
 set -o pipefail
@@ -39,15 +41,27 @@ echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 # Install system packages, including X11 for easy rotation and SSH
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-# Install system packages, including X11 for easy rotation
-echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv git python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 upower iw python3-requests python3-tz python3-dateutil python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine lz4 plymouth-theme-spinner xserver-xorg xinit x11-xserver-utils openbox libinput-tools ubuntu-raspi-settings xserver-xorg-video-modesetting libxcb-cursor0 | tee -a "$LOG_FILE"# Enable SSH
+apt-get install -y python3 python3-pip python3-venv git python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 upower iw python3-requests python3-tz python3-dateutil python3-pandas qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine lz4 plymouth-theme-spinner xserver-xorg xinit x11-xserver-utils openbox libinput-tools ubuntu-raspi-settings xserver-xorg-video-modesetting libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg | tee -a "$LOG_FILE"
+
+# Enable SSH
 echo "Enabling SSH..." | tee -a "$LOG_FILE"
 systemctl enable --now ssh | tee -a "$LOG_FILE"
 
 # Remove fbdev driver to prevent Xorg fallback error
 echo "Removing incompatible fbdev driver..." | tee -a "$LOG_FILE"
 apt remove --purge xserver-xorg-video-fbdev -y | tee -a "$LOG_FILE"
+
+# Configure Xorg for vc4 modesetting to fix framebuffer mode error
+echo "Configuring Xorg for vc4 modesetting..." | tee -a "$LOG_FILE"
+mkdir -p /etc/X11/xorg.conf.d
+cat << EOF > /etc/X11/xorg.conf.d/99-vc4.conf
+Section "OutputClass"
+    Identifier "vc4"
+    MatchDriver "vc4"
+    Driver "modesetting"
+    Option "PrimaryGPU" "true"
+EndSection
+EOF
 
 # Enable upower service if installed
 if [ -f /lib/systemd/system/upower.service ]; then
@@ -81,10 +95,10 @@ if ! grep -q "^COMPRESS=lz4" /etc/initramfs-tools/initramfs.conf; then
     echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
 fi
 
-# Add modules for Plymouth to work with vc4-kms-v3d
+# Add modules for Plymouth to work with vc4-kms-v3d (avoid duplicates)
 echo "Adding modules to initramfs for Plymouth splash..." | tee -a "$LOG_FILE"
-echo "drm" >> /etc/initramfs-tools/modules
-echo "vc4" >> /etc/initramfs-tools/modules
+grep -qxF "drm" /etc/initramfs-tools/modules || echo "drm" >> /etc/initramfs-tools/modules
+grep -qxF "vc4" /etc/initramfs-tools/modules || echo "vc4" >> /etc/initramfs-tools/modules
 
 # Clone GitHub repository to Desktop
 echo "Cloning GitHub repository to Desktop..." | tee -a "$LOG_FILE"
@@ -142,6 +156,7 @@ xset -dpms
 xset s noblank
 unclutter -idle 0 -root &
 export QT_QPA_PLATFORM=xcb
+export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl\"
 exec python3 $REPO_DIR/app.py > $HOME_DIR/app.log 2>&1
 EOF"
@@ -161,8 +176,8 @@ ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
 EOF
 systemctl daemon-reload | tee -a "$LOG_FILE"
 
-# Launch X from .bash_profile only on tty1
-sudo -u "$USER" bash -c "cat << EOF >> ~/.bash_profile
+# Launch X from .profile only on tty1 (more reliable for autologin sourcing)
+sudo -u "$USER" bash -c "cat << EOF > ~/.profile
 if [ \"\$(tty)\" = \"/dev/tty1\" ] && [ -z \"\$DISPLAY\" ]; then
   startx
 fi
