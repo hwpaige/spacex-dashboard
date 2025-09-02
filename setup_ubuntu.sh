@@ -22,10 +22,16 @@ apt-get autoclean -y | tee -a "$LOG_FILE"
 echo "System updated and upgraded." | tee -a "$LOG_FILE"
 
 echo "Installing system packages..." | tee -a "$LOG_FILE"
-apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt5 python3-pyqt5.qtwebengine python3-pyqt5.qtchart python3-pyqt5.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice wireless-tools | tee -a "$LOG_FILE"
+apt-get install -y python3 python3-pip python3-venv python3.12-venv git xorg xserver-xorg-core openbox lightdm lightdm-gtk-greeter x11-xserver-utils xauth python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick unclutter plymouth plymouth-themes xserver-xorg-input-libinput xserver-xorg-input-synaptics libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 libgbm1 mesa-vulkan-drivers htop libgbm1 libdrm2 accountsservice net-tools python3-pyqtgraph | tee -a "$LOG_FILE"
 apt-get reinstall -y plymouth plymouth-themes | tee -a "$LOG_FILE"
 apt-get install --reinstall -y xserver-xorg-core xorg | tee -a "$LOG_FILE"
 echo "System packages installed." | tee -a "$LOG_FILE"
+
+# Install additional Python packages via pip
+echo "Installing additional Python packages..." | tee -a "$LOG_FILE"
+python3 -m pip install --upgrade pip | tee -a "$LOG_FILE"
+python3 -m pip install pyqtgraph requests pytz python-dateutil pandas | tee -a "$LOG_FILE"
+echo "Python packages installed." | tee -a "$LOG_FILE"
 
 echo "Ensuring xauth is installed..." | tee -a "$LOG_FILE"
 apt-get install -y xauth | tee -a "$LOG_FILE"
@@ -38,6 +44,15 @@ usermod -aG docker "$USER" | tee -a "$LOG_FILE"
 docker buildx install | tee -a "$LOG_FILE"
 docker buildx create --name mybuilder --use | tee -a "$LOG_FILE"
 echo "Docker and Buildx installed." | tee -a "$LOG_FILE"
+
+# Add user to graphics groups for hardware acceleration
+usermod -aG render,video,tty,input "$USER" | tee -a "$LOG_FILE"
+
+# Create udev rule for DMA heap access to fix Qt WebEngine hardware acceleration issues
+echo "Creating udev rule for DMA heap access..." | tee -a "$LOG_FILE"
+echo 'KERNEL=="dma_heap", MODE="0666"' > /etc/udev/rules.d/99-dma-heap.rules
+udevadm control --reload-rules | tee -a "$LOG_FILE"
+udevadm trigger | tee -a "$LOG_FILE"
 
 CONFIG_FILE="/boot/firmware/config.txt"
 CMDLINE_FILE="/boot/firmware/cmdline.txt"
@@ -123,8 +138,12 @@ if [ ! -d "$REPO_DIR" ]; then
 fi
 echo "Repository cloned to $REPO_DIR." | tee -a "$LOG_FILE"
 
+# Modify app.py to add VizDisplayCompositor disable flag for hardware acceleration fix
+echo "Modifying app.py to fix Qt WebEngine hardware acceleration..." | tee -a "$LOG_FILE"
+sudo -u "$USER" sed -i 's/--enable-native-gpu-memory-buffers --enable-zero-copy/--enable-native-gpu-memory-buffers --enable-zero-copy --disable-features=VizDisplayCompositor/' "$REPO_DIR/app.py"
+
 echo "Creating start_app.sh on host..." | tee -a "$LOG_FILE"
-sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'dbus-run-session -- python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
+sudo -u "$USER" bash -c "cd \"$REPO_DIR\" && echo '#!/bin/bash' > start_app.sh && echo 'export QT_QPA_PLATFORM=xcb' >> start_app.sh && echo 'export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl --disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --use-gl=desktop --enable-hardware-overlays --enable-accelerated-video --enable-native-gpu-memory-buffers --enable-zero-copy\"' >> start_app.sh && echo 'export QT_LOGGING_RULES=\"qt.webenginecontext=true;qt5ct.debug=false\"' >> start_app.sh && echo 'export QTWEBENGINE_DISABLE_SANDBOX=\"1\"' >> start_app.sh && echo 'export QSG_RHI_BACKEND=\"gl\"' >> start_app.sh && echo 'dbus-run-session -- python3 app.py' >> start_app.sh && chmod +x start_app.sh" | tee -a "$LOG_FILE"
 echo "start_app.sh created." | tee -a "$LOG_FILE"
 
 echo "Configuring desktop auto-login, kiosk mode, and Xauth..." | tee -a "$LOG_FILE"
@@ -198,6 +217,11 @@ for i in {1..60}; do
 done
 docker start spacex-dashboard-app || docker run -d --name spacex-dashboard-app --restart unless-stopped \\
     -e DISPLAY=:0 \\
+    -e QT_QPA_PLATFORM=xcb \\
+    -e QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl --disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --use-gl=desktop --enable-hardware-overlays --enable-accelerated-video --enable-native-gpu-memory-buffers --enable-zero-copy\" \\
+    -e QT_LOGGING_RULES=\"qt.webenginecontext=true;qt5ct.debug=false\" \\
+    -e QTWEBENGINE_DISABLE_SANDBOX=\"1\" \\
+    -e QSG_RHI_BACKEND=\"gl\" \\
     -v /tmp/.X11-unix:/tmp/.X11-unix \\
     -v $HOME_DIR/.Xauthority:/app/.Xauthority \\
     -e XAUTHORITY=/app/.Xauthority \\
