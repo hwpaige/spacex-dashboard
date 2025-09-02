@@ -11642,3 +11642,1205 @@ Init Parameters:
 2025-09-01 12:26:48,186 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
 2025-09-01 12:27:57,876 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
 2025-09-01 12:27:57,996 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:30:53,554 - INFO - Fetching SpaceX launch data
+2025-09-01 12:30:53,556 - INFO - Using persistent cached previous launches
+2025-09-01 12:30:53,556 - INFO - Using persistent cached upcoming launches
+2025-09-01 12:30:53,556 - INFO - Fetching F1 data
+2025-09-01 12:30:53,556 - INFO - Using persistent cached F1 data
+2025-09-01 12:30:53,559 - INFO - Fetching weather data for Starbase
+2025-09-01 12:30:54,421 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:30:55,426 - INFO - Fetching weather data for Vandy
+2025-09-01 12:30:56,265 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:30:57,268 - INFO - Fetching weather data for Cape
+2025-09-01 12:30:58,104 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:30:59,105 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:30:59,943 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:31:01,128 - WARNING - No WiFi interface detected on Windows
+2025-09-01 12:31:01,472 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 12:31:01,547 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-driver-bug-workarounds 
+ *  disable-gpu-sandbox 
+ *  disable-software-rasterizer 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-webgl 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-09-01 12:31:02,096 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 12:31:02,104 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 12:31:02,111 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 12:31:02,112 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:31:02,113 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 12:31:02,130 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:31:02,131 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 12:31:02,320 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:31:02,371 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 12:31:05,771 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-09-01 12:31:08,062 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-09-01 12:31:08,139 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-09-01 12:31:08,202 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-09-01 12:31:08,277 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-09-01 12:31:08,289 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-09-01 12:31:43,394 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:31:43,395 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 12:36:01,033 - INFO - Fetching weather data for Starbase
+2025-09-01 12:36:01,732 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:36:02,740 - INFO - Fetching weather data for Vandy
+2025-09-01 12:36:03,425 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:36:04,426 - INFO - Fetching weather data for Cape
+2025-09-01 12:36:05,114 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:36:06,117 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:36:06,865 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:41:01,035 - INFO - Fetching weather data for Starbase
+2025-09-01 12:41:01,841 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:41:02,842 - INFO - Fetching weather data for Vandy
+2025-09-01 12:41:03,571 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:41:04,573 - INFO - Fetching weather data for Cape
+2025-09-01 12:41:05,261 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:41:06,262 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:41:06,988 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:43:01,040 - INFO - Fetching SpaceX launch data
+2025-09-01 12:43:04,031 - INFO - Successfully fetched and saved previous launches
+2025-09-01 12:43:06,774 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 12:43:06,872 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:46:01,053 - INFO - Fetching weather data for Starbase
+2025-09-01 12:46:01,819 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:46:02,825 - INFO - Fetching weather data for Vandy
+2025-09-01 12:46:03,499 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:46:04,501 - INFO - Fetching weather data for Cape
+2025-09-01 12:46:05,182 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:46:06,183 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:46:06,904 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:51:01,057 - INFO - Fetching weather data for Starbase
+2025-09-01 12:51:01,785 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:51:02,786 - INFO - Fetching weather data for Vandy
+2025-09-01 12:51:03,480 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:51:04,483 - INFO - Fetching weather data for Cape
+2025-09-01 12:51:05,169 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:51:06,170 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:51:06,907 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 12:55:01,061 - INFO - Fetching SpaceX launch data
+2025-09-01 12:55:07,363 - INFO - Successfully fetched and saved previous launches
+2025-09-01 12:55:10,043 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 12:55:10,143 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 12:56:01,063 - INFO - Fetching weather data for Starbase
+2025-09-01 12:56:01,779 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 12:56:02,784 - INFO - Fetching weather data for Vandy
+2025-09-01 12:56:03,469 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 12:56:04,475 - INFO - Fetching weather data for Cape
+2025-09-01 12:56:05,160 - INFO - Successfully fetched weather data for Cape
+2025-09-01 12:56:06,168 - INFO - Fetching weather data for Hawthorne
+2025-09-01 12:56:06,861 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:01:01,071 - INFO - Fetching weather data for Starbase
+2025-09-01 13:01:01,788 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:01:02,790 - INFO - Fetching weather data for Vandy
+2025-09-01 13:01:03,517 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:01:04,518 - INFO - Fetching weather data for Cape
+2025-09-01 13:01:05,194 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:01:06,196 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:01:06,876 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:06:01,082 - INFO - Fetching weather data for Starbase
+2025-09-01 13:06:01,792 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:06:02,798 - INFO - Fetching weather data for Vandy
+2025-09-01 13:06:03,521 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:06:04,522 - INFO - Fetching weather data for Cape
+2025-09-01 13:06:05,261 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:06:06,263 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:06:06,929 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:07:01,064 - INFO - Fetching SpaceX launch data
+2025-09-01 13:07:03,613 - INFO - Successfully fetched and saved previous launches
+2025-09-01 13:07:06,336 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 13:07:06,438 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 13:11:01,078 - INFO - Fetching weather data for Starbase
+2025-09-01 13:11:01,826 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:11:02,828 - INFO - Fetching weather data for Vandy
+2025-09-01 13:11:03,501 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:11:04,505 - INFO - Fetching weather data for Cape
+2025-09-01 13:11:05,171 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:11:06,174 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:11:06,857 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:16:01,080 - INFO - Fetching weather data for Starbase
+2025-09-01 13:16:12,161 - ERROR - Open-Meteo API error for Starbase: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Max retries exceeded with url: /v1/forecast?latitude=25.997&longitude=-97.155&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000018E03BCEC00>: Failed to resolve 'api.open-meteo.com' ([Errno 11001] getaddrinfo failed)"))
+2025-09-01 13:16:12,161 - INFO - Fetching weather data for Vandy
+2025-09-01 13:16:23,225 - ERROR - Open-Meteo API error for Vandy: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Max retries exceeded with url: /v1/forecast?latitude=34.632&longitude=-120.611&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000018E521DAB10>: Failed to resolve 'api.open-meteo.com' ([Errno 11001] getaddrinfo failed)"))
+2025-09-01 13:16:23,225 - INFO - Fetching weather data for Cape
+2025-09-01 13:16:34,289 - ERROR - Open-Meteo API error for Cape: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Max retries exceeded with url: /v1/forecast?latitude=28.392&longitude=-80.605&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000018E521DA600>: Failed to resolve 'api.open-meteo.com' ([Errno 11001] getaddrinfo failed)"))
+2025-09-01 13:16:34,289 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:16:34,293 - ERROR - Open-Meteo API error for Hawthorne: HTTPSConnectionPool(host='api.open-meteo.com', port=443): Max retries exceeded with url: /v1/forecast?latitude=33.916&longitude=-118.352&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x0000018E03C07920>: Failed to resolve 'api.open-meteo.com' ([Errno 11001] getaddrinfo failed)"))
+2025-09-01 13:16:34,425 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 13:16:34,472 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 13:16:34,514 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 13:16:34,518 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 13:16:34,523 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 13:16:34,590 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 13:16:34,597 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 13:16:35,539 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:35,547 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:35,605 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 13:16:35,609 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radarCalendar Unable to create cal from minifest Error: Failed to fetch
+2025-09-01 13:16:38,234 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:38,238 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:41,244 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:41,248 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:44,415 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:44,425 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:52,608 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:52,614 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:55,623 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:55,623 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:58,654 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:16:58,654 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:01,722 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:01,727 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:04,718 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:04,729 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:07,741 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:07,744 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:10,754 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:10,759 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:13,791 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:13,831 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:16,811 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:16,816 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:19,848 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:19,868 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:22,887 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:22,889 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:25,896 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:25,898 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:28,933 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:28,952 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:32,166 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:32,173 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:35,213 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:35,273 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:38,333 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:38,336 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:41,446 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:41,448 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:45,543 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:45,545 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:48,665 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:48,670 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:58,676 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:17:58,816 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:18:01,122 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:18:01,385 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 http EventSource error event for url=/blitz/sse?version=2, options={} [object Event]
+2025-09-01 13:25:18,565 - INFO - Fetching SpaceX launch data
+2025-09-01 13:25:21,067 - INFO - Successfully fetched and saved previous launches
+2025-09-01 13:25:23,902 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 13:25:23,902 - INFO - Fetching F1 data
+2025-09-01 13:25:25,370 - INFO - Successfully fetched and saved F1 data
+2025-09-01 13:25:26,372 - INFO - Fetching weather data for Starbase
+2025-09-01 13:25:27,153 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:25:28,155 - INFO - Fetching weather data for Vandy
+2025-09-01 13:25:28,917 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:25:29,919 - INFO - Fetching weather data for Cape
+2025-09-01 13:25:30,596 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:25:31,603 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:25:32,273 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:25:33,398 - WARNING - No WiFi interface detected on Windows
+2025-09-01 13:25:33,631 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 13:25:33,665 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-driver-bug-workarounds 
+ *  disable-gpu-sandbox 
+ *  disable-software-rasterizer 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-webgl 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-09-01 13:25:34,200 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 13:25:34,205 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 13:25:34,211 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 13:25:34,212 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 13:25:34,212 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 13:25:34,225 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 13:25:34,226 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 13:25:34,351 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 13:25:34,389 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 13:25:36,722 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-09-01 13:25:37,455 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-09-01 13:25:37,515 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-09-01 13:25:37,539 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-09-01 13:25:37,561 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-09-01 13:25:37,579 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-09-01 13:26:05,771 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 13:26:05,772 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 13:26:06,899 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 13:30:33,319 - INFO - Fetching weather data for Starbase
+2025-09-01 13:30:34,059 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:30:35,060 - INFO - Fetching weather data for Vandy
+2025-09-01 13:30:35,749 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:30:36,751 - INFO - Fetching weather data for Cape
+2025-09-01 13:30:37,386 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:30:38,386 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:30:39,081 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:35:33,319 - INFO - Fetching weather data for Starbase
+2025-09-01 13:35:34,032 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:35:35,034 - INFO - Fetching weather data for Vandy
+2025-09-01 13:35:35,668 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:35:36,669 - INFO - Fetching weather data for Cape
+2025-09-01 13:35:37,312 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:35:38,314 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:35:38,976 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:37:33,327 - INFO - Fetching SpaceX launch data
+2025-09-01 13:37:36,235 - INFO - Successfully fetched and saved previous launches
+2025-09-01 13:37:39,011 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 13:37:39,129 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 13:40:33,321 - INFO - Fetching weather data for Starbase
+2025-09-01 13:40:34,053 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:40:35,054 - INFO - Fetching weather data for Vandy
+2025-09-01 13:40:35,686 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:40:36,688 - INFO - Fetching weather data for Cape
+2025-09-01 13:40:37,369 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:40:38,371 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:40:39,098 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:45:33,334 - INFO - Fetching weather data for Starbase
+2025-09-01 13:45:34,240 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:45:35,243 - INFO - Fetching weather data for Vandy
+2025-09-01 13:45:35,983 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:45:36,985 - INFO - Fetching weather data for Cape
+2025-09-01 13:45:37,825 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:45:38,827 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:45:39,649 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:49:33,326 - INFO - Fetching SpaceX launch data
+2025-09-01 13:49:33,331 - INFO - Using persistent cached previous launches
+2025-09-01 13:49:33,340 - INFO - Using persistent cached upcoming launches
+2025-09-01 13:49:33,767 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 13:50:33,377 - INFO - Fetching weather data for Starbase
+2025-09-01 13:50:34,279 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:50:35,281 - INFO - Fetching weather data for Vandy
+2025-09-01 13:50:36,126 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:50:37,128 - INFO - Fetching weather data for Cape
+2025-09-01 13:50:37,961 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:50:38,979 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:50:39,907 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 13:55:33,349 - INFO - Fetching weather data for Starbase
+2025-09-01 13:55:34,198 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 13:55:35,203 - INFO - Fetching weather data for Vandy
+2025-09-01 13:55:36,050 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 13:55:37,056 - INFO - Fetching weather data for Cape
+2025-09-01 13:55:37,893 - INFO - Successfully fetched weather data for Cape
+2025-09-01 13:55:38,894 - INFO - Fetching weather data for Hawthorne
+2025-09-01 13:55:39,732 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:00:33,346 - INFO - Fetching weather data for Starbase
+2025-09-01 14:00:34,319 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:00:35,322 - INFO - Fetching weather data for Vandy
+2025-09-01 14:00:36,180 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:00:37,182 - INFO - Fetching weather data for Cape
+2025-09-01 14:00:38,031 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:00:39,034 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:00:39,723 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:01:33,347 - INFO - Fetching SpaceX launch data
+2025-09-01 14:01:35,709 - INFO - Successfully fetched and saved previous launches
+2025-09-01 14:01:41,624 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 14:01:42,039 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 14:05:33,362 - INFO - Fetching weather data for Starbase
+2025-09-01 14:05:34,268 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:05:35,270 - INFO - Fetching weather data for Vandy
+2025-09-01 14:05:36,013 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:05:37,015 - INFO - Fetching weather data for Cape
+2025-09-01 14:05:37,848 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:05:38,851 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:05:39,595 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:10:33,348 - INFO - Fetching weather data for Starbase
+2025-09-01 14:10:34,091 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:10:35,093 - INFO - Fetching weather data for Vandy
+2025-09-01 14:10:35,936 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:10:36,942 - INFO - Fetching weather data for Cape
+2025-09-01 14:10:37,695 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:10:38,697 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:10:39,412 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:13:33,345 - INFO - Fetching SpaceX launch data
+2025-09-01 14:13:35,838 - INFO - Successfully fetched and saved previous launches
+2025-09-01 14:13:38,629 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 14:13:38,927 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 14:15:33,362 - INFO - Fetching weather data for Starbase
+2025-09-01 14:15:34,225 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:15:35,231 - INFO - Fetching weather data for Vandy
+2025-09-01 14:15:36,032 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:15:37,038 - INFO - Fetching weather data for Cape
+2025-09-01 14:15:37,828 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:15:38,833 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:15:39,604 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:20:33,392 - INFO - Fetching weather data for Starbase
+2025-09-01 14:20:34,135 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:20:35,138 - INFO - Fetching weather data for Vandy
+2025-09-01 14:20:36,004 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:20:37,007 - INFO - Fetching weather data for Cape
+2025-09-01 14:20:37,710 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:20:38,716 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:20:39,411 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:25:33,405 - INFO - Fetching SpaceX launch data
+2025-09-01 14:25:35,988 - INFO - Successfully fetched and saved previous launches
+2025-09-01 14:25:39,089 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 14:25:39,223 - INFO - Fetching weather data for Starbase
+2025-09-01 14:25:39,891 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:25:40,893 - INFO - Fetching weather data for Vandy
+2025-09-01 14:25:41,561 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:25:42,563 - INFO - Fetching weather data for Cape
+2025-09-01 14:25:43,304 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:25:44,306 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:25:45,146 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:25:46,393 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 14:30:33,357 - INFO - Fetching weather data for Starbase
+2025-09-01 14:30:34,323 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:30:35,325 - INFO - Fetching weather data for Vandy
+2025-09-01 14:30:36,124 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:30:37,125 - INFO - Fetching weather data for Cape
+2025-09-01 14:30:37,906 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:30:38,909 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:30:39,631 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:35:33,495 - INFO - Fetching weather data for Starbase
+2025-09-01 14:35:34,248 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:35:35,251 - INFO - Fetching weather data for Vandy
+2025-09-01 14:35:36,084 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:35:37,088 - INFO - Fetching weather data for Cape
+2025-09-01 14:35:37,911 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:35:38,913 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:35:39,577 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:37:33,363 - INFO - Fetching SpaceX launch data
+2025-09-01 14:37:33,383 - INFO - Using persistent cached previous launches
+2025-09-01 14:37:33,388 - INFO - Using persistent cached upcoming launches
+2025-09-01 14:37:33,553 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 14:40:33,350 - INFO - Fetching weather data for Starbase
+2025-09-01 14:40:34,279 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:40:35,281 - INFO - Fetching weather data for Vandy
+2025-09-01 14:40:36,108 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:40:37,109 - INFO - Fetching weather data for Cape
+2025-09-01 14:40:37,861 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:40:38,868 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:40:39,611 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:44:52,803 - ERROR - [QT-QtWarningMsg] Retrying to obtain clipboard.
+2025-09-01 14:45:33,351 - INFO - Fetching weather data for Starbase
+2025-09-01 14:45:34,161 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:45:35,163 - INFO - Fetching weather data for Vandy
+2025-09-01 14:45:35,898 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:45:36,904 - INFO - Fetching weather data for Cape
+2025-09-01 14:45:37,542 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:45:38,544 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:45:39,385 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:49:33,351 - INFO - Fetching SpaceX launch data
+2025-09-01 14:49:36,089 - INFO - Successfully fetched and saved previous launches
+2025-09-01 14:49:38,727 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 14:49:38,893 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 14:50:33,356 - INFO - Fetching weather data for Starbase
+2025-09-01 14:50:34,080 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:50:35,081 - INFO - Fetching weather data for Vandy
+2025-09-01 14:50:35,686 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:50:36,695 - INFO - Fetching weather data for Cape
+2025-09-01 14:50:37,303 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:50:38,306 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:50:38,947 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 14:55:33,360 - INFO - Fetching weather data for Starbase
+2025-09-01 14:55:34,068 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 14:55:35,069 - INFO - Fetching weather data for Vandy
+2025-09-01 14:55:35,741 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 14:55:36,743 - INFO - Fetching weather data for Cape
+2025-09-01 14:55:37,349 - INFO - Successfully fetched weather data for Cape
+2025-09-01 14:55:38,350 - INFO - Fetching weather data for Hawthorne
+2025-09-01 14:55:38,969 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 15:00:33,351 - INFO - Fetching weather data for Starbase
+2025-09-01 15:00:33,995 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 15:00:34,996 - INFO - Fetching weather data for Vandy
+2025-09-01 15:00:35,669 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 15:00:36,671 - INFO - Fetching weather data for Cape
+2025-09-01 15:00:37,341 - INFO - Successfully fetched weather data for Cape
+2025-09-01 15:00:38,343 - INFO - Fetching weather data for Hawthorne
+2025-09-01 15:00:38,984 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 15:01:33,361 - INFO - Fetching SpaceX launch data
+2025-09-01 15:01:35,927 - INFO - Successfully fetched and saved previous launches
+2025-09-01 15:01:39,103 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 15:01:39,222 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 15:05:33,352 - INFO - Fetching weather data for Starbase
+2025-09-01 15:05:34,077 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 15:05:35,079 - INFO - Fetching weather data for Vandy
+2025-09-01 15:05:35,764 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 15:05:36,766 - INFO - Fetching weather data for Cape
+2025-09-01 15:05:37,390 - INFO - Successfully fetched weather data for Cape
+2025-09-01 15:05:38,391 - INFO - Fetching weather data for Hawthorne
+2025-09-01 15:05:39,075 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 15:10:33,357 - INFO - Fetching weather data for Starbase
+2025-09-01 15:10:33,995 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 15:10:34,996 - INFO - Fetching weather data for Vandy
+2025-09-01 15:10:35,670 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 15:10:36,672 - INFO - Fetching weather data for Cape
+2025-09-01 15:10:37,292 - INFO - Successfully fetched weather data for Cape
+2025-09-01 15:10:38,293 - INFO - Fetching weather data for Hawthorne
+2025-09-01 15:10:38,919 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 15:11:53,502 - ERROR - [QT-QtWarningMsg] Retrying to obtain clipboard.
+2025-09-01 15:13:33,355 - INFO - Fetching SpaceX launch data
+2025-09-01 15:13:33,357 - INFO - Using persistent cached previous launches
+2025-09-01 15:13:33,357 - INFO - Using persistent cached upcoming launches
+2025-09-01 15:13:33,407 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 19:40:16,037 - INFO - Fetching SpaceX launch data
+2025-09-01 19:40:18,635 - INFO - Successfully fetched and saved previous launches
+2025-09-01 19:40:21,075 - INFO - Successfully fetched and saved upcoming launches
+2025-09-01 19:40:21,075 - INFO - Fetching F1 data
+2025-09-01 19:40:22,561 - INFO - Successfully fetched and saved F1 data
+2025-09-01 19:40:23,565 - INFO - Fetching weather data for Starbase
+2025-09-01 19:40:24,271 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 19:40:25,272 - INFO - Fetching weather data for Vandy
+2025-09-01 19:40:25,878 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 19:40:26,881 - INFO - Fetching weather data for Cape
+2025-09-01 19:40:27,562 - INFO - Successfully fetched weather data for Cape
+2025-09-01 19:40:28,566 - INFO - Fetching weather data for Hawthorne
+2025-09-01 19:40:29,187 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 19:40:30,335 - WARNING - No WiFi interface detected on Windows
+2025-09-01 19:40:30,595 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 19:40:30,640 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-driver-bug-workarounds 
+ *  disable-gpu-sandbox 
+ *  disable-software-rasterizer 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-webgl 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-09-01 19:40:30,934 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 19:40:30,941 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 19:40:30,947 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 19:40:30,948 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 19:40:30,948 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 19:40:30,966 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 19:40:30,966 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 19:40:31,088 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 19:40:31,121 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 19:40:32,026 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar WebGL context creation error: disabled by enterprise policy or commandline switch undefined
+2025-09-01 19:40:32,027 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar WebGL context creation error: disabled by enterprise policy or commandline switch undefined
+2025-09-01 19:40:32,027 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar WebGL context creation error: disabled by enterprise policy or commandline switch undefined
+2025-09-01 19:40:32,028 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar WebGL context creation error: disabled by enterprise policy or commandline switch undefined
+2025-09-01 19:40:32,030 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar Crashed browser undefined
+2025-09-01 19:40:32,031 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 radar Crashed browser undefined
+2025-09-01 19:40:38,135 - ERROR - [QT-QtDebugMsg] inline.qml:237 WebEngineView loaded successfully for radar
+2025-09-01 19:40:38,223 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 TileRenderer Canvas context creation error: disabled by enterprise policy or commandline switch, overlay=wind, poi=favs undefined
+2025-09-01 19:40:38,223 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 TileRenderer Canvas context creation error: disabled by enterprise policy or commandline switch, overlay=wind, poi=favs undefined
+2025-09-01 19:40:38,225 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 TileRenderer Canvas context creation error: disabled by enterprise policy or commandline switch, overlay=wind, poi=favs undefined
+2025-09-01 19:40:38,225 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 TileRenderer Canvas context creation error: disabled by enterprise policy or commandline switch, overlay=wind, poi=favs undefined
+2025-09-01 19:40:38,484 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 plugin Failed to load/resolve dependencies: legacy-tile-render Error: DI error: Module layers not defined. Required by: @plugins/legacy-tile-render
+2025-09-01 19:40:38,484 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 plugin Failed to load/resolve dependencies: legacy-tile-render Error: DI error: Module layers not defined. Required by: @plugins/legacy-tile-render
+2025-09-01 19:40:38,485 - ERROR - [QT-QtCriticalMsg] https://embed.windy.com/v/41.1.0.emb.4d73/embed2.js:1 Uncaught (in promise) Error: DI error: Module layers not defined. Required by: @plugins/legacy-tile-render
+2025-09-01 19:40:39,776 - ERROR - QML warning: inline.qml:925: TypeError: Cannot call method 'getWifiInterfaceInfo' of null
+2025-09-01 19:40:39,776 - ERROR - [QT-QtWarningMsg] inline.qml:925 inline.qml:925: TypeError: Cannot call method 'getWifiInterfaceInfo' of null
+2025-09-01 19:40:39,777 - ERROR - QML warning: inline.qml:934: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,777 - ERROR - [QT-QtWarningMsg] inline.qml:934 inline.qml:934: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,777 - ERROR - QML warning: inline.qml:913: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,777 - ERROR - [QT-QtWarningMsg] inline.qml:913 inline.qml:913: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,777 - ERROR - QML warning: inline.qml:813: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,778 - ERROR - [QT-QtWarningMsg] inline.qml:813 inline.qml:813: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,778 - ERROR - QML warning: inline.qml:715: TypeError: Cannot read property 'wifiNetworks' of null
+2025-09-01 19:40:39,778 - ERROR - [QT-QtWarningMsg] inline.qml:715 inline.qml:715: TypeError: Cannot read property 'wifiNetworks' of null
+2025-09-01 19:40:39,778 - ERROR - QML warning: inline.qml:670: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:40:39,779 - ERROR - [QT-QtWarningMsg] inline.qml:670 inline.qml:670: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:40:39,779 - ERROR - QML warning: inline.qml:673: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:40:39,779 - ERROR - [QT-QtWarningMsg] inline.qml:673 inline.qml:673: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:40:39,779 - ERROR - QML warning: inline.qml:648: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,779 - ERROR - [QT-QtWarningMsg] inline.qml:648 inline.qml:648: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,780 - ERROR - QML warning: inline.qml:640: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,780 - ERROR - [QT-QtWarningMsg] inline.qml:640 inline.qml:640: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,780 - ERROR - QML warning: inline.qml:641: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,780 - ERROR - [QT-QtWarningMsg] inline.qml:641 inline.qml:641: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,780 - ERROR - QML warning: inline.qml:633: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,780 - ERROR - [QT-QtWarningMsg] inline.qml:633 inline.qml:633: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,781 - ERROR - QML warning: inline.qml:636: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,781 - ERROR - [QT-QtWarningMsg] inline.qml:636 inline.qml:636: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,782 - ERROR - QML warning: inline.qml:625: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,782 - ERROR - [QT-QtWarningMsg] inline.qml:625 inline.qml:625: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,782 - ERROR - QML warning: inline.qml:617: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,782 - ERROR - [QT-QtWarningMsg] inline.qml:617 inline.qml:617: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,782 - ERROR - QML warning: inline.qml:555: TypeError: Cannot read property 'countdown' of null
+2025-09-01 19:40:39,783 - ERROR - [QT-QtWarningMsg] inline.qml:555 inline.qml:555: TypeError: Cannot read property 'countdown' of null
+2025-09-01 19:40:39,783 - ERROR - QML warning: inline.qml:555: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,783 - ERROR - [QT-QtWarningMsg] inline.qml:555 inline.qml:555: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,783 - ERROR - QML warning: inline.qml:548: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,783 - ERROR - [QT-QtWarningMsg] inline.qml:548 inline.qml:548: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,784 - ERROR - QML warning: inline.qml:531: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,784 - ERROR - [QT-QtWarningMsg] inline.qml:531 inline.qml:531: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,784 - ERROR - QML warning: inline.qml:515: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,784 - ERROR - [QT-QtWarningMsg] inline.qml:515 inline.qml:515: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,784 - ERROR - QML warning: inline.qml:518: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,784 - ERROR - [QT-QtWarningMsg] inline.qml:518 inline.qml:518: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:40:39,784 - ERROR - QML warning: inline.qml:511: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,784 - ERROR - [QT-QtWarningMsg] inline.qml:511 inline.qml:511: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,785 - ERROR - QML warning: inline.qml:502: TypeError: Cannot read property 'weather' of null
+2025-09-01 19:40:39,785 - ERROR - [QT-QtWarningMsg] inline.qml:502 inline.qml:502: TypeError: Cannot read property 'weather' of null
+2025-09-01 19:40:39,785 - ERROR - QML warning: inline.qml:502: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,785 - ERROR - [QT-QtWarningMsg] inline.qml:502 inline.qml:502: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,785 - ERROR - QML warning: inline.qml:501: TypeError: Cannot read property 'currentTime' of null
+2025-09-01 19:40:39,785 - ERROR - [QT-QtWarningMsg] inline.qml:501 inline.qml:501: TypeError: Cannot read property 'currentTime' of null
+2025-09-01 19:40:39,786 - ERROR - QML warning: inline.qml:501: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,786 - ERROR - [QT-QtWarningMsg] inline.qml:501 inline.qml:501: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,786 - ERROR - QML warning: inline.qml:494: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,786 - ERROR - [QT-QtWarningMsg] inline.qml:494 inline.qml:494: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,786 - ERROR - QML warning: inline.qml:464: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,787 - ERROR - [QT-QtWarningMsg] inline.qml:464 inline.qml:464: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,787 - ERROR - QML warning: inline.qml:453: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,787 - ERROR - [QT-QtWarningMsg] inline.qml:453 inline.qml:453: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,787 - ERROR - QML warning: inline.qml:410: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,787 - ERROR - [QT-QtWarningMsg] inline.qml:410 inline.qml:410: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,787 - ERROR - QML warning: inline.qml:353: TypeError: Cannot read property 'eventModel' of null
+2025-09-01 19:40:39,787 - ERROR - [QT-QtWarningMsg] inline.qml:353 inline.qml:353: TypeError: Cannot read property 'eventModel' of null
+2025-09-01 19:40:39,788 - ERROR - QML warning: inline.qml:345: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,788 - ERROR - [QT-QtWarningMsg] inline.qml:345 inline.qml:345: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,788 - ERROR - QML warning: inline.qml:337: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,788 - ERROR - [QT-QtWarningMsg] inline.qml:337 inline.qml:337: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,788 - ERROR - QML warning: inline.qml:289: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,788 - ERROR - [QT-QtWarningMsg] inline.qml:289 inline.qml:289: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,789 - ERROR - QML warning: inline.qml:269: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,790 - ERROR - [QT-QtWarningMsg] inline.qml:269 inline.qml:269: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,791 - ERROR - QML warning: inline.qml:270: TypeError: Cannot read property 'raceCalendar' of null
+2025-09-01 19:40:39,792 - ERROR - [QT-QtWarningMsg] inline.qml:270 inline.qml:270: TypeError: Cannot read property 'raceCalendar' of null
+2025-09-01 19:40:39,792 - ERROR - QML warning: inline.qml:202: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,792 - ERROR - [QT-QtWarningMsg] inline.qml:202 inline.qml:202: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,793 - ERROR - QML warning: inline.qml:190: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,793 - ERROR - [QT-QtWarningMsg] inline.qml:190 inline.qml:190: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,793 - ERROR - QML warning: inline.qml:169: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,794 - ERROR - [QT-QtWarningMsg] inline.qml:169 inline.qml:169: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,794 - ERROR - QML warning: inline.qml:170: TypeError: Cannot read property 'driverStandings' of null
+2025-09-01 19:40:39,794 - ERROR - [QT-QtWarningMsg] inline.qml:170 inline.qml:170: TypeError: Cannot read property 'driverStandings' of null
+2025-09-01 19:40:39,794 - ERROR - QML warning: inline.qml:69: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,794 - ERROR - [QT-QtWarningMsg] inline.qml:69 inline.qml:69: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,794 - ERROR - QML warning: inline.qml:70: TypeError: Cannot read property 'launchTrendsMonths' of null
+2025-09-01 19:40:39,794 - ERROR - [QT-QtWarningMsg] inline.qml:70 inline.qml:70: TypeError: Cannot read property 'launchTrendsMonths' of null
+2025-09-01 19:40:39,796 - ERROR - QML warning: inline.qml:68: TypeError: Cannot read property 'launchTrendsSeries' of null
+2025-09-01 19:40:39,796 - ERROR - [QT-QtWarningMsg] inline.qml:68 inline.qml:68: TypeError: Cannot read property 'launchTrendsSeries' of null
+2025-09-01 19:40:39,796 - ERROR - QML warning: inline.qml:59: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,797 - ERROR - [QT-QtWarningMsg] inline.qml:59 inline.qml:59: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,797 - ERROR - QML warning: inline.qml:45: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,797 - ERROR - [QT-QtWarningMsg] inline.qml:45 inline.qml:45: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,797 - ERROR - QML warning: inline.qml:37: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,797 - ERROR - [QT-QtWarningMsg] inline.qml:37 inline.qml:37: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,797 - ERROR - QML warning: inline.qml:16: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,797 - ERROR - [QT-QtWarningMsg] inline.qml:16 inline.qml:16: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,797 - ERROR - QML warning: inline.qml:20: TypeError: Cannot call method 'get_next_race' of null
+2025-09-01 19:40:39,798 - ERROR - [QT-QtWarningMsg] inline.qml:20 inline.qml:20: TypeError: Cannot call method 'get_next_race' of null
+2025-09-01 19:40:39,798 - ERROR - QML warning: inline.qml:947: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,798 - ERROR - [QT-QtWarningMsg] inline.qml:947 inline.qml:947: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,798 - ERROR - QML warning: inline.qml:953: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,798 - ERROR - [QT-QtWarningMsg] inline.qml:953 inline.qml:953: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,799 - ERROR - QML warning: inline.qml:930: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,799 - ERROR - [QT-QtWarningMsg] inline.qml:930 inline.qml:930: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,799 - ERROR - QML warning: inline.qml:929: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,799 - ERROR - [QT-QtWarningMsg] inline.qml:929 inline.qml:929: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,799 - ERROR - QML warning: inline.qml:902: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,800 - ERROR - [QT-QtWarningMsg] inline.qml:902 inline.qml:902: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,800 - ERROR - QML warning: inline.qml:900: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,800 - ERROR - [QT-QtWarningMsg] inline.qml:900 inline.qml:900: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,800 - ERROR - QML warning: inline.qml:847: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,801 - ERROR - [QT-QtWarningMsg] inline.qml:847 inline.qml:847: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,801 - ERROR - QML warning: inline.qml:853: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,801 - ERROR - [QT-QtWarningMsg] inline.qml:853 inline.qml:853: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,801 - ERROR - QML warning: inline.qml:828: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,802 - ERROR - [QT-QtWarningMsg] inline.qml:828 inline.qml:828: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,802 - ERROR - QML warning: inline.qml:827: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,802 - ERROR - [QT-QtWarningMsg] inline.qml:827 inline.qml:827: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,802 - ERROR - QML warning: inline.qml:802: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,802 - ERROR - [QT-QtWarningMsg] inline.qml:802 inline.qml:802: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,803 - ERROR - QML warning: inline.qml:800: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,803 - ERROR - [QT-QtWarningMsg] inline.qml:800 inline.qml:800: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,803 - ERROR - QML warning: inline.qml:698: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,803 - ERROR - [QT-QtWarningMsg] inline.qml:698 inline.qml:698: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - QML warning: inline.qml:704: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - [QT-QtWarningMsg] inline.qml:704 inline.qml:704: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - QML warning: inline.qml:677: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - [QT-QtWarningMsg] inline.qml:677 inline.qml:677: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - QML warning: inline.qml:683: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,804 - ERROR - [QT-QtWarningMsg] inline.qml:683 inline.qml:683: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - QML warning: inline.qml:604: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - [QT-QtWarningMsg] inline.qml:604 inline.qml:604: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - QML warning: inline.qml:602: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - [QT-QtWarningMsg] inline.qml:602 inline.qml:602: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - QML warning: inline.qml:579: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,805 - ERROR - [QT-QtWarningMsg] inline.qml:579 inline.qml:579: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,806 - ERROR - QML warning: inline.qml:580: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,806 - ERROR - [QT-QtWarningMsg] inline.qml:580 inline.qml:580: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,806 - ERROR - QML warning: inline.qml:578: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,807 - ERROR - [QT-QtWarningMsg] inline.qml:578 inline.qml:578: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,807 - ERROR - QML warning: inline.qml:579: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,807 - ERROR - [QT-QtWarningMsg] inline.qml:579 inline.qml:579: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,807 - ERROR - QML warning: inline.qml:580: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - [QT-QtWarningMsg] inline.qml:580 inline.qml:580: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - QML warning: inline.qml:578: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - [QT-QtWarningMsg] inline.qml:578 inline.qml:578: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - QML warning: inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - [QT-QtWarningMsg] inline.qml:565 inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,808 - ERROR - QML warning: inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,809 - ERROR - [QT-QtWarningMsg] inline.qml:566 inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,809 - ERROR - QML warning: inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,809 - ERROR - [QT-QtWarningMsg] inline.qml:564 inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,809 - ERROR - QML warning: inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,809 - ERROR - [QT-QtWarningMsg] inline.qml:565 inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,809 - ERROR - QML warning: inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,809 - ERROR - [QT-QtWarningMsg] inline.qml:566 inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,810 - ERROR - QML warning: inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,810 - ERROR - [QT-QtWarningMsg] inline.qml:564 inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,810 - ERROR - QML warning: inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,810 - ERROR - [QT-QtWarningMsg] inline.qml:565 inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,810 - ERROR - QML warning: inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,810 - ERROR - [QT-QtWarningMsg] inline.qml:566 inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,810 - ERROR - QML warning: inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,811 - ERROR - [QT-QtWarningMsg] inline.qml:564 inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,811 - ERROR - QML warning: inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,811 - ERROR - [QT-QtWarningMsg] inline.qml:565 inline.qml:565: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,811 - ERROR - QML warning: inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,811 - ERROR - [QT-QtWarningMsg] inline.qml:566 inline.qml:566: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,811 - ERROR - QML warning: inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,811 - ERROR - [QT-QtWarningMsg] inline.qml:564 inline.qml:564: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,812 - ERROR - QML warning: inline.qml:432: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,812 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,812 - ERROR - QML warning: inline.qml:429: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:40:39,812 - ERROR - [QT-QtWarningMsg] inline.qml:429 inline.qml:429: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:40:39,812 - ERROR - QML warning: inline.qml:439: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,812 - ERROR - [QT-QtWarningMsg] inline.qml:439 inline.qml:439: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,813 - ERROR - QML warning: inline.qml:432: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,813 - ERROR - [QT-QtWarningMsg] inline.qml:432 inline.qml:432: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,813 - ERROR - QML warning: inline.qml:429: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:40:39,813 - ERROR - [QT-QtWarningMsg] inline.qml:429 inline.qml:429: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:40:39,813 - ERROR - QML warning: inline.qml:439: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,813 - ERROR - [QT-QtWarningMsg] inline.qml:439 inline.qml:439: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,813 - ERROR - QML warning: inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - [QT-QtWarningMsg] inline.qml:398 inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - QML warning: inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,814 - ERROR - [QT-QtWarningMsg] inline.qml:391 inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,814 - ERROR - QML warning: inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - [QT-QtWarningMsg] inline.qml:377 inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,814 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,815 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,816 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,817 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - QML warning: inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - [QT-QtWarningMsg] inline.qml:315 inline.qml:315: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - QML warning: inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - [QT-QtWarningMsg] inline.qml:322 inline.qml:322: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,818 - ERROR - QML warning: inline.qml:221: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,819 - ERROR - [QT-QtWarningMsg] inline.qml:221 inline.qml:221: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,819 - ERROR - QML warning: inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,819 - ERROR - [QT-QtWarningMsg] inline.qml:143 inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,819 - ERROR - QML warning: inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:40:39,819 - ERROR - [QT-QtWarningMsg] inline.qml:140 inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:40:39,819 - ERROR - QML warning: inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,819 - ERROR - [QT-QtWarningMsg] inline.qml:150 inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,820 - ERROR - QML warning: inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,820 - ERROR - [QT-QtWarningMsg] inline.qml:143 inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,820 - ERROR - QML warning: inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:40:39,820 - ERROR - [QT-QtWarningMsg] inline.qml:140 inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:40:39,820 - ERROR - QML warning: inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,820 - ERROR - [QT-QtWarningMsg] inline.qml:150 inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,820 - ERROR - QML warning: inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,821 - ERROR - [QT-QtWarningMsg] inline.qml:101 inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,821 - ERROR - QML warning: inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,821 - ERROR - [QT-QtWarningMsg] inline.qml:98 inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,821 - ERROR - QML warning: inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,821 - ERROR - [QT-QtWarningMsg] inline.qml:108 inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,821 - ERROR - QML warning: inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,822 - ERROR - [QT-QtWarningMsg] inline.qml:101 inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,822 - ERROR - QML warning: inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,822 - ERROR - [QT-QtWarningMsg] inline.qml:98 inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:40:39,822 - ERROR - QML warning: inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,822 - ERROR - [QT-QtWarningMsg] inline.qml:108 inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,822 - ERROR - QML warning: inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,822 - ERROR - [QT-QtWarningMsg] inline.qml:398 inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,823 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,823 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,823 - ERROR - QML warning: inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,823 - ERROR - [QT-QtWarningMsg] inline.qml:391 inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,823 - ERROR - QML warning: inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,823 - ERROR - [QT-QtWarningMsg] inline.qml:377 inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,823 - ERROR - QML warning: inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,824 - ERROR - [QT-QtWarningMsg] inline.qml:375 inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,824 - ERROR - QML warning: inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,824 - ERROR - [QT-QtWarningMsg] inline.qml:361 inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,824 - ERROR - QML warning: inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,824 - ERROR - [QT-QtWarningMsg] inline.qml:359 inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,824 - ERROR - QML warning: inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,824 - ERROR - [QT-QtWarningMsg] inline.qml:398 inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,824 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,825 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,825 - ERROR - QML warning: inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,825 - ERROR - [QT-QtWarningMsg] inline.qml:391 inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,825 - ERROR - QML warning: inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,825 - ERROR - [QT-QtWarningMsg] inline.qml:377 inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,825 - ERROR - QML warning: inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,826 - ERROR - [QT-QtWarningMsg] inline.qml:375 inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,826 - ERROR - QML warning: inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,826 - ERROR - [QT-QtWarningMsg] inline.qml:361 inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,826 - ERROR - QML warning: inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,826 - ERROR - [QT-QtWarningMsg] inline.qml:359 inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,826 - ERROR - QML warning: inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,826 - ERROR - [QT-QtWarningMsg] inline.qml:398 inline.qml:398: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,827 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,827 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,827 - ERROR - QML warning: inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,827 - ERROR - [QT-QtWarningMsg] inline.qml:391 inline.qml:391: TypeError: Cannot read property 'location' of null
+2025-09-01 19:40:39,827 - ERROR - QML warning: inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,827 - ERROR - [QT-QtWarningMsg] inline.qml:377 inline.qml:377: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,827 - ERROR - QML warning: inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,828 - ERROR - [QT-QtWarningMsg] inline.qml:375 inline.qml:375: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,828 - ERROR - QML warning: inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,828 - ERROR - [QT-QtWarningMsg] inline.qml:361 inline.qml:361: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:40:39,828 - ERROR - QML warning: inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:40:39,828 - ERROR - [QT-QtWarningMsg] inline.qml:359 inline.qml:359:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:16,381 - INFO - Fetching SpaceX launch data
+2025-09-01 19:42:16,381 - INFO - Using persistent cached previous launches
+2025-09-01 19:42:16,382 - INFO - Using persistent cached upcoming launches
+2025-09-01 19:42:16,382 - INFO - Fetching F1 data
+2025-09-01 19:42:16,383 - INFO - Using persistent cached F1 data
+2025-09-01 19:42:16,383 - INFO - Fetching weather data for Starbase
+2025-09-01 19:42:17,073 - INFO - Successfully fetched weather data for Starbase
+2025-09-01 19:42:18,073 - INFO - Fetching weather data for Vandy
+2025-09-01 19:42:18,705 - INFO - Successfully fetched weather data for Vandy
+2025-09-01 19:42:19,706 - INFO - Fetching weather data for Cape
+2025-09-01 19:42:20,380 - INFO - Successfully fetched weather data for Cape
+2025-09-01 19:42:21,381 - INFO - Fetching weather data for Hawthorne
+2025-09-01 19:42:22,061 - INFO - Successfully fetched weather data for Hawthorne
+2025-09-01 19:42:23,190 - WARNING - No WiFi interface detected on Windows
+2025-09-01 19:42:23,428 - ERROR - [QT-QtInfoMsg] Sandboxing disabled by user.
+2025-09-01 19:42:23,465 - ERROR - [QT-QtDebugMsg] 
+Chromium GL Backend: angle
+Chromium ANGLE Backend: d3d11
+Chromium Vulkan Backend: disabled
+
+QSG RHI Backend: OpenGL
+QSG RHI Backend Supported: yes
+QSG RHI Device: Intel(R) Iris(R) Xe Graphics
+QSG RHI GPU Vendor: Intel
+
+Using Shared GL: no
+
+Init Parameters:
+ *  allow-running-insecure-content 
+ *  application-name python
+ *  browser-subprocess-path C:\Users\harri\PycharmProjects\spacex-dashboard\.venv\Lib\site-packages\PyQt6\Qt6\bin\QtWebEngineProcess.exe
+ *  disable-blink-features WebOTP
+ *  disable-features EyeDropper,BackgroundFetch,InstalledApp,WebOTP,WebPayments,WebUSB,StandardCompliantNonSpecialSchemeURLParsing
+ *  disable-gpu-driver-bug-workarounds 
+ *  disable-gpu-sandbox 
+ *  disable-software-rasterizer 
+ *  disable-speech-api 
+ *  disable-web-security 
+ *  enable-accelerated-video-decode 
+ *  enable-features NetworkServiceInProcess2,TracingServiceInProcess
+ *  enable-gpu 
+ *  enable-webgl 
+ *  ignore-gpu-blocklist 
+ *  in-process-gpu 
+ *  no-sandbox 
+ *  touch-events auto
+ *  use-gl angle
+
+2025-09-01 19:42:23,931 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="8514oem", stylename=Solid, pointsize=12, pixelsize=20, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("8514oem", lfWidth=0, lfHeight=-20) dpi=96
+2025-09-01 19:42:23,937 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Fixedsys", stylename=Solid, pointsize=12, pixelsize=15, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Fixedsys", lfWidth=0, lfHeight=-15) dpi=96
+2025-09-01 19:42:23,941 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="Modern", stylename=Solid, pointsize=12, pixelsize=82, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("Modern", lfWidth=0, lfHeight=-82) dpi=96
+2025-09-01 19:42:23,943 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 19:42:23,944 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=12, pixelsize=16, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-16) dpi=96
+2025-09-01 19:42:23,956 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Sans Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Sans Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 19:42:23,957 - ERROR - [QT-QtWarningMsg] DirectWrite: CreateFontFaceFromHDC() failed (Indicates an error in an input file such as a font file.) for QFontDef(Family="MS Serif", stylename=Solid, pointsize=10.5, pixelsize=13, styleHint=5, weight=400, stretch=100, hintingPreference=0) LOGFONT("MS Serif", lfWidth=0, lfHeight=-13) dpi=96
+2025-09-01 19:42:24,092 - ERROR - [QT-QtWarningMsg] QBasicTimer::stop: Failed. Possibly trying to stop from a different thread
+2025-09-01 19:42:24,129 - ERROR - [QT-QtDebugMsg] inline.qml:209 SwipeView completed, count: 6
+2025-09-01 19:42:26,584 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for radar
+2025-09-01 19:42:27,278 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for gust
+2025-09-01 19:42:27,283 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for pressure
+2025-09-01 19:42:27,295 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for clouds
+2025-09-01 19:42:27,295 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for temp
+2025-09-01 19:42:27,305 - ERROR - [QT-QtDebugMsg] inline.qml:236 WebEngineView loaded successfully for wind
+2025-09-01 19:42:29,195 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 19:42:29,196 - ERROR - [QT-QtWarningMsg] https://embed.windy.com/v/41.1.0.emb.4d73/plugins/lightnings.js:1 The AudioContext was not allowed to start. It must be resumed (or created) after a user gesture on the page. https://goo.gl/7K7WLu
+2025-09-01 19:42:33,698 - ERROR - QML warning: inline.qml:917: TypeError: Cannot call method 'getWifiInterfaceInfo' of null
+2025-09-01 19:42:33,699 - ERROR - [QT-QtWarningMsg] inline.qml:917 inline.qml:917: TypeError: Cannot call method 'getWifiInterfaceInfo' of null
+2025-09-01 19:42:33,700 - ERROR - QML warning: inline.qml:926: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,700 - ERROR - [QT-QtWarningMsg] inline.qml:926 inline.qml:926: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,701 - ERROR - QML warning: inline.qml:905: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,701 - ERROR - [QT-QtWarningMsg] inline.qml:905 inline.qml:905: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,701 - ERROR - QML warning: inline.qml:805: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,701 - ERROR - [QT-QtWarningMsg] inline.qml:805 inline.qml:805: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,702 - ERROR - QML warning: inline.qml:707: TypeError: Cannot read property 'wifiNetworks' of null
+2025-09-01 19:42:33,702 - ERROR - [QT-QtWarningMsg] inline.qml:707 inline.qml:707: TypeError: Cannot read property 'wifiNetworks' of null
+2025-09-01 19:42:33,702 - ERROR - QML warning: inline.qml:662: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:42:33,702 - ERROR - [QT-QtWarningMsg] inline.qml:662 inline.qml:662: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:42:33,702 - ERROR - QML warning: inline.qml:665: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:42:33,702 - ERROR - [QT-QtWarningMsg] inline.qml:665 inline.qml:665: TypeError: Cannot read property 'wifiConnecting' of null
+2025-09-01 19:42:33,703 - ERROR - QML warning: inline.qml:640: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,703 - ERROR - [QT-QtWarningMsg] inline.qml:640 inline.qml:640: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,703 - ERROR - QML warning: inline.qml:632: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,703 - ERROR - [QT-QtWarningMsg] inline.qml:632 inline.qml:632: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,704 - ERROR - QML warning: inline.qml:633: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,705 - ERROR - [QT-QtWarningMsg] inline.qml:633 inline.qml:633: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,705 - ERROR - QML warning: inline.qml:625: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,705 - ERROR - [QT-QtWarningMsg] inline.qml:625 inline.qml:625: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,705 - ERROR - QML warning: inline.qml:628: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,705 - ERROR - [QT-QtWarningMsg] inline.qml:628 inline.qml:628: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,706 - ERROR - QML warning: inline.qml:617: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,706 - ERROR - [QT-QtWarningMsg] inline.qml:617 inline.qml:617: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,706 - ERROR - QML warning: inline.qml:609: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,706 - ERROR - [QT-QtWarningMsg] inline.qml:609 inline.qml:609: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,706 - ERROR - QML warning: inline.qml:547: TypeError: Cannot read property 'countdown' of null
+2025-09-01 19:42:33,707 - ERROR - [QT-QtWarningMsg] inline.qml:547 inline.qml:547: TypeError: Cannot read property 'countdown' of null
+2025-09-01 19:42:33,707 - ERROR - QML warning: inline.qml:547: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,707 - ERROR - [QT-QtWarningMsg] inline.qml:547 inline.qml:547: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,707 - ERROR - QML warning: inline.qml:540: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,707 - ERROR - [QT-QtWarningMsg] inline.qml:540 inline.qml:540: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,707 - ERROR - QML warning: inline.qml:523: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,708 - ERROR - [QT-QtWarningMsg] inline.qml:523 inline.qml:523: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,708 - ERROR - QML warning: inline.qml:507: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,708 - ERROR - [QT-QtWarningMsg] inline.qml:507 inline.qml:507: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,708 - ERROR - QML warning: inline.qml:510: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,708 - ERROR - [QT-QtWarningMsg] inline.qml:510 inline.qml:510: TypeError: Cannot read property 'wifiConnected' of null
+2025-09-01 19:42:33,708 - ERROR - QML warning: inline.qml:503: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,708 - ERROR - [QT-QtWarningMsg] inline.qml:503 inline.qml:503: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,708 - ERROR - QML warning: inline.qml:494: TypeError: Cannot read property 'weather' of null
+2025-09-01 19:42:33,708 - ERROR - [QT-QtWarningMsg] inline.qml:494 inline.qml:494: TypeError: Cannot read property 'weather' of null
+2025-09-01 19:42:33,709 - ERROR - QML warning: inline.qml:494: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,709 - ERROR - [QT-QtWarningMsg] inline.qml:494 inline.qml:494: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,709 - ERROR - QML warning: inline.qml:493: TypeError: Cannot read property 'currentTime' of null
+2025-09-01 19:42:33,709 - ERROR - [QT-QtWarningMsg] inline.qml:493 inline.qml:493: TypeError: Cannot read property 'currentTime' of null
+2025-09-01 19:42:33,710 - ERROR - QML warning: inline.qml:493: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,710 - ERROR - [QT-QtWarningMsg] inline.qml:493 inline.qml:493: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,710 - ERROR - QML warning: inline.qml:486: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,710 - ERROR - [QT-QtWarningMsg] inline.qml:486 inline.qml:486: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,710 - ERROR - QML warning: inline.qml:463: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,711 - ERROR - [QT-QtWarningMsg] inline.qml:463 inline.qml:463: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,711 - ERROR - QML warning: inline.qml:452: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,711 - ERROR - [QT-QtWarningMsg] inline.qml:452 inline.qml:452: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,711 - ERROR - QML warning: inline.qml:409: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,711 - ERROR - [QT-QtWarningMsg] inline.qml:409 inline.qml:409: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,712 - ERROR - QML warning: inline.qml:352: TypeError: Cannot read property 'eventModel' of null
+2025-09-01 19:42:33,712 - ERROR - [QT-QtWarningMsg] inline.qml:352 inline.qml:352: TypeError: Cannot read property 'eventModel' of null
+2025-09-01 19:42:33,712 - ERROR - QML warning: inline.qml:344: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,713 - ERROR - [QT-QtWarningMsg] inline.qml:344 inline.qml:344: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,713 - ERROR - QML warning: inline.qml:336: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,713 - ERROR - [QT-QtWarningMsg] inline.qml:336 inline.qml:336: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,713 - ERROR - QML warning: inline.qml:288: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,713 - ERROR - [QT-QtWarningMsg] inline.qml:288 inline.qml:288: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,713 - ERROR - QML warning: inline.qml:268: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,713 - ERROR - [QT-QtWarningMsg] inline.qml:268 inline.qml:268: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,715 - ERROR - QML warning: inline.qml:269: TypeError: Cannot read property 'raceCalendar' of null
+2025-09-01 19:42:33,715 - ERROR - [QT-QtWarningMsg] inline.qml:269 inline.qml:269: TypeError: Cannot read property 'raceCalendar' of null
+2025-09-01 19:42:33,716 - ERROR - QML warning: inline.qml:202: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,716 - ERROR - [QT-QtWarningMsg] inline.qml:202 inline.qml:202: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,717 - ERROR - QML warning: inline.qml:190: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,717 - ERROR - [QT-QtWarningMsg] inline.qml:190 inline.qml:190: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,717 - ERROR - QML warning: inline.qml:169: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,717 - ERROR - [QT-QtWarningMsg] inline.qml:169 inline.qml:169: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,718 - ERROR - QML warning: inline.qml:170: TypeError: Cannot read property 'driverStandings' of null
+2025-09-01 19:42:33,719 - ERROR - [QT-QtWarningMsg] inline.qml:170 inline.qml:170: TypeError: Cannot read property 'driverStandings' of null
+2025-09-01 19:42:33,719 - ERROR - QML warning: inline.qml:69: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,719 - ERROR - [QT-QtWarningMsg] inline.qml:69 inline.qml:69: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,720 - ERROR - QML warning: inline.qml:70: TypeError: Cannot read property 'launchTrendsMonths' of null
+2025-09-01 19:42:33,720 - ERROR - [QT-QtWarningMsg] inline.qml:70 inline.qml:70: TypeError: Cannot read property 'launchTrendsMonths' of null
+2025-09-01 19:42:33,720 - ERROR - QML warning: inline.qml:68: TypeError: Cannot read property 'launchTrendsSeries' of null
+2025-09-01 19:42:33,720 - ERROR - [QT-QtWarningMsg] inline.qml:68 inline.qml:68: TypeError: Cannot read property 'launchTrendsSeries' of null
+2025-09-01 19:42:33,720 - ERROR - QML warning: inline.qml:59: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,721 - ERROR - [QT-QtWarningMsg] inline.qml:59 inline.qml:59: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,721 - ERROR - QML warning: inline.qml:45: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,721 - ERROR - [QT-QtWarningMsg] inline.qml:45 inline.qml:45: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,721 - ERROR - QML warning: inline.qml:37: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,721 - ERROR - [QT-QtWarningMsg] inline.qml:37 inline.qml:37: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,722 - ERROR - QML warning: inline.qml:16: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,722 - ERROR - [QT-QtWarningMsg] inline.qml:16 inline.qml:16: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,722 - ERROR - QML warning: inline.qml:20: TypeError: Cannot call method 'get_next_race' of null
+2025-09-01 19:42:33,722 - ERROR - [QT-QtWarningMsg] inline.qml:20 inline.qml:20: TypeError: Cannot call method 'get_next_race' of null
+2025-09-01 19:42:33,722 - ERROR - QML warning: inline.qml:939: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - [QT-QtWarningMsg] inline.qml:939 inline.qml:939: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - QML warning: inline.qml:945: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - [QT-QtWarningMsg] inline.qml:945 inline.qml:945: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - QML warning: inline.qml:922: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - [QT-QtWarningMsg] inline.qml:922 inline.qml:922: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - QML warning: inline.qml:921: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,723 - ERROR - [QT-QtWarningMsg] inline.qml:921 inline.qml:921: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - QML warning: inline.qml:894: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - [QT-QtWarningMsg] inline.qml:894 inline.qml:894: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - QML warning: inline.qml:892: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - [QT-QtWarningMsg] inline.qml:892 inline.qml:892: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - QML warning: inline.qml:839: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - [QT-QtWarningMsg] inline.qml:839 inline.qml:839: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - QML warning: inline.qml:845: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - [QT-QtWarningMsg] inline.qml:845 inline.qml:845: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,724 - ERROR - QML warning: inline.qml:820: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - [QT-QtWarningMsg] inline.qml:820 inline.qml:820: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - QML warning: inline.qml:819: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - [QT-QtWarningMsg] inline.qml:819 inline.qml:819: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - QML warning: inline.qml:794: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - [QT-QtWarningMsg] inline.qml:794 inline.qml:794: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,725 - ERROR - QML warning: inline.qml:792: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - [QT-QtWarningMsg] inline.qml:792 inline.qml:792: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - QML warning: inline.qml:690: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - [QT-QtWarningMsg] inline.qml:690 inline.qml:690: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - QML warning: inline.qml:696: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - [QT-QtWarningMsg] inline.qml:696 inline.qml:696: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,726 - ERROR - QML warning: inline.qml:669: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,727 - ERROR - [QT-QtWarningMsg] inline.qml:669 inline.qml:669: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,727 - ERROR - QML warning: inline.qml:675: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,727 - ERROR - [QT-QtWarningMsg] inline.qml:675 inline.qml:675: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,727 - ERROR - QML warning: inline.qml:596: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,728 - ERROR - [QT-QtWarningMsg] inline.qml:596 inline.qml:596: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,728 - ERROR - QML warning: inline.qml:594: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,729 - ERROR - [QT-QtWarningMsg] inline.qml:594 inline.qml:594: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,729 - ERROR - QML warning: inline.qml:571: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,729 - ERROR - [QT-QtWarningMsg] inline.qml:571 inline.qml:571: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,729 - ERROR - QML warning: inline.qml:572: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - [QT-QtWarningMsg] inline.qml:572 inline.qml:572: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - QML warning: inline.qml:570: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - [QT-QtWarningMsg] inline.qml:570 inline.qml:570: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - QML warning: inline.qml:571: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - [QT-QtWarningMsg] inline.qml:571 inline.qml:571: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - QML warning: inline.qml:572: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,730 - ERROR - [QT-QtWarningMsg] inline.qml:572 inline.qml:572: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,731 - ERROR - QML warning: inline.qml:570: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,731 - ERROR - [QT-QtWarningMsg] inline.qml:570 inline.qml:570: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,731 - ERROR - QML warning: inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,731 - ERROR - [QT-QtWarningMsg] inline.qml:557 inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,731 - ERROR - QML warning: inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,732 - ERROR - [QT-QtWarningMsg] inline.qml:558 inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,732 - ERROR - QML warning: inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,732 - ERROR - [QT-QtWarningMsg] inline.qml:556 inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,732 - ERROR - QML warning: inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,732 - ERROR - [QT-QtWarningMsg] inline.qml:557 inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,732 - ERROR - QML warning: inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,732 - ERROR - [QT-QtWarningMsg] inline.qml:558 inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,733 - ERROR - QML warning: inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,733 - ERROR - [QT-QtWarningMsg] inline.qml:556 inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,733 - ERROR - QML warning: inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,733 - ERROR - [QT-QtWarningMsg] inline.qml:557 inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,733 - ERROR - QML warning: inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,734 - ERROR - [QT-QtWarningMsg] inline.qml:558 inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,734 - ERROR - QML warning: inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,734 - ERROR - [QT-QtWarningMsg] inline.qml:556 inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,734 - ERROR - QML warning: inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,734 - ERROR - [QT-QtWarningMsg] inline.qml:557 inline.qml:557: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,734 - ERROR - QML warning: inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,734 - ERROR - [QT-QtWarningMsg] inline.qml:558 inline.qml:558: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,736 - ERROR - QML warning: inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,736 - ERROR - [QT-QtWarningMsg] inline.qml:556 inline.qml:556: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,736 - ERROR - QML warning: inline.qml:431: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,736 - ERROR - [QT-QtWarningMsg] inline.qml:431 inline.qml:431: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,736 - ERROR - QML warning: inline.qml:428: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:42:33,737 - ERROR - [QT-QtWarningMsg] inline.qml:428 inline.qml:428: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:42:33,737 - ERROR - QML warning: inline.qml:438: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,737 - ERROR - [QT-QtWarningMsg] inline.qml:438 inline.qml:438: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,737 - ERROR - QML warning: inline.qml:431: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:431 inline.qml:431: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:428: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:428 inline.qml:428: TypeError: Cannot read property 'eventType' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:438: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:438 inline.qml:438: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:390 inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:376 inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,738 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,739 - ERROR - QML warning: inline.qml:312: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,739 - ERROR - [QT-QtWarningMsg] inline.qml:312 inline.qml:312: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,739 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,739 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,739 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,740 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,741 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,742 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - QML warning: inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - [QT-QtWarningMsg] inline.qml:314 inline.qml:314: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - QML warning: inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - [QT-QtWarningMsg] inline.qml:313 inline.qml:313: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,743 - ERROR - QML warning: inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:321 inline.qml:321: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:220 inline.qml:220: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,744 - ERROR - QML warning: inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,744 - ERROR - [QT-QtWarningMsg] inline.qml:143 inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,746 - ERROR - QML warning: inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:42:33,746 - ERROR - [QT-QtWarningMsg] inline.qml:140 inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:42:33,746 - ERROR - QML warning: inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,746 - ERROR - [QT-QtWarningMsg] inline.qml:150 inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,746 - ERROR - QML warning: inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,746 - ERROR - [QT-QtWarningMsg] inline.qml:143 inline.qml:143: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,747 - ERROR - QML warning: inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:42:33,747 - ERROR - [QT-QtWarningMsg] inline.qml:140 inline.qml:140: TypeError: Cannot read property 'chartViewMode' of null
+2025-09-01 19:42:33,747 - ERROR - QML warning: inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,747 - ERROR - [QT-QtWarningMsg] inline.qml:150 inline.qml:150: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,747 - ERROR - QML warning: inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,747 - ERROR - [QT-QtWarningMsg] inline.qml:101 inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,747 - ERROR - QML warning: inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:98 inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,748 - ERROR - QML warning: inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:108 inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - QML warning: inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:101 inline.qml:101: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - QML warning: inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:98 inline.qml:98: TypeError: Cannot read property 'chartType' of null
+2025-09-01 19:42:33,748 - ERROR - QML warning: inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:108 inline.qml:108: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,748 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,749 - ERROR - QML warning: inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,749 - ERROR - [QT-QtWarningMsg] inline.qml:396 inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,749 - ERROR - QML warning: inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,749 - ERROR - [QT-QtWarningMsg] inline.qml:390 inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,749 - ERROR - QML warning: inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,749 - ERROR - [QT-QtWarningMsg] inline.qml:376 inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,749 - ERROR - QML warning: inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,749 - ERROR - [QT-QtWarningMsg] inline.qml:374 inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,749 - ERROR - QML warning: inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,750 - ERROR - [QT-QtWarningMsg] inline.qml:360 inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,750 - ERROR - QML warning: inline.qml:358:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,750 - ERROR - [QT-QtWarningMsg] inline.qml:358 inline.qml:358:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,750 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,750 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,750 - ERROR - QML warning: inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,750 - ERROR - [QT-QtWarningMsg] inline.qml:396 inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,750 - ERROR - QML warning: inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,750 - ERROR - [QT-QtWarningMsg] inline.qml:390 inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,751 - ERROR - QML warning: inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,751 - ERROR - [QT-QtWarningMsg] inline.qml:376 inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,751 - ERROR - QML warning: inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,751 - ERROR - [QT-QtWarningMsg] inline.qml:374 inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,751 - ERROR - QML warning: inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,751 - ERROR - [QT-QtWarningMsg] inline.qml:360 inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,752 - ERROR - QML warning: inline.qml:358:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,752 - ERROR - [QT-QtWarningMsg] inline.qml:358 inline.qml:358:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,752 - ERROR - QML warning: inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,752 - ERROR - [QT-QtWarningMsg] inline.qml:397 inline.qml:397: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,752 - ERROR - QML warning: inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,752 - ERROR - [QT-QtWarningMsg] inline.qml:396 inline.qml:396: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,753 - ERROR - QML warning: inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,753 - ERROR - [QT-QtWarningMsg] inline.qml:390 inline.qml:390: TypeError: Cannot read property 'location' of null
+2025-09-01 19:42:33,753 - ERROR - QML warning: inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,753 - ERROR - [QT-QtWarningMsg] inline.qml:376 inline.qml:376: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,753 - ERROR - QML warning: inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,753 - ERROR - [QT-QtWarningMsg] inline.qml:374 inline.qml:374: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,753 - ERROR - QML warning: inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,754 - ERROR - [QT-QtWarningMsg] inline.qml:360 inline.qml:360: TypeError: Cannot read property 'theme' of null
+2025-09-01 19:42:33,754 - ERROR - QML warning: inline.qml:358:29: TypeError: Cannot read property 'mode' of null
+2025-09-01 19:42:33,754 - ERROR - [QT-QtWarningMsg] inline.qml:358 inline.qml:358:29: TypeError: Cannot read property 'mode' of null
