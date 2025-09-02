@@ -53,6 +53,8 @@ if platform.system() == 'Windows':
     os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
 elif platform.system() == 'Linux':
     os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force XCB platform for better hardware acceleration
+    os.environ["QT_SCALE_FACTOR"] = "1.0"  # Ensure no scaling issues
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"  # Disable auto scaling
     os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"  # Force EGL for hardware acceleration
     os.environ["EGL_PLATFORM"] = "drm"  # Use DRM for EGL when available
     os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"  # Force OpenGL 3.3 compatibility
@@ -1705,6 +1707,7 @@ Window {
     height: 320
     title: "SpaceX/F1 Dashboard"
     color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
+    flags: Qt.Window | Qt.WindowTitleHint | Qt.WindowMinimizeButtonHint | Qt.WindowCloseButtonHint  // Ensure standard window flags
     Behavior on color { ColorAnimation { duration: 300 } }
 
     // Cache expensive / repeated lookups
@@ -1715,6 +1718,10 @@ Window {
         anchors.fill: parent
         anchors.margins: 5
         spacing: 5
+
+        Component.onCompleted: {
+            console.log("Main layout loaded, window size:", root.width, "x", root.height);
+        }
 
         RowLayout {
             Layout.fillWidth: true
@@ -1917,8 +1924,8 @@ Window {
                                         localContentCanAccessRemoteUrls: true
                                     }
                                     onFullScreenRequested: function(request) {
-                                        request.accept();
-                                        root.visibility = Window.FullScreen
+                                        // Reject fullscreen requests to prevent hiding the bottom bar
+                                        request.reject();
                                     }
                                     onLoadingChanged: function(loadRequest) {
                                         if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -2152,7 +2159,10 @@ Window {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: backend.mode === "spacex" ? videoUrl : (nextRace ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")
-                        onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
+                        onFullScreenRequested: function(request) { 
+                            // Reject fullscreen requests to prevent hiding the bottom bar
+                            request.reject(); 
+                        }
                     }
                 }
             }
@@ -2163,6 +2173,11 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
             color: "transparent"
+            visible: true  // Ensure bottom bar is always visible
+
+            Component.onCompleted: {
+                console.log("Bottom bar created, size:", width, "x", height);
+            }
 
             RowLayout {
                 anchors.fill: parent
