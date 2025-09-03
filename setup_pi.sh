@@ -277,7 +277,7 @@ unclutter -idle 0 -root &
 # Set Qt environment variables
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS="--disable-gpu --no-sandbox --enable-accelerated-video-decode"
+export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --enable-accelerated-video-decode"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
