@@ -31,7 +31,6 @@ if platform.system() == 'Windows':
 elif platform.system() == 'Linux':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
-        "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --use-gl=egl "
         "--enable-hardware-overlays --enable-accelerated-video "
         "--enable-native-gpu-memory-buffers --enable-zero-copy"
