@@ -5,9 +5,9 @@ set -o pipefail
 # SpaceX Dashboard Setup Script for Raspberry Pi 5 with Ubuntu 24.04
 # Optimized version with modular functions and better error handling
 
-USER="harrison"
+USER="${SUDO_USER:-harrison}"
 HOME_DIR="/home/$USER"
-LOG_FILE="/tmp/setup_ubuntu.log"
+LOG_FILE="$HOME_DIR/setup_ubuntu.log"
 REPO_URL="https://github.com/hwpaige/spacex-dashboard"
 REPO_DIR="$HOME_DIR/Desktop/project"
 VENV_DIR="$HOME_DIR/.venv"
@@ -270,11 +270,11 @@ fi
 
 if python3 -c 'import pyqtgraph' 2>/dev/null; then
     echo "Starting application..." | tee -a ~/xinitrc.log
-    exec sudo python3 ~/Desktop/project/app.py > ~/app.log 2>&1
+    exec python3 ~/Desktop/project/app.py > ~/app.log 2>&1
 else
     source ~/.venv/bin/activate
     echo "Starting application with virtual environment..." | tee -a ~/xinitrc.log
-    exec sudo python ~/Desktop/project/app.py > ~/app.log 2>&1
+    exec python ~/Desktop/project/app.py > ~/app.log 2>&1
 fi
 EOF
     chown "$USER:$USER" "$HOME_DIR/.xinitrc"
@@ -328,6 +328,7 @@ cleanup() {
 }
 
 main() {
+    mkdir -p "$HOME_DIR"
     log "Starting Raspberry Pi 5 setup on Ubuntu Server at $(date)"
     
     setup_user
