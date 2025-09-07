@@ -42,11 +42,28 @@ setup_user() {
 }
 
 setup_gpu_permissions() {
-    log "Setting GPU device permissions..."
+    log "Setting GPU device permissions and DMA buffer fixes..."
+    
+    # GPU device permissions
     cat << EOF > /etc/udev/rules.d/99-gpu-permissions.rules
 SUBSYSTEM=="drm", KERNEL=="card*", GROUP="video", MODE="0660"
 SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0660"
 EOF
+    
+    # DMA buffer permissions for Chromium
+    cat << EOF > /etc/udev/rules.d/99-dmabuf-permissions.rules
+SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"
+KERNEL=="dmabuf", GROUP="video", MODE="0660"
+EOF
+    
+    # Memory limits for the user
+    cat << EOF > /etc/security/limits.d/99-app-limits.conf
+$USER soft memlock unlimited
+$USER hard memlock unlimited
+$USER soft nofile 65536
+$USER hard nofile 65536
+EOF
+    
     udevadm control --reload-rules && udevadm trigger
 }
 
@@ -83,6 +100,7 @@ install_packages() {
         libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
         libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1
         libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg
+        libswiftshader-dev libswiftshader1
         
         # WebEngine dependencies
         libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0
@@ -123,11 +141,19 @@ echo \"User: \$(whoami) | Display: \$DISPLAY\"
 echo \"Python: \$(python3 --version 2>/dev/null || echo 'Not found')\"
 echo ''
 echo '=== Package Tests ==='
-python3 -c 'import PyQt6, pyqtgraph, requests, pandas; print(\"✓ All packages working\")' 2>/dev/null || echo '✗ System Python failed'
+python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ All packages working (including psutil)\")' 2>/dev/null || echo '✗ System Python failed'
+echo ''
+echo '=== GPU/DMA Buffer Status ==='
+echo \"GPU devices:\"
+ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
+echo \"DMA heap:\"
+ls -la /dev/dma_heap/ 2>/dev/null || echo 'No DMA heap found'
+echo \"SwiftShader:\"
+ls -la /usr/lib/swiftshader/ 2>/dev/null || echo 'SwiftShader not found'
 echo ''
 if [ -f ~/.venv/bin/activate ]; then
     source ~/.venv/bin/activate
-    python -c 'import PyQt6, pyqtgraph, requests, pandas; print(\"✓ Virtual environment working\")' 2>/dev/null || echo '✗ Virtual environment failed'
+    python -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ Virtual environment working\")' 2>/dev/null || echo '✗ Virtual environment failed'
 else
     echo 'No virtual environment found'
 fi
@@ -157,6 +183,37 @@ EOF
     
     # Enable upower if available
     [ -f /lib/systemd/system/upower.service ] && systemctl enable --now upower
+    
+    # Create systemd service for the app with memory limits
+    cat << EOF > /etc/systemd/system/spacex-dashboard.service
+[Unit]
+Description=SpaceX Dashboard Application
+After=network.target display-manager.service
+Requires=display-manager.service
+
+[Service]
+Type=simple
+User=$USER
+Environment=DISPLAY=:0
+Environment=QT_QPA_PLATFORM=xcb
+Environment=XAUTHORITY=/home/$USER/.Xauthority
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --disable-gpu --disable-software-rasterizer --disable-accelerated-video-decode --use-gl=swiftshader --swiftshader-path=/usr/lib/swiftshader/libEGL.so --max-tiles-for-interest-area=512 --num-raster-threads=1
+Environment=PYQTGRAPH_QT_LIB=PyQt6
+Environment=QT_DEBUG_PLUGINS=0
+Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
+WorkingDirectory=/home/$USER/Desktop/project
+ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/app.py
+Restart=always
+RestartSec=5
+MemoryLimit=512M
+MemoryHigh=400M
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    systemctl daemon-reload
 }
 
 configure_boot() {
@@ -165,9 +222,9 @@ configure_boot() {
     local config_file="/boot/firmware/config.txt"
     local cmdline_file="/boot/firmware/cmdline.txt"
     
-    # Silent boot settings
+    # Silent boot settings with memory optimizations
     grep -q "quiet" "$cmdline_file" || 
-        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false/' "$cmdline_file"
+        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=256M/' "$cmdline_file"
     
     # Display settings
     if ! grep -q "hdmi_mode=87" "$config_file"; then
@@ -260,7 +317,8 @@ unclutter -idle 0 -root &
 
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS="--no-sandbox --enable-accelerated-video-decode"
+# Conservative Chromium flags for Raspberry Pi to prevent DMA buffer issues
+export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --disable-gpu --disable-software-rasterizer --disable-accelerated-video-decode --use-gl=swiftshader --swiftshader-path=/usr/lib/swiftshader/libEGL.so --max-tiles-for-interest-area=512 --num-raster-threads=1"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
@@ -353,6 +411,10 @@ main() {
     create_xinitrc
     configure_autologin
     optimize_performance
+    
+    # Enable the systemd service
+    systemctl enable spacex-dashboard
+    
     cleanup
     
     log "Setup complete. Rebooting in 10 seconds..."
