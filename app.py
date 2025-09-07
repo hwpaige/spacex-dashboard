@@ -19,30 +19,30 @@ import time
 import pyqtgraph as pg
 import subprocess
 import re
+import psutil
 
 # Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --disable-software-rasterizer "
-        "--disable-gpu-driver-bug-workarounds --no-sandbox"
+        "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
+        "--memory-pressure-off --max_old_space_size=512"
     )
 elif platform.system() == 'Linux':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --use-gl=egl "
-        "--enable-hardware-overlays --enable-accelerated-video "
-        "--enable-native-gpu-memory-buffers --enable-zero-copy"
+        "--disable-gpu-sandbox --disable-dev-shm-usage "
+        "--memory-pressure-off --max_old_space_size=512"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox"
+        "--disable-gpu-sandbox --disable-dev-shm-usage "
+        "--memory-pressure-off --max_old_space_size=512"
     )
-os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
+os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=false;qt5ct.debug=false;*.debug=false;qt.*.debug=false"  # Reduce Qt WebEngine verbosity
+os.environ["QT_QPA_PLATFORMTHEME"] = "windows"  # Use native Windows theme
+os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Disable automatic scaling for better performance
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 os.environ["QSG_RHI_BACKEND"] = "gl"
 
@@ -59,13 +59,28 @@ elif platform.system() == 'Linux':
     os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Force GLSL 3.30 compatibility
     os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
 
-# Set up logging to console and file
+# Set Qt style to avoid customization warnings - Use Fusion for consistency across platforms
+os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"  # Cross-platform style that supports customization
+
+# Set up logging to console and file with proper Unicode handling
+class UnicodeSafeStreamHandler(logging.StreamHandler):
+    def emit(self, record):
+        try:
+            super().emit(record)
+        except UnicodeEncodeError:
+            # Fallback: encode the message safely
+            msg = self.format(record)
+            safe_msg = msg.encode('utf-8', errors='replace').decode('utf-8')
+            stream = self.stream
+            stream.write(safe_msg + self.terminator)
+            self.flush()
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO,  # Keep INFO level for important messages
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log')),  # Banana Pi log path
-        logging.StreamHandler(sys.stdout)
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8'),
+        UnicodeSafeStreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -82,12 +97,31 @@ def _qt_message_handler(mode, context, message):
     location = ''
     if context and context.file and context.line:
         location = f" {context.file}:{context.line}"
+
+    # Sanitize message to handle Unicode issues
     try:
-        logger.error(f"[QT-{level_name}]{location} {message}")
-    except UnicodeEncodeError:
-        # Handle encoding issues by sanitizing the message
-        sanitized_message = message.encode('utf-8', errors='replace').decode('utf-8')
-        logger.error(f"[QT-{level_name}]{location} {sanitized_message}")
+        safe_message = str(message)
+    except Exception:
+        safe_message = "<message encoding error>"
+
+    # Filter out common noisy messages
+    if "The current style does not support customization" in safe_message:
+        return  # Skip these warnings as they're not critical
+    if "Sandboxing disabled by user" in safe_message:
+        return  # Skip sandbox warnings
+    if "QBasicTimer::stop: Failed. Possibly trying to stop from a different thread" in safe_message:
+        return  # Skip timer thread warnings
+
+    try:
+        if "error" in level_name.lower() or "fatal" in level_name.lower():
+            logger.error(f"[QT-{level_name}]{location} {safe_message}")
+        elif "warning" in level_name.lower():
+            logger.warning(f"[QT-{level_name}]{location} {safe_message}")
+        else:
+            logger.info(f"[QT-{level_name}]{location} {safe_message}")
+    except Exception:
+        # Final fallback
+        print(f"[QT-{level_name}]{location} {safe_message}")
 
 # Install the handler only once
 try:
@@ -647,6 +681,16 @@ class Backend(QObject):
         self.wifi_timer.timeout.connect(self.update_wifi_status)
         self.wifi_timer.start(5000)  # Check every 5 seconds
         
+        # Memory cleanup timer
+        self.memory_timer = QTimer(self)
+        self.memory_timer.timeout.connect(self.cleanup_memory)
+        self.memory_timer.start(1800000)  # Clean up every 30 minutes
+        
+        # Memory logging timer
+        self.memory_log_timer = QTimer(self)
+        self.memory_log_timer.timeout.connect(self.logMemoryStats)
+        self.memory_log_timer.start(15000)  # Log every 15 seconds for debugging
+        
         # Check WiFi interface availability on startup
         self.check_wifi_interface()
         
@@ -655,6 +699,12 @@ class Backend(QObject):
         logger.info(f"Initial location: {self._location}")
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
+        
+        # Log initial memory usage
+        process = psutil.Process()
+        initial_memory = process.memory_info().rss / 1024 / 1024
+        initial_memory_percent = process.memory_percent()
+        logger.info(f"Initial memory usage: {initial_memory:.1f} MB ({initial_memory_percent:.1f}%)")
 
     @pyqtProperty(str, notify=modeChanged)
     def mode(self):
@@ -1039,10 +1089,19 @@ class Backend(QObject):
         self.weatherChanged.emit()
 
     def update_launches_periodic(self):
+        # Log memory before update
+        process = psutil.Process()
+        memory_before = process.memory_info().rss / 1024 / 1024
+        
         self._launch_data = fetch_launches()
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.update_event_model()
+        
+        # Log memory after update
+        memory_after = process.memory_info().rss / 1024 / 1024
+        memory_change = memory_after - memory_before
+        logger.info(f"Launch update memory: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     def update_time(self):
         self.timeChanged.emit()
@@ -1054,10 +1113,67 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
 
+    def cleanup_memory(self):
+        """Force garbage collection and memory cleanup"""
+        import gc
+        
+        # Log memory usage before cleanup
+        process = psutil.Process()
+        memory_before = process.memory_info().rss / 1024 / 1024
+        memory_percent = process.memory_percent()
+        
+        # Force garbage collection
+        collected = gc.collect()
+        
+        # Log memory usage after cleanup
+        memory_after = process.memory_info().rss / 1024 / 1024
+        memory_saved = memory_before - memory_after
+        
+        logger.info(f"Memory cleanup: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_saved:+.1f}MB, {memory_percent:.1f}%)")
+        logger.info(f"Garbage collected: {collected} objects")
+
+    @pyqtSlot(result=str)
+    def getMemoryStats(self):
+        """Get current memory statistics as JSON string"""
+        try:
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            memory_percent = process.memory_percent()
+            
+            stats = {
+                'rss_mb': round(memory_info.rss / 1024 / 1024, 1),
+                'vms_mb': round(memory_info.vms / 1024 / 1024, 1),
+                'percent': round(memory_percent, 1),
+                'cpu_percent': round(process.cpu_percent(interval=0.1), 1)
+            }
+            
+            return json.dumps(stats)
+        except Exception as e:
+            logger.error(f"Error getting memory stats: {e}")
+            return json.dumps({'error': str(e)})
+
+    def logMemoryStats(self):
+        """Log current memory statistics"""
+        try:
+            process = psutil.Process()
+            memory_info = process.memory_info()
+            memory_percent = process.memory_percent()
+            
+            logger.info(f"Memory stats - RSS: {memory_info.rss / 1024 / 1024:.1f}MB, "
+                       f"VMS: {memory_info.vms / 1024 / 1024:.1f}MB, "
+                       f"Percent: {memory_percent:.1f}%, "
+                       f"CPU: {process.cpu_percent(interval=0.1):.1f}%")
+        except Exception as e:
+            logger.error(f"Error logging memory stats: {e}")
+
     @pyqtSlot()
     def scanWifiNetworks(self):
         """Scan for available WiFi networks"""
         try:
+            # Log memory before WiFi scan
+            process = psutil.Process()
+            memory_before = process.memory_info().rss / 1024 / 1024
+            
             is_windows = platform.system() == 'Windows'
             
             if is_windows:
@@ -1171,10 +1287,20 @@ class Backend(QObject):
             self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
             self.wifiNetworksChanged.emit()
             
+            # Log memory after WiFi scan (success case)
+            memory_after = process.memory_info().rss / 1024 / 1024
+            memory_change = memory_after - memory_before
+            logger.debug(f"WiFi scan memory (success): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
+            
         except Exception as e:
             logger.error(f"Error scanning WiFi networks: {e}")
             self._wifi_networks = []
             self.wifiNetworksChanged.emit()
+            
+            # Log memory after WiFi scan (error case)
+            memory_after = process.memory_info().rss / 1024 / 1024
+            memory_change = memory_after - memory_before
+            logger.debug(f"WiFi scan memory (error): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     @pyqtSlot(str, str)
     def connectToWifi(self, ssid, password):
@@ -1645,7 +1771,7 @@ if __name__ == '__main__':
             "--disable-web-security --allow-running-insecure-content "
             "--disable-gpu-sandbox"
         )
-    os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
+    os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=false;*.debug=false;qt.*.debug=false"
     
     # Set platform-specific Qt platform plugin
     if platform.system() == 'Windows':
@@ -1663,15 +1789,7 @@ if __name__ == '__main__':
     else:
         os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
     
-    # # Set QML style to Fusion
-    # os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
-    
     QtWebEngineQuick.initialize()
-    
-    # # Set style to Fusion before creating QApplication
-    # fusion_style = QStyleFactory.create("Fusion")
-    # if fusion_style:
-    #     QApplication.setStyle(fusion_style)
     
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -1700,11 +1818,22 @@ if __name__ == '__main__':
     def _log_qml_warnings(errors):
         for e in errors:
             try:
-                logger.error(f"QML warning: {e.toString()}")
+                error_msg = e.toString()
+                # Filter out common non-critical warnings
+                if "The current style does not support customization" in error_msg:
+                    continue  # Skip style customization warnings
+                if "Window created - bottom bar should be visible" in error_msg:
+                    continue  # Skip debug messages
+                if "SwipeView completed" in error_msg:
+                    continue  # Skip debug messages
+                logger.error(f"QML warning: {error_msg}")
             except UnicodeEncodeError:
                 # Handle encoding issues by sanitizing the message
-                sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
-                logger.error(f"QML warning: {sanitized_message}")
+                try:
+                    sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
+                    logger.error(f"QML warning: {sanitized_message}")
+                except Exception:
+                    logger.error("QML warning: <encoding error>")
             except Exception:
                 logger.error(f"QML warning (unformatted): {e}")
     try:
@@ -1944,7 +2073,7 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    url: radarLocations[backend.location].replace("radar", modelData) + "&rand=" + new Date().getTime()
+                                    url: radarLocations[backend.location].replace("radar", modelData)
                                     settings {
                                         webGLEnabled: true
                                         accelerated2dCanvasEnabled: true
