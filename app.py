@@ -29,30 +29,30 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     psutil = None
 
-# Environment variables for Qt and Chromium - Conservative settings for Raspberry Pi
+# Environment variables for Qt and Chromium - GPU-enabled with proper memory management
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
         "--memory-pressure-off --max_old_space_size=512 "
-        "--disable-gpu --disable-software-rasterizer"
+        "--gpu-memory-buffer-size-mb=128 --max-tiles-for-interest-area=512"
     )
 elif platform.system() == 'Linux':
-    # Raspberry Pi specific - disable all GPU acceleration to prevent DMA buffer issues
+    # Raspberry Pi - Enable GPU but with conservative memory limits and proper DMA buffer handling
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
         "--memory-pressure-off --max_old_space_size=256 "
-        "--disable-gpu --disable-software-rasterizer --disable-accelerated-video-decode "
-        "--use-gl=swiftshader --swiftshader-path=/usr/lib/swiftshader/libEGL.so "
-        "--max-tiles-for-interest-area=512 --num-raster-threads=1"
+        "--gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 "
+        "--num-raster-threads=2 --enable-gpu-memory-buffer-video-frames "
+        "--enable-gpu-memory-buffer-compositor-resources"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --disable-dev-shm-usage "
         "--memory-pressure-off --max_old_space_size=512 "
-        "--disable-gpu --disable-software-rasterizer"
+        "--gpu-memory-buffer-size-mb=128"
     )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=false;qt5ct.debug=false;*.debug=false;qt.*.debug=false"  # Reduce Qt WebEngine verbosity
 os.environ["QT_QPA_PLATFORMTHEME"] = "windows"  # Use native Windows theme

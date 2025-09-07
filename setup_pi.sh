@@ -42,7 +42,7 @@ setup_user() {
 }
 
 setup_gpu_permissions() {
-    log "Setting GPU device permissions and DMA buffer fixes..."
+    log "Setting GPU device permissions and DMA buffer fixes for GPU memory mapping..."
     
     # GPU device permissions
     cat << EOF > /etc/udev/rules.d/99-gpu-permissions.rules
@@ -50,16 +50,22 @@ SUBSYSTEM=="drm", KERNEL=="card*", GROUP="video", MODE="0660"
 SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0660"
 EOF
     
-    # DMA buffer permissions for Chromium
+    # Enhanced DMA buffer permissions for Chromium GPU memory mapping
     cat << EOF > /etc/udev/rules.d/99-dmabuf-permissions.rules
 SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"
 KERNEL=="dmabuf", GROUP="video", MODE="0660"
+# Allow GPU memory buffer access
+SUBSYSTEM=="dma_buf", GROUP="video", MODE="0660"
 EOF
     
-    # Memory limits for the user
+    # GPU memory cgroup limits
+    mkdir -p /sys/fs/cgroup/memory/gpu
+    echo "64M" > /sys/fs/cgroup/memory/gpu/memory.limit_in_bytes 2>/dev/null || true
+    
+    # Memory limits for the user with GPU memory support
     cat << EOF > /etc/security/limits.d/99-app-limits.conf
-$USER soft memlock unlimited
-$USER hard memlock unlimited
+$USER soft memlock 128M
+$USER hard memlock 256M
 $USER soft nofile 65536
 $USER hard nofile 65536
 EOF
@@ -100,7 +106,6 @@ install_packages() {
         libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
         libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1
         libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg
-        libswiftshader-dev libswiftshader1
         
         # WebEngine dependencies
         libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0
@@ -148,8 +153,10 @@ echo \"GPU devices:\"
 ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
 echo \"DMA heap:\"
 ls -la /dev/dma_heap/ 2>/dev/null || echo 'No DMA heap found'
-echo \"SwiftShader:\"
-ls -la /usr/lib/swiftshader/ 2>/dev/null || echo 'SwiftShader not found'
+echo \"GPU memory info:\"
+cat /proc/meminfo | grep -E "(MemTotal|MemAvailable|Buffers|Cached)" 2>/dev/null || echo 'Memory info unavailable'
+echo \"GPU cgroup status:\"
+ls -la /sys/fs/cgroup/memory/gpu/ 2>/dev/null || echo 'GPU cgroup not configured'
 echo ''
 if [ -f ~/.venv/bin/activate ]; then
     source ~/.venv/bin/activate
@@ -197,7 +204,7 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --disable-gpu --disable-software-rasterizer --disable-accelerated-video-decode --use-gl=swiftshader --swiftshader-path=/usr/lib/swiftshader/libEGL.so --max-tiles-for-interest-area=512 --num-raster-threads=1
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --enable-gpu-memory-buffer-video-frames --enable-gpu-memory-buffer-compositor-resources
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
@@ -205,9 +212,9 @@ WorkingDirectory=/home/$USER/Desktop/project
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/app.py
 Restart=always
 RestartSec=5
-MemoryLimit=512M
-MemoryHigh=400M
-MemoryMax=512M
+MemoryLimit=768M
+MemoryHigh=512M
+MemoryMax=768M
 
 [Install]
 WantedBy=multi-user.target
@@ -222,9 +229,9 @@ configure_boot() {
     local config_file="/boot/firmware/config.txt"
     local cmdline_file="/boot/firmware/cmdline.txt"
     
-    # Silent boot settings with memory optimizations
+    # Silent boot settings with GPU memory optimizations
     grep -q "quiet" "$cmdline_file" || 
-        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=256M/' "$cmdline_file"
+        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=512M/' "$cmdline_file"
     
     # Display settings
     if ! grep -q "hdmi_mode=87" "$config_file"; then
@@ -317,8 +324,8 @@ unclutter -idle 0 -root &
 
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-# Conservative Chromium flags for Raspberry Pi to prevent DMA buffer issues
-export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --disable-gpu --disable-software-rasterizer --disable-accelerated-video-decode --use-gl=swiftshader --swiftshader-path=/usr/lib/swiftshader/libEGL.so --max-tiles-for-interest-area=512 --num-raster-threads=1"
+# GPU-enabled Chromium flags for Raspberry Pi with proper memory mapping
+export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --enable-gpu-memory-buffer-video-frames --enable-gpu-memory-buffer-compositor-resources"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
