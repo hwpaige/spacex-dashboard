@@ -104,7 +104,7 @@ setup_python_environment() {
     log "Creating virtual environment..."
     python3 -m venv "$VENV_DIR" || error_exit "Failed to create venv"
     sudo -u "$USER" bash -c "source $VENV_DIR/bin/activate && python -m pip install --upgrade pip"
-    sudo -u "$USER" bash -c "source $VENV_DIR/bin/activate && pip install PyQt6 pyqtgraph requests python-dateutil pandas pytz"
+    sudo -u "$USER" bash -c "source $VENV_DIR/bin/activate && pip install PyQt6 pyqtgraph requests python-dateutil pandas pytz psutil"
 }
 
 create_debug_script() {
