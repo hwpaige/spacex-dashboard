@@ -3,7 +3,8 @@ set -e
 set -o pipefail
 
 # SpaceX Dashboard Setup Script for Raspberry Pi 5 with Ubuntu 24.04
-# Optimized version with modular functions and better error handling
+# Optimized vecho '=== Package Tests ==='
+python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print("✓ All packages working (including psutil)")' 2>/dev/null || echo '✗ System Python failed'sion with modular functions and better error handling
 
 USER="${SUDO_USER:-harrison}"
 HOME_DIR="/home/$USER"
@@ -70,6 +71,7 @@ install_packages() {
         # Data and utilities
         python3-requests python3-dateutil python3-pandas python3-tz python3-pytz
         python3-numpy python3-scipy python3-matplotlib python3-opengl python3-pyqtgraph
+        python3-psutil
         
         # System utilities
         unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools
@@ -96,15 +98,20 @@ install_packages() {
 setup_python_environment() {
     log "Setting up Python environment..."
     
-    if python3 -c "import PyQt6, pyqtgraph, requests, pandas" 2>/dev/null; then
-        log "System Python with all dependencies working"
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil" 2>/dev/null; then
+        log "System Python with all dependencies working (including psutil)"
         return
     fi
     
-    log "Creating virtual environment..."
-    python3 -m venv "$VENV_DIR" || error_exit "Failed to create venv"
-    sudo -u "$USER" bash -c "source $VENV_DIR/bin/activate && python -m pip install --upgrade pip"
-    sudo -u "$USER" bash -c "source $VENV_DIR/bin/activate && pip install PyQt6 pyqtgraph requests python-dateutil pandas pytz psutil"
+    log "Installing missing Python packages system-wide..."
+    apt-get install -y python3-psutil python3-pyqt6 python3-pyqtgraph python3-requests python3-pandas
+    
+    # Verify installation
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil" 2>/dev/null; then
+        log "✓ All Python packages installed successfully"
+    else
+        log "⚠ Some packages may still be missing, but continuing..."
+    fi
 }
 
 create_debug_script() {

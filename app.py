@@ -19,7 +19,15 @@ import time
 import pyqtgraph as pg
 import subprocess
 import re
-import psutil
+
+# Try to import psutil for memory monitoring (optional)
+try:
+    import psutil
+    PSUTIL_AVAILABLE = True
+except ImportError:
+    print("Warning: psutil not available - memory monitoring disabled")
+    PSUTIL_AVAILABLE = False
+    psutil = None
 
 # Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
@@ -700,11 +708,14 @@ class Backend(QObject):
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
         
-        # Log initial memory usage
-        process = psutil.Process()
-        initial_memory = process.memory_info().rss / 1024 / 1024
-        initial_memory_percent = process.memory_percent()
-        logger.info(f"Initial memory usage: {initial_memory:.1f} MB ({initial_memory_percent:.1f}%)")
+        # Log initial memory usage (if psutil is available)
+        if PSUTIL_AVAILABLE:
+            process = psutil.Process()
+            initial_memory = process.memory_info().rss / 1024 / 1024
+            initial_memory_percent = process.memory_percent()
+            logger.info(f"Initial memory usage: {initial_memory:.1f} MB ({initial_memory_percent:.1f}%)")
+        else:
+            logger.info("Memory monitoring disabled (psutil not available)")
 
     @pyqtProperty(str, notify=modeChanged)
     def mode(self):
@@ -1089,19 +1100,22 @@ class Backend(QObject):
         self.weatherChanged.emit()
 
     def update_launches_periodic(self):
-        # Log memory before update
-        process = psutil.Process()
-        memory_before = process.memory_info().rss / 1024 / 1024
+        # Log memory before update (if psutil available)
+        memory_before = None
+        if PSUTIL_AVAILABLE:
+            process = psutil.Process()
+            memory_before = process.memory_info().rss / 1024 / 1024
         
         self._launch_data = fetch_launches()
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.update_event_model()
         
-        # Log memory after update
-        memory_after = process.memory_info().rss / 1024 / 1024
-        memory_change = memory_after - memory_before
-        logger.info(f"Launch update memory: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
+        # Log memory after update (if psutil available)
+        if PSUTIL_AVAILABLE and memory_before is not None:
+            memory_after = process.memory_info().rss / 1024 / 1024
+            memory_change = memory_after - memory_before
+            logger.info(f"Launch update memory: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     def update_time(self):
         self.timeChanged.emit()
@@ -1117,24 +1131,31 @@ class Backend(QObject):
         """Force garbage collection and memory cleanup"""
         import gc
         
-        # Log memory usage before cleanup
-        process = psutil.Process()
-        memory_before = process.memory_info().rss / 1024 / 1024
-        memory_percent = process.memory_percent()
+        # Log memory usage before cleanup (if psutil available)
+        memory_before = None
+        memory_percent = 0
+        if PSUTIL_AVAILABLE:
+            process = psutil.Process()
+            memory_before = process.memory_info().rss / 1024 / 1024
+            memory_percent = process.memory_percent()
         
         # Force garbage collection
         collected = gc.collect()
         
-        # Log memory usage after cleanup
-        memory_after = process.memory_info().rss / 1024 / 1024
-        memory_saved = memory_before - memory_after
+        # Log memory usage after cleanup (if psutil available)
+        if PSUTIL_AVAILABLE and memory_before is not None:
+            memory_after = process.memory_info().rss / 1024 / 1024
+            memory_saved = memory_before - memory_after
+            logger.info(f"Memory cleanup: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_saved:+.1f}MB, {memory_percent:.1f}%)")
         
-        logger.info(f"Memory cleanup: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_saved:+.1f}MB, {memory_percent:.1f}%)")
         logger.info(f"Garbage collected: {collected} objects")
 
     @pyqtSlot(result=str)
     def getMemoryStats(self):
         """Get current memory statistics as JSON string"""
+        if not PSUTIL_AVAILABLE:
+            return json.dumps({'error': 'psutil not available'})
+            
         try:
             process = psutil.Process()
             memory_info = process.memory_info()
@@ -1154,6 +1175,10 @@ class Backend(QObject):
 
     def logMemoryStats(self):
         """Log current memory statistics"""
+        if not PSUTIL_AVAILABLE:
+            logger.info("Memory monitoring unavailable (psutil not installed)")
+            return
+            
         try:
             process = psutil.Process()
             memory_info = process.memory_info()
@@ -1170,9 +1195,11 @@ class Backend(QObject):
     def scanWifiNetworks(self):
         """Scan for available WiFi networks"""
         try:
-            # Log memory before WiFi scan
-            process = psutil.Process()
-            memory_before = process.memory_info().rss / 1024 / 1024
+            # Log memory before WiFi scan (if psutil available)
+            memory_before = None
+            if PSUTIL_AVAILABLE:
+                process = psutil.Process()
+                memory_before = process.memory_info().rss / 1024 / 1024
             
             is_windows = platform.system() == 'Windows'
             
@@ -1288,9 +1315,10 @@ class Backend(QObject):
             self.wifiNetworksChanged.emit()
             
             # Log memory after WiFi scan (success case)
-            memory_after = process.memory_info().rss / 1024 / 1024
-            memory_change = memory_after - memory_before
-            logger.debug(f"WiFi scan memory (success): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
+            if PSUTIL_AVAILABLE and memory_before is not None:
+                memory_after = process.memory_info().rss / 1024 / 1024
+                memory_change = memory_after - memory_before
+                logger.debug(f"WiFi scan memory (success): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
             
         except Exception as e:
             logger.error(f"Error scanning WiFi networks: {e}")
@@ -1298,9 +1326,10 @@ class Backend(QObject):
             self.wifiNetworksChanged.emit()
             
             # Log memory after WiFi scan (error case)
-            memory_after = process.memory_info().rss / 1024 / 1024
-            memory_change = memory_after - memory_before
-            logger.debug(f"WiFi scan memory (error): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
+            if PSUTIL_AVAILABLE and memory_before is not None:
+                memory_after = process.memory_info().rss / 1024 / 1024
+                memory_change = memory_after - memory_before
+                logger.debug(f"WiFi scan memory (error): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     @pyqtSlot(str, str)
     def connectToWifi(self, ssid, password):
