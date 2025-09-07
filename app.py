@@ -29,23 +29,29 @@ except ImportError:
     PSUTIL_AVAILABLE = False
     psutil = None
 
-# Environment variables for Qt and Chromium - GPU-enabled with proper memory management
+# Environment variables for Qt and Chromium - Conservative GPU settings with memory leak prevention
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
         "--memory-pressure-off --max_old_space_size=512 "
-        "--gpu-memory-buffer-size-mb=128 --max-tiles-for-interest-area=512"
+        "--gpu-memory-buffer-size-mb=128 --max-tiles-for-interest-area=512 "
+        "--disable-background-timer-throttling --disable-renderer-backgrounding "
+        "--disable-features=VizDisplayCompositor"
     )
 elif platform.system() == 'Linux':
-    # Raspberry Pi - Enable GPU but with conservative memory limits and proper DMA buffer handling
+    # Raspberry Pi - Conservative GPU settings to prevent memory leaks
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
-        "--memory-pressure-off --max_old_space_size=256 "
-        "--gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 "
-        "--num-raster-threads=2 --enable-gpu-memory-buffer-video-frames "
-        "--enable-gpu-memory-buffer-compositor-resources"
+        "--memory-pressure-off --max_old_space_size=128 --memory-reducer "
+        "--gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 "
+        "--num-raster-threads=1 --disable-accelerated-video-decode "
+        "--disable-background-timer-throttling --disable-renderer-backgrounding "
+        "--disable-features=VizDisplayCompositor,UseSkiaRenderer "
+        "--disable-gpu-memory-buffer-video-frames "
+        "--disable-gpu-memory-buffer-compositor-resources "
+        "--max-tiles-for-interest-area=64"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (

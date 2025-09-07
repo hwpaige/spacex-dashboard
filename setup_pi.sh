@@ -2,9 +2,11 @@
 set -e
 set -o pipefail
 
+# Trap to handle interrupts gracefully
+trap 'log "Setup interrupted by user"; exit 1' INT TERM
+
 # SpaceX Dashboard Setup Script for Raspberry Pi 5 with Ubuntu 24.04
-# Optimized vecho '=== Package Tests ==='
-python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print("✓ All packages working (including psutil)")' 2>/dev/null || echo '✗ System Python failed'sion with modular functions and better error handling
+# Optimized with modular functions and better error handling
 
 USER="${SUDO_USER:-harrison}"
 HOME_DIR="/home/$USER"
@@ -42,25 +44,30 @@ setup_user() {
 }
 
 setup_gpu_permissions() {
-    log "Setting GPU device permissions and DMA buffer fixes for GPU memory mapping..."
+    log "Setting comprehensive GPU device permissions and DMA buffer fixes..."
     
-    # GPU device permissions
-    cat << EOF > /etc/udev/rules.d/99-gpu-permissions.rules
+    # Remove any existing rules first
+    rm -f /etc/udev/rules.d/99-gpu-permissions.rules
+    rm -f /etc/udev/rules.d/99-dmabuf-permissions.rules
+    
+    # Comprehensive GPU device permissions
+    cat << 'EOF' > /etc/udev/rules.d/99-gpu-permissions.rules
+# GPU device permissions for Chromium
 SUBSYSTEM=="drm", KERNEL=="card*", GROUP="video", MODE="0660"
 SUBSYSTEM=="drm", KERNEL=="renderD*", GROUP="render", MODE="0660"
+SUBSYSTEM=="drm", KERNEL=="controlD*", GROUP="video", MODE="0660"
 EOF
     
     # Enhanced DMA buffer permissions for Chromium GPU memory mapping
-    cat << EOF > /etc/udev/rules.d/99-dmabuf-permissions.rules
+    cat << 'EOF' > /etc/udev/rules.d/99-dmabuf-permissions.rules
+# DMA buffer permissions for GPU memory mapping
 SUBSYSTEM=="dma_heap", GROUP="video", MODE="0660"
 KERNEL=="dmabuf", GROUP="video", MODE="0660"
-# Allow GPU memory buffer access
 SUBSYSTEM=="dma_buf", GROUP="video", MODE="0660"
+# Additional DMA buffer device permissions
+KERNEL=="udmabuf", GROUP="video", MODE="0660"
+SUBSYSTEM=="udmabuf", GROUP="video", MODE="0660"
 EOF
-    
-    # GPU memory cgroup limits
-    mkdir -p /sys/fs/cgroup/memory/gpu
-    echo "64M" > /sys/fs/cgroup/memory/gpu/memory.limit_in_bytes 2>/dev/null || true
     
     # Memory limits for the user with GPU memory support
     cat << EOF > /etc/security/limits.d/99-app-limits.conf
@@ -70,14 +77,27 @@ $USER soft nofile 65536
 $USER hard nofile 65536
 EOF
     
-    udevadm control --reload-rules && udevadm trigger
+    # Reload udev rules
+    udevadm control --reload-rules
+    udevadm trigger --subsystem-match=drm
+    udevadm trigger --subsystem-match=dma_heap
+    udevadm trigger --subsystem-match=dma_buf
+    
+    log "GPU permissions configured and udev rules reloaded"
 }
 
 update_system() {
     log "Updating system packages..."
-    apt-get update -y && apt-get upgrade -y --no-install-recommends
-    apt-get install -y software-properties-common
-    add-apt-repository universe -y
+    if ! apt-get update -y; then
+        log "WARNING: apt-get update failed, continuing..."
+    fi
+    if ! apt-get upgrade -y --no-install-recommends; then
+        log "WARNING: apt-get upgrade failed, continuing..."
+    fi
+    if ! apt-get install -y software-properties-common; then
+        log "WARNING: Could not install software-properties-common, continuing..."
+    fi
+    add-apt-repository universe -y 2>/dev/null || log "WARNING: Could not add universe repository"
 }
 
 install_packages() {
@@ -113,8 +133,19 @@ install_packages() {
         libasound2t64 libgtk-3-0 lz4 plymouth-theme-spinner
     )
     
-    if ! apt-get install -y --no-install-recommends "${packages[@]}"; then
-        log "WARNING: Some packages failed to install, continuing..."
+    local failed_packages=""
+    for package in "${packages[@]}"; do
+        if ! apt-get install -y --no-install-recommends "$package" 2>/dev/null; then
+            failed_packages="$failed_packages $package"
+            log "WARNING: Failed to install $package"
+        fi
+    done
+    
+    if [ -n "$failed_packages" ]; then
+        log "WARNING: Some packages failed to install:$failed_packages"
+        log "This may affect functionality, but continuing setup..."
+    else
+        log "All packages installed successfully"
     fi
 }
 
@@ -154,7 +185,9 @@ ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
 echo \"DMA heap:\"
 ls -la /dev/dma_heap/ 2>/dev/null || echo 'No DMA heap found'
 echo \"GPU memory info:\"
-cat /proc/meminfo | grep -E "(MemTotal|MemAvailable|Buffers|Cached)" 2>/dev/null || echo 'Memory info unavailable'
+cat /proc/meminfo | grep -E \"(MemTotal|MemAvailable|Buffers|Cached|SwapTotal|SwapFree)\" 2>/dev/null || echo 'Memory info unavailable'
+echo \"System memory usage:\"
+free -h 2>/dev/null || echo 'free command not available'
 echo \"GPU cgroup status:\"
 ls -la /sys/fs/cgroup/memory/gpu/ 2>/dev/null || echo 'GPU cgroup not configured'
 echo ''
@@ -191,6 +224,17 @@ EOF
     # Enable upower if available
     [ -f /lib/systemd/system/upower.service ] && systemctl enable --now upower
     
+    # Memory management sysctl settings
+    cat << EOF > /etc/sysctl.d/99-memory.conf
+# Memory management optimizations for Chromium
+vm.swappiness = 10
+vm.vfs_cache_pressure = 50
+vm.dirty_ratio = 10
+vm.dirty_background_ratio = 5
+vm.min_free_kbytes = 32768
+EOF
+    sysctl -p /etc/sysctl.d/99-memory.conf 2>/dev/null || log "WARNING: Could not apply sysctl settings"
+    
     # Create systemd service for the app with memory limits
     cat << EOF > /etc/systemd/system/spacex-dashboard.service
 [Unit]
@@ -204,7 +248,7 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --enable-gpu-memory-buffer-video-frames --enable-gpu-memory-buffer-compositor-resources
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 --num-raster-threads=1 --disable-accelerated-video-decode --disable-background-timer-throttling --disable-renderer-backgrounding --disable-features=VizDisplayCompositor,UseSkiaRenderer --disable-gpu-memory-buffer-video-frames --disable-gpu-memory-buffer-compositor-resources --max-tiles-for-interest-area=64
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
@@ -212,9 +256,9 @@ WorkingDirectory=/home/$USER/Desktop/project
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/app.py
 Restart=always
 RestartSec=5
-MemoryLimit=768M
-MemoryHigh=512M
-MemoryMax=768M
+MemoryLimit=512M
+MemoryHigh=384M
+MemoryMax=512M
 
 [Install]
 WantedBy=multi-user.target
@@ -229,9 +273,9 @@ configure_boot() {
     local config_file="/boot/firmware/config.txt"
     local cmdline_file="/boot/firmware/cmdline.txt"
     
-    # Silent boot settings with GPU memory optimizations
+    # Silent boot settings with enhanced memory optimizations
     grep -q "quiet" "$cmdline_file" || 
-        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=512M/' "$cmdline_file"
+        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=512M coherent_pool=2M/' "$cmdline_file"
     
     # Display settings
     if ! grep -q "hdmi_mode=87" "$config_file"; then
@@ -324,8 +368,8 @@ unclutter -idle 0 -root &
 
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-# GPU-enabled Chromium flags for Raspberry Pi with proper memory mapping
-export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --enable-gpu-memory-buffer-video-frames --enable-gpu-memory-buffer-compositor-resources"
+# Conservative Chromium flags for Raspberry Pi to prevent memory leaks
+export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 --num-raster-threads=1 --disable-accelerated-video-decode --disable-background-timer-throttling --disable-renderer-backgrounding --disable-features=VizDisplayCompositor,UseSkiaRenderer --disable-gpu-memory-buffer-video-frames --disable-gpu-memory-buffer-compositor-resources --max-tiles-for-interest-area=64"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
