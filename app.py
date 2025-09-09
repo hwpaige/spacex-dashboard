@@ -32,9 +32,13 @@ elif platform.system() == 'Linux':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --use-gl=desktop "
+        "--disable-gpu-sandbox --use-gl=egl --enable-unsafe-webgpu "
         "--enable-hardware-overlays --enable-accelerated-video "
-        "--enable-native-gpu-memory-buffers --enable-zero-copy"
+        "--enable-native-gpu-memory-buffers --enable-zero-copy "
+        "--disable-backgrounding-occluded-windows --max-tiles-for-interest-area=512 "
+        "--enable-gpu-rasterization --enable-oop-rasterization "
+        "--enable-webgl-draft-extensions --enable-webgl-image-chromium "
+        "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -45,6 +49,13 @@ else:
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 os.environ["QSG_RHI_BACKEND"] = "gl"
+
+# Additional Mesa environment variables for Raspberry Pi WebGL support
+os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
+os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
+os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering
+os.environ["GALLIUM_DRIVER"] = "v3d"  # Use VideoCore driver
+os.environ["VDPAU_DRIVER"] = "v3d"  # Video acceleration
 
 # Set platform-specific Qt platform plugin
 if platform.system() == 'Windows':
