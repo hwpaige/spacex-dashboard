@@ -153,13 +153,13 @@ install_packages() {
 setup_python_environment() {
     log "Setting up Python environment..."
     
-    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil" 2>/dev/null; then
+    if python3 -c "import PyQt6, requests, pandas, psutil" 2>/dev/null; then
         log "System Python with all dependencies working (including psutil)"
         return
     fi
     
     log "Installing missing Python packages system-wide..."
-    apt-get install -y python3-psutil python3-pyqt6 python3-pyqtgraph python3-requests python3-pandas
+    apt-get install -y python3-psutil python3-pyqt6 python3-requests python3-pandas
     
     # Verify installation
     if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil" 2>/dev/null; then
