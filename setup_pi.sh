@@ -117,7 +117,7 @@ install_packages() {
         python3-psutil
         
         # System utilities
-        unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools
+        unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
         xserver-xorg xinit x11-xserver-utils openbox libinput-tools
         ubuntu-raspi-settings xserver-xorg-video-modesetting
         
@@ -206,6 +206,9 @@ configure_system() {
     
     # Enable SSH
     systemctl enable --now ssh
+    
+    # Enable NetworkManager for nmcli WiFi management
+    systemctl enable --now NetworkManager
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true

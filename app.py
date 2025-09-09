@@ -20,49 +20,29 @@ import pyqtgraph as pg
 import subprocess
 import re
 
-# Try to import psutil for memory monitoring (optional)
-try:
-    import psutil
-    PSUTIL_AVAILABLE = True
-except ImportError:
-    print("Warning: psutil not available - memory monitoring disabled")
-    PSUTIL_AVAILABLE = False
-    psutil = None
-
-# Environment variables for Qt and Chromium - Conservative GPU settings with memory leak prevention
+# Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
-        "--memory-pressure-off --max_old_space_size=512 "
-        "--gpu-memory-buffer-size-mb=128 --max-tiles-for-interest-area=512 "
-        "--disable-background-timer-throttling --disable-renderer-backgrounding "
-        "--disable-features=VizDisplayCompositor"
+        "--disable-gpu-sandbox --disable-software-rasterizer "
+        "--disable-gpu-driver-bug-workarounds --no-sandbox"
     )
 elif platform.system() == 'Linux':
-    # Raspberry Pi - Conservative GPU settings to prevent memory leaks
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage "
-        "--memory-pressure-off --max_old_space_size=128 --memory-reducer "
-        "--gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 "
-        "--num-raster-threads=1 --disable-accelerated-video-decode "
-        "--disable-background-timer-throttling --disable-renderer-backgrounding "
-        "--disable-features=VizDisplayCompositor,UseSkiaRenderer "
-        "--disable-gpu-memory-buffer-video-frames "
-        "--disable-gpu-memory-buffer-compositor-resources "
-        "--max-tiles-for-interest-area=64"
+        "--disable-gpu-sandbox --use-gl=desktop "
+        "--enable-hardware-overlays --enable-accelerated-video "
+        "--enable-native-gpu-memory-buffers --enable-zero-copy"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --disable-dev-shm-usage "
-        "--memory-pressure-off --max_old_space_size=512 "
-        "--gpu-memory-buffer-size-mb=128"
+        "--disable-gpu-sandbox"
     )
-os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=false;qt5ct.debug=false;*.debug=false;qt.*.debug=false"  # Reduce Qt WebEngine verbosity
-os.environ["QT_QPA_PLATFORMTHEME"] = "windows"  # Use native Windows theme
-os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Disable automatic scaling for better performance
+os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 os.environ["QSG_RHI_BACKEND"] = "gl"
 
@@ -79,28 +59,13 @@ elif platform.system() == 'Linux':
     os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Force GLSL 3.30 compatibility
     os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
 
-# Set Qt style to avoid customization warnings - Use Fusion for consistency across platforms
-os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"  # Cross-platform style that supports customization
-
-# Set up logging to console and file with proper Unicode handling
-class UnicodeSafeStreamHandler(logging.StreamHandler):
-    def emit(self, record):
-        try:
-            super().emit(record)
-        except UnicodeEncodeError:
-            # Fallback: encode the message safely
-            msg = self.format(record)
-            safe_msg = msg.encode('utf-8', errors='replace').decode('utf-8')
-            stream = self.stream
-            stream.write(safe_msg + self.terminator)
-            self.flush()
-
+# Set up logging to console and file
 logging.basicConfig(
-    level=logging.INFO,  # Keep INFO level for important messages
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8'),
-        UnicodeSafeStreamHandler(sys.stdout)
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log')),  # Banana Pi log path
+        logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
@@ -117,31 +82,12 @@ def _qt_message_handler(mode, context, message):
     location = ''
     if context and context.file and context.line:
         location = f" {context.file}:{context.line}"
-
-    # Sanitize message to handle Unicode issues
     try:
-        safe_message = str(message)
-    except Exception:
-        safe_message = "<message encoding error>"
-
-    # Filter out common noisy messages
-    if "The current style does not support customization" in safe_message:
-        return  # Skip these warnings as they're not critical
-    if "Sandboxing disabled by user" in safe_message:
-        return  # Skip sandbox warnings
-    if "QBasicTimer::stop: Failed. Possibly trying to stop from a different thread" in safe_message:
-        return  # Skip timer thread warnings
-
-    try:
-        if "error" in level_name.lower() or "fatal" in level_name.lower():
-            logger.error(f"[QT-{level_name}]{location} {safe_message}")
-        elif "warning" in level_name.lower():
-            logger.warning(f"[QT-{level_name}]{location} {safe_message}")
-        else:
-            logger.info(f"[QT-{level_name}]{location} {safe_message}")
-    except Exception:
-        # Final fallback
-        print(f"[QT-{level_name}]{location} {safe_message}")
+        logger.error(f"[QT-{level_name}]{location} {message}")
+    except UnicodeEncodeError:
+        # Handle encoding issues by sanitizing the message
+        sanitized_message = message.encode('utf-8', errors='replace').decode('utf-8')
+        logger.error(f"[QT-{level_name}]{location} {sanitized_message}")
 
 # Install the handler only once
 try:
@@ -701,16 +647,6 @@ class Backend(QObject):
         self.wifi_timer.timeout.connect(self.update_wifi_status)
         self.wifi_timer.start(5000)  # Check every 5 seconds
         
-        # Memory cleanup timer
-        self.memory_timer = QTimer(self)
-        self.memory_timer.timeout.connect(self.cleanup_memory)
-        self.memory_timer.start(1800000)  # Clean up every 30 minutes
-        
-        # Memory logging timer
-        self.memory_log_timer = QTimer(self)
-        self.memory_log_timer.timeout.connect(self.logMemoryStats)
-        self.memory_log_timer.start(15000)  # Log every 15 seconds for debugging
-        
         # Check WiFi interface availability on startup
         self.check_wifi_interface()
         
@@ -719,15 +655,6 @@ class Backend(QObject):
         logger.info(f"Initial location: {self._location}")
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
-        
-        # Log initial memory usage (if psutil is available)
-        if PSUTIL_AVAILABLE:
-            process = psutil.Process()
-            initial_memory = process.memory_info().rss / 1024 / 1024
-            initial_memory_percent = process.memory_percent()
-            logger.info(f"Initial memory usage: {initial_memory:.1f} MB ({initial_memory_percent:.1f}%)")
-        else:
-            logger.info("Memory monitoring disabled (psutil not available)")
 
     @pyqtProperty(str, notify=modeChanged)
     def mode(self):
@@ -1112,22 +1039,10 @@ class Backend(QObject):
         self.weatherChanged.emit()
 
     def update_launches_periodic(self):
-        # Log memory before update (if psutil available)
-        memory_before = None
-        if PSUTIL_AVAILABLE:
-            process = psutil.Process()
-            memory_before = process.memory_info().rss / 1024 / 1024
-        
         self._launch_data = fetch_launches()
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.update_event_model()
-        
-        # Log memory after update (if psutil available)
-        if PSUTIL_AVAILABLE and memory_before is not None:
-            memory_after = process.memory_info().rss / 1024 / 1024
-            memory_change = memory_after - memory_before
-            logger.info(f"Launch update memory: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     def update_time(self):
         self.timeChanged.emit()
@@ -1139,93 +1054,23 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
 
-    def cleanup_memory(self):
-        """Force garbage collection and memory cleanup"""
-        import gc
-        
-        # Log memory usage before cleanup (if psutil available)
-        memory_before = None
-        memory_percent = 0
-        if PSUTIL_AVAILABLE:
-            process = psutil.Process()
-            memory_before = process.memory_info().rss / 1024 / 1024
-            memory_percent = process.memory_percent()
-        
-        # Force garbage collection
-        collected = gc.collect()
-        
-        # Log memory usage after cleanup (if psutil available)
-        if PSUTIL_AVAILABLE and memory_before is not None:
-            memory_after = process.memory_info().rss / 1024 / 1024
-            memory_saved = memory_before - memory_after
-            logger.info(f"Memory cleanup: {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_saved:+.1f}MB, {memory_percent:.1f}%)")
-        
-        logger.info(f"Garbage collected: {collected} objects")
-
-    @pyqtSlot(result=str)
-    def getMemoryStats(self):
-        """Get current memory statistics as JSON string"""
-        if not PSUTIL_AVAILABLE:
-            return json.dumps({'error': 'psutil not available'})
-            
-        try:
-            process = psutil.Process()
-            memory_info = process.memory_info()
-            memory_percent = process.memory_percent()
-            
-            stats = {
-                'rss_mb': round(memory_info.rss / 1024 / 1024, 1),
-                'vms_mb': round(memory_info.vms / 1024 / 1024, 1),
-                'percent': round(memory_percent, 1),
-                'cpu_percent': round(process.cpu_percent(interval=0.1), 1)
-            }
-            
-            return json.dumps(stats)
-        except Exception as e:
-            logger.error(f"Error getting memory stats: {e}")
-            return json.dumps({'error': str(e)})
-
-    def logMemoryStats(self):
-        """Log current memory statistics"""
-        if not PSUTIL_AVAILABLE:
-            logger.info("Memory monitoring unavailable (psutil not installed)")
-            return
-            
-        try:
-            process = psutil.Process()
-            memory_info = process.memory_info()
-            memory_percent = process.memory_percent()
-            
-            logger.info(f"Memory stats - RSS: {memory_info.rss / 1024 / 1024:.1f}MB, "
-                       f"VMS: {memory_info.vms / 1024 / 1024:.1f}MB, "
-                       f"Percent: {memory_percent:.1f}%, "
-                       f"CPU: {process.cpu_percent(interval=0.1):.1f}%")
-        except Exception as e:
-            logger.error(f"Error logging memory stats: {e}")
-
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks"""
+        """Scan for available WiFi networks using nmcli (Ubuntu standard)"""
         try:
-            # Log memory before WiFi scan (if psutil available)
-            memory_before = None
-            if PSUTIL_AVAILABLE:
-                process = psutil.Process()
-                memory_before = process.memory_info().rss / 1024 / 1024
-            
             is_windows = platform.system() == 'Windows'
-            
+
             if is_windows:
                 # Use Windows netsh command to scan for WiFi networks
-                result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'], 
+                result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
                                       capture_output=True, text=True, timeout=10)
-                
+
                 networks = []
                 current_network = {}
-                
+
                 for line in result.stdout.split('\n'):
                     line = line.strip()
-                    
+
                     # Look for SSID
                     if line.startswith('SSID'):
                         if current_network and current_network.get('ssid'):
@@ -1233,7 +1078,7 @@ class Backend(QObject):
                         ssid_match = re.search(r'SSID\s+\d+\s*:\s*(.+)', line)
                         if ssid_match:
                             current_network = {'ssid': ssid_match.group(1).strip(), 'signal': 0, 'encrypted': False}
-                    
+
                     # Look for signal strength
                     elif 'Signal' in line and current_network:
                         signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
@@ -1243,115 +1088,93 @@ class Backend(QObject):
                             # Convert percentage to dBm (rough approximation: 100% = -30dBm, 0% = -100dBm)
                             dbm = -30 - ((100 - percentage) * 0.7)
                             current_network['signal'] = int(dbm)
-                    
+
                     # Look for authentication
                     elif 'Authentication' in line and current_network:
                         if 'WPA' in line or 'WPA2' in line or 'WPA3' in line:
                             current_network['encrypted'] = True
-                
+
                 # Add the last network
                 if current_network and current_network.get('ssid'):
                     networks.append(current_network)
             else:
-                # Use Linux iwlist command for Raspberry Pi/Ubuntu
-                # Try different interface names if wlan0 doesn't work
-                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
-                interface = None
-                
-                for iface in interfaces:
-                    try:
-                        test_result = subprocess.run(['ip', 'link', 'show', iface], 
-                                                   capture_output=True, timeout=2)
-                        if test_result.returncode == 0:
-                            interface = iface
-                            break
-                    except:
-                        continue
-                
-                if not interface:
-                    logger.error("No wireless interface found on Linux system")
-                    self._wifi_networks = []
-                    self.wifiNetworksChanged.emit()
-                    return
-                
-                # Try with sudo first, then without if it fails
+                # Use nmcli for Ubuntu/Linux (much more reliable than iwlist)
                 try:
-                    result = subprocess.run(['sudo', 'iwlist', interface, 'scan'], 
-                                          capture_output=True, text=True, timeout=15)
-                except:
-                    # Try without sudo
-                    try:
-                        result = subprocess.run(['iwlist', interface, 'scan'], 
-                                              capture_output=True, text=True, timeout=15)
-                    except Exception as e:
-                        logger.error(f"Failed to scan WiFi networks: {e}")
+                    # First check if nmcli is available
+                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
+                    if nmcli_check.returncode != 0:
+                        logger.error("nmcli not found. Please install network-manager: sudo apt install network-manager")
                         self._wifi_networks = []
                         self.wifiNetworksChanged.emit()
                         return
-                
-                networks = []
-                current_network = {}
-                
-                for line in result.stdout.split('\n'):
-                    line = line.strip()
-                    
-                    # Look for ESSID
-                    essid_match = re.search(r'ESSID:"([^"]*)"', line)
-                    if essid_match:
-                        if current_network and current_network.get('ssid'):
-                            networks.append(current_network)
-                        current_network = {'ssid': essid_match.group(1), 'signal': 0, 'encrypted': False}
-                    
-                    # Look for signal level
-                    signal_match = re.search(r'Signal level=(-?\d+)', line)
-                    if signal_match and current_network:
-                        current_network['signal'] = int(signal_match.group(1))
-                    
-                    # Look for encryption
-                    if 'Encryption key:on' in line and current_network:
-                        current_network['encrypted'] = True
-                
-                # Add the last network
-                if current_network and current_network.get('ssid'):
-                    networks.append(current_network)
-            
+
+                    # Scan for networks using nmcli
+                    result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
+                                          capture_output=True, text=True, timeout=15)
+
+                    if result.returncode != 0:
+                        logger.error(f"nmcli scan failed: {result.stderr}")
+                        self._wifi_networks = []
+                        self.wifiNetworksChanged.emit()
+                        return
+
+                    networks = []
+                    lines = result.stdout.strip().split('\n')
+
+                    # Skip header line
+                    for line in lines[1:]:
+                        parts = line.split()
+                        if len(parts) >= 8:
+                            ssid = parts[1] if parts[1] != '--' else parts[0]
+                            if ssid and ssid != '*':
+                                # Extract signal strength (usually in parts)
+                                signal = 0
+                                for part in parts:
+                                    if part.endswith('*'):
+                                        signal = int(part[:-1]) if part[:-1].isdigit() else 0
+                                        break
+
+                                # Check for security
+                                security = ' '.join(parts[6:]) if len(parts) > 6 else ''
+                                encrypted = 'WPA' in security or 'WEP' in security
+
+                                networks.append({
+                                    'ssid': ssid,
+                                    'signal': signal,
+                                    'encrypted': encrypted
+                                })
+
+                except Exception as e:
+                    logger.error(f"nmcli scan failed: {e}")
+                    self._wifi_networks = []
+                    self.wifiNetworksChanged.emit()
+                    return
+
             # Remove duplicates and sort by signal strength
             seen_ssids = set()
             unique_networks = []
             for network in networks:
-                if network['ssid'] not in seen_ssids and network['ssid'] and network['ssid'] != '<disconnected>':
+                if network['ssid'] not in seen_ssids and network['ssid']:
                     seen_ssids.add(network['ssid'])
                     unique_networks.append(network)
-            
+
             self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
             self.wifiNetworksChanged.emit()
-            
-            # Log memory after WiFi scan (success case)
-            if PSUTIL_AVAILABLE and memory_before is not None:
-                memory_after = process.memory_info().rss / 1024 / 1024
-                memory_change = memory_after - memory_before
-                logger.debug(f"WiFi scan memory (success): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
-            
+
         except Exception as e:
             logger.error(f"Error scanning WiFi networks: {e}")
             self._wifi_networks = []
             self.wifiNetworksChanged.emit()
-            
-            # Log memory after WiFi scan (error case)
-            if PSUTIL_AVAILABLE and memory_before is not None:
-                memory_after = process.memory_info().rss / 1024 / 1024
-                memory_change = memory_after - memory_before
-                logger.debug(f"WiFi scan memory (error): {memory_before:.1f}MB -> {memory_after:.1f}MB ({memory_change:+.1f}MB)")
 
     @pyqtSlot(str, str)
     def connectToWifi(self, ssid, password):
-        """Connect to a WiFi network"""
+        """Connect to a WiFi network using nmcli"""
         try:
             self._wifi_connecting = True
             self.wifiConnectingChanged.emit()
-            
+
             is_windows = platform.system() == 'Windows'
-            
+
             if is_windows:
                 # Create a temporary XML profile for Windows WiFi connection
                 profile_xml = f'''<?xml version="1.0"?>
@@ -1379,91 +1202,80 @@ class Backend(QObject):
         </security>
     </MSM>
 </WLANProfile>'''
-                
+
                 # Write profile to temp file
                 profile_path = f'C:\\temp\\wifi_profile_{ssid}.xml'
                 os.makedirs('C:\\temp', exist_ok=True)
                 with open(profile_path, 'w') as f:
                     f.write(profile_xml)
-                
+
                 # Add the profile
-                subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'], 
+                subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
                              capture_output=True, timeout=10)
-                
+
                 # Connect to the network
-                subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'], 
+                subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
                              capture_output=True, timeout=10)
-                
+
                 # Clean up
                 try:
                     os.remove(profile_path)
                 except:
                     pass
             else:
-                # Use wpa_supplicant for Linux/Raspberry Pi
-                # Find the wireless interface
-                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
-                interface = None
-                
-                for iface in interfaces:
-                    try:
-                        test_result = subprocess.run(['ip', 'link', 'show', iface], 
-                                                   capture_output=True, timeout=2)
-                        if test_result.returncode == 0:
-                            interface = iface
-                            break
-                    except:
-                        continue
-                
-                if not interface:
-                    logger.error("No wireless interface found for connection")
-                    self._wifi_connecting = False
-                    self.wifiConnectingChanged.emit()
-                    return
-                
-                config_content = f'''network={{
-    ssid="{ssid}"
-    psk="{password}"
-    key_mgmt=WPA-PSK
-}}'''
-                
-                # Write to temp file
-                with open('/tmp/wifi_config.conf', 'w') as f:
-                    f.write(config_content)
-                
-                # Try with sudo first, then without if it fails
+                # Use nmcli for Ubuntu/Linux (much simpler and more reliable)
                 try:
-                    # Use wpa_supplicant to connect
-                    subprocess.run(['sudo', 'wpa_supplicant', '-B', '-i', interface, '-c', '/tmp/wifi_config.conf'], 
-                                 capture_output=True, timeout=10)
-                    
-                    # Get IP address
-                    subprocess.run(['sudo', 'dhclient', interface], 
-                                 capture_output=True, timeout=10)
-                except:
-                    # Try without sudo
-                    try:
-                        subprocess.run(['wpa_supplicant', '-B', '-i', interface, '-c', '/tmp/wifi_config.conf'], 
-                                     capture_output=True, timeout=10)
-                        subprocess.run(['dhclient', interface], 
-                                     capture_output=True, timeout=10)
-                    except Exception as e:
-                        logger.error(f"Failed to connect to WiFi: {e}")
+                    # Check if nmcli is available
+                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
+                    if nmcli_check.returncode != 0:
+                        logger.error("nmcli not found. Please install network-manager: sudo apt install network-manager")
                         self._wifi_connecting = False
                         self.wifiConnectingChanged.emit()
                         return
-                
-                # Clean up
-                try:
-                    os.remove('/tmp/wifi_config.conf')
-                except:
-                    pass
-            
+
+                    logger.info(f"Connecting to WiFi network: {ssid}")
+
+                    # First, disconnect from current network if connected
+                    try:
+                        subprocess.run(['nmcli', 'device', 'disconnect', 'wlan0'],
+                                     capture_output=True, timeout=10)
+                    except:
+                        pass  # Ignore if no current connection
+
+                    # Connect to the new network
+                    if password:
+                        # For networks with password
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
+                                              capture_output=True, text=True, timeout=30)
+                    else:
+                        # For open networks
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid],
+                                              capture_output=True, text=True, timeout=30)
+
+                    if result.returncode == 0:
+                        logger.info(f"Successfully connected to {ssid}")
+                    else:
+                        logger.error(f"Failed to connect to {ssid}: {result.stderr}")
+                        self._wifi_connecting = False
+                        self.wifiConnectingChanged.emit()
+                        return
+
+                except Exception as e:
+                    logger.error(f"nmcli connection failed: {e}")
+                    self._wifi_connecting = False
+                    self.wifiConnectingChanged.emit()
+                    return
+
             self._wifi_connecting = False
             self.wifiConnectingChanged.emit()
-            
+
             # Check if connected
             self.update_wifi_status()
+
+        except Exception as e:
+            logger.error(f"Error connecting to WiFi: {e}")
+            self._wifi_connecting = False
+            self.wifiConnectingChanged.emit()
             
         except Exception as e:
             logger.error(f"Error connecting to WiFi: {e}")
@@ -1475,22 +1287,33 @@ class Backend(QObject):
         """Disconnect from current WiFi network"""
         try:
             is_windows = platform.system() == 'Windows'
-            
+
             if is_windows:
                 subprocess.run(['netsh', 'wlan', 'disconnect'], capture_output=True)
             else:
-                # For Linux, kill wpa_supplicant and release DHCP
+                # For Linux, use nmcli to disconnect (preferred method)
                 try:
-                    subprocess.run(['sudo', 'killall', 'wpa_supplicant'], capture_output=True)
-                    subprocess.run(['sudo', 'dhclient', '-r', 'wlan0'], capture_output=True)
-                except:
-                    # Try without sudo
-                    try:
-                        subprocess.run(['killall', 'wpa_supplicant'], capture_output=True)
-                        subprocess.run(['dhclient', '-r', 'wlan0'], capture_output=True)
-                    except Exception as e:
-                        logger.error(f"Error disconnecting WiFi: {e}")
-            
+                    # First try to disconnect using nmcli
+                    result = subprocess.run(['nmcli', 'device', 'disconnect', 'wifi'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        logger.info("Successfully disconnected WiFi using nmcli")
+                    else:
+                        logger.warning(f"nmcli disconnect failed: {result.stderr}")
+                        # Fallback to killing wpa_supplicant and releasing DHCP
+                        try:
+                            subprocess.run(['sudo', 'killall', 'wpa_supplicant'], capture_output=True)
+                            subprocess.run(['sudo', 'dhclient', '-r', 'wlan0'], capture_output=True)
+                        except:
+                            # Try without sudo
+                            try:
+                                subprocess.run(['killall', 'wpa_supplicant'], capture_output=True)
+                                subprocess.run(['dhclient', '-r', 'wlan0'], capture_output=True)
+                            except Exception as e:
+                                logger.error(f"Error disconnecting WiFi: {e}")
+                except Exception as e:
+                    logger.error(f"Error disconnecting WiFi: {e}")
+
             self._wifi_connected = False
             self._current_wifi_ssid = ""
             self.wifiConnectedChanged.emit()
@@ -1521,60 +1344,74 @@ class Backend(QObject):
                         if ssid_match:
                             current_ssid = ssid_match.group(1).strip()
             else:
-                # Check wireless interfaces for Linux
-                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
-                has_ip = False
+                # Check WiFi status using nmcli (preferred for Ubuntu/Linux)
+                connected = False
                 current_ssid = ""
-                
-                for interface in interfaces:
-                    try:
-                        # Check if interface has an IP address
-                        result = subprocess.run(['ip', 'addr', 'show', interface], 
-                                              capture_output=True, text=True, timeout=5)
-                        
-                        if 'inet ' in result.stdout:
-                            has_ip = True
-                            break
-                    except:
-                        continue
-                
-                # Get current SSID - try multiple methods
-                current_ssid = ""
-                if has_ip:
-                    # Try nmcli first (NetworkManager)
-                    try:
-                        nmcli_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'dev', 'wifi'], 
-                                                    capture_output=True, text=True, timeout=5)
-                        if nmcli_result.returncode == 0:
-                            for line in nmcli_result.stdout.split('\n'):
+
+                try:
+                    # Use nmcli to get device status
+                    result = subprocess.run(['nmcli', 'device', 'status'],
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        lines = result.stdout.split('\n')
+                        for line in lines:
+                            if 'wifi' in line.lower() and 'connected' in line.lower():
+                                connected = True
+                                break
+
+                    # Get current SSID if connected
+                    if connected:
+                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi'],
+                                                   capture_output=True, text=True, timeout=5)
+                        if ssid_result.returncode == 0:
+                            for line in ssid_result.stdout.split('\n'):
                                 if line.startswith('yes:'):
                                     current_ssid = line.split(':', 1)[1].strip()
                                     break
-                    except:
-                        pass
-                    
-                    # If nmcli failed, try iw
-                    if not current_ssid:
+
+                except Exception as e:
+                    logger.warning(f"nmcli not available, falling back to legacy methods: {e}")
+                    # Fallback to legacy methods
+                    interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                    has_ip = False
+
+                    for interface in interfaces:
                         try:
-                            iw_result = subprocess.run(['iw', 'dev', interface, 'link'], 
-                                                     capture_output=True, text=True, timeout=5)
-                            if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
-                                ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
-                                if ssid_match:
-                                    current_ssid = ssid_match.group(1).strip()
+                            # Check if interface has an IP address
+                            result = subprocess.run(['ip', 'addr', 'show', interface],
+                                                  capture_output=True, text=True, timeout=5)
+
+                            if 'inet ' in result.stdout:
+                                has_ip = True
+                                break
+                        except:
+                            continue
+
+                    # Get current SSID using legacy tools
+                    if has_ip:
+                        # Try iw first
+                        try:
+                            for interface in interfaces:
+                                iw_result = subprocess.run(['iw', 'dev', interface, 'link'],
+                                                         capture_output=True, text=True, timeout=5)
+                                if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
+                                    ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
+                                    if ssid_match:
+                                        current_ssid = ssid_match.group(1).strip()
+                                        break
                         except:
                             pass
-                    
-                    # If iw failed, try iwgetid
-                    if not current_ssid:
-                        try:
-                            ssid_result = subprocess.run(['iwgetid', '-r'], 
-                                                       capture_output=True, text=True, timeout=5)
-                            current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
-                        except:
-                            pass
-                
-                connected = has_ip
+
+                        # If iw failed, try iwgetid
+                        if not current_ssid:
+                            try:
+                                ssid_result = subprocess.run(['iwgetid', '-r'],
+                                                           capture_output=True, text=True, timeout=5)
+                                current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
+                            except:
+                                pass
+
+                    connected = has_ip
             
             # Update properties
             wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
@@ -1595,51 +1432,53 @@ class Backend(QObject):
         """Check if WiFi interface is available and log status"""
         try:
             is_windows = platform.system() == 'Windows'
-            
+
             if is_windows:
                 # Check if WLAN interface exists on Windows
-                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'],
                                       capture_output=True, text=True, timeout=5)
                 if 'wlan' in result.stdout.lower() or 'wireless' in result.stdout.lower():
                     logger.info("WiFi interface detected on Windows")
                 else:
                     logger.warning("No WiFi interface detected on Windows")
             else:
-                # Check wireless interfaces on Linux
-                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
-                wifi_found = False
-                
-                for interface in interfaces:
-                    try:
-                        result = subprocess.run(['ip', 'link', 'show', interface], 
-                                              capture_output=True, text=True, timeout=5)
-                        if result.returncode == 0:
-                            logger.info(f"WiFi interface {interface} detected on Linux")
-                            wifi_found = True
-                            break
-                    except:
-                        continue
-                
-                if not wifi_found:
-                    logger.warning("No WiFi interface detected on Linux")
-                
-                # Check if required tools are available
-                tools = ['nmcli', 'iw', 'iwlist', 'iwgetid', 'wpa_supplicant', 'dhclient']
-                for tool in tools:
-                    try:
-                        tool_check = subprocess.run(['which', tool], capture_output=True, timeout=2)
-                        if tool_check.returncode != 0:
-                            logger.warning(f"WiFi tool '{tool}' not found. WiFi functionality may be limited.")
-                    except:
-                        logger.warning(f"Error checking for tool '{tool}'")
-                
-                # Check sudo availability
+                # Check wireless interfaces on Linux using nmcli
                 try:
-                    sudo_check = subprocess.run(['sudo', '-n', 'true'], capture_output=True, timeout=2)
-                    if sudo_check.returncode != 0:
-                        logger.warning("sudo not available or requires password. WiFi functionality may require manual sudo setup.")
+                    result = subprocess.run(['nmcli', 'device', 'status'],
+                                          capture_output=True, text=True, timeout=5)
+                    if 'wifi' in result.stdout.lower():
+                        logger.info("WiFi interface detected on Linux via nmcli")
+                    else:
+                        logger.warning("No WiFi interface detected via nmcli")
                 except:
-                    logger.warning("Error checking sudo availability")
+                    # Fallback to ip command
+                    interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                    wifi_found = False
+
+                    for interface in interfaces:
+                        try:
+                            result = subprocess.run(['ip', 'link', 'show', interface],
+                                                 capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                logger.info(f"WiFi interface {interface} detected on Linux")
+                                wifi_found = True
+                                break
+                        except:
+                            continue
+
+                    if not wifi_found:
+                        logger.warning("No WiFi interface detected on Linux")
+
+                # Check if nmcli is available (preferred for Ubuntu)
+                try:
+                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=2)
+                    if nmcli_check.returncode == 0:
+                        logger.info("nmcli available - full WiFi functionality supported")
+                    else:
+                        logger.warning("nmcli not available - limited WiFi functionality. Install with: sudo apt install network-manager")
+                except:
+                    logger.warning("Error checking nmcli availability")
+
         except Exception as e:
             logger.error(f"Error checking WiFi interface: {e}")
 
@@ -1800,11 +1639,10 @@ if __name__ == '__main__':
         )
     elif platform.system() == 'Linux':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
-            "--disable-web-security --allow-running-insecure-content "
-            "--disable-gpu-sandbox --use-gl=desktop "
-            "--enable-hardware-overlays --enable-accelerated-video "
-            "--enable-native-gpu-memory-buffers --enable-zero-copy"
+            "--disable-gpu --disable-software-rasterizer --disable-background-timer-throttling "
+            "--disable-renderer-backgrounding --disable-backgrounding-occluded-windows "
+            "--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox "
+            "--use-gl=swiftshader"  # Use software OpenGL
         )
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -1812,25 +1650,32 @@ if __name__ == '__main__':
             "--disable-web-security --allow-running-insecure-content "
             "--disable-gpu-sandbox"
         )
-    os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=false;*.debug=false;qt.*.debug=false"
+    os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
     
     # Set platform-specific Qt platform plugin
     if platform.system() == 'Windows':
         os.environ["QT_QPA_PLATFORM"] = "windows"
         os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
     elif platform.system() == 'Linux':
-        # os.environ["QT_QPA_PLATFORM"] = "xcb"  # Force XCB platform for hardware acceleration
-        # os.environ["QSG_RHI_BACKEND"] = "gl"  # Force OpenGL hardware acceleration
-        # os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"  # Force EGL for hardware acceleration
-        # os.environ["EGL_PLATFORM"] = "drm"  # Use DRM for EGL when available
-        # os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"  # Force OpenGL 3.3 compatibility
-        # os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Force GLSL 3.30 compatibility
-        # os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
-        print("Linux platform detected - setting environment variables for hardware acceleration")
+        # Raspberry Pi / Linux settings - use software rendering for better compatibility
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        os.environ["QT_QUICK_BACKEND"] = "software"  # Use software rendering for RPi
+        os.environ["QSG_RHI_BACKEND"] = "software"   # Force software rendering
+        os.environ["QT_XCB_GL_INTEGRATION"] = "none" # Disable GL integration
+        os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"    # Force software OpenGL
+        print("Linux platform detected - using software rendering for Raspberry Pi compatibility")
     else:
         os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
     
+    # # Set QML style to Fusion
+    # os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
+    
     QtWebEngineQuick.initialize()
+    
+    # # Set style to Fusion before creating QApplication
+    # fusion_style = QStyleFactory.create("Fusion")
+    # if fusion_style:
+    #     QApplication.setStyle(fusion_style)
     
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -1859,22 +1704,11 @@ if __name__ == '__main__':
     def _log_qml_warnings(errors):
         for e in errors:
             try:
-                error_msg = e.toString()
-                # Filter out common non-critical warnings
-                if "The current style does not support customization" in error_msg:
-                    continue  # Skip style customization warnings
-                if "Window created - bottom bar should be visible" in error_msg:
-                    continue  # Skip debug messages
-                if "SwipeView completed" in error_msg:
-                    continue  # Skip debug messages
-                logger.error(f"QML warning: {error_msg}")
+                logger.error(f"QML warning: {e.toString()}")
             except UnicodeEncodeError:
                 # Handle encoding issues by sanitizing the message
-                try:
-                    sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
-                    logger.error(f"QML warning: {sanitized_message}")
-                except Exception:
-                    logger.error("QML warning: <encoding error>")
+                sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
+                logger.error(f"QML warning: {sanitized_message}")
             except Exception:
                 logger.error(f"QML warning (unformatted): {e}")
     try:
@@ -2114,7 +1948,7 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    url: radarLocations[backend.location].replace("radar", modelData)
+                                    url: radarLocations[backend.location].replace("radar", modelData) + "&rand=" + new Date().getTime()
                                     settings {
                                         webGLEnabled: true
                                         accelerated2dCanvasEnabled: true
@@ -2434,7 +2268,11 @@ Window {
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: console.log("WiFi clicked")
+                        onClicked: {
+                            console.log("WiFi clicked - opening popup")
+                            wifiPopup.open()
+                            console.log("WiFi popup opened, visible:", wifiPopup.visible)
+                        }
                     }
                 }
 
