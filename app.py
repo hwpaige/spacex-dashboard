@@ -16,7 +16,6 @@ from dateutil.parser import parse
 import pytz
 import pandas as pd
 import time
-import pyqtgraph as pg
 import subprocess
 import re
 
@@ -1533,98 +1532,6 @@ class Backend(QObject):
         except Exception as e:
             return f"Error getting WiFi interface info: {e}"
 
-class PyQtGraphItem(QQuickPaintedItem):
-    dataChanged = pyqtSignal()
-    chartTypeChanged = pyqtSignal()
-    monthsChanged = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._data = []
-        self._chart_type = 'bar'
-        self._months = []
-        self.widget = pg.PlotWidget()
-        self.plot_item = self.widget.plotItem
-        self.plot_item.addLegend()
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
-        self.bar_items = []
-        self.line_items = []
-
-    @pyqtProperty('QVariantList', notify=dataChanged)
-    def data(self):
-        return self._data
-
-    @data.setter
-    def data(self, value):
-        self._data = value
-        self.update_plot()
-
-    @pyqtProperty(str, notify=chartTypeChanged)
-    def chartType(self):
-        return self._chart_type
-
-    @chartType.setter
-    def chartType(self, value):
-        self._chart_type = value
-        self.update_plot()
-
-    @pyqtProperty('QVariantList', notify=monthsChanged)
-    def months(self):
-        return self._months
-
-    @months.setter
-    def months(self, value):
-        self._months = value
-        self.update_plot()
-
-    def update_plot(self):
-        self.plot_item.clear()
-        max_y = 0
-        for series in self._data:
-            if isinstance(series, dict) and 'values' in series and series['values']:
-                max_y = max(max_y, max(series['values']))
-        if max_y == 0:
-            max_y = 10
-        if self._chart_type == 'bar':
-            for i, series in enumerate(self._data):
-                if isinstance(series, dict) and 'values' in series and series['values']:
-                    x = list(range(len(series['values'])))
-                    height = series['values']
-                    bar = pg.BarGraphItem(x=x, height=height, width=0.8, brush=pg.mkBrush(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
-                    self.plot_item.addItem(bar)
-            if self._months:
-                ticks = [[(i, month) for i, month in enumerate(self._months)]]
-                self.plot_item.getAxis('bottom').setTicks(ticks)
-            self.plot_item.setLabel('bottom', 'Months')
-        else:
-            for i, series in enumerate(self._data):
-                if isinstance(series, dict) and 'values' in series and series['values']:
-                    x = list(range(len(series['values'])))
-                    y = series['values']
-                    self.plot_item.plot(x, y, pen=pg.mkPen(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
-            self.plot_item.setLabel('bottom', 'Day of Year')
-        self.plot_item.setLabel('left', 'Number of Launches')
-        x_len = len(self._data[0]['values']) if self._data and self._data[0]['values'] else (12 if self._chart_type == 'bar' else 365)
-        if self._chart_type == 'bar':
-            x_range = (-0.5, x_len - 0.5)
-        else:
-            x_range = (0, x_len - 1)
-        self.plot_item.getViewBox().setRange(xRange=x_range, yRange=(0, max_y))
-        self.plot_item.getViewBox().update()
-        self.widget.update()
-        self.update()
-
-    def get_color(self, index):
-        colors = ['#ff6b6b', '#4ecdc4', '#ffe66d']
-        return colors[index % len(colors)]
-
-    def paint(self, painter):
-        rect = QRectF(0, 0, self.width(), self.height())
-        self.widget.resize(int(self.width()), int(self.height()))
-        self.widget.scene().setSceneRect(0, 0, self.width(), self.height())
-        self.widget.render(painter, rect, rect.toRect())
-
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
     if hasattr(sys.stdout, 'reconfigure'):
@@ -1707,8 +1614,6 @@ if __name__ == '__main__':
         logger.error(f"Font Awesome font not found at: {fa_path}")
 
     engine = QQmlApplicationEngine()
-    qmlRegisterType(PyQtGraphItem, 'MyModule', 1, 0, 'PyQtGraphItem')
-    # Connect QML warnings signal (list of QQmlError objects)
     def _log_qml_warnings(errors):
         for e in errors:
             try:
@@ -1730,6 +1635,7 @@ if __name__ == '__main__':
     context.setContextProperty("circuitCoords", circuit_coords)
     context.setContextProperty("spacexLogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'spacex_logo.png')}")
     context.setContextProperty("f1LogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png')}")
+    context.setContextProperty("chartHtmlPath", f"file://{os.path.join(os.path.dirname(__file__), 'chart.html')}")
     context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1')
 
     # Embedded QML for completeness (main.qml content)
@@ -1740,7 +1646,6 @@ import QtQuick.Controls 2.12
 import QtQuick.Layouts 1.12
 import QtCharts 2.3
 import QtWebEngine 1.8
-import MyModule 1.0
 
 Window {
     id: root
@@ -1801,12 +1706,23 @@ Window {
                             anchors.fill: parent
                             spacing: 5
 
-                            PyQtGraphItem {
+                            WebEngineView {
+                                id: chartView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                data: backend.launchTrendsSeries
-                                chartType: backend.chartType
-                                months: backend.launchTrendsMonths
+                                url: chartHtmlPath
+                                settings {
+                                    webGLEnabled: true
+                                    accelerated2dCanvasEnabled: true
+                                    allowRunningInsecureContent: true
+                                    javascriptEnabled: true
+                                    localContentCanAccessRemoteUrls: true
+                                }
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        updateChart();
+                                    }
+                                }
                             }
 
                             // Chart control buttons
@@ -1832,6 +1748,7 @@ Window {
                                             text: chartData.icon
                                             onClicked: {
                                                 backend.chartType = chartData.type
+                                                updateChart()
                                             }
                                             background: Rectangle {
                                                 color: backend.chartType === chartData.type ? 
@@ -1874,6 +1791,7 @@ Window {
                                             text: chartData.icon
                                             onClicked: {
                                                 backend.chartViewMode = chartData.type
+                                                updateChart()
                                             }
                                             background: Rectangle {
                                                 color: backend.chartViewMode === chartData.type ? 
@@ -1899,6 +1817,32 @@ Window {
                                     }
                                 }
                             }
+                        }
+
+                        function updateChart() {
+                            if (chartView.loadProgress === 100) {
+                                var seriesData = backend.launchTrendsSeries
+                                var monthLabels = backend.launchTrendsMonths
+                                var chartType = backend.chartType
+                                var title = backend.chartViewMode === "cumulative" ? 
+                                           (chartType === "bar" ? "Cumulative Launch Trends (Bar)" : "Cumulative Launch Trends (Line)") : 
+                                           (chartType === "bar" ? "Monthly Launch Trends (Bar)" : "Monthly Launch Trends (Line)")
+                                
+                                var jsCode = "window.updateChartData(" + 
+                                           JSON.stringify(seriesData) + ", '" + 
+                                           chartType + "', " + 
+                                           JSON.stringify(monthLabels) + ", '" + 
+                                           title + "')"
+                                chartView.runJavaScript(jsCode)
+                            }
+                        }
+
+                        // Update chart when data changes
+                        Connections {
+                            target: backend
+                            onLaunchesChanged: chartView.parent.updateChart()
+                            onChartTypeChanged: chartView.parent.updateChart()
+                            onChartViewModeChanged: chartView.parent.updateChart()
                         }
                     }
 
