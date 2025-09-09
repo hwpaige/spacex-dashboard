@@ -252,15 +252,15 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl --disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --use-gl=egl --enable-unsafe-webgpu --enable-hardware-overlays --enable-accelerated-video --enable-native-gpu-memory-buffers --enable-zero-copy --disable-backgrounding-occluded-windows --max-tiles-for-interest-area=512 --enable-gpu-rasterization --enable-oop-rasterization --enable-webgl-draft-extensions --enable-webgl-image-chromium --gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --num-raster-threads=1
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-web-security --allow-running-insecure-content --gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF --disable-gpu-driver-bug-workarounds
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
-Environment=MESA_GL_VERSION_OVERRIDE=3.3
-Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
-Environment=VDPAU_DRIVER=v3d
+Environment=MESA_GL_VERSION_OVERRIDE=3.3
+Environment=MESA_GLSL_VERSION_OVERRIDE=330
+Environment=EGL_PLATFORM=drm
 WorkingDirectory=/home/$USER/Desktop/project
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/app.py
 Restart=always
