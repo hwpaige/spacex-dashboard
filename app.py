@@ -29,16 +29,13 @@ if platform.system() == 'Windows':
         "--disable-gpu-driver-bug-workarounds --no-sandbox"
     )
 elif platform.system() == 'Linux':
+    # Hardware acceleration for Raspberry Pi with WebGL support for radar
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
+        "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
+        "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox --use-gl=egl --enable-unsafe-webgpu "
-        "--enable-hardware-overlays --enable-accelerated-video "
-        "--enable-native-gpu-memory-buffers --enable-zero-copy "
-        "--disable-backgrounding-occluded-windows --max-tiles-for-interest-area=512 "
-        "--enable-gpu-rasterization --enable-oop-rasterization "
-        "--enable-webgl-draft-extensions --enable-webgl-image-chromium "
-        "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF"
+        "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
+        "--disable-gpu-driver-bug-workarounds"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -50,12 +47,12 @@ os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  #
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
 os.environ["QSG_RHI_BACKEND"] = "gl"
 
-# Additional Mesa environment variables for Raspberry Pi WebGL support
-os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"
-os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"
+# Essential Mesa environment variables for Raspberry Pi hardware rendering
 os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering
 os.environ["GALLIUM_DRIVER"] = "v3d"  # Use VideoCore driver
-os.environ["VDPAU_DRIVER"] = "v3d"  # Video acceleration
+os.environ["MESA_GL_VERSION_OVERRIDE"] = "3.3"  # Ensure OpenGL 3.3
+os.environ["MESA_GLSL_VERSION_OVERRIDE"] = "330"  # Ensure GLSL 3.30
+os.environ["EGL_PLATFORM"] = "drm"  # Use DRM for EGL
 
 # Set platform-specific Qt platform plugin
 if platform.system() == 'Windows':
@@ -387,7 +384,7 @@ location_settings = {
     'Hawthorne': {'lat': 33.916, 'lon': -118.352, 'timezone': 'America/Los_Angeles'}
 }
 
-# Radar URLs (simplified to avoid WebGL issues)
+# Radar URLs - Enable for all platforms including Raspberry Pi
 radar_locations = {
     'Starbase': 'https://embed.windy.com/embed2.html?lat=25.997&lon=-97.155&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=25.997&detailLon=-97.155&metricWind=mph&metricTemp=%C2%B0F',
     'Vandy': 'https://embed.windy.com/embed2.html?lat=34.632&lon=-120.611&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=34.632&detailLon=-120.611&metricWind=mph&metricTemp=%C2%B0F',
@@ -1668,13 +1665,13 @@ if __name__ == '__main__':
         os.environ["QT_QPA_PLATFORM"] = "windows"
         os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
     elif platform.system() == 'Linux':
-        # Raspberry Pi / Linux settings - use software rendering for better compatibility
+        # Raspberry Pi / Linux settings - use hardware acceleration with Mesa
         os.environ["QT_QPA_PLATFORM"] = "xcb"
-        os.environ["QT_QUICK_BACKEND"] = "software"  # Use software rendering for RPi
-        os.environ["QSG_RHI_BACKEND"] = "software"   # Force software rendering
-        os.environ["QT_XCB_GL_INTEGRATION"] = "none" # Disable GL integration
-        os.environ["LIBGL_ALWAYS_SOFTWARE"] = "1"    # Force software OpenGL
-        print("Linux platform detected - using software rendering for Raspberry Pi compatibility")
+        os.environ["QT_QUICK_BACKEND"] = "softwarecontext"  # Use software context but hardware rendering
+        # Remove QSG_RHI_BACKEND override - let Qt choose best backend (GL with Mesa)
+        os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl" # Use EGL for hardware acceleration
+        # LIBGL_ALWAYS_SOFTWARE is already set to "0" earlier for hardware rendering
+        print("Linux platform detected - using hardware acceleration with Mesa drivers")
     else:
         os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
     
