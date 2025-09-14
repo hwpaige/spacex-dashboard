@@ -377,8 +377,8 @@ unclutter -idle 0 -root &
 
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-# Conservative Chromium flags for Raspberry Pi to prevent memory leaks
-export QTWEBENGINE_CHROMIUM_FLAGS="--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 --num-raster-threads=1 --disable-accelerated-video-decode --disable-background-timer-throttling --disable-renderer-backgrounding --disable-features=VizDisplayCompositor,UseSkiaRenderer --disable-gpu-memory-buffer-video-frames --disable-gpu-memory-buffer-compositor-resources --max-tiles-for-interest-area=64"
+# Hardware acceleration Chromium flags for Raspberry Pi with WebGL support
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-web-security --allow-running-insecure-content --gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF --disable-gpu-driver-bug-workarounds --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 --num-raster-threads=1"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
