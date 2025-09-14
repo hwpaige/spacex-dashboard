@@ -1116,42 +1116,12 @@ class Backend(QObject):
                         self.wifiNetworksChanged.emit()
                         return
 
-                    # Check if NetworkManager is running
-                    nm_status = subprocess.run(['systemctl', 'is-active', 'NetworkManager'],
-                                             capture_output=True, text=True, timeout=5)
-                    if nm_status.returncode != 0 or 'active' not in nm_status.stdout:
-                        logger.error("NetworkManager is not running. Please start it with: sudo systemctl start NetworkManager")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
-
-                    # Get WiFi interface name dynamically
-                    wifi_interfaces = self._get_wifi_interfaces()
-                    if not wifi_interfaces:
-                        logger.warning("No WiFi interfaces found for scanning")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
-
-                    # Try to scan using the first available interface
-                    scan_interface = wifi_interfaces[0]
-                    logger.info(f"Scanning for WiFi networks using interface: {scan_interface}")
-
-                    # Simple rescan for fresh results
-                    rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'],
-                                                 capture_output=True, text=True, timeout=10)
-                    if rescan_result.returncode != 0:
-                        logger.warning(f"WiFi rescan failed: {rescan_result.stderr}")
-
-                    # Wait a moment for rescan to complete
-                    time.sleep(2)
-
                     # Scan for networks using nmcli
                     result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
                                           capture_output=True, text=True, timeout=15)
 
                     if result.returncode != 0:
-                        logger.error(f"WiFi scan failed: {result.stderr}")
+                        logger.error(f"nmcli scan failed: {result.stderr}")
                         self._wifi_networks = []
                         self.wifiNetworksChanged.emit()
                         return
@@ -1271,52 +1241,27 @@ class Backend(QObject):
                         self.wifiConnectingChanged.emit()
                         return
 
-                    # Check if NetworkManager is running
-                    nm_status = subprocess.run(['systemctl', 'is-active', 'NetworkManager'],
-                                             capture_output=True, text=True, timeout=5)
-                    if nm_status.returncode != 0 or 'active' not in nm_status.stdout:
-                        logger.error("NetworkManager is not running. Please start it with: sudo systemctl start NetworkManager")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                        return
-
                     logger.info(f"Connecting to WiFi network: {ssid}")
-
-                    # Get available WiFi interfaces
-                    wifi_interfaces = self._get_wifi_interfaces()
-                    if not wifi_interfaces:
-                        logger.error("No WiFi interfaces available for connection")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                        return
-
-                    # Use the first available interface
-                    interface = wifi_interfaces[0]
-                    logger.info(f"Using WiFi interface: {interface}")
 
                     # First, disconnect from current network if connected
                     try:
-                        disconnect_result = subprocess.run(['nmcli', 'device', 'disconnect', interface],
-                                                         capture_output=True, timeout=10)
-                        if disconnect_result.returncode == 0:
-                            logger.info(f"Disconnected from current network on {interface}")
-                    except Exception as e:
-                        logger.warning(f"Could not disconnect from current network: {e}")
+                        subprocess.run(['nmcli', 'device', 'disconnect', 'wlan0'],
+                                     capture_output=True, timeout=10)
+                    except:
+                        pass  # Ignore if no current connection
 
                     # Connect to the new network
                     if password:
                         # For networks with password
-                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password, 'ifname', interface],
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
                                               capture_output=True, text=True, timeout=30)
                     else:
                         # For open networks
-                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', interface],
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid],
                                               capture_output=True, text=True, timeout=30)
 
                     if result.returncode == 0:
-                        logger.info(f"Successfully connected to {ssid} on {interface}")
-                        # Wait a moment for the connection to establish
-                        time.sleep(2)
+                        logger.info(f"Successfully connected to {ssid}")
                     else:
                         logger.error(f"Failed to connect to {ssid}: {result.stderr}")
                         self._wifi_connecting = False
@@ -1356,33 +1301,24 @@ class Backend(QObject):
             else:
                 # For Linux, use nmcli to disconnect (preferred method)
                 try:
-                    # Get available WiFi interfaces
-                    wifi_interfaces = self._get_wifi_interfaces()
-
-                    if wifi_interfaces:
-                        # Try to disconnect each interface
-                        for interface in wifi_interfaces:
-                            try:
-                                result = subprocess.run(['nmcli', 'device', 'disconnect', interface],
-                                                      capture_output=True, text=True, timeout=10)
-                                if result.returncode == 0:
-                                    logger.info(f"Successfully disconnected WiFi on {interface}")
-                                else:
-                                    logger.warning(f"nmcli disconnect failed on {interface}: {result.stderr}")
-                            except Exception as e:
-                                logger.warning(f"Error disconnecting {interface}: {e}")
+                    # First try to disconnect using nmcli
+                    result = subprocess.run(['nmcli', 'device', 'disconnect', 'wifi'],
+                                          capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        logger.info("Successfully disconnected WiFi using nmcli")
                     else:
-                        logger.warning("No WiFi interfaces found for disconnection")
-
-                    # Fallback: try to disconnect all wifi devices
-                    try:
-                        result = subprocess.run(['nmcli', 'device', 'disconnect', 'wifi'],
-                                              capture_output=True, text=True, timeout=10)
-                        if result.returncode == 0:
-                            logger.info("Successfully disconnected all WiFi devices")
-                    except Exception as e:
-                        logger.warning(f"Fallback disconnect failed: {e}")
-
+                        logger.warning(f"nmcli disconnect failed: {result.stderr}")
+                        # Fallback to killing wpa_supplicant and releasing DHCP
+                        try:
+                            subprocess.run(['sudo', 'killall', 'wpa_supplicant'], capture_output=True)
+                            subprocess.run(['sudo', 'dhclient', '-r', 'wlan0'], capture_output=True)
+                        except:
+                            # Try without sudo
+                            try:
+                                subprocess.run(['killall', 'wpa_supplicant'], capture_output=True)
+                                subprocess.run(['dhclient', '-r', 'wlan0'], capture_output=True)
+                            except Exception as e:
+                                logger.error(f"Error disconnecting WiFi: {e}")
                 except Exception as e:
                     logger.error(f"Error disconnecting WiFi: {e}")
 
@@ -1396,116 +1332,104 @@ class Backend(QObject):
         """Update WiFi connection status"""
         try:
             is_windows = platform.system() == 'Windows'
-
+            
             if is_windows:
                 # Check WiFi interface status using Windows commands
-                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'],
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
                                       capture_output=True, text=True, timeout=5)
-
+                
                 connected = False
                 current_ssid = ""
-
+                
                 for line in result.stdout.split('\n'):
                     line = line.strip()
-
+                    
                     if 'State' in line and 'connected' in line.lower():
                         connected = True
-
+                    
                     if 'SSID' in line and 'BSSID' not in line:
                         ssid_match = re.search(r'SSID\s*:\s*(.+)', line)
                         if ssid_match:
                             current_ssid = ssid_match.group(1).strip()
             else:
-                # Check WiFi status using multiple methods for Linux
+                # Check WiFi status using nmcli (preferred for Ubuntu/Linux)
                 connected = False
                 current_ssid = ""
 
-                # Method 1: Use nmcli (preferred)
                 try:
-                    # Check if nmcli is available and NetworkManager is running
-                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=2)
-                    if nmcli_check.returncode == 0:
-                        nm_status = subprocess.run(['systemctl', 'is-active', 'NetworkManager'],
-                                                 capture_output=True, text=True, timeout=5)
-                        if nm_status.returncode == 0 and 'active' in nm_status.stdout.strip():
-                            # Use nmcli to get device status
-                            result = subprocess.run(['nmcli', 'device', 'status'],
-                                                  capture_output=True, text=True, timeout=5)
-                            if result.returncode == 0:
-                                lines = result.stdout.split('\n')
-                                for line in lines:
-                                    if 'wifi' in line.lower() and 'connected' in line.lower():
-                                        connected = True
-                                        break
+                    # Use nmcli to get device status
+                    result = subprocess.run(['nmcli', 'device', 'status'],
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        lines = result.stdout.split('\n')
+                        for line in lines:
+                            if 'wifi' in line.lower() and 'connected' in line.lower():
+                                connected = True
+                                break
 
-                            # Get current SSID if connected
-                            if connected:
-                                ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi'],
+                    # Get current SSID if connected
+                    if connected:
+                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi'],
                                                    capture_output=True, text=True, timeout=5)
-                                if ssid_result.returncode == 0:
-                                    for line in ssid_result.stdout.split('\n'):
-                                        if line.startswith('yes:'):
-                                            current_ssid = line.split(':', 1)[1].strip()
-                                            break
-                        else:
-                            logger.warning("NetworkManager not running, falling back to legacy methods")
-                    else:
-                        logger.warning("nmcli not available, falling back to legacy methods")
+                        if ssid_result.returncode == 0:
+                            for line in ssid_result.stdout.split('\n'):
+                                if line.startswith('yes:'):
+                                    current_ssid = line.split(':', 1)[1].strip()
+                                    break
 
                 except Exception as e:
-                    logger.warning(f"nmcli method failed, falling back to legacy methods: {e}")
+                    logger.warning(f"nmcli not available, falling back to legacy methods: {e}")
+                    # Fallback to legacy methods
+                    interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                    has_ip = False
 
-                # Method 2: Legacy fallback methods
-                if not connected:
-                    wifi_interfaces = self._get_wifi_interfaces()
-
-                    for interface in wifi_interfaces:
+                    for interface in interfaces:
                         try:
                             # Check if interface has an IP address
                             result = subprocess.run(['ip', 'addr', 'show', interface],
                                                   capture_output=True, text=True, timeout=5)
 
                             if 'inet ' in result.stdout:
-                                connected = True
-                                logger.info(f"WiFi connected via interface {interface}")
-
-                                # Get current SSID using iw
-                                try:
-                                    iw_result = subprocess.run(['iw', 'dev', interface, 'link'],
-                                                             capture_output=True, text=True, timeout=5)
-                                    if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
-                                        ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
-                                        if ssid_match:
-                                            current_ssid = ssid_match.group(1).strip()
-                                            break
-                                except Exception as e:
-                                    logger.warning(f"iw command failed for {interface}: {e}")
-
-                                # If iw failed, try iwgetid
-                                if not current_ssid:
-                                    try:
-                                        ssid_result = subprocess.run(['iwgetid', '-r'],
-                                                                   capture_output=True, text=True, timeout=5)
-                                        if ssid_result.returncode == 0:
-                                            current_ssid = ssid_result.stdout.strip()
-                                    except Exception as e:
-                                        logger.warning(f"iwgetid command failed: {e}")
-
+                                has_ip = True
                                 break
-                        except Exception as e:
-                            logger.warning(f"Error checking interface {interface}: {e}")
+                        except:
                             continue
 
+                    # Get current SSID using legacy tools
+                    if has_ip:
+                        # Try iw first
+                        try:
+                            for interface in interfaces:
+                                iw_result = subprocess.run(['iw', 'dev', interface, 'link'],
+                                                         capture_output=True, text=True, timeout=5)
+                                if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
+                                    ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
+                                    if ssid_match:
+                                        current_ssid = ssid_match.group(1).strip()
+                                        break
+                        except:
+                            pass
+
+                        # If iw failed, try iwgetid
+                        if not current_ssid:
+                            try:
+                                ssid_result = subprocess.run(['iwgetid', '-r'],
+                                                           capture_output=True, text=True, timeout=5)
+                                current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
+                            except:
+                                pass
+
+                    connected = has_ip
+            
             # Update properties
             wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
-
+            
             self._wifi_connected = connected
             self._current_wifi_ssid = current_ssid
-
+            
             if wifi_changed:
-                logger.info(f"WiFi status changed - Connected: {connected}, SSID: '{current_ssid}'")
                 self.wifiConnectedChanged.emit()
-
+                
         except Exception as e:
             logger.error(f"Error updating WiFi status: {e}")
             self._wifi_connected = False
@@ -1526,157 +1450,85 @@ class Backend(QObject):
                 else:
                     logger.warning("No WiFi interface detected on Windows")
             else:
-                # Check wireless interfaces on Linux using multiple methods
-                wifi_interfaces = self._get_wifi_interfaces()
-                if wifi_interfaces:
-                    logger.info(f"WiFi interfaces detected: {', '.join(wifi_interfaces)}")
-                else:
-                    logger.warning("No WiFi interfaces detected on Linux")
+                # Check wireless interfaces on Linux using nmcli
+                try:
+                    result = subprocess.run(['nmcli', 'device', 'status'],
+                                          capture_output=True, text=True, timeout=5)
+                    if 'wifi' in result.stdout.lower():
+                        logger.info("WiFi interface detected on Linux via nmcli")
+                    else:
+                        logger.warning("No WiFi interface detected via nmcli")
+                except:
+                    # Fallback to ip command
+                    interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                    wifi_found = False
+
+                    for interface in interfaces:
+                        try:
+                            result = subprocess.run(['ip', 'link', 'show', interface],
+                                                 capture_output=True, text=True, timeout=5)
+                            if result.returncode == 0:
+                                logger.info(f"WiFi interface {interface} detected on Linux")
+                                wifi_found = True
+                                break
+                        except:
+                            continue
+
+                    if not wifi_found:
+                        logger.warning("No WiFi interface detected on Linux")
 
                 # Check if nmcli is available (preferred for Ubuntu)
                 try:
                     nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=2)
                     if nmcli_check.returncode == 0:
                         logger.info("nmcli available - full WiFi functionality supported")
-                        # Check if NetworkManager is running
-                        nm_status = subprocess.run(['systemctl', 'is-active', 'NetworkManager'],
-                                                 capture_output=True, text=True, timeout=5)
-                        if nm_status.returncode == 0 and 'active' in nm_status.stdout:
-                            logger.info("NetworkManager is running")
-                        else:
-                            logger.warning("NetworkManager is not running - WiFi functionality may be limited")
                     else:
                         logger.warning("nmcli not available - limited WiFi functionality. Install with: sudo apt install network-manager")
-                except Exception as e:
-                    logger.warning(f"Error checking nmcli/NetworkManager: {e}")
+                except:
+                    logger.warning("Error checking nmcli availability")
 
         except Exception as e:
             logger.error(f"Error checking WiFi interface: {e}")
-
-    def _get_wifi_interfaces(self):
-        """Get list of available WiFi interfaces"""
-        interfaces = []
-        try:
-            # Method 1: Use nmcli device status
-            result = subprocess.run(['nmcli', 'device', 'status'],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                for line in result.stdout.split('\n'):
-                    if 'wifi' in line.lower():
-                        parts = line.split()
-                        if len(parts) >= 4 and parts[2].lower() == 'wifi':
-                            interfaces.append(parts[0])
-
-            # Method 2: Use iw dev
-            if not interfaces:
-                iw_result = subprocess.run(['iw', 'dev'], capture_output=True, text=True, timeout=5)
-                if iw_result.returncode == 0:
-                    for line in iw_result.stdout.split('\n'):
-                        if 'Interface' in line:
-                            interface = line.split()[-1]
-                            interfaces.append(interface)
-
-            # Method 3: Check common interface names
-            if not interfaces:
-                common_interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000', 'wlan1']
-                for interface in common_interfaces:
-                    ip_result = subprocess.run(['ip', 'link', 'show', interface],
-                                             capture_output=True, timeout=5)
-                    if ip_result.returncode == 0:
-                        interfaces.append(interface)
-
-        except Exception as e:
-            logger.warning(f"Error getting WiFi interfaces: {e}")
-
-        return list(set(interfaces))  # Remove duplicates
 
     @pyqtSlot(result=str)
     def getWifiInterfaceInfo(self):
         """Get information about the WiFi interface for debugging"""
         try:
             is_windows = platform.system() == 'Windows'
-
+            
             if is_windows:
-                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'],
+                result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
                                       capture_output=True, text=True, timeout=5)
                 return f"Windows WiFi Interfaces:\n{result.stdout}"
             else:
-                # Get comprehensive interface info for Linux
-                info_lines = ["=== Linux WiFi Interface Information ===\n"]
-
-                # 1. NetworkManager status
-                try:
-                    nm_status = subprocess.run(['systemctl', 'is-active', 'NetworkManager'],
-                                             capture_output=True, text=True, timeout=5)
-                    info_lines.append(f"NetworkManager Status: {nm_status.stdout.strip()}")
-                except:
-                    info_lines.append("NetworkManager Status: Unable to check")
-
-                # 2. nmcli availability
-                try:
-                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=2)
-                    info_lines.append(f"nmcli Available: {'Yes' if nmcli_check.returncode == 0 else 'No'}")
-                except:
-                    info_lines.append("nmcli Available: Unable to check")
-
-                # 3. Device status via nmcli
-                try:
-                    result = subprocess.run(['nmcli', 'device', 'status'],
-                                          capture_output=True, text=True, timeout=5)
-                    info_lines.append("\n=== nmcli device status ===")
-                    info_lines.append(result.stdout.strip())
-                except Exception as e:
-                    info_lines.append(f"\nnmcli device status: Error - {e}")
-
-                # 4. WiFi list via nmcli
-                try:
-                    wifi_result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
-                                               capture_output=True, text=True, timeout=10)
-                    info_lines.append("\n=== nmcli device wifi list ===")
-                    info_lines.append(wifi_result.stdout.strip()[:1000])  # Limit output
-                except Exception as e:
-                    info_lines.append(f"\nnmcli device wifi list: Error - {e}")
-
-                # 5. IP address information
-                wifi_interfaces = self._get_wifi_interfaces()
-                info_lines.append(f"\n=== Detected WiFi Interfaces: {', '.join(wifi_interfaces) if wifi_interfaces else 'None'} ===")
-
-                for interface in wifi_interfaces:
+                # Get interface info for all wireless interfaces
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                info_lines = ["Linux Wireless Interfaces:"]
+                
+                for interface in interfaces:
                     try:
-                        ip_result = subprocess.run(['ip', 'addr', 'show', interface],
+                        # Get interface info
+                        ip_result = subprocess.run(['ip', 'addr', 'show', interface], 
                                                  capture_output=True, text=True, timeout=5)
-                        info_lines.append(f"\n--- {interface} ---")
-                        info_lines.append(ip_result.stdout.strip())
-
-                        # Get wireless info
-                        try:
-                            iw_result = subprocess.run(['iwconfig', interface],
-                                                     capture_output=True, text=True, timeout=5)
-                            info_lines.append("Wireless Info:")
-                            info_lines.append(iw_result.stdout.strip())
-                        except:
-                            info_lines.append("Wireless Info: iwconfig not available")
-
-                        # Get link info
-                        try:
-                            iw_link = subprocess.run(['iw', 'dev', interface, 'link'],
-                                                   capture_output=True, text=True, timeout=5)
-                            info_lines.append("Link Info:")
-                            info_lines.append(iw_link.stdout.strip())
-                        except:
-                            info_lines.append("Link Info: iw not available")
-
-                    except Exception as e:
-                        info_lines.append(f"Error getting info for {interface}: {e}")
-
-                # 6. System information
-                info_lines.append("\n=== System Information ===")
-                try:
-                    uname = subprocess.run(['uname', '-a'], capture_output=True, text=True, timeout=5)
-                    info_lines.append(f"Kernel: {uname.stdout.strip()}")
-                except:
-                    info_lines.append("Kernel: Unable to get")
-
+                        
+                        if ip_result.returncode == 0:
+                            info_lines.append(f"\n--- {interface} ---")
+                            info_lines.append(ip_result.stdout.strip())
+                            
+                            # Get wireless info
+                            try:
+                                iw_result = subprocess.run(['iwconfig', interface], 
+                                                         capture_output=True, text=True, timeout=5)
+                                info_lines.append("Wireless Info:")
+                                info_lines.append(iw_result.stdout.strip())
+                            except:
+                                info_lines.append("Wireless Info: Not available (iwconfig not found)")
+                    except:
+                        continue
+                
+                if len(info_lines) == 1:
+                    info_lines.append("No wireless interfaces found")
+                
                 return "\n".join(info_lines)
         except Exception as e:
             return f"Error getting WiFi interface info: {e}"
@@ -1685,19 +1537,62 @@ class PyQtGraphItem(QQuickPaintedItem):
     dataChanged = pyqtSignal()
     chartTypeChanged = pyqtSignal()
     monthsChanged = pyqtSignal()
+    themeChanged = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._data = []
         self._chart_type = 'bar'
         self._months = []
+        self._theme = 'dark'
         self.widget = pg.PlotWidget()
         self.plot_item = self.widget.plotItem
-        self.plot_item.addLegend()
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+
+        # Enhanced styling setup
+        self.setup_enhanced_styling()
+
         self.bar_items = []
         self.line_items = []
+        self.area_items = []
+
+    def setup_enhanced_styling(self):
+        """Setup modern, Tesla-inspired chart styling"""
+        # Configure plot appearance
+        self.plot_item.showGrid(x=True, y=True, alpha=0.3)
+        # Set transparent background for theme integration
+        self.widget.setBackground('transparent')
+
+        # Enhanced grid styling
+        grid_pen = pg.mkPen(color=(255, 255, 255, 50) if self._theme == 'dark' else (0, 0, 0, 30), width=1, style=Qt.PenStyle.DotLine)
+        self.plot_item.getAxis('left').setGrid(50)
+        self.plot_item.getAxis('bottom').setGrid(50)
+        self.plot_item.getAxis('left').setPen(grid_pen)
+        self.plot_item.getAxis('bottom').setPen(grid_pen)
+
+        # Remove axis lines for cleaner look
+        self.plot_item.getAxis('left').setPen(None)
+        self.plot_item.getAxis('bottom').setPen(None)
+
+        # Enhanced legend
+        legend = self.plot_item.addLegend(offset=(-10, 10))
+        legend.setBrush(pg.mkBrush(color=(0, 0, 0, 180) if self._theme == 'dark' else (255, 255, 255, 220)))
+        # Note: LegendItem doesn't have setBorder method in this version of PyQtGraph
+
+        # Disable auto range for precise control
+        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
+        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+
+        # Add subtle background pattern
+        self.add_background_pattern()
+
+    def add_background_pattern(self):
+        """Add subtle background pattern for depth"""
+        # Create a subtle gradient background
+        gradient = pg.LinearRegionItem([0, 1], orientation=pg.LinearRegionItem.Horizontal)
+        gradient.setBrush(pg.mkBrush(color=(255, 255, 255, 10) if self._theme == 'dark' else (0, 0, 0, 5)))
+        gradient.setMovable(False)
+        gradient.setBounds([0, 1])
+        self.plot_item.addItem(gradient, ignoreBounds=True)
 
     @pyqtProperty('QVariantList', notify=dataChanged)
     def data(self):
@@ -1726,46 +1621,282 @@ class PyQtGraphItem(QQuickPaintedItem):
         self._months = value
         self.update_plot()
 
+    @pyqtProperty(str, notify=themeChanged)
+    def theme(self):
+        return self._theme
+
+    @theme.setter
+    def theme(self, value):
+        self._theme = value
+        self.update_theme()
+        self.update_plot()
+
+    def update_theme(self):
+        """Update chart colors based on theme"""
+        # Update grid colors
+        grid_alpha = 50 if self._theme == 'dark' else 30
+        grid_pen = pg.mkPen(color=(255, 255, 255, grid_alpha) if self._theme == 'dark' else (0, 0, 0, grid_alpha), width=1, style=Qt.PenStyle.DotLine)
+        self.plot_item.getAxis('left').setGrid(grid_alpha)
+        self.plot_item.getAxis('bottom').setGrid(grid_alpha)
+
+        # Update legend
+        legend_brush = pg.mkBrush(color=(0, 0, 0, 180) if self._theme == 'dark' else (255, 255, 255, 220))
+        legend_border = pg.mkPen(color=(255, 255, 255, 100) if self._theme == 'dark' else (0, 0, 0, 100))
+        if hasattr(self.plot_item, 'legend'):
+            self.plot_item.legend.setBrush(legend_brush)
+            self.plot_item.legend.setBorder(legend_border)
+
     def update_plot(self):
         self.plot_item.clear()
+
+        # Re-setup styling after clear
+        self.setup_enhanced_styling()
+
+        if not self._data:
+            return
+
         max_y = 0
         for series in self._data:
             if isinstance(series, dict) and 'values' in series and series['values']:
                 max_y = max(max_y, max(series['values']))
+
         if max_y == 0:
             max_y = 10
+
+        # Enhanced color palette inspired by Tesla's design
+        colors = self.get_enhanced_colors()
+
         if self._chart_type == 'bar':
-            for i, series in enumerate(self._data):
-                if isinstance(series, dict) and 'values' in series and series['values']:
-                    x = list(range(len(series['values'])))
-                    height = series['values']
-                    bar = pg.BarGraphItem(x=x, height=height, width=0.8, brush=pg.mkBrush(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
-                    self.plot_item.addItem(bar)
-            if self._months:
-                ticks = [[(i, month) for i, month in enumerate(self._months)]]
-                self.plot_item.getAxis('bottom').setTicks(ticks)
-            self.plot_item.setLabel('bottom', 'Months')
+            self.render_enhanced_bar_chart(colors, max_y)
+        elif self._chart_type == 'area':
+            self.render_enhanced_area_chart(colors, max_y)
+        else:  # line chart
+            self.render_enhanced_line_chart(colors, max_y)
+
+        # Enhanced axis labels
+        self.setup_enhanced_axes()
+
+        # Update view range with smooth animation
+        self.update_view_range(max_y)
+
+    def get_enhanced_colors(self):
+        """Get Tesla-inspired color palette"""
+        if self._theme == 'dark':
+            return [
+                {'primary': '#00D4FF', 'secondary': '#0088CC', 'gradient': [('#00D4FF', 0.8), ('#0088CC', 0.3)]},  # Electric blue
+                {'primary': '#FF6B6B', 'secondary': '#CC4444', 'gradient': [('#FF6B6B', 0.8), ('#CC4444', 0.3)]},  # Energy red
+                {'primary': '#4ECDC4', 'secondary': '#26A69A', 'gradient': [('#4ECDC4', 0.8), ('#26A69A', 0.3)]}   # Cool teal
+            ]
         else:
-            for i, series in enumerate(self._data):
-                if isinstance(series, dict) and 'values' in series and series['values']:
-                    x = list(range(len(series['values'])))
-                    y = series['values']
-                    self.plot_item.plot(x, y, pen=pg.mkPen(color=self.get_color(i)), name=series.get('label', f'Series {i}'))
-            self.plot_item.setLabel('bottom', 'Day of Year')
-        self.plot_item.setLabel('left', 'Number of Launches')
-        x_len = len(self._data[0]['values']) if self._data and self._data[0]['values'] else (12 if self._chart_type == 'bar' else 365)
+            return [
+                {'primary': '#0066CC', 'secondary': '#004499', 'gradient': [('#0066CC', 0.9), ('#004499', 0.4)]},  # Deep blue
+                {'primary': '#FF4444', 'secondary': '#CC2222', 'gradient': [('#FF4444', 0.9), ('#CC2222', 0.4)]},  # Bright red
+                {'primary': '#00AA88', 'secondary': '#008866', 'gradient': [('#00AA88', 0.9), ('#008866', 0.4)]}   # Ocean green
+            ]
+
+    def render_enhanced_bar_chart(self, colors, max_y):
+        """Render modern bar chart with gradients and effects"""
+        bar_width = 0.8 / len(self._data) if len(self._data) > 1 else 0.6
+
+        for i, series in enumerate(self._data):
+            if not (isinstance(series, dict) and 'values' in series and series['values']):
+                continue
+
+            color_scheme = colors[i % len(colors)]
+            x_positions = []
+
+            for j, value in enumerate(series['values']):
+                if len(self._data) > 1:
+                    x_pos = j + (i - len(self._data)/2 + 0.5) * bar_width
+                else:
+                    x_pos = j
+
+                x_positions.append(x_pos)
+
+                # Create gradient brush for 3D effect
+                gradient = pg.mkBrush(color=color_scheme['primary'])
+                bar = pg.BarGraphItem(
+                    x=[x_pos], height=[value], width=bar_width,
+                    brush=gradient, pen=pg.mkPen(color=color_scheme['secondary'], width=1)
+                )
+
+                # Add glow effect
+                glow_bar = pg.BarGraphItem(
+                    x=[x_pos], height=[value], width=bar_width * 1.1,
+                    brush=pg.mkBrush(color=(color_scheme['primary'], 0.3)),
+                    pen=None
+                )
+                self.plot_item.addItem(glow_bar)
+                self.plot_item.addItem(bar)
+
+                # Add value labels on top of bars
+                if value > 0:
+                    label = pg.TextItem(text=str(int(value)), color=color_scheme['secondary'], anchor=(0.5, -0.5))
+                    label.setPos(x_pos, value + max_y * 0.02)
+                    self.plot_item.addItem(label)
+
+        # Enhanced x-axis ticks
+        if self._months and self._chart_type == 'bar':
+            ticks = [[(i, month) for i, month in enumerate(self._months)]]
+            axis = self.plot_item.getAxis('bottom')
+            axis.setTicks(ticks)
+            axis.setStyle(tickTextOffset=10)
+
+    def render_enhanced_area_chart(self, colors, max_y):
+        """Render modern area chart with smooth gradients"""
+        for i, series in enumerate(self._data):
+            if not (isinstance(series, dict) and 'values' in series and series['values']):
+                continue
+
+            color_scheme = colors[i % len(colors)]
+            x = list(range(len(series['values'])))
+            y = series['values']
+
+            # Create smooth curve for area chart
+            if len(x) > 2:
+                try:
+                    from scipy import interpolate
+                    f = interpolate.interp1d(x, y, kind='cubic')
+                    x_smooth = [i/10.0 for i in range(len(x)*10)]
+                    y_smooth = f(x_smooth)
+                    x, y = x_smooth, y_smooth
+                except ImportError:
+                    pass  # Fall back to original data if scipy not available
+
+            # Create gradient fill for area
+            area_color = list(pg.mkColor(color_scheme['primary']))
+            area_color[3] = 120  # Semi-transparent for area effect
+
+            # Create area fill
+            fill_x = x + x[::-1]
+            fill_y = y + [0] * len(y)
+
+            area_brush = pg.mkBrush(color=tuple(area_color))
+            fill_curve = pg.PlotCurveItem(x=fill_x, y=fill_y, brush=area_brush, pen=None)
+            self.plot_item.addItem(fill_curve)
+
+            # Add gradient overlay for depth
+            gradient_color = list(pg.mkColor(color_scheme['secondary']))
+            gradient_color[3] = 60
+            gradient_fill = pg.PlotCurveItem(
+                x=fill_x, y=fill_y,
+                brush=pg.mkBrush(color=tuple(gradient_color)),
+                pen=None
+            )
+            self.plot_item.addItem(gradient_fill)
+
+            # Main line on top
+            pen = pg.mkPen(
+                color=color_scheme['primary'],
+                width=2,
+                style=Qt.PenStyle.SolidLine,
+                cap=Qt.PenCapStyle.RoundCap,
+                join=Qt.PenJoinStyle.RoundJoin
+            )
+
+            line_curve = pg.PlotCurveItem(x=x, y=y, pen=pen)
+            self.plot_item.addItem(line_curve)
+
+            # Add subtle data points
+            for px, py in zip(x[::20], y[::20]):  # Every 20th point for area chart
+                point = pg.ScatterPlotItem(
+                    x=[px], y=[py], size=4,
+                    brush=pg.mkBrush(color=color_scheme['secondary']),
+                    pen=pg.mkPen(color=color_scheme['primary'], width=1)
+                )
+                self.plot_item.addItem(point)
+
+    def render_enhanced_line_chart(self, colors, max_y):
+        """Render modern line chart with smooth curves and data points"""
+        for i, series in enumerate(self._data):
+            if not (isinstance(series, dict) and 'values' in series and series['values']):
+                continue
+
+            color_scheme = colors[i % len(colors)]
+            x = list(range(len(series['values'])))
+            y = series['values']
+
+            # Smooth the line using interpolation
+            if len(x) > 2:
+                try:
+                    from scipy import interpolate
+                    f = interpolate.interp1d(x, y, kind='cubic')
+                    x_smooth = [i/10.0 for i in range(len(x)*10)]
+                    y_smooth = f(x_smooth)
+                    x, y = x_smooth, y_smooth
+                except ImportError:
+                    pass  # Fall back to original data if interpolation fails
+
+            # Main line with enhanced styling
+            pen = pg.mkPen(
+                color=color_scheme['primary'],
+                width=3,
+                style=Qt.PenStyle.SolidLine,
+                cap=Qt.PenCapStyle.RoundCap,
+                join=Qt.PenJoinStyle.RoundJoin
+            )
+
+            line_curve = pg.PlotCurveItem(x=x, y=y, pen=pen)
+            self.plot_item.addItem(line_curve)
+
+            # Add data points with glow effect
+            for px, py in zip(x[::10], y[::10]):  # Every 10th point to avoid overcrowding
+                # Glow point
+                glow_point = pg.ScatterPlotItem(
+                    x=[px], y=[py], size=12,
+                    brush=pg.mkBrush(color=(color_scheme['primary'], 0.3)),
+                    pen=None
+                )
+                self.plot_item.addItem(glow_point)
+
+                # Main point
+                point = pg.ScatterPlotItem(
+                    x=[px], y=[py], size=6,
+                    brush=pg.mkBrush(color=color_scheme['secondary']),
+                    pen=pg.mkPen(color=color_scheme['primary'], width=2)
+                )
+                self.plot_item.addItem(point)
+
+    def setup_enhanced_axes(self):
+        """Setup enhanced axis styling"""
+        # Enhanced axis labels
+        font_color = (255, 255, 255) if self._theme == 'dark' else (0, 0, 0)
+
+        left_axis = self.plot_item.getAxis('left')
+        left_axis.setLabel('Launches', color=font_color, size='12pt', bold=True)
+        left_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
+
+        bottom_axis = self.plot_item.getAxis('bottom')
+        bottom_label = 'Months' if self._chart_type == 'bar' else 'Day of Year'
+        bottom_axis.setLabel(bottom_label, color=font_color, size='12pt', bold=True)
+        bottom_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
+
+        # Rotate bottom labels for better readability
+        if self._chart_type == 'bar' and len(self._months) > 6:
+            bottom_axis.setStyle(tickTextOffset=15, tickTextAngle=-45)
+
+    def update_view_range(self, max_y):
+        """Update view range with smooth padding"""
+        x_len = len(self._data[0]['values']) if self._data and self._data[0]['values'] else 12
+        y_padding = max_y * 0.1  # 10% padding
+
         if self._chart_type == 'bar':
             x_range = (-0.5, x_len - 0.5)
         else:
-            x_range = (0, x_len - 1)
-        self.plot_item.getViewBox().setRange(xRange=x_range, yRange=(0, max_y))
-        self.plot_item.getViewBox().update()
-        self.widget.update()
-        self.update()
+            x_range = (-0.1 * x_len, x_len * 1.1)  # Extra padding for line chart
 
-    def get_color(self, index):
-        colors = ['#ff6b6b', '#4ecdc4', '#ffe66d']
-        return colors[index % len(colors)]
+        y_range = (-y_padding, max_y + y_padding)
+
+        # Smooth animation to new range
+        view_box = self.plot_item.getViewBox()
+        current_range = view_box.viewRange()
+
+        # Animate to new range
+        animation = pg.QtCore.QPropertyAnimation(view_box, b"viewRange")
+        animation.setDuration(500)
+        animation.setStartValue(current_range)
+        animation.setEndValue([x_range, y_range])
+        animation.start()
 
     def paint(self, painter):
         rect = QRectF(0, 0, self.width(), self.height())
@@ -1931,8 +2062,10 @@ Window {
                     Text {
                         text: backend.mode === "spacex" ? 
                                (backend.chartViewMode === "cumulative" ? 
-                                (backend.chartType === "bar" ? "Cumulative Launch Trends (Bar)" : "Cumulative Launch Trends (Line)") : 
-                                (backend.chartType === "bar" ? "Monthly Launch Trends (Bar)" : "Monthly Launch Trends (Line)")) : 
+                                (backend.chartType === "bar" ? "Cumulative Launch Trends (Bar)" : 
+                                 backend.chartType === "line" ? "Cumulative Launch Trends (Line)" : "Cumulative Launch Trends (Area)") : 
+                                (backend.chartType === "bar" ? "Monthly Launch Trends (Bar)" : 
+                                 backend.chartType === "line" ? "Monthly Launch Trends (Line)" : "Monthly Launch Trends (Area)")) : 
                                "Driver Standings"
                         font.pixelSize: 14
                         color: "#999999"
@@ -1955,6 +2088,7 @@ Window {
                                 data: backend.launchTrendsSeries
                                 chartType: backend.chartType
                                 months: backend.launchTrendsMonths
+                                theme: backend.theme
                             }
 
                             // Chart control buttons
@@ -1969,7 +2103,8 @@ Window {
                                     Repeater {
                                         model: [
                                             {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"}
+                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                            {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"}
                                         ]
                                         Button {
                                             property var chartData: modelData
