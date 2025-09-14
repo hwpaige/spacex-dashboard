@@ -1647,10 +1647,11 @@ if __name__ == '__main__':
         )
     elif platform.system() == 'Linux':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--disable-gpu --disable-software-rasterizer --disable-background-timer-throttling "
-            "--disable-renderer-backgrounding --disable-backgrounding-occluded-windows "
-            "--disable-web-security --allow-running-insecure-content --disable-gpu-sandbox "
-            "--use-gl=swiftshader"  # Use software OpenGL
+            "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
+            "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
+            "--disable-web-security --allow-running-insecure-content "
+            "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
+            "--disable-gpu-driver-bug-workarounds"
         )
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -1667,7 +1668,6 @@ if __name__ == '__main__':
     elif platform.system() == 'Linux':
         # Raspberry Pi / Linux settings - use hardware acceleration with Mesa
         os.environ["QT_QPA_PLATFORM"] = "xcb"
-        os.environ["QT_QUICK_BACKEND"] = "softwarecontext"  # Use software context but hardware rendering
         # Remove QSG_RHI_BACKEND override - let Qt choose best backend (GL with Mesa)
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl" # Use EGL for hardware acceleration
         # LIBGL_ALWAYS_SOFTWARE is already set to "0" earlier for hardware rendering
@@ -1734,12 +1734,12 @@ if __name__ == '__main__':
 
     # Embedded QML for completeness (main.qml content)
     qml_code = """
-import QtQuick 2.12
-import QtQuick.Window 2.12
-import QtQuick.Controls 2.12
-import QtQuick.Layouts 1.12
-import QtCharts 2.3
-import QtWebEngine 1.8
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
+import QtQuick.Layouts
+import QtCharts
+import QtWebEngine
 import MyModule 1.0
 
 Window {
@@ -2776,7 +2776,6 @@ Window {
     """
 
     # Load QML from string (for complete single file)
-    qml_code = qml_code.replace('PointerHandler {', 'DragHandler {\n    target: null')
     engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
     if not engine.rootObjects():
         logger.error("QML root object creation failed (see earlier QML errors above).")
