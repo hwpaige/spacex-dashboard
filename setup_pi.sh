@@ -232,6 +232,12 @@ echo ''
 echo '=== System Logs (last 20 WiFi-related lines) ==='
 journalctl -u NetworkManager -n 20 --no-pager 2>/dev/null || echo 'No NetworkManager logs available'
 echo ''
+echo '=== wpa_supplicant status ==='
+systemctl is-active wpa_supplicant || echo 'wpa_supplicant not active'
+echo ''
+echo '=== Test WiFi scan manually ==='
+timeout 10 nmcli device wifi list 2>/dev/null | head -10 || echo 'Manual scan failed'
+echo ''
 echo '=== Interface Permissions ==='
 ls -la /sys/class/net/ 2>/dev/null || echo 'Cannot access network interfaces'
 echo ''
@@ -275,6 +281,27 @@ managed=true
 
 [device]
 wifi.scan-rand-mac-address=no
+wifi.backend=wpa_supplicant
+EOF
+    
+    # Additional NetworkManager configuration for better WiFi scanning
+    cat << EOF > /etc/NetworkManager/conf.d/10-wifi-scan.conf
+[device]
+wifi.scan-rand-mac-address=no
+wifi.backend=wpa_supplicant
+match-device=driver:brcmfmac
+managed=true
+EOF
+    
+    # Configure wpa_supplicant for better scanning
+    cat << EOF > /etc/wpa_supplicant/wpa_supplicant.conf
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=US
+
+network={
+    key_mgmt=NONE
+}
 EOF
     
     # Restart NetworkManager to apply configuration

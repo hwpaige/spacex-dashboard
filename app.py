@@ -1138,20 +1138,79 @@ class Backend(QObject):
                     logger.info(f"Scanning for WiFi networks using interface: {scan_interface}")
 
                     # Rescan for fresh results
-                    rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', scan_interface],
-                                                 capture_output=True, text=True, timeout=10)
-                    if rescan_result.returncode != 0:
-                        logger.warning(f"WiFi rescan failed: {rescan_result.stderr}")
+                    # Check if interface is available for scanning and prepare it
+                    try:
+                        # First, check the device status
+                        device_status = subprocess.run(['nmcli', 'device', 'show', scan_interface],
+                                                     capture_output=True, text=True, timeout=5)
+                        
+                        if 'unavailable' in device_status.stdout.lower():
+                            logger.warning(f"WiFi interface {scan_interface} is unavailable for scanning")
+                            # Try to bring the interface up
+                            up_result = subprocess.run(['nmcli', 'device', 'set', scan_interface, 'managed', 'yes'],
+                                                     capture_output=True, text=True, timeout=5)
+                            if up_result.returncode == 0:
+                                logger.info(f"Set {scan_interface} to managed mode")
+                                time.sleep(2)  # Wait for interface to settle
+                            else:
+                                logger.warning(f"Failed to set {scan_interface} to managed mode: {up_result.stderr}")
+                        
+                        # Try to rescan for fresh results
+                        rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', scan_interface],
+                                                     capture_output=True, text=True, timeout=10)
+                        if rescan_result.returncode != 0:
+                            logger.warning(f"WiFi rescan failed: {rescan_result.stderr}")
+                            # If rescan fails, try without specifying interface
+                            logger.info("Trying rescan without interface specification...")
+                            rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'],
+                                                         capture_output=True, text=True, timeout=10)
+                            if rescan_result.returncode != 0:
+                                logger.warning(f"General WiFi rescan also failed: {rescan_result.stderr}")
+                    except Exception as e:
+                        logger.warning(f"Error during interface preparation: {e}")
 
                     # Scan for networks using nmcli
                     result = subprocess.run(['nmcli', 'device', 'wifi', 'list', 'ifname', scan_interface],
                                           capture_output=True, text=True, timeout=15)
 
                     if result.returncode != 0:
-                        logger.error(f"nmcli scan failed: {result.stderr}")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
+                        logger.warning(f"WiFi scan failed on {scan_interface}: {result.stderr}")
+                        # Try scanning without specifying interface as fallback
+                        logger.info("Trying scan without interface specification...")
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
+                                              capture_output=True, text=True, timeout=15)
+                        
+                        if result.returncode != 0:
+                            logger.error(f"WiFi scan failed completely: {result.stderr}")
+                            # Last resort: try to disconnect temporarily and scan
+                            logger.info("Attempting temporary disconnect for scanning...")
+                            try:
+                                disconnect_result = subprocess.run(['nmcli', 'device', 'disconnect', scan_interface],
+                                                                 capture_output=True, text=True, timeout=5)
+                                if disconnect_result.returncode == 0:
+                                    logger.info("Temporarily disconnected for scanning")
+                                    time.sleep(2)  # Wait for disconnect
+                                    
+                                    # Try scanning while disconnected
+                                    result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
+                                                          capture_output=True, text=True, timeout=15)
+                                    
+                                    # Try to reconnect
+                                    reconnect_result = subprocess.run(['nmcli', 'device', 'connect', scan_interface],
+                                                                    capture_output=True, text=True, timeout=10)
+                                    if reconnect_result.returncode == 0:
+                                        logger.info("Reconnected after scanning")
+                                    else:
+                                        logger.warning(f"Failed to reconnect: {reconnect_result.stderr}")
+                                else:
+                                    logger.warning(f"Failed to disconnect for scanning: {disconnect_result.stderr}")
+                            except Exception as e:
+                                logger.warning(f"Error during temporary disconnect scan: {e}")
+                            
+                            if result.returncode != 0:
+                                self._wifi_networks = []
+                                self.wifiNetworksChanged.emit()
+                                return
 
                     networks = []
                     lines = result.stdout.strip().split('\n')
