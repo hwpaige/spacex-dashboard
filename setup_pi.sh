@@ -200,6 +200,45 @@ else
 fi
 EOF"
     sudo -u "$USER" chmod +x "$HOME_DIR/debug_x.sh"
+    
+    # Create WiFi debug script
+    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/debug_wifi.sh
+#!/bin/bash
+echo '=== WiFi Debug Information ==='
+echo \"Date: \$(date)\"
+echo \"User: \$(whoami)\"
+echo ''
+echo '=== NetworkManager Status ==='
+systemctl is-active NetworkManager || echo 'NetworkManager not active'
+echo ''
+echo '=== nmcli Status ==='
+nmcli general || echo 'nmcli failed'
+echo ''
+echo '=== Device Status ==='
+nmcli device status
+echo ''
+echo '=== WiFi Device List ==='
+nmcli device wifi list 2>/dev/null || echo 'WiFi list failed'
+echo ''
+echo '=== IP Addresses ==='
+ip addr show
+echo ''
+echo '=== Wireless Interfaces ==='
+iw dev
+echo ''
+echo '=== Current Connections ==='
+nmcli connection show --active
+echo ''
+echo '=== System Logs (last 20 WiFi-related lines) ==='
+journalctl -u NetworkManager -n 20 --no-pager 2>/dev/null || echo 'No NetworkManager logs available'
+echo ''
+echo '=== Interface Permissions ==='
+ls -la /sys/class/net/ 2>/dev/null || echo 'Cannot access network interfaces'
+echo ''
+echo '=== User Groups ==='
+groups
+EOF"
+    sudo -u "$USER" chmod +x "$HOME_DIR/debug_wifi.sh"
 }
 
 configure_system() {
@@ -210,6 +249,48 @@ configure_system() {
     
     # Enable NetworkManager for nmcli WiFi management
     systemctl enable --now NetworkManager
+    
+    # Ensure NetworkManager waits for interfaces
+    mkdir -p /etc/NetworkManager/conf.d
+    cat << EOF > /etc/NetworkManager/conf.d/10-wait-online.conf
+[main]
+plugins=ifupdown,keyfile
+dhcp=dhclient
+
+[ifupdown]
+managed=true
+
+[device]
+wifi.scan-rand-mac-address=no
+EOF
+    
+    # Configure NetworkManager to manage WiFi interfaces
+    cat << EOF > /etc/NetworkManager/NetworkManager.conf
+[main]
+plugins=ifupdown,keyfile
+dhcp=dhclient
+
+[ifupdown]
+managed=true
+
+[device]
+wifi.scan-rand-mac-address=no
+EOF
+    
+    # Restart NetworkManager to apply configuration
+    systemctl restart NetworkManager
+    
+    # Add user to netdev group for network device access
+    usermod -aG netdev "$USER" 2>/dev/null || log "WARNING: Could not add user to netdev group"
+    
+    # Create polkit rule for NetworkManager access without password
+    cat << EOF > /etc/polkit-1/rules.d/50-networkmanager.rules
+polkit.addRule(function(action, subject) {
+    if (action.id.indexOf("org.freedesktop.NetworkManager.") == 0 && subject.user == "$USER") {
+        return polkit.Result.YES;
+    }
+});
+EOF
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true
@@ -431,19 +512,56 @@ EOF"
 optimize_performance() {
     log "Applying performance optimizations..."
     
-    # WiFi power save off
-    echo "options brcmfmac p2p=0" > /etc/modprobe.d/brcmfmac.conf
-    iw dev wlan0 set power_save off 2>/dev/null || true
-    modprobe -r brcmfmac 2>/dev/null || true
-    modprobe brcmfmac 2>/dev/null || true
+    # WiFi power save off - multiple methods for reliability
+    log "Configuring WiFi power management..."
     
+    # Method 1: Kernel module parameters
+    echo "options brcmfmac p2p=0" > /etc/modprobe.d/brcmfmac.conf
+    echo "options brcm80211 feature_disable=0x82000" >> /etc/modprobe.d/brcmfmac.conf
+    
+    # Method 2: NetworkManager WiFi power save
+    mkdir -p /etc/NetworkManager/conf.d
+    cat << EOF > /etc/NetworkManager/conf.d/20-wifi-powersave.conf
+[connection]
+wifi.powersave = 2
+EOF
+    
+    # Method 3: iw command in rc.local
     cat << EOF > /etc/rc.local
 #!/bin/sh -e
+# Disable WiFi power save on all wireless interfaces
 sleep 10
-iw dev wlan0 set power_save off || true
+for iface in \$(iw dev | grep Interface | awk '{print \$2}'); do
+    iw dev \$iface set power_save off 2>/dev/null || true
+    echo "Disabled power save on \$iface"
+done
 exit 0
 EOF
     chmod +x /etc/rc.local
+    
+    # Method 4: systemd service for WiFi power management
+    cat << EOF > /etc/systemd/system/wifi-powersave.service
+[Unit]
+Description=Disable WiFi Power Save
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'for iface in \$(iw dev | grep Interface | awk "{print \$2}"); do iw dev \$iface set power_save off 2>/dev/null || true; done'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    systemctl enable wifi-powersave
+    
+    # Reload modules
+    modprobe -r brcmfmac 2>/dev/null || true
+    modprobe brcmfmac 2>/dev/null || true
+    
+    log "WiFi power management configured"
 }
 
 cleanup() {
