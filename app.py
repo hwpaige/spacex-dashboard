@@ -2135,7 +2135,7 @@ Window {
                 Layout.fillHeight: true
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
-                clip: true
+                clip: false
 
                 ColumnLayout {
                     anchors.fill: parent
