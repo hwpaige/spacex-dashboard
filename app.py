@@ -20,6 +20,18 @@ import pyqtgraph as pg
 import subprocess
 import re
 
+# Set console encoding to UTF-8 to handle Unicode characters properly
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -72,10 +84,37 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log')),  # Banana Pi log path
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8'),  # Banana Pi log path
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+# Configure console handler to handle Unicode properly
+console_handler = logging.StreamHandler(sys.stdout)
+console_handler.setLevel(logging.INFO)
+console_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+# Handle encoding errors gracefully
+if hasattr(console_handler.stream, 'reconfigure'):
+    try:
+        console_handler.stream.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass  # Fallback if reconfigure fails
+
+# Replace the default console handler with our custom one that handles encoding
+root_logger = logging.getLogger()
+# Remove existing StreamHandler
+for handler in root_logger.handlers[:]:
+    if isinstance(handler, logging.StreamHandler) and handler.stream == sys.stdout:
+        root_logger.removeHandler(handler)
+# Add our custom handler
+root_logger.addHandler(console_handler)
+
+# Ensure file handler uses UTF-8
+file_handler = logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+root_logger.addHandler(file_handler)
+
 logger = logging.getLogger(__name__)
 
 # Qt message handler to surface QML / Qt internal messages (errors, warnings, info)
@@ -90,12 +129,19 @@ def _qt_message_handler(mode, context, message):
     location = ''
     if context and context.file and context.line:
         location = f" {context.file}:{context.line}"
+
+    # Sanitize message to handle Unicode issues
     try:
-        logger.error(f"[QT-{level_name}]{location} {message}")
-    except UnicodeEncodeError:
-        # Handle encoding issues by sanitizing the message
-        sanitized_message = message.encode('utf-8', errors='replace').decode('utf-8')
+        sanitized_message = str(message).encode('utf-8', errors='replace').decode('utf-8')
+        
+        # Filter out style customization warnings as they're not critical
+        if "current style does not support customization" in sanitized_message:
+            return
+            
         logger.error(f"[QT-{level_name}]{location} {sanitized_message}")
+    except Exception:
+        # If all else fails, log a generic message
+        logger.error(f"[QT-{level_name}]{location} <message encoding failed>")
 
 # Install the handler only once
 try:
@@ -992,12 +1038,6 @@ class Backend(QObject):
             self._launch_trends_cache[cache_key] = data
             return data
 
-    @pyqtProperty(list, notify=launchesChanged)
-    def launchTrendsMonths(self):
-        if self._chart_type == 'bar':
-            return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        return []
-
     @pyqtProperty(list, notify=f1Changed)
     def driverStandings(self):
         return self._f1_data['driver_standings']
@@ -1555,6 +1595,13 @@ class PyQtGraphItem(QQuickPaintedItem):
         self.line_items = []
         self.area_items = []
 
+    def geometryChanged(self, newGeometry, oldGeometry):
+        """Handle geometry changes to ensure proper sizing"""
+        super().geometryChanged(newGeometry, oldGeometry)
+        if self.widget:
+            self.widget.resize(int(newGeometry.width()), int(newGeometry.height()))
+            self.update()
+
     def setup_enhanced_styling(self):
         """Setup modern, Tesla-inspired chart styling"""
         # Configure plot appearance
@@ -1569,9 +1616,9 @@ class PyQtGraphItem(QQuickPaintedItem):
         self.plot_item.getAxis('left').setPen(grid_pen)
         self.plot_item.getAxis('bottom').setPen(grid_pen)
 
-        # Remove axis lines for cleaner look
-        self.plot_item.getAxis('left').setPen(None)
-        self.plot_item.getAxis('bottom').setPen(None)
+        # Keep axis lines visible for better chart readability
+        # self.plot_item.getAxis('left').setPen(None)
+        # self.plot_item.getAxis('bottom').setPen(None)
 
         # Enhanced legend
         legend = self.plot_item.addLegend(offset=(-10, 10))
@@ -1644,7 +1691,8 @@ class PyQtGraphItem(QQuickPaintedItem):
         legend_border = pg.mkPen(color=(255, 255, 255, 100) if self._theme == 'dark' else (0, 0, 0, 100))
         if hasattr(self.plot_item, 'legend'):
             self.plot_item.legend.setBrush(legend_brush)
-            self.plot_item.legend.setBorder(legend_border)
+            # Note: LegendItem doesn't have setBorder method in this version of PyQtGraph
+            # self.plot_item.legend.setBorder(legend_border)
 
     def update_plot(self):
         self.plot_item.clear()
@@ -1714,16 +1762,18 @@ class PyQtGraphItem(QQuickPaintedItem):
                 x_positions.append(x_pos)
 
                 # Create gradient brush for 3D effect
-                gradient = pg.mkBrush(color=color_scheme['primary'])
+                gradient = pg.mkBrush(color=pg.mkColor(color_scheme['primary']))
                 bar = pg.BarGraphItem(
                     x=[x_pos], height=[value], width=bar_width,
-                    brush=gradient, pen=pg.mkPen(color=color_scheme['secondary'], width=1)
+                    brush=gradient, pen=pg.mkPen(color=pg.mkColor(color_scheme['secondary']), width=1)
                 )
 
                 # Add glow effect
+                glow_color = pg.mkColor(color_scheme['primary'])
+                glow_color.setAlphaF(0.3)
                 glow_bar = pg.BarGraphItem(
                     x=[x_pos], height=[value], width=bar_width * 1.1,
-                    brush=pg.mkBrush(color=(color_scheme['primary'], 0.3)),
+                    brush=pg.mkBrush(color=glow_color),
                     pen=None
                 )
                 self.plot_item.addItem(glow_bar)
@@ -1731,7 +1781,7 @@ class PyQtGraphItem(QQuickPaintedItem):
 
                 # Add value labels on top of bars
                 if value > 0:
-                    label = pg.TextItem(text=str(int(value)), color=color_scheme['secondary'], anchor=(0.5, -0.5))
+                    label = pg.TextItem(text=str(int(value)), color=pg.mkColor(color_scheme['secondary']), anchor=(0.5, -0.5))
                     label.setPos(x_pos, value + max_y * 0.02)
                     self.plot_item.addItem(label)
 
@@ -1764,30 +1814,30 @@ class PyQtGraphItem(QQuickPaintedItem):
                     pass  # Fall back to original data if scipy not available
 
             # Create gradient fill for area
-            area_color = list(pg.mkColor(color_scheme['primary']))
-            area_color[3] = 120  # Semi-transparent for area effect
+            area_color = pg.mkColor(color_scheme['primary'])
+            area_color.setAlphaF(0.47)  # Semi-transparent for area effect (120/255 ≈ 0.47)
 
             # Create area fill
             fill_x = x + x[::-1]
             fill_y = y + [0] * len(y)
 
-            area_brush = pg.mkBrush(color=tuple(area_color))
+            area_brush = pg.mkBrush(color=area_color)
             fill_curve = pg.PlotCurveItem(x=fill_x, y=fill_y, brush=area_brush, pen=None)
             self.plot_item.addItem(fill_curve)
 
             # Add gradient overlay for depth
-            gradient_color = list(pg.mkColor(color_scheme['secondary']))
-            gradient_color[3] = 60
+            gradient_color = pg.mkColor(color_scheme['secondary'])
+            gradient_color.setAlphaF(0.235)  # Semi-transparent for gradient effect (60/255 ≈ 0.235)
             gradient_fill = pg.PlotCurveItem(
                 x=fill_x, y=fill_y,
-                brush=pg.mkBrush(color=tuple(gradient_color)),
+                brush=pg.mkBrush(color=gradient_color),
                 pen=None
             )
             self.plot_item.addItem(gradient_fill)
 
             # Main line on top
             pen = pg.mkPen(
-                color=color_scheme['primary'],
+                color=pg.mkColor(color_scheme['primary']),
                 width=2,
                 style=Qt.PenStyle.SolidLine,
                 cap=Qt.PenCapStyle.RoundCap,
@@ -1842,9 +1892,11 @@ class PyQtGraphItem(QQuickPaintedItem):
             # Add data points with glow effect
             for px, py in zip(x[::10], y[::10]):  # Every 10th point to avoid overcrowding
                 # Glow point
+                glow_color = pg.mkColor(color_scheme['primary'])
+                glow_color.setAlphaF(0.3)
                 glow_point = pg.ScatterPlotItem(
                     x=[px], y=[py], size=12,
-                    brush=pg.mkBrush(color=(color_scheme['primary'], 0.3)),
+                    brush=pg.mkBrush(color=glow_color),
                     pen=None
                 )
                 self.plot_item.addItem(glow_point)
@@ -1852,8 +1904,8 @@ class PyQtGraphItem(QQuickPaintedItem):
                 # Main point
                 point = pg.ScatterPlotItem(
                     x=[px], y=[py], size=6,
-                    brush=pg.mkBrush(color=color_scheme['secondary']),
-                    pen=pg.mkPen(color=color_scheme['primary'], width=2)
+                    brush=pg.mkBrush(color=pg.mkColor(color_scheme['secondary'])),
+                    pen=pg.mkPen(color=pg.mkColor(color_scheme['primary']), width=2)
                 )
                 self.plot_item.addItem(point)
 
@@ -1865,19 +1917,27 @@ class PyQtGraphItem(QQuickPaintedItem):
         left_axis = self.plot_item.getAxis('left')
         left_axis.setLabel('Launches', color=font_color, size='12pt', bold=True)
         left_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
+        left_axis.show()  # Ensure axis is visible
+        left_axis.setVisible(True)  # Make sure axis is visible
 
         bottom_axis = self.plot_item.getAxis('bottom')
         bottom_label = 'Months' if self._chart_type == 'bar' else 'Day of Year'
         bottom_axis.setLabel(bottom_label, color=font_color, size='12pt', bold=True)
         bottom_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
+        bottom_axis.show()  # Ensure axis is visible
+        bottom_axis.setVisible(True)  # Make sure axis is visible
 
         # Rotate bottom labels for better readability
         if self._chart_type == 'bar' and len(self._months) > 6:
-            bottom_axis.setStyle(tickTextOffset=15, tickTextAngle=-45)
+            bottom_axis.setStyle(tickTextOffset=15)
 
     def update_view_range(self, max_y):
         """Update view range with smooth padding"""
-        x_len = len(self._data[0]['values']) if self._data and self._data[0]['values'] else 12
+        # Get the maximum length across all data series
+        x_len = 12  # default
+        if self._data:
+            x_len = max(len(series.get('values', [])) for series in self._data if isinstance(series, dict) and 'values' in series)
+
         y_padding = max_y * 0.1  # 10% padding
 
         if self._chart_type == 'bar':
@@ -1885,24 +1945,38 @@ class PyQtGraphItem(QQuickPaintedItem):
         else:
             x_range = (-0.1 * x_len, x_len * 1.1)  # Extra padding for line chart
 
-        y_range = (-y_padding, max_y + y_padding)
+        y_range = (0, max_y + y_padding)  # Start from 0 instead of negative padding
 
-        # Smooth animation to new range
+        # Set range directly and ensure it's applied
         view_box = self.plot_item.getViewBox()
-        current_range = view_box.viewRange()
+        view_box.setRange(xRange=x_range, yRange=y_range, padding=0)
 
-        # Animate to new range
-        animation = pg.QtCore.QPropertyAnimation(view_box, b"viewRange")
-        animation.setDuration(500)
-        animation.setStartValue(current_range)
-        animation.setEndValue([x_range, y_range])
-        animation.start()
+        # Also set axis ranges directly for better control
+        self.plot_item.getAxis('left').setRange(y_range[0], y_range[1])
+        self.plot_item.getAxis('bottom').setRange(x_range[0], x_range[1])
+
+        # Temporarily enable autoRange to ensure proper display, then disable
+        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=True)
+        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=True)
+        # Force a refresh
+        self.plot_item.update()
+        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
+        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+
+        # Force update to ensure changes are visible
+        self.plot_item.update()
+        self.widget.update()
+        self.update()
 
     def paint(self, painter):
         rect = QRectF(0, 0, self.width(), self.height())
-        self.widget.resize(int(self.width()), int(self.height()))
-        self.widget.scene().setSceneRect(0, 0, self.width(), self.height())
-        self.widget.render(painter, rect, rect.toRect())
+        if self.width() > 0 and self.height() > 0:
+            self.widget.resize(int(self.width()), int(self.height()))
+            self.widget.scene().setSceneRect(0, 0, self.width(), self.height())
+            self.widget.render(painter, rect, rect.toRect())
+        else:
+            # Fallback for zero size
+            painter.fillRect(rect, Qt.GlobalColor.white if self._theme == 'light' else Qt.GlobalColor.black)
 
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
@@ -1958,11 +2032,15 @@ if __name__ == '__main__':
     # os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
     
     QtWebEngineQuick.initialize()
-    
-    # # Set style to Fusion before creating QApplication
-    # fusion_style = QStyleFactory.create("Fusion")
-    # if fusion_style:
-    #     QApplication.setStyle(fusion_style)
+    # Set style to Material before creating QApplication to support QML control customization
+    material_style = QStyleFactory.create("Material")
+    if material_style:
+        QApplication.setStyle(material_style)
+    else:
+        # Fallback to Fusion if Material is not available
+        fusion_style = QStyleFactory.create("Fusion")
+        if fusion_style:
+            QApplication.setStyle(fusion_style)
     
     app = QApplication(sys.argv)
     app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -1991,13 +2069,16 @@ if __name__ == '__main__':
     def _log_qml_warnings(errors):
         for e in errors:
             try:
-                logger.error(f"QML warning: {e.toString()}")
-            except UnicodeEncodeError:
-                # Handle encoding issues by sanitizing the message
-                sanitized_message = e.toString().encode('utf-8', errors='replace').decode('utf-8')
-                logger.error(f"QML warning: {sanitized_message}")
+                # Sanitize message to handle Unicode issues
+                message = str(e.toString()).encode('utf-8', errors='replace').decode('utf-8')
+                
+                # Filter out style customization warnings as they're not critical
+                if "current style does not support customization" in message:
+                    continue
+                    
+                logger.error(f"QML warning: {message}")
             except Exception:
-                logger.error(f"QML warning (unformatted): {e}")
+                logger.error("QML warning: <message encoding failed>")
     try:
         engine.warnings.connect(_log_qml_warnings)
     except Exception as _e:
