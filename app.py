@@ -1595,11 +1595,25 @@ class PyQtGraphItem(QQuickPaintedItem):
         self.line_items = []
         self.area_items = []
 
+        # Set initial view range
+        self.update_view_range(10)
+
     def geometryChanged(self, newGeometry, oldGeometry):
         """Handle geometry changes to ensure proper sizing"""
         super().geometryChanged(newGeometry, oldGeometry)
         if self.widget:
             self.widget.resize(int(newGeometry.width()), int(newGeometry.height()))
+            # Update the plot item's view box to match the new geometry
+            view_box = self.plot_item.getViewBox()
+            view_box.setGeometry(QRectF(0, 0, newGeometry.width(), newGeometry.height()))
+            view_box.updateViewRange()
+            
+            # Also set the plot item geometry
+            self.plot_item.setGeometry(QRectF(0, 0, newGeometry.width(), newGeometry.height()))
+            
+            self.widget.updateGeometry()
+            self.plot_item.updateGeometry()
+            self.update_plot()
             self.update()
 
     def setup_enhanced_styling(self):
@@ -1608,6 +1622,16 @@ class PyQtGraphItem(QQuickPaintedItem):
         self.plot_item.showGrid(x=True, y=True, alpha=0.3)
         # Set transparent background for theme integration
         self.widget.setBackground('transparent')
+        
+        # Remove any margins from the widget and ensure it fills the entire area
+        self.widget.setContentsMargins(0, 0, 0, 0)
+        if self.widget.layout():
+            self.widget.layout().setContentsMargins(0, 0, 0, 0)
+            self.widget.layout().setSpacing(0)
+        
+        # Ensure the plot item fills the entire widget
+        self.plot_item.setContentsMargins(0, 0, 0, 0)
+        self.plot_item.getViewBox().setContentsMargins(0, 0, 0, 0)
 
         # Enhanced grid styling
         grid_pen = pg.mkPen(color=(255, 255, 255, 50) if self._theme == 'dark' else (0, 0, 0, 30), width=1, style=Qt.PenStyle.DotLine)
@@ -1628,6 +1652,7 @@ class PyQtGraphItem(QQuickPaintedItem):
         # Disable auto range for precise control
         self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
         self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+        self.plot_item.getViewBox().clipToView = False
 
         # Add subtle background pattern
         self.add_background_pattern()
@@ -1649,6 +1674,7 @@ class PyQtGraphItem(QQuickPaintedItem):
     def data(self, value):
         self._data = value
         self.update_plot()
+        self.update()  # Force repaint
 
     @pyqtProperty(str, notify=chartTypeChanged)
     def chartType(self):
@@ -1658,6 +1684,7 @@ class PyQtGraphItem(QQuickPaintedItem):
     def chartType(self, value):
         self._chart_type = value
         self.update_plot()
+        self.update()  # Force repaint
 
     @pyqtProperty('QVariantList', notify=monthsChanged)
     def months(self):
@@ -1667,6 +1694,7 @@ class PyQtGraphItem(QQuickPaintedItem):
     def months(self, value):
         self._months = value
         self.update_plot()
+        self.update()  # Force repaint
 
     @pyqtProperty(str, notify=themeChanged)
     def theme(self):
@@ -1677,6 +1705,7 @@ class PyQtGraphItem(QQuickPaintedItem):
         self._theme = value
         self.update_theme()
         self.update_plot()
+        self.update()  # Force repaint
 
     def update_theme(self):
         """Update chart colors based on theme"""
@@ -1949,19 +1978,25 @@ class PyQtGraphItem(QQuickPaintedItem):
 
         # Set range directly and ensure it's applied
         view_box = self.plot_item.getViewBox()
-        view_box.setRange(xRange=x_range, yRange=y_range, padding=0)
+        
+        # Enable auto range temporarily to ensure proper initialization
+        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=True)
+        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=True)
+        
+        # Set the ranges
+        view_box.setXRange(x_range[0], x_range[1], padding=0)
+        view_box.setYRange(y_range[0], y_range[1], padding=0)
+
+        # Disable auto range
+        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
+        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
 
         # Also set axis ranges directly for better control
         self.plot_item.getAxis('left').setRange(y_range[0], y_range[1])
         self.plot_item.getAxis('bottom').setRange(x_range[0], x_range[1])
 
-        # Temporarily enable autoRange to ensure proper display, then disable
-        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=True)
-        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=True)
-        # Force a refresh
-        self.plot_item.update()
-        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
-        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
+        # Force view box to update its internal state
+        view_box.updateViewRange()
 
         # Force update to ensure changes are visible
         self.plot_item.update()
@@ -1971,8 +2006,16 @@ class PyQtGraphItem(QQuickPaintedItem):
     def paint(self, painter):
         rect = QRectF(0, 0, self.width(), self.height())
         if self.width() > 0 and self.height() > 0:
+            # Ensure widget is properly sized
             self.widget.resize(int(self.width()), int(self.height()))
-            self.widget.scene().setSceneRect(0, 0, self.width(), self.height())
+            
+            # Force layout update if layout exists
+            if self.widget.layout():
+                self.widget.layout().update()
+            self.widget.updateGeometry()
+            self.widget.update()
+            
+            # Render the entire widget directly
             self.widget.render(painter, rect, rect.toRect())
         else:
             # Fallback for zero size
@@ -2166,6 +2209,7 @@ Window {
                             PyQtGraphItem {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                clip: false
                                 data: backend.launchTrendsSeries
                                 chartType: backend.chartType
                                 months: backend.launchTrendsMonths

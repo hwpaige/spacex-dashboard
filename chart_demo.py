@@ -32,7 +32,6 @@ def demo_enhanced_charts():
 
     # Enhanced styling
     plot.showGrid(x=True, y=True, alpha=0.3)
-    plot.setBackground(None)
 
     # Modern color palette
     colors = [
