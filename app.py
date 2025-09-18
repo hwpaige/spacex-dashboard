@@ -4,8 +4,8 @@ import os
 import json
 import platform
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint
-from PyQt6.QtGui import QFontDatabase, QCursor, QRegion
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir
+from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
@@ -16,7 +16,6 @@ from dateutil.parser import parse
 import pytz
 import pandas as pd
 import time
-import pyqtgraph as pg
 import subprocess
 import re
 
@@ -187,7 +186,7 @@ def fetch_launches():
         logger.info("Using persistent cached previous launches")
     else:
         try:
-            url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_date_str}&limit=50'
+            url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_year}-12-31&limit=100'
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
@@ -862,88 +861,39 @@ class Backend(QObject):
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrendsMonths(self):
-        try:
-            launches = self._launch_data['previous']
-            if not launches:
-                return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
-            
-            df = pd.DataFrame(launches)
-            df['date'] = pd.to_datetime(df['date'])
-            current_year = datetime.now(pytz.UTC).year
-            df = df[df['date'].dt.year == current_year]
-            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
-            df = df[df['rocket'].isin(rocket_types)]
-            
-            if df.empty:
-                return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
-            
-            if self._chart_type == 'bar':
-                # Monthly labels for bar chart
-                df['period'] = df['date'].dt.to_period('M').astype(str)
-                unique_periods = sorted(df['period'].unique())
-                month_names = []
-                for period in unique_periods:
-                    year_month = period.split('-')
-                    if len(year_month) == 2:
-                        year, month_num = int(year_month[0]), int(year_month[1])
-                        month_name = datetime(year, month_num, 1).strftime('%b')
-                        month_names.append(month_name)
-                    else:
-                        month_names.append(period)
-                return month_names
-            else:
-                # For line chart, return month labels for daily data
-                return self._generate_month_labels_for_days()
-                
-        except Exception as e:
-            logger.error(f"Error in launchTrendsMonths: {e}")
-            return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'] if self._chart_type == 'bar' else self._generate_month_labels_for_days()
+        launches = self._launch_data['previous']
+        df = pd.DataFrame(launches)
+        df['date'] = pd.to_datetime(df['date'])
+        current_year = datetime.now(pytz.UTC).year
+        df = df[df['date'].dt.year == current_year]
+        rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+        df = df[df['rocket'].isin(rocket_types)]
+        df['month'] = df['date'].dt.to_period('M').astype(str)
+        df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
+        df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
+        months = df_pivot.index.tolist()
+        return months
 
     @pyqtProperty(int, notify=launchesChanged)
     def launchTrendsMaxValue(self):
-        try:
-            launches = self._launch_data['previous']
-            if not launches:
-                return 5
-            df = pd.DataFrame(launches)
-            df['date'] = pd.to_datetime(df['date'])
-            current_year = datetime.now(pytz.UTC).year
-            df = df[df['date'].dt.year == current_year]
-            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
-            df = df[df['rocket'].isin(rocket_types)]
-            if df.empty:
-                return 5
-            
-            if self._chart_type == 'bar':
-                # Monthly aggregation for bar chart
-                df['period'] = df['date'].dt.to_period('M').astype(str)
-                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
-                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
-            else:
-                # Daily aggregation for line chart
-                df['period'] = df['date'].dt.date.astype(str)
-                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
-                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
-                # Reindex to include all days of the year
-                start_date = datetime(current_year, 1, 1).date()
-                end_date = datetime(current_year, 12, 31).date()
-                all_dates = [str(start_date + timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
-                df_pivot = df_pivot.reindex(all_dates, fill_value=0)
-            
+        launches = self._launch_data['previous']
+        df = pd.DataFrame(launches)
+        df['date'] = pd.to_datetime(df['date'])
+        current_year = datetime.now(pytz.UTC).year
+        df = df[df['date'].dt.year == current_year]
+        rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+        df = df[df['rocket'].isin(rocket_types)]
+        df['month'] = df['date'].dt.to_period('M').astype(str)
+        df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
+        df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
+        for col in rocket_types:
+            if col not in df_pivot.columns:
+                df_pivot[col] = 0
+        if self._chart_view_mode == 'cumulative':
             for col in rocket_types:
-                if col not in df_pivot.columns:
-                    df_pivot[col] = 0
-            
-            # Apply cumulative view if selected
-            if self._chart_view_mode == 'cumulative':
-                df_pivot = df_pivot.cumsum()
-            
-            max_value = df_pivot.values.max()
-            # Round up to nearest 5, with minimum of 5
-            return max(5, int((max_value + 4) // 5 * 5))
-        except Exception as e:
-            logger.error(f"Error in launchTrendsMaxValue: {e}")
-            return 5
+                df_pivot[col] = df_pivot[col].cumsum()
+        # Return the maximum value across all series
+        return int(df_pivot.max().max())
 
     def _generate_month_labels_for_days(self):
         """Generate month labels for daily data points - show month name on first day of month, empty otherwise"""
@@ -963,80 +913,29 @@ class Backend(QObject):
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrendsSeries(self):
-        cache_key = (self._chart_type, self._chart_view_mode, len(self._launch_data['previous']))
-        if cache_key in self._launch_trends_cache:
-            return self._launch_trends_cache[cache_key]
-        
-        try:
-            launches = self._launch_data['previous']
-            if not launches:
-                default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-                data = [
-                    {'label': 'Starship', 'values': default_values},
-                    {'label': 'Falcon 9', 'values': default_values},
-                    {'label': 'Falcon Heavy', 'values': default_values}
-                ]
-                self._launch_trends_cache[cache_key] = data
-                return data
-            df = pd.DataFrame(launches)
-            df['date'] = pd.to_datetime(df['date'])
-            current_year = datetime.now(pytz.UTC).year
-            df = df[df['date'].dt.year == current_year]
-            rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
-            df = df[df['rocket'].isin(rocket_types)]
-            if df.empty:
-                default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-                data = [
-                    {'label': 'Starship', 'values': default_values},
-                    {'label': 'Falcon 9', 'values': default_values},
-                    {'label': 'Falcon Heavy', 'values': default_values}
-                ]
-                self._launch_trends_cache[cache_key] = data
-                return data
-            
-            if self._chart_type == 'bar':
-                # Monthly aggregation for bar chart
-                df['period'] = df['date'].dt.to_period('M').astype(str)
-                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
-                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
-            else:
-                # Daily aggregation for line chart
-                df['period'] = df['date'].dt.date.astype(str)
-                df_grouped = df.groupby(['period', 'rocket']).size().reset_index(name='Launches')
-                df_pivot = df_grouped.pivot(index='period', columns='rocket', values='Launches').fillna(0)
-                # Reindex to include all days of the year
-                start_date = datetime(current_year, 1, 1).date()
-                end_date = datetime(current_year, 12, 31).date()
-                all_dates = [str(start_date + timedelta(days=i)) for i in range((end_date - start_date).days + 1)]
-                df_pivot = df_pivot.reindex(all_dates, fill_value=0)
-            
+        launches = self._launch_data['previous']
+        df = pd.DataFrame(launches)
+        df['date'] = pd.to_datetime(df['date'])
+        current_year = datetime.now(pytz.UTC).year
+        df = df[df['date'].dt.year == current_year]
+        rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
+        df = df[df['rocket'].isin(rocket_types)]
+        df['month'] = df['date'].dt.to_period('M').astype(str)
+        df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
+        df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
+        for col in rocket_types:
+            if col not in df_pivot.columns:
+                df_pivot[col] = 0
+        if self._chart_view_mode == 'cumulative':
             for col in rocket_types:
-                if col not in df_pivot.columns:
-                    df_pivot[col] = 0
-            
-            # Apply cumulative view if selected
-            if self._chart_view_mode == 'cumulative':
-                df_pivot = df_pivot.cumsum()
-            
-            data = []
-            for rocket in rocket_types:
-                values = df_pivot[rocket].tolist()
-                data.append({
-                    'label': rocket,
-                    'values': values
-                })
-            self._launch_trends_cache[cache_key] = data
-            return data
-        except Exception as e:
-            logger.error(f"Error in launchTrendsSeries: {e}")
-            default_values = [0] * 12 if self._chart_type == 'bar' else [0] * 365
-            data = [
-                {'label': 'Starship', 'values': default_values},
-                {'label': 'Falcon 9', 'values': default_values},
-                {'label': 'Falcon Heavy', 'values': default_values}
-            ]
-            self._launch_trends_cache[cache_key] = data
-            return data
+                df_pivot[col] = df_pivot[col].cumsum()
+        data = []
+        for rocket in rocket_types:
+            data.append({
+                'label': rocket,
+                'values': df_pivot[rocket].tolist()
+            })
+        return data
 
     @pyqtProperty(list, notify=f1Changed)
     def driverStandings(self):
@@ -1573,454 +1472,6 @@ class Backend(QObject):
         except Exception as e:
             return f"Error getting WiFi interface info: {e}"
 
-class PyQtGraphItem(QQuickPaintedItem):
-    dataChanged = pyqtSignal()
-    chartTypeChanged = pyqtSignal()
-    monthsChanged = pyqtSignal()
-    themeChanged = pyqtSignal()
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._data = []
-        self._chart_type = 'bar'
-        self._months = []
-        self._theme = 'dark'
-        self.widget = pg.PlotWidget()
-        self.plot_item = self.widget.plotItem
-
-        # Enhanced styling setup
-        self.setup_enhanced_styling()
-
-        self.bar_items = []
-        self.line_items = []
-        self.area_items = []
-
-        # Set initial view range
-        self.update_view_range(10)
-
-    def geometryChanged(self, newGeometry, oldGeometry):
-        """Handle geometry changes to ensure proper sizing"""
-        super().geometryChanged(newGeometry, oldGeometry)
-        if self.widget:
-            self.widget.resize(int(newGeometry.width()), int(newGeometry.height()))
-            # Update the plot item's view box to match the new geometry
-            view_box = self.plot_item.getViewBox()
-            view_box.setGeometry(QRectF(0, 0, newGeometry.width(), newGeometry.height()))
-            view_box.updateViewRange()
-            
-            # Also set the plot item geometry
-            self.plot_item.setGeometry(QRectF(0, 0, newGeometry.width(), newGeometry.height()))
-            
-            self.widget.updateGeometry()
-            self.plot_item.updateGeometry()
-            self.update_plot()
-            self.update()
-
-    def setup_enhanced_styling(self):
-        """Setup modern, Tesla-inspired chart styling"""
-        # Configure plot appearance
-        self.plot_item.showGrid(x=True, y=True, alpha=0.3)
-        # Set transparent background for theme integration
-        self.widget.setBackground('transparent')
-        
-        # Remove any margins from the widget and ensure it fills the entire area
-        self.widget.setContentsMargins(0, 0, 0, 0)
-        if self.widget.layout():
-            self.widget.layout().setContentsMargins(0, 0, 0, 0)
-            self.widget.layout().setSpacing(0)
-        
-        # Ensure the plot item fills the entire widget
-        self.plot_item.setContentsMargins(0, 0, 0, 0)
-        self.plot_item.getViewBox().setContentsMargins(0, 0, 0, 0)
-
-        # Enhanced grid styling
-        grid_pen = pg.mkPen(color=(255, 255, 255, 50) if self._theme == 'dark' else (0, 0, 0, 30), width=1, style=Qt.PenStyle.DotLine)
-        self.plot_item.getAxis('left').setGrid(50)
-        self.plot_item.getAxis('bottom').setGrid(50)
-        self.plot_item.getAxis('left').setPen(grid_pen)
-        self.plot_item.getAxis('bottom').setPen(grid_pen)
-
-        # Keep axis lines visible for better chart readability
-        # self.plot_item.getAxis('left').setPen(None)
-        # self.plot_item.getAxis('bottom').setPen(None)
-
-        # Enhanced legend
-        legend = self.plot_item.addLegend(offset=(-10, 10))
-        legend.setBrush(pg.mkBrush(color=(0, 0, 0, 180) if self._theme == 'dark' else (255, 255, 255, 220)))
-        # Note: LegendItem doesn't have setBorder method in this version of PyQtGraph
-
-        # Disable auto range for precise control
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
-        self.plot_item.getViewBox().enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
-        self.plot_item.getViewBox().clipToView = False
-
-        # Add subtle background pattern
-        self.add_background_pattern()
-
-    def add_background_pattern(self):
-        """Add subtle background pattern for depth"""
-        # Create a subtle gradient background
-        gradient = pg.LinearRegionItem([0, 1], orientation=pg.LinearRegionItem.Horizontal)
-        gradient.setBrush(pg.mkBrush(color=(255, 255, 255, 10) if self._theme == 'dark' else (0, 0, 0, 5)))
-        gradient.setMovable(False)
-        gradient.setBounds([0, 1])
-        self.plot_item.addItem(gradient, ignoreBounds=True)
-
-    @pyqtProperty('QVariantList', notify=dataChanged)
-    def data(self):
-        return self._data
-
-    @data.setter
-    def data(self, value):
-        self._data = value
-        self.update_plot()
-        self.update()  # Force repaint
-
-    @pyqtProperty(str, notify=chartTypeChanged)
-    def chartType(self):
-        return self._chart_type
-
-    @chartType.setter
-    def chartType(self, value):
-        self._chart_type = value
-        self.update_plot()
-        self.update()  # Force repaint
-
-    @pyqtProperty('QVariantList', notify=monthsChanged)
-    def months(self):
-        return self._months
-
-    @months.setter
-    def months(self, value):
-        self._months = value
-        self.update_plot()
-        self.update()  # Force repaint
-
-    @pyqtProperty(str, notify=themeChanged)
-    def theme(self):
-        return self._theme
-
-    @theme.setter
-    def theme(self, value):
-        self._theme = value
-        self.update_theme()
-        self.update_plot()
-        self.update()  # Force repaint
-
-    def update_theme(self):
-        """Update chart colors based on theme"""
-        # Update grid colors
-        grid_alpha = 50 if self._theme == 'dark' else 30
-        grid_pen = pg.mkPen(color=(255, 255, 255, grid_alpha) if self._theme == 'dark' else (0, 0, 0, grid_alpha), width=1, style=Qt.PenStyle.DotLine)
-        self.plot_item.getAxis('left').setGrid(grid_alpha)
-        self.plot_item.getAxis('bottom').setGrid(grid_alpha)
-
-        # Update legend
-        legend_brush = pg.mkBrush(color=(0, 0, 0, 180) if self._theme == 'dark' else (255, 255, 255, 220))
-        legend_border = pg.mkPen(color=(255, 255, 255, 100) if self._theme == 'dark' else (0, 0, 0, 100))
-        if hasattr(self.plot_item, 'legend'):
-            self.plot_item.legend.setBrush(legend_brush)
-            # Note: LegendItem doesn't have setBorder method in this version of PyQtGraph
-            # self.plot_item.legend.setBorder(legend_border)
-
-    def update_plot(self):
-        self.plot_item.clear()
-
-        # Re-setup styling after clear
-        self.setup_enhanced_styling()
-
-        if not self._data:
-            return
-
-        max_y = 0
-        for series in self._data:
-            if isinstance(series, dict) and 'values' in series and series['values']:
-                max_y = max(max_y, max(series['values']))
-
-        if max_y == 0:
-            max_y = 10
-
-        # Enhanced color palette inspired by Tesla's design
-        colors = self.get_enhanced_colors()
-
-        if self._chart_type == 'bar':
-            self.render_enhanced_bar_chart(colors, max_y)
-        elif self._chart_type == 'area':
-            self.render_enhanced_area_chart(colors, max_y)
-        else:  # line chart
-            self.render_enhanced_line_chart(colors, max_y)
-
-        # Enhanced axis labels
-        self.setup_enhanced_axes()
-
-        # Update view range with smooth animation
-        self.update_view_range(max_y)
-
-    def get_enhanced_colors(self):
-        """Get Tesla-inspired color palette"""
-        if self._theme == 'dark':
-            return [
-                {'primary': '#00D4FF', 'secondary': '#0088CC', 'gradient': [('#00D4FF', 0.8), ('#0088CC', 0.3)]},  # Electric blue
-                {'primary': '#FF6B6B', 'secondary': '#CC4444', 'gradient': [('#FF6B6B', 0.8), ('#CC4444', 0.3)]},  # Energy red
-                {'primary': '#4ECDC4', 'secondary': '#26A69A', 'gradient': [('#4ECDC4', 0.8), ('#26A69A', 0.3)]}   # Cool teal
-            ]
-        else:
-            return [
-                {'primary': '#0066CC', 'secondary': '#004499', 'gradient': [('#0066CC', 0.9), ('#004499', 0.4)]},  # Deep blue
-                {'primary': '#FF4444', 'secondary': '#CC2222', 'gradient': [('#FF4444', 0.9), ('#CC2222', 0.4)]},  # Bright red
-                {'primary': '#00AA88', 'secondary': '#008866', 'gradient': [('#00AA88', 0.9), ('#008866', 0.4)]}   # Ocean green
-            ]
-
-    def render_enhanced_bar_chart(self, colors, max_y):
-        """Render modern bar chart with gradients and effects"""
-        bar_width = 0.8 / len(self._data) if len(self._data) > 1 else 0.6
-
-        for i, series in enumerate(self._data):
-            if not (isinstance(series, dict) and 'values' in series and series['values']):
-                continue
-
-            color_scheme = colors[i % len(colors)]
-            x_positions = []
-
-            for j, value in enumerate(series['values']):
-                if len(self._data) > 1:
-                    x_pos = j + (i - len(self._data)/2 + 0.5) * bar_width
-                else:
-                    x_pos = j
-
-                x_positions.append(x_pos)
-
-                # Create gradient brush for 3D effect
-                gradient = pg.mkBrush(color=pg.mkColor(color_scheme['primary']))
-                bar = pg.BarGraphItem(
-                    x=[x_pos], height=[value], width=bar_width,
-                    brush=gradient, pen=pg.mkPen(color=pg.mkColor(color_scheme['secondary']), width=1)
-                )
-
-                # Add glow effect
-                glow_color = pg.mkColor(color_scheme['primary'])
-                glow_color.setAlphaF(0.3)
-                glow_bar = pg.BarGraphItem(
-                    x=[x_pos], height=[value], width=bar_width * 1.1,
-                    brush=pg.mkBrush(color=glow_color),
-                    pen=None
-                )
-                self.plot_item.addItem(glow_bar)
-                self.plot_item.addItem(bar)
-
-                # Add value labels on top of bars
-                if value > 0:
-                    label = pg.TextItem(text=str(int(value)), color=pg.mkColor(color_scheme['secondary']), anchor=(0.5, -0.5))
-                    label.setPos(x_pos, value + max_y * 0.02)
-                    self.plot_item.addItem(label)
-
-        # Enhanced x-axis ticks
-        if self._months and self._chart_type == 'bar':
-            ticks = [[(i, month) for i, month in enumerate(self._months)]]
-            axis = self.plot_item.getAxis('bottom')
-            axis.setTicks(ticks)
-            axis.setStyle(tickTextOffset=10)
-
-    def render_enhanced_area_chart(self, colors, max_y):
-        """Render modern area chart with smooth gradients"""
-        for i, series in enumerate(self._data):
-            if not (isinstance(series, dict) and 'values' in series and series['values']):
-                continue
-
-            color_scheme = colors[i % len(colors)]
-            x = list(range(len(series['values'])))
-            y = series['values']
-
-            # Create smooth curve for area chart
-            if len(x) > 2:
-                try:
-                    from scipy import interpolate
-                    f = interpolate.interp1d(x, y, kind='cubic')
-                    x_smooth = [i/10.0 for i in range(len(x)*10)]
-                    y_smooth = f(x_smooth)
-                    x, y = x_smooth, y_smooth
-                except ImportError:
-                    pass  # Fall back to original data if scipy not available
-
-            # Create gradient fill for area
-            area_color = pg.mkColor(color_scheme['primary'])
-            area_color.setAlphaF(0.47)  # Semi-transparent for area effect (120/255 ≈ 0.47)
-
-            # Create area fill
-            fill_x = x + x[::-1]
-            fill_y = y + [0] * len(y)
-
-            area_brush = pg.mkBrush(color=area_color)
-            fill_curve = pg.PlotCurveItem(x=fill_x, y=fill_y, brush=area_brush, pen=None)
-            self.plot_item.addItem(fill_curve)
-
-            # Add gradient overlay for depth
-            gradient_color = pg.mkColor(color_scheme['secondary'])
-            gradient_color.setAlphaF(0.235)  # Semi-transparent for gradient effect (60/255 ≈ 0.235)
-            gradient_fill = pg.PlotCurveItem(
-                x=fill_x, y=fill_y,
-                brush=pg.mkBrush(color=gradient_color),
-                pen=None
-            )
-            self.plot_item.addItem(gradient_fill)
-
-            # Main line on top
-            pen = pg.mkPen(
-                color=pg.mkColor(color_scheme['primary']),
-                width=2,
-                style=Qt.PenStyle.SolidLine,
-                cap=Qt.PenCapStyle.RoundCap,
-                join=Qt.PenJoinStyle.RoundJoin
-            )
-
-            line_curve = pg.PlotCurveItem(x=x, y=y, pen=pen)
-            self.plot_item.addItem(line_curve)
-
-            # Add subtle data points
-            for px, py in zip(x[::20], y[::20]):  # Every 20th point for area chart
-                point = pg.ScatterPlotItem(
-                    x=[px], y=[py], size=4,
-                    brush=pg.mkBrush(color=color_scheme['secondary']),
-                    pen=pg.mkPen(color=color_scheme['primary'], width=1)
-                )
-                self.plot_item.addItem(point)
-
-    def render_enhanced_line_chart(self, colors, max_y):
-        """Render modern line chart with smooth curves and data points"""
-        for i, series in enumerate(self._data):
-            if not (isinstance(series, dict) and 'values' in series and series['values']):
-                continue
-
-            color_scheme = colors[i % len(colors)]
-            x = list(range(len(series['values'])))
-            y = series['values']
-
-            # Smooth the line using interpolation
-            if len(x) > 2:
-                try:
-                    from scipy import interpolate
-                    f = interpolate.interp1d(x, y, kind='cubic')
-                    x_smooth = [i/10.0 for i in range(len(x)*10)]
-                    y_smooth = f(x_smooth)
-                    x, y = x_smooth, y_smooth
-                except ImportError:
-                    pass  # Fall back to original data if interpolation fails
-
-            # Main line with enhanced styling
-            pen = pg.mkPen(
-                color=color_scheme['primary'],
-                width=3,
-                style=Qt.PenStyle.SolidLine,
-                cap=Qt.PenCapStyle.RoundCap,
-                join=Qt.PenJoinStyle.RoundJoin
-            )
-
-            line_curve = pg.PlotCurveItem(x=x, y=y, pen=pen)
-            self.plot_item.addItem(line_curve)
-
-            # Add data points with glow effect
-            for px, py in zip(x[::10], y[::10]):  # Every 10th point to avoid overcrowding
-                # Glow point
-                glow_color = pg.mkColor(color_scheme['primary'])
-                glow_color.setAlphaF(0.3)
-                glow_point = pg.ScatterPlotItem(
-                    x=[px], y=[py], size=12,
-                    brush=pg.mkBrush(color=glow_color),
-                    pen=None
-                )
-                self.plot_item.addItem(glow_point)
-
-                # Main point
-                point = pg.ScatterPlotItem(
-                    x=[px], y=[py], size=6,
-                    brush=pg.mkBrush(color=pg.mkColor(color_scheme['secondary'])),
-                    pen=pg.mkPen(color=pg.mkColor(color_scheme['primary']), width=2)
-                )
-                self.plot_item.addItem(point)
-
-    def setup_enhanced_axes(self):
-        """Setup enhanced axis styling"""
-        # Enhanced axis labels
-        font_color = (255, 255, 255) if self._theme == 'dark' else (0, 0, 0)
-
-        left_axis = self.plot_item.getAxis('left')
-        left_axis.setLabel('Launches', color=font_color, size='12pt', bold=True)
-        left_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
-        left_axis.show()  # Ensure axis is visible
-        left_axis.setVisible(True)  # Make sure axis is visible
-
-        bottom_axis = self.plot_item.getAxis('bottom')
-        bottom_label = 'Months' if self._chart_type == 'bar' else 'Day of Year'
-        bottom_axis.setLabel(bottom_label, color=font_color, size='12pt', bold=True)
-        bottom_axis.setStyle(tickTextHeight=12, tickTextWidth=50)
-        bottom_axis.show()  # Ensure axis is visible
-        bottom_axis.setVisible(True)  # Make sure axis is visible
-
-        # Rotate bottom labels for better readability
-        if self._chart_type == 'bar' and len(self._months) > 6:
-            bottom_axis.setStyle(tickTextOffset=15)
-
-    def update_view_range(self, max_y):
-        """Update view range with smooth padding"""
-        # Get the maximum length across all data series
-        x_len = 12  # default
-        if self._data:
-            x_len = max(len(series.get('values', [])) for series in self._data if isinstance(series, dict) and 'values' in series)
-
-        y_padding = max_y * 0.1  # 10% padding
-
-        if self._chart_type == 'bar':
-            x_range = (-0.5, x_len - 0.5)
-        else:
-            x_range = (-0.1 * x_len, x_len * 1.1)  # Extra padding for line chart
-
-        y_range = (0, max_y + y_padding)  # Start from 0 instead of negative padding
-
-        # Set range directly and ensure it's applied
-        view_box = self.plot_item.getViewBox()
-        
-        # Enable auto range temporarily to ensure proper initialization
-        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=True)
-        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=True)
-        
-        # Set the ranges
-        view_box.setXRange(x_range[0], x_range[1], padding=0)
-        view_box.setYRange(y_range[0], y_range[1], padding=0)
-
-        # Disable auto range
-        view_box.enableAutoRange(axis=pg.ViewBox.XAxis, enable=False)
-        view_box.enableAutoRange(axis=pg.ViewBox.YAxis, enable=False)
-
-        # Also set axis ranges directly for better control
-        self.plot_item.getAxis('left').setRange(y_range[0], y_range[1])
-        self.plot_item.getAxis('bottom').setRange(x_range[0], x_range[1])
-
-        # Force view box to update its internal state
-        view_box.updateViewRange()
-
-        # Force update to ensure changes are visible
-        self.plot_item.update()
-        self.widget.update()
-        self.update()
-
-    def paint(self, painter):
-        rect = QRectF(0, 0, self.width(), self.height())
-        if self.width() > 0 and self.height() > 0:
-            # Ensure widget is properly sized
-            self.widget.resize(int(self.width()), int(self.height()))
-            
-            # Force layout update if layout exists
-            if self.widget.layout():
-                self.widget.layout().update()
-            self.widget.updateGeometry()
-            self.widget.update()
-            
-            # Render the entire widget directly
-            self.widget.render(painter, rect, rect.toRect())
-        else:
-            # Fallback for zero size
-            painter.fillRect(rect, Qt.GlobalColor.white if self._theme == 'light' else Qt.GlobalColor.black)
-
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
     if hasattr(sys.stdout, 'reconfigure'):
@@ -2106,44 +1557,200 @@ if __name__ == '__main__':
     else:
         logger.error(f"Font Awesome font not found at: {fa_path}")
 
-    engine = QQmlApplicationEngine()
-    qmlRegisterType(PyQtGraphItem, 'MyModule', 1, 0, 'PyQtGraphItem')
-    # Connect QML warnings signal (list of QQmlError objects)
-    def _log_qml_warnings(errors):
-        for e in errors:
-            try:
-                # Sanitize message to handle Unicode issues
-                message = str(e.toString()).encode('utf-8', errors='replace').decode('utf-8')
-                
-                # Filter out style customization warnings as they're not critical
-                if "current style does not support customization" in message:
-                    continue
-                    
-                logger.error(f"QML warning: {message}")
-            except Exception:
-                logger.error("QML warning: <message encoding failed>")
-    try:
-        engine.warnings.connect(_log_qml_warnings)
-    except Exception as _e:
-        logger.warning(f"Could not connect engine warnings signal: {_e}")
-    backend = Backend()
-    context = engine.rootContext()
-    context.setContextProperty("backend", backend)
-    context.setContextProperty("radarLocations", radar_locations)
-    context.setContextProperty("circuitCoords", circuit_coords)
-    context.setContextProperty("spacexLogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'spacex_logo.png')}")
-    context.setContextProperty("f1LogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png')}")
-    context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1')
+class ChartItem(QQuickPaintedItem):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._chart_type = "bar"
+        self._view_mode = "actual"
+        self._series = []
+        self._months = []
+        self._max_value = 0
+        self._theme = "dark"
+        self._show_animated = 0
 
-    # Embedded QML for completeness (main.qml content)
-    qml_code = """
+    @pyqtProperty(str)
+    def chartType(self):
+        return self._chart_type
+
+    @chartType.setter
+    def chartType(self, value):
+        if self._chart_type != value:
+            self._chart_type = value
+            self.update()
+
+    @pyqtProperty(str)
+    def viewMode(self):
+        return self._view_mode
+
+    @viewMode.setter
+    def viewMode(self, value):
+        if self._view_mode != value:
+            self._view_mode = value
+            self.update()
+
+    @pyqtProperty(list)
+    def series(self):
+        return self._series
+
+    @series.setter
+    def series(self, value):
+        self._series = value
+        self.update()
+
+    @pyqtProperty(list)
+    def months(self):
+        return self._months
+
+    @months.setter
+    def months(self, value):
+        self._months = value
+        self.update()
+
+    @pyqtProperty(float)
+    def maxValue(self):
+        return self._max_value
+
+    @maxValue.setter
+    def maxValue(self, value):
+        self._max_value = value
+        self.update()
+
+    @pyqtProperty(str)
+    def theme(self):
+        return self._theme
+
+    @theme.setter
+    def theme(self, value):
+        if self._theme != value:
+            self._theme = value
+            self.update()
+
+    @pyqtProperty(float)
+    def showAnimated(self):
+        return self._show_animated
+
+    @showAnimated.setter
+    def showAnimated(self, value):
+        if self._show_animated != value:
+            self._show_animated = value
+            self.update()
+
+    def paint(self, painter):
+        if not self._series:
+            return
+
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        width = self.width()
+        height = self.height()
+        margin = 20
+
+        # Colors
+        if self._theme == "dark":
+            bg_color = QColor("#2a2e2e")
+            text_color = QColor("white")
+            grid_color = QColor("#555")
+            colors = [QColor("#00D4FF"), QColor("#FF6B6B"), QColor("#4ECDC4")]
+        else:
+            bg_color = QColor("#f0f0f0")
+            text_color = QColor("black")
+            grid_color = QColor("#ccc")
+            colors = [QColor("#0066CC"), QColor("#FF4444"), QColor("#00AA88")]
+
+        painter.fillRect(0, 0, int(width), int(height), bg_color)
+
+        # Draw grid
+        painter.setPen(QPen(grid_color, 1))
+        for i in range(0, 11):
+            y = margin + (height - 2 * margin) * i / 10
+            painter.drawLine(int(margin), int(y), int(width - margin), int(y))
+
+        # Draw chart
+        if self._chart_type == "bar":
+            self._draw_bar_chart(painter, width, height, margin, colors)
+        elif self._chart_type == "line":
+            self._draw_line_chart(painter, width, height, margin, colors)
+        elif self._chart_type == "area":
+            self._draw_area_chart(painter, width, height, margin, colors)
+
+    def _draw_bar_chart(self, painter, width, height, margin, colors):
+        if not self._months:
+            return
+        bar_width = (width - 2 * margin) / len(self._months) / len(self._series)
+        for s, series_data in enumerate(self._series):
+            color = colors[s % len(colors)]
+            painter.setBrush(QBrush(color))
+            painter.setPen(QPen(color, 1))
+            for i, value in enumerate(series_data['values']):
+                x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
+                bar_height = (height - 2 * margin) * value / self._max_value if self._max_value > 0 else 0
+                y = height - margin - bar_height
+                painter.drawRect(QRectF(x, y, bar_width, bar_height))
+
+    def _draw_line_chart(self, painter, width, height, margin, colors):
+        for s, series_data in enumerate(self._series):
+            color = colors[s % len(colors)]
+            painter.setPen(QPen(color, 3))
+            points = []
+            for i, value in enumerate(series_data['values']):
+                x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
+                y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
+                points.append(QPoint(int(x), int(y)))
+            if len(points) > 1:
+                for i in range(len(points) - 1):
+                    painter.drawLine(points[i], points[i + 1])
+
+    def _draw_area_chart(self, painter, width, height, margin, colors):
+        for s, series_data in enumerate(self._series):
+            color = colors[s % len(colors)]
+            painter.setPen(QPen(color, 3))
+            painter.setBrush(QBrush(color.lighter(150)))
+            points = [QPoint(margin, height - margin)]
+            for i, value in enumerate(series_data['values']):
+                x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
+                y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
+                points.append(QPoint(int(x), int(y)))
+            points.append(QPoint(width - margin, height - margin))
+            painter.drawPolygon(points)
+
+qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
+
+engine = QQmlApplicationEngine()
+# Connect QML warnings signal (list of QQmlError objects)
+def _log_qml_warnings(errors):
+    for e in errors:
+        try:
+            # Sanitize message to handle Unicode issues
+            message = str(e.toString()).encode('utf-8', errors='replace').decode('utf-8')
+            
+            # Filter out style customization warnings as they're not critical
+            if "current style does not support customization" in message:
+                continue
+                
+            logger.error(f"QML warning: {message}")
+        except Exception:
+            logger.error("QML warning: <message encoding failed>")
+try:
+    engine.warnings.connect(_log_qml_warnings)
+except Exception as _e:
+    logger.warning(f"Could not connect engine warnings signal: {_e}")
+backend = Backend()
+context = engine.rootContext()
+context.setContextProperty("backend", backend)
+context.setContextProperty("radarLocations", radar_locations)
+context.setContextProperty("circuitCoords", circuit_coords)
+context.setContextProperty("spacexLogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'spacex_logo.png')}")
+context.setContextProperty("f1LogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png')}")
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1')
+
+# Embedded QML for completeness (main.qml content)
+qml_code = """
 import QtQuick
 import QtQuick.Window
 import QtQuick.Controls
 import QtQuick.Layouts
-import QtCharts
+import Charts 1.0
 import QtWebEngine
-import MyModule 1.0
 
 Window {
     id: root
@@ -2206,14 +1813,29 @@ Window {
                             anchors.fill: parent
                             spacing: 5
 
-                            PyQtGraphItem {
+                            ChartItem {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                clip: false
-                                data: backend.launchTrendsSeries
+
                                 chartType: backend.chartType
+                                viewMode: backend.chartViewMode
+                                series: backend.launchTrendsSeries
                                 months: backend.launchTrendsMonths
+                                maxValue: backend.launchTrendsMaxValue
                                 theme: backend.theme
+
+                                opacity: showAnimated
+
+                                property real showAnimated: 0
+
+                                Component.onCompleted: showAnimated = 1
+
+                                Behavior on showAnimated {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                }
                             }
 
                             // Chart control buttons
@@ -2284,7 +1906,7 @@ Window {
                                                 backend.chartViewMode = chartData.type
                                             }
                                             background: Rectangle {
-                                                color: backend.chartViewMode === chartData.type ? 
+                                       color: backend.chartViewMode === chartData.type ? 
                                                        (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
                                                        (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
@@ -3181,12 +2803,12 @@ Window {
         }
     }
 }
-    """
+"""
 
-    # Load QML from string (for complete single file)
-    engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
-    if not engine.rootObjects():
-        logger.error("QML root object creation failed (see earlier QML errors above).")
-        print("QML load failed. Check console for Qt errors.")
-        sys.exit(-1)
-    sys.exit(app.exec())
+# Load QML from string (for complete single file)
+engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
+if not engine.rootObjects():
+    logger.error("QML root object creation failed (see earlier QML errors above).")
+    print("QML load failed. Check console for Qt errors.")
+    sys.exit(-1)
+sys.exit(app.exec())
