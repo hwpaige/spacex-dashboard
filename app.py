@@ -18,6 +18,7 @@ import pandas as pd
 import time
 import subprocess
 import re
+import calendar
 
 # Set console encoding to UTF-8 to handle Unicode characters properly
 if hasattr(sys.stdout, 'reconfigure'):
@@ -149,7 +150,9 @@ except Exception as _e:  # Fallback (should not normally occur)
     logger.warning(f"Failed to install Qt message handler: {_e}")
 
 # Cache for launch data
-CACHE_REFRESH_INTERVAL = 720  # 12 minutes in seconds
+CACHE_REFRESH_INTERVAL_PREVIOUS = 86400  # 24 hours for historical data
+CACHE_REFRESH_INTERVAL_UPCOMING = 3600   # 1 hour for upcoming launches
+CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), 'previous_launches_cache.json')
 CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), 'upcoming_launches_cache.json')
 
@@ -181,7 +184,7 @@ def fetch_launches():
 
     # Load previous launches cache
     previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
-    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_PREVIOUS:
         previous_launches = previous_cache['data']
         logger.info("Using persistent cached previous launches")
     else:
@@ -215,7 +218,7 @@ def fetch_launches():
 
     # Load upcoming launches cache
     upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
-    if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+    if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING:
         upcoming_launches = upcoming_cache['data']
         logger.info("Using persistent cached upcoming launches")
     else:
@@ -253,7 +256,7 @@ def fetch_f1_data():
         return f1_cache
     current_time = datetime.now(pytz.UTC)
     cache = load_cache_from_file(CACHE_FILE_F1)
-    if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL:
+    if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1:
         f1_cache = cache['data']
         logger.info("Using persistent cached F1 data")
         return f1_cache
@@ -581,7 +584,7 @@ class EventModel(QAbstractListModel):
                 this_week_launches = [l for l in launches if today < parse(l['net']).replace(tzinfo=pytz.UTC).date() <= this_week_end]
                 later_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() > this_week_end]
                 if today_launches:
-                    grouped.append({'group': 'Today'})
+                    grouped.append({'group': "Today's Launches 🚀"})
                     grouped.extend(today_launches)
                 if this_week_launches:
                     grouped.append({'group': 'This Week'})
@@ -595,7 +598,7 @@ class EventModel(QAbstractListModel):
                 last_week_launches = [l for l in launches if last_week_start <= parse(l['net']).replace(tzinfo=pytz.UTC).date() < today]
                 earlier_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() < last_week_start]
                 if today_launches:
-                    grouped.append({'group': 'Today'})
+                    grouped.append({'group': "Today's Launches 🚀"})
                     grouped.extend(today_launches)
                 if last_week_launches:
                     grouped.append({'group': 'Last Week'})
@@ -612,7 +615,7 @@ class EventModel(QAbstractListModel):
                 this_week_races = [r for r in races if today < parse(r['date_start']).replace(tzinfo=pytz.UTC).date() <= this_week_end]
                 later_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() > this_week_end]
                 if today_races:
-                    grouped.append({'group': 'Today'})
+                    grouped.append({'group': "Today's Races 🏎️"})
                     grouped.extend(today_races)
                 if this_week_races:
                     grouped.append({'group': 'This Week'})
@@ -685,7 +688,7 @@ class Backend(QObject):
 
         self.launch_timer = QTimer(self)
         self.launch_timer.timeout.connect(self.update_launches_periodic)
-        self.launch_timer.start(CACHE_REFRESH_INTERVAL * 1000)
+        self.launch_timer.start(CACHE_REFRESH_INTERVAL_UPCOMING * 1000)
 
         self.time_timer = QTimer(self)
         self.time_timer.timeout.connect(self.update_time)
@@ -698,7 +701,7 @@ class Backend(QObject):
         # WiFi timer for status updates
         self.wifi_timer = QTimer(self)
         self.wifi_timer.timeout.connect(self.update_wifi_status)
-        self.wifi_timer.start(5000)  # Check every 5 seconds
+        # Don't start timer automatically - only when WiFi popup is open
         
         # Check WiFi interface availability on startup
         self.check_wifi_interface()
@@ -945,6 +948,47 @@ class Backend(QObject):
     def raceCalendar(self):
         return sorted(self._f1_data['schedule'], key=lambda x: parse(x['date_start']))
 
+    @pyqtProperty(list, notify=launchesChanged)
+    def launchDescriptions(self):
+        return [
+            "7/1 2104: Falcon 9 hoists MTG-S1/Sentinel-4A to geosync from LC-39A; Ariane's loss is our nominal gain, booster recovered without drama.",
+            "7/2 0425: 500th Falcon 9 ignites with 27 Starlinks from SLC-40; B1067 clocks 29th flight, orbit insertion as predictable as gravity.",
+            "7/8 0545: Another 28 Starlinks flung to LEO via Falcon 9 at SLC-40; deployment flawless, booster sticks the landing like it's bored.",
+            "7/13 0504: Dror-1 comsat dispatched to GTO by Falcon 9 from SLC-40; 500th success tallied, technical specs holding steady.",
+            "7/16 0230: Falcon 9 from SLC-4E deploys 26 Starlinks to LEO; trajectory spot-on, recovery droneship reports no complaints.",
+            "7/16 0610: 24 KuiperSats for Amazon lofted by Falcon 9 at SLC-40; ironic assist to rivals, payloads separate cleanly in orbit.",
+            "7/19 0352: 24 Starlinks to SSO courtesy of Falcon 9 from SLC-4E; booster separation nominal, landing pad greets old friend.",
+            "7/22 2112: O3b mPOWER duo boosted to MEO by Falcon 9 at SLC-40; fairing jettisoned, engines perform without a hitch.",
+            "7/23 1813: TRACERS twins and cubesat tag-alongs reach SSO on Falcon 9 from SLC-4E; NASA science in orbit, booster touchdown precise.",
+            "7/26 0901: 28 Starlinks added to the constellation from SLC-40 Falcon 9; delta-v expended, satellites phoning home.",
+            "7/27 0431: 24 Starlinks parked in SSO by Vandenberg Falcon 9; staging sequence textbook, droneship claims another.",
+            "7/30 0337: B1085 hits 10 flights in year one with 28 Starlinks from SLC-40; Falcon efficiency borders on monotonous.",
+            "7/31 1835: Falcon 9 SLC-4E sends 24 Starlinks to SSO; payload fairings pop, orbit achieved with kerbal-like precision.",
+            "8/1 1543: Crew-11 Endeavour ferries four to ISS via Falcon 9 from LC-39A; docking smooth, human-rated reliability endures.",
+            "8/4 0757: 28 Starlinks flung to LEO via Falcon 9 at SLC-40; deployment flawless, booster sticks the landing like it's bored.",
+            "8/11 1235: 24 KuiperSats for Amazon lofted by Falcon 9 at SLC-4E; ironic assist to rivals, payloads separate cleanly in orbit.",
+            "8/14 1200: 24 Starlinks to SSO courtesy of Falcon 9 from SLC-4E; booster separation nominal, landing pad greets old friend.",
+            "8/14 1600: 28 Starlinks added to the constellation from SLC-40 Falcon 9; delta-v expended, satellites phoning home.",
+            "8/18 1300: Falcon 9 SLC-4E sends 24 Starlinks to SSO; payload fairings pop, orbit achieved with kerbal-like precision.",
+            "8/22 1800: X-37B OTV-8 secretly orbited by Falcon 9 from LC-39A; USSF-36 mission opaque, but booster recovery transparent.",
+            "8/22 2200: Closing double-header: 24 Starlinks to SSO on Falcon 9 from SLC-4E; rapid cadence, flawless execution.",
+            "8/26 1855: Falcon 9 from SLC-4E launches NAOS to orbit; booster nails LZ-4, parameters held steady.",
+            "8/26 2331: Starship Flight 10 ignites from Starbase; hot-staging clean, ship splashes precisely in Indian Ocean, Super Heavy boosts back nominally.",
+            "8/27 1104: 28 Starlinks flung to LEO via Falcon 9 at SLC-40; deployment flawless, booster sticks the landing like it's bored.",
+            "8/28 0812: Falcon 9 from LC-39A deploys 28 Starlinks to LEO; booster on 30th reuse lands ASOG, reusability milestone dryly noted.",
+            "8/30 0452: 24 Starlinks parked in SSO by Vandenberg Falcon 9; staging sequence textbook, droneship claims another.",
+            "8/31 1142: Another 28 Starlinks flung to LEO via Falcon 9 at SLC-40; deployment flawless, booster sticks the landing like it's bored.",
+            "9/3 0344: Falcon 9 from SLC-4E deploys 24 Starlinks to LEO; trajectory spot-on, recovery droneship reports no complaints.",
+            "9/3 1149: 28 Starlinks added to the constellation from SLC-40 Falcon 9; delta-v expended, satellites phoning home.",
+            "9/5 1225: 500th Falcon 9 ignites with 28 Starlinks from SLC-40; booster hits 10 flights, JRTI touchdown, efficiency reigns.",
+            "9/6 1759: Falcon 9 from SLC-4E deploys 24 Starlinks to LEO; trajectory spot-on, recovery droneship reports no complaints.",
+            "9/10 1412: Falcon 9 from SLC-4E boosts Space Force Tranche 1 to LEO; SDA payloads separate cleanly, OCISLY catches booster again.",
+            "9/12 0203: Falcon 9 from SLC-40 dispatches Nusantara Lima comsat to GTO; booster settles on ASOG, insertion as planned.",
+            "9/13 1748: Falcon 9 from SLC-4E completes 300th Starlink mission with 24 satellites to LEO; deployment spot-on, recovery droneship unfazed.",
+            "9/14 2213: Falcon 9 from SLC-40 propels Northrop Grumman Cygnus XL to ISS; booster lands at LZ-2, cargo en route without incident.",
+            "9/18 0930: Falcon 9 from SLC-40 flings 28 Starlinks to LEO; delta-v spotless, booster recovery monotonous."
+        ]
+
     def get_next_launch(self):
         current_time = datetime.now(pytz.UTC)
         valid_launches = [l for l in self._launch_data['upcoming'] if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
@@ -1005,6 +1049,7 @@ class Backend(QObject):
     def scanWifiNetworks(self):
         """Scan for available WiFi networks using nmcli (Ubuntu standard)"""
         try:
+            logger.info("Starting WiFi network scan...")
             is_windows = platform.system() == 'Windows'
 
             if is_windows:
@@ -1046,6 +1091,7 @@ class Backend(QObject):
                     networks.append(current_network)
             else:
                 # Use nmcli for Ubuntu/Linux (much more reliable than iwlist)
+                logger.info("Scanning WiFi networks on Linux using nmcli...")
                 try:
                     # First check if nmcli is available
                     nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
@@ -1055,34 +1101,64 @@ class Backend(QObject):
                         self.wifiNetworksChanged.emit()
                         return
 
-                    # Scan for networks using nmcli
-                    result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
-                                          capture_output=True, text=True, timeout=15)
+                    logger.info("nmcli found, running scan...")
 
+                    # First, find the WiFi device name
+                    device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
+                    wifi_device = None
+                    if device_result.returncode == 0:
+                        for line in device_result.stdout.split('\n'):
+                            parts = line.split()
+                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
+                                wifi_device = parts[0]
+                                break
+                    
+                    logger.info(f"Found WiFi device: {wifi_device}")
+                    
+                    if wifi_device:
+                        # Make sure WiFi is enabled and rescan
+                        enable_result = subprocess.run(['nmcli', 'device', 'set', wifi_device, 'on'], capture_output=True, text=True, timeout=5)
+                        logger.info(f"WiFi enable result: {enable_result.returncode}, stdout: {enable_result.stdout.strip()}, stderr: {enable_result.stderr.strip()}")
+                        
+                        rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], capture_output=True, text=True, timeout=10)
+                        logger.info(f"WiFi rescan result: {rescan_result.returncode}, stdout: {rescan_result.stdout.strip()}, stderr: {rescan_result.stderr.strip()}")
+
+                        # Scan for networks using nmcli
+                        result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
+                                              capture_output=True, text=True, timeout=15)
+                    else:
+                        logger.error("No WiFi device found")
+                        self._wifi_networks = []
+                        self.wifiNetworksChanged.emit()
+                        return
+
+                    logger.info(f"nmcli scan completed with return code: {result.returncode}")
                     if result.returncode != 0:
                         logger.error(f"nmcli scan failed: {result.stderr}")
                         self._wifi_networks = []
                         self.wifiNetworksChanged.emit()
                         return
 
+                    logger.info(f"nmcli output length: {len(result.stdout)}")
+                    logger.info(f"nmcli output: {repr(result.stdout)}")
                     networks = []
                     lines = result.stdout.strip().split('\n')
 
+                    logger.info(f"Found {len(lines)} lines in nmcli output")
                     # Skip header line
                     for line in lines[1:]:
+                        logger.debug(f"Processing line: {line}")
                         parts = line.split()
-                        if len(parts) >= 8:
-                            ssid = parts[1] if parts[1] != '--' else parts[0]
-                            if ssid and ssid != '*':
-                                # Extract signal strength (usually in parts)
-                                signal = 0
-                                for part in parts:
-                                    if part.endswith('*'):
-                                        signal = int(part[:-1]) if part[:-1].isdigit() else 0
-                                        break
+                        if len(parts) >= 7:
+                            # SSID is usually in column 1 (index 0), but skip if it's '*'
+                            ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
+                            if ssid and ssid != '--':
+                                # Signal is usually in column 4
+                                signal_str = parts[4] if len(parts) > 4 else '0'
+                                signal = int(signal_str) if signal_str.isdigit() else 0
 
-                                # Check for security
-                                security = ' '.join(parts[6:]) if len(parts) > 6 else ''
+                                # Security is usually in column 6
+                                security = parts[6] if len(parts) > 6 else ''
                                 encrypted = 'WPA' in security or 'WEP' in security
 
                                 networks.append({
@@ -1090,6 +1166,7 @@ class Backend(QObject):
                                     'signal': signal,
                                     'encrypted': encrypted
                                 })
+                                logger.debug(f"Found network: {ssid}, signal: {signal}, encrypted: {encrypted}")
 
                 except Exception as e:
                     logger.error(f"nmcli scan failed: {e}")
@@ -1182,12 +1259,29 @@ class Backend(QObject):
 
                     logger.info(f"Connecting to WiFi network: {ssid}")
 
+                    # Find the WiFi device
+                    device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
+                    wifi_device = None
+                    if device_result.returncode == 0:
+                        for line in device_result.stdout.split('\n'):
+                            parts = line.split()
+                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
+                                wifi_device = parts[0]
+                                break
+                    
+                    if not wifi_device:
+                        logger.error("No WiFi device found for connection")
+                        self._wifi_connecting = False
+                        self.wifiConnectingChanged.emit()
+                        return
+
                     # First, disconnect from current network if connected
                     try:
-                        subprocess.run(['nmcli', 'device', 'disconnect', 'wlan0'],
-                                     capture_output=True, timeout=10)
-                    except:
-                        pass  # Ignore if no current connection
+                        disconnect_result = subprocess.run(['nmcli', 'device', 'disconnect', wifi_device],
+                                                         capture_output=True, text=True, timeout=10)
+                        logger.info(f"Disconnect result: {disconnect_result.returncode}")
+                    except Exception as e:
+                        logger.warning(f"Disconnect failed: {e}")
 
                     # Connect to the new network
                     if password:
@@ -1267,9 +1361,26 @@ class Backend(QObject):
         except Exception as e:
             logger.error(f"Error disconnecting WiFi: {e}")
 
+    @pyqtSlot()
+    def startWifiTimer(self):
+        """Start WiFi status checking timer"""
+        if not self.wifi_timer.isActive():
+            self.wifi_timer.start(5000)  # Check every 5 seconds when popup is open
+            logger.info("WiFi status timer started")
+            # Update status immediately when starting
+            self.update_wifi_status()
+
+    @pyqtSlot()
+    def stopWifiTimer(self):
+        """Stop WiFi status checking timer"""
+        if self.wifi_timer.isActive():
+            self.wifi_timer.stop()
+            logger.info("WiFi status timer stopped")
+
     def update_wifi_status(self):
         """Update WiFi connection status"""
         try:
+            logger.debug("Updating WiFi status...")
             is_windows = platform.system() == 'Windows'
             
             if is_windows:
@@ -1292,6 +1403,7 @@ class Backend(QObject):
                             current_ssid = ssid_match.group(1).strip()
             else:
                 # Check WiFi status using nmcli (preferred for Ubuntu/Linux)
+                logger.debug("Checking WiFi status on Linux using nmcli...")
                 connected = False
                 current_ssid = ""
 
@@ -1299,22 +1411,54 @@ class Backend(QObject):
                     # Use nmcli to get device status
                     result = subprocess.run(['nmcli', 'device', 'status'],
                                           capture_output=True, text=True, timeout=5)
+                    logger.debug(f"nmcli device status return code: {result.returncode}")
+                    logger.debug(f"nmcli device status stdout: {result.stdout[:200]}...")
+                    
                     if result.returncode == 0:
                         lines = result.stdout.split('\n')
                         for line in lines:
-                            if 'wifi' in line.lower() and 'connected' in line.lower():
-                                connected = True
-                                break
+                            logger.debug(f"Checking line: {line}")
+                            parts = line.split()
+                            if len(parts) >= 4:
+                                device_type = parts[1].lower()
+                                state = parts[2].lower()
+                                if device_type == 'wifi' and state == 'connected':
+                                    connected = True
+                                    logger.info("WiFi connection detected via nmcli")
+                                    break
 
                     # Get current SSID if connected
                     if connected:
-                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi'],
-                                                   capture_output=True, text=True, timeout=5)
-                        if ssid_result.returncode == 0:
-                            for line in ssid_result.stdout.split('\n'):
-                                if line.startswith('yes:'):
-                                    current_ssid = line.split(':', 1)[1].strip()
-                                    break
+                        # Find the connected WiFi device
+                        connected_device = None
+                        for line in result.stdout.split('\n'):
+                            parts = line.split()
+                            if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
+                                connected_device = parts[0]
+                                break
+                        
+                        if connected_device:
+                            # Try to get active connection info for this device
+                            ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', connected_device],
+                                                       capture_output=True, text=True, timeout=5)
+                            logger.debug(f"nmcli SSID check return code: {ssid_result.returncode}")
+                            if ssid_result.returncode == 0:
+                                for line in ssid_result.stdout.split('\n'):
+                                    logger.debug(f"SSID line: {line}")
+                                    if line.startswith('yes:'):
+                                        current_ssid = line.split(':', 1)[1].strip()
+                                        logger.info(f"Current SSID: {current_ssid}")
+                                        break
+                        else:
+                            # Fallback to active connections
+                            ssid_result = subprocess.run(['nmcli', '-t', '-f', 'name', 'connection', 'show', '--active'],
+                                                       capture_output=True, text=True, timeout=5)
+                            logger.debug(f"nmcli active connection return code: {ssid_result.returncode}")
+                            if ssid_result.returncode == 0:
+                                connections = ssid_result.stdout.strip().split('\n')
+                                if connections and connections[0]:
+                                    current_ssid = connections[0]
+                                    logger.info(f"Current SSID (fallback): {current_ssid}")
 
                 except Exception as e:
                     logger.warning(f"nmcli not available, falling back to legacy methods: {e}")
@@ -1324,14 +1468,17 @@ class Backend(QObject):
 
                     for interface in interfaces:
                         try:
+                            logger.debug(f"Checking interface {interface}...")
                             # Check if interface has an IP address
                             result = subprocess.run(['ip', 'addr', 'show', interface],
                                                   capture_output=True, text=True, timeout=5)
 
                             if 'inet ' in result.stdout:
                                 has_ip = True
+                                logger.info(f"WiFi interface {interface} has IP address")
                                 break
-                        except:
+                        except Exception as e:
+                            logger.debug(f"Error checking {interface}: {e}")
                             continue
 
                     # Get current SSID using legacy tools
@@ -1643,27 +1790,64 @@ class ChartItem(QQuickPaintedItem):
 
         width = self.width()
         height = self.height()
-        margin = 20
+        margin = 25  # Reduced margin for closer fit to container
 
-        # Colors
+        # Colors - Tesla-inspired dark theme
         if self._theme == "dark":
-            bg_color = QColor("#2a2e2e")
-            text_color = QColor("white")
-            grid_color = QColor("#555")
+            bg_color = QColor("#2a2e2e")  # Match card background
+            text_color = QColor("#ffffff")
+            grid_color = QColor("#333333")  # Finer grid
+            axis_color = QColor("#666666")
             colors = [QColor("#00D4FF"), QColor("#FF6B6B"), QColor("#4ECDC4")]
         else:
             bg_color = QColor("#f0f0f0")
             text_color = QColor("black")
             grid_color = QColor("#ccc")
+            axis_color = QColor("#999")
             colors = [QColor("#0066CC"), QColor("#FF4444"), QColor("#00AA88")]
 
         painter.fillRect(0, 0, int(width), int(height), bg_color)
 
-        # Draw grid
-        painter.setPen(QPen(grid_color, 1))
+        # Draw finer grid lines
+        painter.setPen(QPen(grid_color, 1, Qt.PenStyle.DotLine))
         for i in range(0, 11):
             y = margin + (height - 2 * margin) * i / 10
             painter.drawLine(int(margin), int(y), int(width - margin), int(y))
+
+        # Draw vertical grid lines for x-axis
+        if self._months:
+            for i in range(len(self._months)):
+                x = margin + (width - 2 * margin) * i / (len(self._months) - 1) if len(self._months) > 1 else margin
+                painter.drawLine(int(x), int(margin), int(x), int(height - margin))
+
+        # Draw y-axis labels
+        painter.setPen(QPen(text_color))
+        font = painter.font()
+        font.setPixelSize(10)
+        painter.setFont(font)
+        for i in range(0, 11):
+            value = self._max_value * (10 - i) / 10
+            y = margin + (height - 2 * margin) * i / 10
+            painter.drawText(int(5), int(y + 4), f"{int(value)}")
+
+        # Draw x-axis labels
+        if self._months:
+            for i, month in enumerate(self._months):
+                x = margin + (width - 2 * margin) * i / (len(self._months) - 1) if len(self._months) > 1 else margin
+                month_letter = month[6:7] if len(month) >= 7 else month
+                painter.drawText(int(x - 10), int(height - 5), month_letter)
+
+        # Draw legend
+        legend_x = width - margin - 100
+        legend_y = margin + 10
+        legend_spacing = 20
+        for s, series_data in enumerate(self._series):
+            color = colors[s % len(colors)]
+            painter.setBrush(QBrush(color))
+            painter.setPen(QPen(color))
+            painter.drawRect(int(legend_x), int(legend_y + s * legend_spacing), 12, 12)
+            painter.setPen(QPen(text_color))
+            painter.drawText(int(legend_x + 16), int(legend_y + s * legend_spacing + 10), series_data['label'])
 
         # Draw chart
         if self._chart_type == "bar":
@@ -1789,20 +1973,6 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
-
-                    Text {
-                        text: backend.mode === "spacex" ? 
-                               (backend.chartViewMode === "cumulative" ? 
-                                (backend.chartType === "bar" ? "Cumulative Launch Trends (Bar)" : 
-                                 backend.chartType === "line" ? "Cumulative Launch Trends (Line)" : "Cumulative Launch Trends (Area)") : 
-                                (backend.chartType === "bar" ? "Monthly Launch Trends (Bar)" : 
-                                 backend.chartType === "line" ? "Monthly Launch Trends (Line)" : "Monthly Launch Trends (Area)")) : 
-                               "Driver Standings"
-                        font.pixelSize: 14
-                        color: "#999999"
-                        Layout.fillWidth: true
-                        horizontalAlignment: Text.AlignHCenter
-                    }
 
                     Item {
                         Layout.fillWidth: true
@@ -2109,12 +2279,6 @@ Window {
                 ColumnLayout {
                     anchors.fill: parent
 
-                    Text {
-                        text: backend.mode === "spacex" ? "Launches" : "Races"
-                        font.pixelSize: 14
-                        color: "#999999"
-                    }
-
                     ListView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
@@ -2250,8 +2414,8 @@ Window {
 
                 // Left pill (time and weather) - FIXED WIDTH
                 Rectangle {
-                    Layout.preferredWidth: 400
-                    Layout.maximumWidth: 400
+                    Layout.preferredWidth: 200
+                    Layout.maximumWidth: 200
                     height: 30
                     radius: 15
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -2265,7 +2429,7 @@ Window {
                         Text {
                             text: backend.currentTime
                             color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 12
+                            font.pixelSize: 14
                             font.family: "D-DIN"
                         }
                         Text {
@@ -2278,8 +2442,39 @@ Window {
                                 return "Weather loading...";
                             }
                             color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 12
+                            font.pixelSize: 14
                             font.family: "D-DIN"
+                        }
+                    }
+                }
+
+                // Scrolling launch ticker
+                Rectangle {
+                    Layout.preferredWidth: 600
+                    Layout.maximumWidth: 600
+                    height: 30
+                    radius: 15
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+                    clip: true
+
+                    Text {
+                        id: tickerText
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: backend.launchDescriptions.join(" \\ ")
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 13
+                        font.family: "D-DIN"
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                from: parent.parent.width
+                                to: -tickerText.width + 400  // Pause with text still visible
+                                duration: 1600000
+                            }
+                            PauseAnimation { duration: 4000 }  // 4 second pause
                         }
                     }
                 }
@@ -2440,6 +2635,9 @@ Window {
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            onOpened: backend.startWifiTimer()
+            onClosed: backend.stopWifiTimer()
 
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
