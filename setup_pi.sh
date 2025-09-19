@@ -208,8 +208,11 @@ configure_system() {
     # Enable SSH
     systemctl enable --now ssh
     
-    # Enable NetworkManager for nmcli WiFi management
-    systemctl enable --now NetworkManager
+    # Disable NetworkManager (conflicts with systemd-networkd)
+    # Enable systemd-networkd for WiFi management
+    systemctl disable --now NetworkManager || true
+    systemctl enable --now systemd-networkd
+    systemctl enable --now wpa_supplicant
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true
@@ -431,16 +434,35 @@ EOF"
 optimize_performance() {
     log "Applying performance optimizations..."
     
-    # WiFi power save off
+    # WiFi power save off and P2P disable for systemd-networkd compatibility
     echo "options brcmfmac p2p=0" > /etc/modprobe.d/brcmfmac.conf
+    
+    # Try to disable power save on wlan0 if it exists
     iw dev wlan0 set power_save off 2>/dev/null || true
+    
+    # Reload WiFi driver
     modprobe -r brcmfmac 2>/dev/null || true
     modprobe brcmfmac 2>/dev/null || true
+    
+    # Ensure wpa_supplicant config exists
+    if [ ! -f /etc/wpa_supplicant/wpa_supplicant.conf ]; then
+        cat << EOF > /etc/wpa_supplicant/wpa_supplicant.conf
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country=US
+
+network={
+    key_mgmt=NONE
+}
+EOF
+        chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+    fi
     
     cat << EOF > /etc/rc.local
 #!/bin/sh -e
 sleep 10
-iw dev wlan0 set power_save off || true
+# Disable WiFi power save if interface exists
+iw dev wlan0 set power_save off 2>/dev/null || true
 exit 0
 EOF
     chmod +x /etc/rc.local
