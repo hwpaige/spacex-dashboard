@@ -1047,7 +1047,7 @@ class Backend(QObject):
 
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks using nmcli (Ubuntu standard)"""
+        """Scan for available WiFi networks using nmcli (Ubuntu standard) with improved error handling"""
         try:
             logger.info("Starting WiFi network scan...")
             is_windows = platform.system() == 'Windows'
@@ -1090,20 +1090,21 @@ class Backend(QObject):
                 if current_network and current_network.get('ssid'):
                     networks.append(current_network)
             else:
-                # Use nmcli for Ubuntu/Linux (much more reliable than iwlist)
-                logger.info("Scanning WiFi networks on Linux using nmcli...")
+                # Enhanced Linux WiFi scanning with multiple fallback methods
+                logger.info("Scanning WiFi networks on Linux...")
+                networks = []
+                
+                # Method 1: Try nmcli (preferred)
                 try:
+                    logger.info("Attempting nmcli scan...")
+                    
                     # First check if nmcli is available
                     nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
                     if nmcli_check.returncode != 0:
-                        logger.error("nmcli not found. Please install network-manager: sudo apt install network-manager")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
+                        logger.warning("nmcli not found, trying fallback methods")
+                        raise Exception("nmcli not available")
 
-                    logger.info("nmcli found, running scan...")
-
-                    # First, find the WiFi device name
+                    # Find the WiFi device name
                     device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
                     wifi_device = None
                     if device_result.returncode == 0:
@@ -1116,63 +1117,165 @@ class Backend(QObject):
                     logger.info(f"Found WiFi device: {wifi_device}")
                     
                     if wifi_device:
-                        # Make sure WiFi is enabled and rescan
-                        enable_result = subprocess.run(['nmcli', 'device', 'set', wifi_device, 'on'], capture_output=True, text=True, timeout=5)
-                        logger.info(f"WiFi enable result: {enable_result.returncode}, stdout: {enable_result.stdout.strip()}, stderr: {enable_result.stderr.strip()}")
+                        # Check if device is available/managed
+                        device_info = subprocess.run(['nmcli', 'device', 'show', wifi_device], 
+                                                   capture_output=True, text=True, timeout=5)
                         
-                        rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], capture_output=True, text=True, timeout=10)
-                        logger.info(f"WiFi rescan result: {rescan_result.returncode}, stdout: {rescan_result.stdout.strip()}, stderr: {rescan_result.stderr.strip()}")
+                        if 'unavailable' in device_info.stdout.lower():
+                            logger.warning(f"WiFi device {wifi_device} is unavailable, trying to make it managed")
+                            # Try to set device as managed
+                            subprocess.run(['nmcli', 'device', 'set', wifi_device, 'managed', 'yes'], 
+                                         capture_output=True, timeout=5)
+                        
+                        # Try to enable WiFi (handle the property error gracefully)
+                        enable_result = subprocess.run(['nmcli', 'radio', 'wifi', 'on'], 
+                                                     capture_output=True, text=True, timeout=5)
+                        if enable_result.returncode != 0:
+                            logger.warning(f"WiFi enable failed: {enable_result.stderr}")
+                        
+                        # Try device-specific enable as fallback
+                        try:
+                            subprocess.run(['nmcli', 'device', 'set', wifi_device, 'on'], 
+                                         capture_output=True, timeout=5)
+                        except:
+                            pass  # Ignore device set errors
+                        
+                        # Rescan for networks
+                        rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], 
+                                                     capture_output=True, text=True, timeout=10)
+                        logger.info(f"WiFi rescan result: {rescan_result.returncode}")
 
-                        # Scan for networks using nmcli
+                        # Scan for networks
                         result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
                                               capture_output=True, text=True, timeout=15)
+                        
+                        if result.returncode == 0 and result.stdout.strip():
+                            logger.info("nmcli scan successful")
+                            lines = result.stdout.strip().split('\n')
+                            
+                            # Skip header line
+                            for line in lines[1:]:
+                                parts = line.split()
+                                if len(parts) >= 7:
+                                    # SSID is usually in column 1 (index 0), but skip if it's '*'
+                                    ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
+                                    if ssid and ssid != '--':
+                                        # Signal is usually in column 4
+                                        signal_str = parts[4] if len(parts) > 4 else '0'
+                                        signal = int(signal_str) if signal_str.isdigit() else 0
+
+                                        # Security is usually in column 6
+                                        security = parts[6] if len(parts) > 6 else ''
+                                        encrypted = 'WPA' in security or 'WEP' in security
+
+                                        networks.append({
+                                            'ssid': ssid,
+                                            'signal': signal,
+                                            'encrypted': encrypted
+                                        })
+                                        logger.debug(f"Found network: {ssid}, signal: {signal}, encrypted: {encrypted}")
+                        else:
+                            logger.warning(f"nmcli scan failed: {result.stderr}")
+                            raise Exception("nmcli scan failed")
                     else:
                         logger.error("No WiFi device found")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
-
-                    logger.info(f"nmcli scan completed with return code: {result.returncode}")
-                    if result.returncode != 0:
-                        logger.error(f"nmcli scan failed: {result.stderr}")
-                        self._wifi_networks = []
-                        self.wifiNetworksChanged.emit()
-                        return
-
-                    logger.info(f"nmcli output length: {len(result.stdout)}")
-                    logger.info(f"nmcli output: {repr(result.stdout)}")
-                    networks = []
-                    lines = result.stdout.strip().split('\n')
-
-                    logger.info(f"Found {len(lines)} lines in nmcli output")
-                    # Skip header line
-                    for line in lines[1:]:
-                        logger.debug(f"Processing line: {line}")
-                        parts = line.split()
-                        if len(parts) >= 7:
-                            # SSID is usually in column 1 (index 0), but skip if it's '*'
-                            ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
-                            if ssid and ssid != '--':
-                                # Signal is usually in column 4
-                                signal_str = parts[4] if len(parts) > 4 else '0'
-                                signal = int(signal_str) if signal_str.isdigit() else 0
-
-                                # Security is usually in column 6
-                                security = parts[6] if len(parts) > 6 else ''
-                                encrypted = 'WPA' in security or 'WEP' in security
-
-                                networks.append({
-                                    'ssid': ssid,
-                                    'signal': signal,
-                                    'encrypted': encrypted
-                                })
-                                logger.debug(f"Found network: {ssid}, signal: {signal}, encrypted: {encrypted}")
-
+                        raise Exception("No WiFi device found")
+                        
                 except Exception as e:
-                    logger.error(f"nmcli scan failed: {e}")
-                    self._wifi_networks = []
-                    self.wifiNetworksChanged.emit()
-                    return
+                    logger.warning(f"nmcli scan failed: {e}, trying iw scan...")
+                    
+                    # Method 2: Fallback to iw (requires wireless-tools)
+                    try:
+                        # Find wireless interface
+                        interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                        wifi_interface = None
+                        
+                        for interface in interfaces:
+                            try:
+                                result = subprocess.run(['iw', 'dev', interface, 'info'], 
+                                                      capture_output=True, timeout=5)
+                                if result.returncode == 0:
+                                    wifi_interface = interface
+                                    break
+                            except:
+                                continue
+                        
+                        if wifi_interface:
+                            logger.info(f"Using iw with interface {wifi_interface}")
+                            
+                            # Bring interface up if needed
+                            subprocess.run(['ip', 'link', 'set', wifi_interface, 'up'], 
+                                         capture_output=True, timeout=5)
+                            
+                            # Scan for networks
+                            scan_result = subprocess.run(['iw', 'dev', wifi_interface, 'scan'], 
+                                                       capture_output=True, text=True, timeout=15)
+                            
+                            if scan_result.returncode == 0:
+                                current_network = {}
+                                for line in scan_result.stdout.split('\n'):
+                                    line = line.strip()
+                                    
+                                    if line.startswith('BSS ') and '(' in line:
+                                        if current_network and current_network.get('ssid'):
+                                            networks.append(current_network)
+                                        bss_match = re.search(r'BSS\s+([0-9a-f:]+)', line)
+                                        if bss_match:
+                                            current_network = {'ssid': '', 'signal': 0, 'encrypted': False}
+                                    
+                                    elif line.startswith('SSID:') and current_network is not None:
+                                        ssid_match = re.search(r'SSID:\s*(.+)', line)
+                                        if ssid_match:
+                                            current_network['ssid'] = ssid_match.group(1).strip()
+                                    
+                                    elif line.startswith('signal:') and current_network is not None:
+                                        signal_match = re.search(r'signal:\s*(-?\d+\.?\d*)', line)
+                                        if signal_match:
+                                            current_network['signal'] = int(float(signal_match.group(1)))
+                                    
+                                    elif line.startswith('RSN:') or line.startswith('WPA:'):
+                                        current_network['encrypted'] = True
+                                
+                                # Add the last network
+                                if current_network and current_network.get('ssid'):
+                                    networks.append(current_network)
+                            
+                    except Exception as e2:
+                        logger.warning(f"iw scan also failed: {e2}")
+                        
+                        # Method 3: Try iwlist as last resort
+                        try:
+                            logger.info("Trying iwlist scan...")
+                            scan_result = subprocess.run(['iwlist', 'wlan0', 'scan'], 
+                                                       capture_output=True, text=True, timeout=20)
+                            
+                            if scan_result.returncode == 0:
+                                current_network = {}
+                                for line in scan_result.stdout.split('\n'):
+                                    line = line.strip()
+                                    
+                                    if 'ESSID:' in line:
+                                        if current_network and current_network.get('ssid'):
+                                            networks.append(current_network)
+                                        essid_match = re.search(r'ESSID:"([^"]*)"', line)
+                                        if essid_match:
+                                            current_network = {'ssid': essid_match.group(1), 'signal': 0, 'encrypted': False}
+                                    
+                                    elif 'Signal level=' in line and current_network:
+                                        signal_match = re.search(r'Signal level=(-?\d+)', line)
+                                        if signal_match:
+                                            current_network['signal'] = int(signal_match.group(1))
+                                    
+                                    elif 'Encryption key:' in line and current_network:
+                                        if 'on' in line:
+                                            current_network['encrypted'] = True
+                                
+                                # Add the last network
+                                if current_network and current_network.get('ssid'):
+                                    networks.append(current_network)
+                                    
+                        except Exception as e3:
+                            logger.error(f"All WiFi scanning methods failed: nmcli({e}), iw({e2}), iwlist({e3})")
 
             # Remove duplicates and sort by signal strength
             seen_ssids = set()
@@ -1183,6 +1286,7 @@ class Backend(QObject):
                     unique_networks.append(network)
 
             self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
+            logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
             self.wifiNetworksChanged.emit()
 
         except Exception as e:
@@ -1378,7 +1482,7 @@ class Backend(QObject):
             logger.info("WiFi status timer stopped")
 
     def update_wifi_status(self):
-        """Update WiFi connection status"""
+        """Update WiFi connection status with enhanced fallback methods"""
         try:
             logger.debug("Updating WiFi status...")
             is_windows = platform.system() == 'Windows'
@@ -1402,22 +1506,20 @@ class Backend(QObject):
                         if ssid_match:
                             current_ssid = ssid_match.group(1).strip()
             else:
-                # Check WiFi status using nmcli (preferred for Ubuntu/Linux)
-                logger.debug("Checking WiFi status on Linux using nmcli...")
+                # Enhanced Linux WiFi status checking with multiple methods
+                logger.debug("Checking WiFi status on Linux...")
                 connected = False
                 current_ssid = ""
 
+                # Method 1: Try nmcli first
                 try:
-                    # Use nmcli to get device status
                     result = subprocess.run(['nmcli', 'device', 'status'],
                                           capture_output=True, text=True, timeout=5)
                     logger.debug(f"nmcli device status return code: {result.returncode}")
-                    logger.debug(f"nmcli device status stdout: {result.stdout[:200]}...")
                     
                     if result.returncode == 0:
                         lines = result.stdout.split('\n')
                         for line in lines:
-                            logger.debug(f"Checking line: {line}")
                             parts = line.split()
                             if len(parts) >= 4:
                                 device_type = parts[1].lower()
@@ -1427,9 +1529,8 @@ class Backend(QObject):
                                     logger.info("WiFi connection detected via nmcli")
                                     break
 
-                    # Get current SSID if connected
+                    # Get current SSID if connected via nmcli
                     if connected:
-                        # Find the connected WiFi device
                         connected_device = None
                         for line in result.stdout.split('\n'):
                             parts = line.split()
@@ -1438,22 +1539,18 @@ class Backend(QObject):
                                 break
                         
                         if connected_device:
-                            # Try to get active connection info for this device
                             ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', connected_device],
                                                        capture_output=True, text=True, timeout=5)
-                            logger.debug(f"nmcli SSID check return code: {ssid_result.returncode}")
                             if ssid_result.returncode == 0:
                                 for line in ssid_result.stdout.split('\n'):
-                                    logger.debug(f"SSID line: {line}")
                                     if line.startswith('yes:'):
                                         current_ssid = line.split(':', 1)[1].strip()
-                                        logger.info(f"Current SSID: {current_ssid}")
+                                        logger.info(f"Current SSID via nmcli: {current_ssid}")
                                         break
                         else:
                             # Fallback to active connections
                             ssid_result = subprocess.run(['nmcli', '-t', '-f', 'name', 'connection', 'show', '--active'],
                                                        capture_output=True, text=True, timeout=5)
-                            logger.debug(f"nmcli active connection return code: {ssid_result.returncode}")
                             if ssid_result.returncode == 0:
                                 connections = ssid_result.stdout.strip().split('\n')
                                 if connections and connections[0]:
@@ -1461,51 +1558,56 @@ class Backend(QObject):
                                     logger.info(f"Current SSID (fallback): {current_ssid}")
 
                 except Exception as e:
-                    logger.warning(f"nmcli not available, falling back to legacy methods: {e}")
-                    # Fallback to legacy methods
+                    logger.warning(f"nmcli status check failed: {e}, trying fallback methods...")
+                
+                # Method 2: Check IP address and interface status
+                if not connected:
+                    logger.debug("Checking IP address and interface status...")
                     interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
                     has_ip = False
+                    active_interface = None
 
                     for interface in interfaces:
                         try:
-                            logger.debug(f"Checking interface {interface}...")
                             # Check if interface has an IP address
                             result = subprocess.run(['ip', 'addr', 'show', interface],
                                                   capture_output=True, text=True, timeout=5)
 
-                            if 'inet ' in result.stdout:
+                            if 'inet ' in result.stdout and 'UP' in result.stdout:
                                 has_ip = True
-                                logger.info(f"WiFi interface {interface} has IP address")
+                                active_interface = interface
+                                logger.info(f"WiFi interface {interface} has IP address and is UP")
                                 break
                         except Exception as e:
                             logger.debug(f"Error checking {interface}: {e}")
                             continue
 
-                    # Get current SSID using legacy tools
                     if has_ip:
-                        # Try iw first
-                        try:
-                            for interface in interfaces:
-                                iw_result = subprocess.run(['iw', 'dev', interface, 'link'],
+                        connected = True
+                        
+                        # Method 3: Try iw to get SSID
+                        if active_interface:
+                            try:
+                                iw_result = subprocess.run(['iw', 'dev', active_interface, 'link'],
                                                          capture_output=True, text=True, timeout=5)
                                 if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
                                     ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
                                     if ssid_match:
                                         current_ssid = ssid_match.group(1).strip()
-                                        break
-                        except:
-                            pass
-
-                        # If iw failed, try iwgetid
-                        if not current_ssid:
-                            try:
-                                ssid_result = subprocess.run(['iwgetid', '-r'],
-                                                           capture_output=True, text=True, timeout=5)
-                                current_ssid = ssid_result.stdout.strip() if ssid_result.returncode == 0 else ""
-                            except:
-                                pass
-
-                    connected = has_ip
+                                        logger.info(f"Current SSID via iw: {current_ssid}")
+                            except Exception as e:
+                                logger.debug(f"iw link check failed: {e}")
+                            
+                            # Method 4: Try iwgetid as fallback
+                            if not current_ssid:
+                                try:
+                                    ssid_result = subprocess.run(['iwgetid', '-r'],
+                                                               capture_output=True, text=True, timeout=5)
+                                    if ssid_result.returncode == 0:
+                                        current_ssid = ssid_result.stdout.strip()
+                                        logger.info(f"Current SSID via iwgetid: {current_ssid}")
+                                except Exception as e:
+                                    logger.debug(f"iwgetid failed: {e}")
             
             # Update properties
             wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
@@ -1514,6 +1616,7 @@ class Backend(QObject):
             self._current_wifi_ssid = current_ssid
             
             if wifi_changed:
+                logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
                 self.wifiConnectedChanged.emit()
                 
         except Exception as e:
@@ -1608,7 +1711,16 @@ class Backend(QObject):
                                 info_lines.append("Wireless Info:")
                                 info_lines.append(iw_result.stdout.strip())
                             except:
-                                info_lines.append("Wireless Info: Not available (iwconfig not found)")
+                                info_lines.append("Wireless Info: iwconfig not available")
+                                
+                            # Get NetworkManager info
+                            try:
+                                nm_result = subprocess.run(['nmcli', 'device', 'show', interface], 
+                                                         capture_output=True, text=True, timeout=5)
+                                info_lines.append("NetworkManager Info:")
+                                info_lines.append(nm_result.stdout.strip())
+                            except:
+                                info_lines.append("NetworkManager Info: nmcli not available")
                     except:
                         continue
                 
@@ -1618,6 +1730,59 @@ class Backend(QObject):
                 return "\n".join(info_lines)
         except Exception as e:
             return f"Error getting WiFi interface info: {e}"
+
+    @pyqtSlot(result=str)
+    def getWifiDebugInfo(self):
+        """Get comprehensive WiFi debugging information"""
+        try:
+            debug_info = ["=== WiFi Debug Information ==="]
+            
+            # System info
+            debug_info.append(f"Platform: {platform.system()} {platform.release()}")
+            
+            # NetworkManager status
+            try:
+                nm_status = subprocess.run(['systemctl', 'status', 'NetworkManager'], 
+                                         capture_output=True, text=True, timeout=5)
+                debug_info.append(f"\nNetworkManager Status:\n{nm_status.stdout}")
+            except:
+                debug_info.append("\nNetworkManager Status: Unable to check")
+            
+            # wpa_supplicant status
+            try:
+                wp_status = subprocess.run(['systemctl', 'status', 'wpa_supplicant'], 
+                                         capture_output=True, text=True, timeout=5)
+                debug_info.append(f"\nwpa_supplicant Status:\n{wp_status.stdout}")
+            except:
+                debug_info.append("\nwpa_supplicant Status: Unable to check")
+            
+            # Device status
+            try:
+                dev_status = subprocess.run(['nmcli', 'device', 'status'], 
+                                          capture_output=True, text=True, timeout=5)
+                debug_info.append(f"\nDevice Status:\n{dev_status.stdout}")
+            except:
+                debug_info.append("\nDevice Status: nmcli not available")
+            
+            # WiFi list
+            try:
+                wifi_list = subprocess.run(['nmcli', 'device', 'wifi', 'list'], 
+                                         capture_output=True, text=True, timeout=10)
+                debug_info.append(f"\nWiFi Networks:\n{wifi_list.stdout}")
+            except:
+                debug_info.append("\nWiFi Networks: Unable to scan")
+            
+            # Current connection
+            try:
+                conn_show = subprocess.run(['nmcli', 'connection', 'show', '--active'], 
+                                         capture_output=True, text=True, timeout=5)
+                debug_info.append(f"\nActive Connections:\n{conn_show.stdout}")
+            except:
+                debug_info.append("\nActive Connections: Unable to check")
+            
+            return "\n".join(debug_info)
+        except Exception as e:
+            return f"Error getting WiFi debug info: {e}"
 
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
