@@ -3,6 +3,11 @@ import requests
 import os
 import json
 import platform
+import fastf1
+import plotly.graph_objects as go
+import plotly.io as pio
+import numpy as np
+import pandas as pd
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -19,6 +24,7 @@ import time
 import subprocess
 import re
 import calendar
+from track_generator import generate_track_map
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
@@ -164,12 +170,26 @@ CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), 'upcoming_launches
 CACHE_FILE_F1 = os.path.join(os.path.dirname(__file__), 'f1_cache.json')
 f1_cache = None
 
+# F1 Team colors for visualization
+F1_TEAM_COLORS = {
+    'red_bull': '#3671C6',      # Red Bull blue
+    'mercedes': '#6CD3BF',     # Mercedes teal
+    'ferrari': '#E8002D',      # Ferrari red
+    'mclaren': '#FF8000',      # McLaren orange
+    'alpine': '#0093CC',       # Alpine blue
+    'aston_martin': '#2D826D', # Aston Martin green
+    'williams': '#37BEDD',     # Williams blue
+    'rb': '#6692FF',           # RB blue
+    'sauber': '#52E252',       # Sauber green
+    'haas': '#B6BABD'          # Haas grey
+}
+
 # Load cache from file
 def load_cache_from_file(cache_file):
     if os.path.exists(cache_file):
         with open(cache_file, 'r') as f:
             cache_data = json.load(f)
-            cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp'])
+            cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp']).replace(tzinfo=pytz.UTC)
             return cache_data
     return None
 
@@ -311,7 +331,12 @@ def fetch_f1_data():
                             "circuit_short_name": meeting['circuit_short_name'],
                             "year": meeting['year']
                         })
-                meeting['sessions'] = sessions
+                meeting['sessions'] = sorted(sessions, key=lambda x: parse(x['date_start']))
+                # Generate track map
+                track_map_path = generate_track_map(race['circuit']['circuitName'])
+                # Sanitize circuit name for filename (same as in track_generator.py)
+                safe_circuit_name = race['circuit']['circuitName'].replace('|', '-').replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', '-').replace('<', '-').replace('>', '-')
+                meeting['track_map_path'] = f'file:///{os.path.join(os.path.dirname(__file__), "cache", f"{safe_circuit_name}_track.png")}' if track_map_path else ''
                 if sessions:
                     # Use the race session date as the primary date for sorting
                     race_session = next((s for s in sessions if s['session_type'] == 'Race'), None)
@@ -403,6 +428,15 @@ def fetch_weather(lat, lon, location):
             'cloud_cover': 50
         }
 
+# Track rotations for F1 circuits
+track_rotations = [('Sakhir', 92.0), ('Jeddah', 104.0), ('Melbourne', 44.0), ('Baku', 357.0), ('Miami', 2.0), ('Monte Carlo', 62.0), ('Catalunya', 95.0), ('Montreal', 62.0), ('Silverstone', 92.0), ('Hungaroring', 40.0), ('Spa-Francorchamps', 91.0), ('Zandvoort', 0.0), ('Monza', 95.0), ('Singapore', 335.0), ('Suzuka', 49.0), ('Lusail', 61.0), ('Austin', 0.0), ('Mexico City', 36.0), ('Interlagos', 0.0), ('Las Vegas', 90.0), ('Yas Marina Circuit', 335.0)]
+
+# Rotation function
+def rotate(xy, *, angle):
+    rot_mat = np.array([[np.cos(angle), np.sin(angle)],
+                        [-np.sin(angle), np.cos(angle)]])
+    return np.matmul(xy, rot_mat)
+
 # Location settings
 location_settings = {
     'Starbase': {'lat': 25.997, 'lon': -97.155, 'timezone': 'America/Chicago'},
@@ -491,6 +525,7 @@ class EventModel(QAbstractListModel):
     IsGroupRole = Qt.ItemDataRole.UserRole + 16
     GroupNameRole = Qt.ItemDataRole.UserRole + 17
     LocalTimeRole = Qt.ItemDataRole.UserRole + 18
+    TrackMapPathRole = Qt.ItemDataRole.UserRole + 19
 
     def __init__(self, data, mode, event_type, tz, parent=None):
         super().__init__(parent)
@@ -544,6 +579,8 @@ class EventModel(QAbstractListModel):
                     return item.get('sessions', [])
                 elif role == self.DateStartRole:
                     return item.get('date_start', '')
+                elif role == self.TrackMapPathRole:
+                    return item.get('track_map_path', '')
                 elif role == self.LocalTimeRole:
                     net = item.get('net', '') or item.get('date_start', '')
                     time_str = item.get('time', '') or ''
@@ -572,6 +609,7 @@ class EventModel(QAbstractListModel):
         roles[self.IsGroupRole] = b"isGroup"
         roles[self.GroupNameRole] = b"groupName"
         roles[self.LocalTimeRole] = b"localTime"
+        roles[self.TrackMapPathRole] = b"trackMapPath"
         return roles
 
     def update_data(self):
@@ -692,7 +730,7 @@ class Backend(QObject):
         self._theme = 'dark'
         self._location = 'Starbase'
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
-        self._chart_type = 'bar'  # 'bar' or 'line'
+        self._chart_type = 'line'  # 'bar' or 'line'
         self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
         self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._isLoading = True
@@ -877,7 +915,7 @@ class Backend(QObject):
             days = delta.days
             hours, remainder = divmod(delta.seconds, 3600)
             minutes, seconds = divmod(remainder, 60)
-            return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s to {next_race['meeting_name']}"
+            return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s to {next_race['country_name']}"
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrends(self):
@@ -1056,6 +1094,41 @@ class Backend(QObject):
         stat_key = getattr(self, '_f1_chart_stat', 'points')
         values = [float(constructor.get(stat_key, 0)) for constructor in top_constructors]
         return [{'label': stat_key.title(), 'values': values}]
+
+    @pyqtProperty(QVariant, notify=f1Changed)
+    def driverStandingsOverTimeSeries(self):
+        standings = self._f1_data['driver_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 drivers
+        top_drivers = standings[:10]
+        stat_key = getattr(self, '_f1_chart_stat', 'points')
+        
+        # Group drivers by team and create series
+        series_data = []
+        team_drivers = {}
+        
+        for driver in top_drivers:
+            team_id = driver.get('teamId', 'unknown')
+            if team_id not in team_drivers:
+                team_drivers[team_id] = []
+            team_drivers[team_id].append(driver)
+        
+        # Create a series for each driver
+        for team_id, drivers in team_drivers.items():
+            team_color = F1_TEAM_COLORS.get(team_id, '#808080')  # Default grey
+            for driver in drivers:
+                driver_name = f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}"
+                points = float(driver.get(stat_key, 0))
+                series_data.append({
+                    'label': driver_name,
+                    'values': [points],  # Single point for now, can be expanded for historical data
+                    'color': team_color,
+                    'team': driver.get('Constructor', {}).get('name', team_id)
+                })
+        
+        return series_data
 
     @pyqtProperty(list, notify=f1Changed)
     def driverNames(self):
@@ -2172,41 +2245,65 @@ class Backend(QObject):
 
     @pyqtSlot(str, result=str)
     def getCountryFlag(self, country_name):
-        """Get flag emoji for a country name"""
-        # Country to flag emoji mapping
-        flag_map = {
-            'Australia': '🇦🇺',
-            'Austria': '🇦🇹',
-            'Azerbaijan': '🇦🇿',
-            'Bahrain': '🇧🇭',
-            'Belgium': '🇧🇪',
-            'Brazil': '🇧🇷',
-            'Canada': '🇨🇦',
-            'China': '🇨🇳',
-            'France': '🇫🇷',
-            'Germany': '🇩🇪',
-            'Hungary': '🇭🇺',
-            'Italy': '🇮🇹',
-            'Japan': '🇯🇵',
-            'Mexico': '🇲🇽',
-            'Monaco': '🇲🇨',
-            'Netherlands': '🇳🇱',
-            'Portugal': '🇵🇹',
-            'Qatar': '🇶🇦',
-            'Russia': '🇷🇺',
-            'Saudi Arabia': '🇸🇦',
-            'Singapore': '🇸🇬',
-            'South Korea': '🇰🇷',
-            'Spain': '🇪🇸',
-            'Turkey': '🇹🇷',
-            'UAE': '🇦🇪',
-            'UK': '🇬🇧',
-            'United Kingdom': '🇬🇧',
-            'United States': '🇺🇸',
-            'USA': '🇺🇸',
-            'Vietnam': '🇻🇳'
+        """Get flag icon path for a country name"""
+        # Country to ISO code mapping
+        code_map = {
+            'Australia': 'au',
+            'Austria': 'at',
+            'Azerbaijan': 'az',
+            'Bahrain': 'bh',
+            'Belgium': 'be',
+            'Brazil': 'br',
+            'Canada': 'ca',
+            'China': 'cn',
+            'France': 'fr',
+            'Germany': 'de',
+            'Great Britain': 'gb',
+            'Hungary': 'hu',
+            'Italy': 'it',
+            'Japan': 'jp',
+            'Mexico': 'mx',
+            'Monaco': 'mc',
+            'Netherlands': 'nl',
+            'Portugal': 'pt',
+            'Qatar': 'qa',
+            'Russia': 'ru',
+            'Saudi Arabia': 'sa',
+            'Singapore': 'sg',
+            'South Korea': 'kr',
+            'Spain': 'es',
+            'Turkey': 'tr',
+            'UAE': 'ae',
+            'United Arab Emirates': 'ae',
+            'UK': 'gb',
+            'United Kingdom': 'gb',
+            'United States': 'us',
+            'USA': 'us',
+            'Vietnam': 'vn'
         }
-        return flag_map.get(country_name, '🏁')  # Default to checkered flag
+        code = code_map.get(country_name)
+        if not code:
+            return ""
+        
+        # Cache directory for flags
+        cache_dir = os.path.join(os.path.dirname(__file__), "cache", "flags")
+        os.makedirs(cache_dir, exist_ok=True)
+        flag_path = os.path.join(cache_dir, f"{code}.svg")
+        
+        # Download if not cached
+        if not os.path.exists(flag_path):
+            try:
+                url = f"https://flagicons.lipis.dev/flags/4x3/{code}.svg"
+                response = requests.get(url, timeout=5)
+                response.raise_for_status()
+                with open(flag_path, 'wb') as f:
+                    f.write(response.content)
+                logger.info(f"Cached flag for {country_name} ({code})")
+            except Exception as e:
+                logger.warning(f"Failed to download flag for {country_name}: {e}")
+                return ""
+        
+        return f"file:///{flag_path}"
 
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
@@ -2432,7 +2529,11 @@ class ChartItem(QQuickPaintedItem):
         legend_y = margin + 10
         legend_spacing = 20
         for s, series_data in enumerate(self._series):
-            color = colors[s % len(colors)]
+            # Use custom color from series data if available, otherwise use default
+            if 'color' in series_data:
+                color = QColor(series_data['color'])
+            else:
+                color = colors[s % len(colors)]
             painter.setBrush(QBrush(color))
             painter.setPen(QPen(color))
             painter.drawRect(int(legend_x), int(legend_y + s * legend_spacing), 12, 12)
@@ -2452,7 +2553,11 @@ class ChartItem(QQuickPaintedItem):
             return
         bar_width = (width - 2 * margin) / len(self._months) / len(self._series)
         for s, series_data in enumerate(self._series):
-            color = colors[s % len(colors)]
+            # Use custom color from series data if available, otherwise use default
+            if 'color' in series_data:
+                color = QColor(series_data['color'])
+            else:
+                color = colors[s % len(colors)]
             painter.setBrush(QBrush(color))
             painter.setPen(QPen(color, 1))
             for i, value in enumerate(series_data['values']):
@@ -2463,20 +2568,35 @@ class ChartItem(QQuickPaintedItem):
 
     def _draw_line_chart(self, painter, width, height, margin, colors):
         for s, series_data in enumerate(self._series):
-            color = colors[s % len(colors)]
+            # Use custom color from series data if available, otherwise use default
+            if 'color' in series_data:
+                color = QColor(series_data['color'])
+            else:
+                color = colors[s % len(colors)]
             painter.setPen(QPen(color, 3))
             points = []
             for i, value in enumerate(series_data['values']):
                 x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
                 y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
                 points.append(QPoint(int(x), int(y)))
+            
+            # Draw lines if multiple points
             if len(points) > 1:
                 for i in range(len(points) - 1):
                     painter.drawLine(points[i], points[i + 1])
+            
+            # Draw points
+            painter.setBrush(QBrush(color))
+            for point in points:
+                painter.drawEllipse(point, 4, 4)
 
     def _draw_area_chart(self, painter, width, height, margin, colors):
         for s, series_data in enumerate(self._series):
-            color = colors[s % len(colors)]
+            # Use custom color from series data if available, otherwise use default
+            if 'color' in series_data:
+                color = QColor(series_data['color'])
+            else:
+                color = colors[s % len(colors)]
             painter.setPen(QPen(color, 3))
             painter.setBrush(QBrush(color.lighter(150)))
             points = [QPoint(int(margin), int(height - margin))]
@@ -2772,7 +2892,7 @@ Window {
                             spacing: 5
 
                             Text {
-                                text: "F1 Driver Performance"
+                                text: "F1 Driver Standings Over Time"
                                 font.pixelSize: 14
                                 font.bold: true
                                 color: backend.theme === "dark" ? "white" : "black"
@@ -2784,10 +2904,10 @@ Window {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
 
-                                chartType: "bar"  // Default to bar chart for F1
+                                chartType: backend.chartType
                                 viewMode: "actual"
-                                series: backend.driverPointsSeries
-                                months: backend.driverNames
+                                series: backend.driverStandingsOverTimeSeries
+                                months: ["Current"]  // Single point for now
                                 maxValue: backend.driverPointsMaxValue
                                 theme: backend.theme
 
@@ -3199,7 +3319,7 @@ Window {
 
                         delegate: Item {
                             width: ListView.view.width
-                            height: model && model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model && model.sessions && model.sessions.length ? model.sessions.length * 18 : 0)) : 40))
+                            height: model && model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model && model.sessions && model.sessions.length ? model.sessions.length * 30 : 0)) : 40))
 
                             Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
 
@@ -3208,14 +3328,14 @@ Window {
                                 anchors.leftMargin: 15
                                 anchors.verticalCenter: parent.verticalCenter
                                 text: (model && model.isGroup) ? (model.groupName ? model.groupName : "") : ""
-                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: model && model.isGroup
+                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: !!(model && model.isGroup)
                             }
 
                             Column {
                                 id: launchColumn
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
                                 spacing: 5
-                                visible: !model.isGroup && backend.mode === "spacex" && model && typeof model === 'object'
+                                visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
 
                                 Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; color: backend.theme === "dark" ? "white" : "black" }
                                 Row { spacing: 5
@@ -3235,58 +3355,83 @@ Window {
                                 Text { text: "Status: " + ((model && model.status) ? model.status : ""); font.pixelSize: 12; color: ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336" }
                             }
 
-                            Column {
+                            Row {
                                 anchors.fill: parent; anchors.margins: 10
-                                visible: !model.isGroup && backend.mode === "f1" && model && typeof model === 'object'
+                                visible: !!(model && !model.isGroup && backend.mode === "f1" && typeof model === 'object')
+                                spacing: 10
                                 
-                                // Race header with flag and name
-                                Row {
-                                    spacing: 8
-                                    Text { 
-                                        text: model && model.countryName ? backend.getCountryFlag(model.countryName) : '🏁'
-                                        font.pixelSize: 16
-                                        visible: backend.mode === "f1"
-                                    }
-                                    Text { 
-                                        text: model && model.meetingName ? model.meetingName : ''; 
-                                        color: backend.theme === "dark" ? "white" : "black"; 
-                                        font.pixelSize: 14; 
-                                        font.bold: true
-                                    }
-                                }
-                                
-                                // Circuit info
-                                Text { text: model && model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
-                                Text { text: model && model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
-                                
-                                // Sessions list
                                 Column {
-                                    spacing: 2
-                                    visible: backend.mode === "f1"
+                                    width: parent.width * 0.6  // 60% for text
+                                    spacing: 5
                                     
-                                    property var raceSessions: model ? (model.sessions || []) : []
+                                    // Race header with flag and name
+                                    Row {
+                                        spacing: 8
+                                        Image {
+                                            source: model && model.countryName ? backend.getCountryFlag(model.countryName) : ""
+                                            width: 24
+                                            height: 18
+                                            visible: backend.mode === "f1" && source !== ""
+                                        }
+                                        Text {
+                                            text: model && model.countryName && !backend.getCountryFlag(model.countryName) ? '🏁' : ''
+                                            font.pixelSize: 16
+                                            visible: backend.mode === "f1" && text !== ''
+                                        }
+                                        Text { 
+                                            text: model && model.meetingName ? model.meetingName : ''; 
+                                            color: backend.theme === "dark" ? "white" : "black"; 
+                                            font.pixelSize: 14; 
+                                            font.bold: true
+                                        }
+                                    }
                                     
-                                    Repeater {
-                                        model: parent.raceSessions
-                                        delegate: Row {
-                                            spacing: 8
-                                            visible: modelData && typeof modelData === 'object' && modelData.session_name && modelData.date_start
-                                            Text { 
-                                                text: "\uf017"; 
-                                                font.family: "Font Awesome 5 Free"; 
-                                                font.pixelSize: 10; 
-                                                color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#666666";
-                                                anchors.verticalCenter: parent.verticalCenter
-                                            }
-                                            Text { 
-                                                text: (modelData && modelData.session_name ? modelData.session_name : "") + " (" + (modelData && modelData.session_type ? modelData.session_type : "") + "): " + (modelData && modelData.date_start ? Qt.formatDateTime(new Date(modelData.date_start), "MMM dd yyyy, hh:mm") + " UTC" : ""); 
-                                                color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#999999"; 
-                                                font.pixelSize: 11;
-                                                font.bold: modelData && modelData.session_type === "Race";
-                                                anchors.verticalCenter: parent.verticalCenter
+                                    // Circuit info
+                                    Text { text: model && model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
+                                    Text { text: model && model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
+                                    
+                                    // Sessions list
+                                    Column {
+                                        spacing: 2
+                                        visible: backend.mode === "f1"
+                                        
+                                        property var raceSessions: model ? (model.sessions || []) : []
+                                        
+                                        Repeater {
+                                            model: parent.raceSessions
+                                            delegate: Row {
+                                                spacing: 8
+                                                visible: !!(modelData && typeof modelData === 'object' && modelData.session_name && modelData.date_start)
+                                                Text { 
+                                                    text: "\uf017"; 
+                                                    font.family: "Font Awesome 5 Free"; 
+                                                    font.pixelSize: 10; 
+                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#666666";
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                }
+                                                Text { 
+                                                    text: (modelData && modelData.session_name ? modelData.session_name : "") + ": " + (modelData && modelData.date_start ? Qt.formatDateTime(new Date(modelData.date_start), "MMM dd yyyy, hh:mm") + " UTC" : ""); 
+                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#999999"; 
+                                                    font.pixelSize: 11;
+                                                    font.bold: !!(modelData && modelData.session_type === "Race");
+                                                    anchors.verticalCenter: parent.verticalCenter;
+                                                    width: 200;  // Smaller since space is limited
+                                                    wrapMode: Text.Wrap;
+                                                    maximumLineCount: 2;
+                                                }
                                             }
                                         }
                                     }
+                                }
+                                
+                                // Track map
+                                Image {
+                                    width: parent.width * 0.4  // 40% for map
+                                    height: parent.height
+                                    source: model && model.trackMapPath ? model.trackMapPath : ""
+                                    visible: !!(model && model.trackMapPath)
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
                                 }
                             }
                         }
@@ -3307,7 +3452,7 @@ Window {
                             Button {
                                 property var launchData: modelData
                                 Layout.preferredWidth: 35
-                                Layout.preferredHeight: 25
+                                Layout.preferredHeight: 23
                                 font.pixelSize: 12
                                 font.family: "Font Awesome 5 Free"
                                 text: launchData.icon
@@ -3373,8 +3518,8 @@ Window {
                 Rectangle {
                     Layout.preferredWidth: 200
                     Layout.maximumWidth: 200
-                    height: 30
-                    radius: 15
+                    height: 28
+                    radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -3410,8 +3555,8 @@ Window {
                     id: tickerRect
                     Layout.preferredWidth: 600
                     Layout.maximumWidth: 600
-                    height: 30
-                    radius: 15
+                    height: 28
+                    radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -3422,7 +3567,7 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         text: backend.launchDescriptions.join(" \\ ")
                         color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 13
+                        font.pixelSize: 14
                         font.family: "D-DIN"
 
                         SequentialAnimation on x {
@@ -3445,9 +3590,9 @@ Window {
 
                 // WiFi icon - SIMPLIFIED
                 Rectangle {
-                    width: 30
-                    height: 30
-                    radius: 15
+                    width: 28
+                    height: 28
+                    radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -3476,8 +3621,8 @@ Window {
                 // Logo toggle - SIMPLIFIED
                 Rectangle {
                     width: 80
-                    height: 30
-                    radius: 15
+                    height: 28
+                    radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -3503,8 +3648,8 @@ Window {
                 Rectangle {
                     Layout.preferredWidth: 450
                     Layout.maximumWidth: 450
-                    height: 30
-                    radius: 15
+                    height: 28
+                    radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -3516,8 +3661,9 @@ Window {
                         Text {
                             text: backend.countdown
                             color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 12
+                            font.pixelSize: 14
                             font.family: "D-DIN"
+                            anchors.verticalCenter: parent.verticalCenter
                         }
 
                         // Location selector
