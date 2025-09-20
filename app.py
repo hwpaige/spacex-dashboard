@@ -611,8 +611,8 @@ class EventModel(QAbstractListModel):
                     grouped.append({'group': 'Earlier'})
                     grouped.extend(earlier_launches)
         else:
-            data = fetch_f1_data()
-            races = data['schedule']
+            # Use the data passed to the model instead of fetching fresh data
+            races = self._data
             if self._event_type == 'upcoming':
                 races = sorted(races, key=lambda x: parse(x['date_start']))
                 today_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() == today]
@@ -694,6 +694,7 @@ class Backend(QObject):
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'bar'  # 'bar' or 'line'
         self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
+        self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._isLoading = True
         self._launch_data = {'previous': [], 'upcoming': []}
         self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
@@ -1108,6 +1109,16 @@ class Backend(QObject):
     def f1ChartStat(self, value):
         if self._f1_chart_stat != value:
             self._f1_chart_stat = value
+            self.f1Changed.emit()
+
+    @pyqtProperty(str, notify=f1Changed)
+    def f1StandingsType(self):
+        return getattr(self, '_f1_standings_type', 'drivers')
+
+    @f1StandingsType.setter
+    def f1StandingsType(self, value):
+        if self._f1_standings_type != value:
+            self._f1_standings_type = value
             self.f1Changed.emit()
 
     @pyqtProperty(list, notify=launchesChanged)
@@ -2159,6 +2170,44 @@ class Backend(QObject):
         except Exception as e:
             return f"Error getting WiFi debug info: {e}"
 
+    @pyqtSlot(str, result=str)
+    def getCountryFlag(self, country_name):
+        """Get flag emoji for a country name"""
+        # Country to flag emoji mapping
+        flag_map = {
+            'Australia': '🇦🇺',
+            'Austria': '🇦🇹',
+            'Azerbaijan': '🇦🇿',
+            'Bahrain': '🇧🇭',
+            'Belgium': '🇧🇪',
+            'Brazil': '🇧🇷',
+            'Canada': '🇨🇦',
+            'China': '🇨🇳',
+            'France': '🇫🇷',
+            'Germany': '🇩🇪',
+            'Hungary': '🇭🇺',
+            'Italy': '🇮🇹',
+            'Japan': '🇯🇵',
+            'Mexico': '🇲🇽',
+            'Monaco': '🇲🇨',
+            'Netherlands': '🇳🇱',
+            'Portugal': '🇵🇹',
+            'Qatar': '🇶🇦',
+            'Russia': '🇷🇺',
+            'Saudi Arabia': '🇸🇦',
+            'Singapore': '🇸🇬',
+            'South Korea': '🇰🇷',
+            'Spain': '🇪🇸',
+            'Turkey': '🇹🇷',
+            'UAE': '🇦🇪',
+            'UK': '🇬🇧',
+            'United Kingdom': '🇬🇧',
+            'United States': '🇺🇸',
+            'USA': '🇺🇸',
+            'Vietnam': '🇻🇳'
+        }
+        return flag_map.get(country_name, '🏁')  # Default to checkered flag
+
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
     if hasattr(sys.stdout, 'reconfigure'):
@@ -2937,7 +2986,7 @@ Window {
                         spacing: 5
 
                         Text {
-                            text: "F1 Standings"
+                            text: backend.f1StandingsType === "drivers" ? "Driver Standings" : "Constructor Standings"
                             font.pixelSize: 14
                             font.bold: true
                             color: backend.theme === "dark" ? "white" : "black"
@@ -2945,120 +2994,135 @@ Window {
                             Layout.margins: 5
                         }
 
-                        // Driver Standings
+                        // Standings List
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                             radius: 6
 
-                            ColumnLayout {
+                            ListView {
                                 anchors.fill: parent
-                                spacing: 2
+                                anchors.margins: 10
+                                model: backend.f1StandingsType === "drivers" ?
+                                       backend.driverStandings.slice(0, 10) :
+                                       backend.constructorStandings.slice(0, 10)
+                                clip: true
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: 35
+                                    color: "transparent"
 
-                                Text {
-                                    text: "Driver Standings"
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.margins: 5
-                                }
+                                    Row {
+                                        spacing: 10
+                                        anchors.verticalCenter: parent.verticalCenter
+                                        anchors.left: parent.left
 
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    model: backend.driverStandings.slice(0, 10)
-                                    clip: true
-                                    delegate: Rectangle {
-                                        width: ListView.view.width
-                                        height: 35
-                                        color: "transparent"
+                                        Text {
+                                            text: modelData.position;
+                                            font.pixelSize: 12;
+                                            color: backend.theme === "dark" ? "white" : "black";
+                                            width: 20
+                                        }
 
-                                        Row {
-                                            spacing: 10
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 10
+                                        // Team logo/color indicator
+                                        Rectangle {
+                                            width: 16
+                                            height: 16
+                                            radius: 8
+                                            color: {
+                                                var teamName = backend.f1StandingsType === "drivers" ?
+                                                              (modelData.Constructors && modelData.Constructors.length > 0 ?
+                                                               modelData.Constructors[0].name : "Unknown") :
+                                                              modelData.Constructor.name;
 
-                                            Text { 
-                                                text: modelData.position; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 20
+                                                // Team color mapping
+                                                var teamColors = {
+                                                    "Mercedes": "#00D2BE",
+                                                    "Red Bull": "#0600EF",
+                                                    "Ferrari": "#DC0000",
+                                                    "McLaren": "#FF8700",
+                                                    "Alpine": "#0090FF",
+                                                    "Aston Martin": "#006F62",
+                                                    "Williams": "#005AFF",
+                                                    "Alfa Romeo": "#900000",
+                                                    "Haas F1 Team": "#FFFFFF",
+                                                    "AlphaTauri": "#2B4562"
+                                                };
+                                                return teamColors[teamName] || "#666666";
                                             }
-                                            Text { 
-                                                text: modelData.Driver.givenName + " " + modelData.Driver.familyName; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 120
+                                            border.color: backend.theme === "dark" ? "#ffffff" : "#000000"
+                                            border.width: {
+                                                var teamName = backend.f1StandingsType === "drivers" ?
+                                                              (modelData.Constructors && modelData.Constructors.length > 0 ?
+                                                               modelData.Constructors[0].name : "Unknown") :
+                                                              modelData.Constructor.name;
+                                                return teamName === "Haas F1 Team" ? 1 : 0;  // Border for white Haas logo
                                             }
-                                            Text { 
-                                                text: modelData.points; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 40
-                                            }
+                                        }
+
+                                        Text {
+                                            text: backend.f1StandingsType === "drivers" ?
+                                                  (modelData.Driver.givenName + " " + modelData.Driver.familyName) :
+                                                  modelData.Constructor.name;
+                                            font.pixelSize: 12;
+                                            color: backend.theme === "dark" ? "white" : "black";
+                                            width: 120
+                                        }
+                                        Text {
+                                            text: modelData.points;
+                                            font.pixelSize: 12;
+                                            color: backend.theme === "dark" ? "white" : "black";
+                                            width: 40
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // Constructor Standings
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                            radius: 6
+                        // Standings type selector buttons
+                        RowLayout {
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.margins: 5
+                            spacing: 10
 
-                            ColumnLayout {
-                                anchors.fill: parent
-                                spacing: 2
-
-                                Text {
-                                    text: "Constructor Standings"
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    Layout.alignment: Qt.AlignHCenter
-                                    Layout.margins: 5
-                                }
-
-                                ListView {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    model: backend.constructorStandings.slice(0, 10)
-                                    clip: true
-                                    delegate: Rectangle {
-                                        width: ListView.view.width
-                                        height: 35
-                                        color: "transparent"
-
-                                        Row {
-                                            spacing: 10
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 10
-
-                                            Text { 
-                                                text: modelData.position; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 20
-                                            }
-                                            Text { 
-                                                text: modelData.Constructor.name; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 120
-                                            }
-                                            Text { 
-                                                text: modelData.points; 
-                                                font.pixelSize: 12; 
-                                                color: backend.theme === "dark" ? "white" : "black";
-                                                width: 40
-                                            }
+                            // Standings type buttons
+                            RowLayout {
+                                spacing: 3
+                                Repeater {
+                                    model: [
+                                        {"type": "drivers", "icon": "\uf1b9", "tooltip": "Driver Standings"},
+                                        {"type": "constructors", "icon": "\uf085", "tooltip": "Constructor Standings"}
+                                    ]
+                                    Button {
+                                        property var standingsData: modelData
+                                        Layout.preferredWidth: 35
+                                        Layout.preferredHeight: 25
+                                        font.pixelSize: 12
+                                        font.family: "Font Awesome 5 Free"
+                                        text: standingsData.icon
+                                        onClicked: {
+                                            backend.f1StandingsType = standingsData.type
+                                        }
+                                        background: Rectangle {
+                                            color: backend.f1StandingsType === standingsData.type ?
+                                                   (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
+                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                            border.width: 1
+                                            radius: 3
+                                        }
+                                        contentItem: Text {
+                                            text: parent.standingsData.icon
+                                            font: parent.font
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            horizontalAlignment: Text.AlignHCenter
+                                            verticalAlignment: Text.AlignVCenter
+                                        }
+                                        ToolTip {
+                                            text: parent.standingsData.tooltip
+                                            visible: parent.hovered
+                                            delay: 500
                                         }
                                     }
                                 }
@@ -3134,7 +3198,7 @@ Window {
 
                         delegate: Item {
                             width: ListView.view.width
-                            height: model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : 40)
+                            height: model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model.sessions && model.sessions.length ? model.sessions.length * 18 : 0)) : 40))
 
                             Rectangle { anchors.fill: parent; color: model.isGroup ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: model.isGroup ? 0 : 6 }
 
@@ -3173,10 +3237,52 @@ Window {
                             Column {
                                 anchors.fill: parent; anchors.margins: 10
                                 visible: !model.isGroup && backend.mode === "f1"
-                                Text { text: model.meetingName ? model.meetingName : ""; color: backend.theme === "dark" ? "white" : "black"; font.pixelSize: 12 }
-                                Text { text: model.dateStart ? ("Date: " + model.dateStart) : ""; color: "#999999"; font.pixelSize: 12 }
+                                
+                                // Race header with flag and name
+                                Row {
+                                    spacing: 8
+                                    Text { 
+                                        text: backend.getCountryFlag(model.countryName)
+                                        font.pixelSize: 16
+                                        visible: backend.mode === "f1"
+                                    }
+                                    Text { 
+                                        text: model.meetingName ? model.meetingName : ""; 
+                                        color: backend.theme === "dark" ? "white" : "black"; 
+                                        font.pixelSize: 14; 
+                                        font.bold: true
+                                    }
+                                }
+                                
+                                // Circuit info
                                 Text { text: model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
                                 Text { text: model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
+                                
+                                // Sessions list
+                                Column {
+                                    spacing: 2
+                                    visible: backend.mode === "f1"
+                                    Repeater {
+                                        model: backend.mode === "f1" && model.sessions ? model.sessions : []
+                                        delegate: Row {
+                                            spacing: 8
+                                            visible: modelData !== undefined
+                                            Text { 
+                                                text: "\uf017"; 
+                                                font.family: "Font Awesome 5 Free"; 
+                                                font.pixelSize: 10; 
+                                                color: "#666666";
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+                                            Text { 
+                                                text: modelData && modelData.session_name ? modelData.session_name + ": " + Qt.formatDateTime(new Date(modelData.date_start), "ddd hh:mm") : ""; 
+                                                color: "#999999"; 
+                                                font.pixelSize: 11;
+                                                anchors.verticalCenter: parent.verticalCenter
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
