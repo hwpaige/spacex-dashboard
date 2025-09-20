@@ -267,131 +267,106 @@ def fetch_f1_data():
     else:
         try:
             current_year = current_time.year
-            # Fetch schedule
-            url = f"https://api.jolpi.ca/ergast/f1/{current_year}.json"
+            # Fetch current season data
+            url = f"https://f1api.dev/api/current"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
-            races = data['MRData']['RaceTable']['Races']
+            logger.info(f"F1 API response keys: {list(data.keys())}")
+            races = data.get('races', [])
             meetings = []
-            short_name_map = {
-                'albert_park': 'Melbourne', 'shanghai': 'Shanghai', 'suzuka': 'Suzuka', 'bahrain': 'Sakhir',
-                'jeddah': 'Jeddah', 'miami': 'Miami', 'imola': 'Imola', 'monaco': 'Monte Carlo',
-                'catalunya': 'Catalunya', 'villeneuve': 'Montreal', 'red_bull_ring': 'Spielberg',
-                'silverstone': 'Silverstone', 'spa': 'Spa', 'hungaroring': 'Hungaroring', 'zandvoort': 'Zandvoort',
-                'monza': 'Monza', 'baku': 'Baku', 'marina_bay': 'Singapore', 'americas': 'Austin',
-                'rodriguez': 'Mexico City', 'interlagos': 'Sao Paulo', 'vegas': 'Las Vegas',
-                'losail': 'Lusail', 'yas_marina': 'Abu Dhabi'
-            }
             for race in races:
                 meeting = {
-                    "circuit_short_name": short_name_map.get(race['Circuit']['circuitId'], race['Circuit']['circuitName']),
-                    "location": race['Circuit']['Location']['locality'],
-                    "country_name": race['Circuit']['Location']['country'],
+                    "circuit_short_name": race['circuit']['circuitName'],
+                    "location": race['circuit']['city'],
+                    "country_name": race['circuit']['country'],
                     "meeting_name": race['raceName'],
-                    "year": current_year
+                    "year": data['season'],
+                    "round": race['round'],
+                    "laps": race['laps'],
+                    "winner": race.get('winner', {}),
+                    "teamWinner": race.get('teamWinner', {}),
+                    "fast_lap": race.get('fast_lap', {})
                 }
                 # Parse sessions
                 sessions = []
-                if 'FirstPractice' in race:
-                    date_start = f"{race['FirstPractice']['date']}T{race['FirstPractice']['time']}"
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": date_start,
-                        "session_type": "Practice",
-                        "session_name": "Practice 1",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                    meeting['date_start'] = date_start  # Set meeting start to FP1
-                if 'SecondPractice' in race:
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": f"{race['SecondPractice']['date']}T{race['SecondPractice']['time']}",
-                        "session_type": "Practice",
-                        "session_name": "Practice 2",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                if 'ThirdPractice' in race:
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": f"{race['ThirdPractice']['date']}T{race['ThirdPractice']['time']}",
-                        "session_type": "Practice",
-                        "session_name": "Practice 3",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                if 'SprintQualifying' in race:
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": f"{race['SprintQualifying']['date']}T{race['SprintQualifying']['time']}",
-                        "session_type": "Qualifying",
-                        "session_name": "Sprint Qualifying",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                if 'Sprint' in race:
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": f"{race['Sprint']['date']}T{race['Sprint']['time']}",
-                        "session_type": "Race",
-                        "session_name": "Sprint",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                if 'Qualifying' in race:
-                    sessions.append({
-                        "location": meeting['location'],
-                        "date_start": f"{race['Qualifying']['date']}T{race['Qualifying']['time']}",
-                        "session_type": "Qualifying",
-                        "session_name": "Qualifying",
-                        "country_name": meeting['country_name'],
-                        "circuit_short_name": meeting['circuit_short_name'],
-                        "year": current_year
-                    })
-                # Always add Race
-                sessions.append({
-                    "location": meeting['location'],
-                    "date_start": f"{race['date']}T{race['time']}",
-                    "session_type": "Race",
-                    "session_name": "Race",
-                    "country_name": meeting['country_name'],
-                    "circuit_short_name": meeting['circuit_short_name'],
-                    "year": current_year
-                })
+                schedule = race['schedule']
+                session_name_map = {
+                    "fp1": "Practice 1",
+                    "fp2": "Practice 2",
+                    "fp3": "Practice 3",
+                    "qualy": "Qualifying",
+                    "sprintQualy": "Sprint Qualifying",
+                    "sprintRace": "Sprint",
+                    "race": "Race"
+                }
+                for session_key, session_data in schedule.items():
+                    if session_data and session_data.get('date'):
+                        sessions.append({
+                            "location": meeting['location'],
+                            "date_start": f"{session_data['date']}T{session_data.get('time', '00:00:00')}",
+                            "session_type": "Practice" if "fp" in session_key else ("Qualifying" if "qualy" in session_key else "Race"),
+                            "session_name": session_name_map.get(session_key, session_key),
+                            "country_name": meeting['country_name'],
+                            "circuit_short_name": meeting['circuit_short_name'],
+                            "year": meeting['year']
+                        })
                 meeting['sessions'] = sessions
+                if sessions:
+                    # Use the race session date as the primary date for sorting
+                    race_session = next((s for s in sessions if s['session_type'] == 'Race'), None)
+                    if race_session:
+                        meeting['date_start'] = race_session['date_start']
+                    else:
+                        meeting['date_start'] = min(s['date_start'] for s in sessions)
                 meetings.append(meeting)
 
             # Fetch driver standings
-            url = f"https://api.jolpi.ca/ergast/f1/{current_year}/driverStandings.json"
+            url = "https://f1api.dev/api/current/drivers-championship"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
-            standings_lists = data['MRData']['StandingsTable']['StandingsLists']
-            driver_standings = standings_lists[0]['DriverStandings'] if standings_lists else []
+            driver_standings = data.get('drivers_championship', [])
+            # Normalize to expected format
+            for standing in driver_standings:
+                if 'driver' in standing and 'Driver' not in standing:
+                    standing['Driver'] = {
+                        'givenName': standing['driver']['name'],
+                        'familyName': standing['driver']['surname'],
+                        'driverId': standing['driverId'],
+                        'nationality': standing['driver']['nationality'],
+                        'code': standing['driver']['shortName']
+                    }
+                if 'team' in standing and 'Constructor' not in standing:
+                    standing['Constructor'] = {
+                        'name': standing['team']['teamName'],
+                        'constructorId': standing['teamId'],
+                        'nationality': standing['team']['country']
+                    }
 
             # Fetch constructor standings
-            url = f"https://api.jolpi.ca/ergast/f1/{current_year}/constructorStandings.json"
+            url = "https://f1api.dev/api/current/constructors-championship"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
-            standings_lists = data['MRData']['StandingsTable']['StandingsLists']
-            constructor_standings = standings_lists[0]['ConstructorStandings'] if standings_lists else []
+            constructor_standings = data.get('constructors_championship', [])
+            # Normalize
+            for standing in constructor_standings:
+                if 'team' in standing and 'Constructor' not in standing:
+                    standing['Constructor'] = {
+                        'name': standing['team']['teamName'],
+                        'constructorId': standing['teamId'],
+                        'nationality': standing['team']['country']
+                    }
 
             f1_data = {'schedule': meetings, 'driver_standings': driver_standings, 'constructor_standings': constructor_standings}
             save_cache_to_file(CACHE_FILE_F1, f1_data, current_time)
             f1_cache = f1_data
-            logger.info("Successfully fetched and saved F1 data")
+            logger.info("Successfully fetched and saved F1 data from f1api.dev")
             time.sleep(1)  # Avoid rate limiting
             return f1_cache
         except Exception as e:
-            logger.error(f"Ergast API error: {e}")
+            logger.error(f"f1api.dev API error: {e}")
             f1_cache = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
             return f1_cache
 
@@ -469,7 +444,32 @@ circuit_coords = {
     'Sao Paulo': {'lat': -23.7036, 'lon': -46.6997},
     'Las Vegas': {'lat': 36.1147, 'lon': -115.1728},
     'Lusail': {'lat': 25.4900, 'lon': 51.4542},
-    'Abu Dhabi': {'lat': 24.4672, 'lon': 54.6031}
+    'Abu Dhabi': {'lat': 24.4672, 'lon': 54.6031},
+    # F1 circuit names
+    'Albert Park Circuit': {'lat': -37.8497, 'lon': 144.968},
+    'Shangai International Circuit': {'lat': 31.3389, 'lon': 121.2200},
+    'Suzuka International Circuit': {'lat': 34.8431, 'lon': 136.5411},
+    'Bahrain International Circuit': {'lat': 26.0325, 'lon': 50.5106},
+    'Jeddah Corniche Circuit': {'lat': 21.6319, 'lon': 39.1044},
+    'Miami International Autodrome': {'lat': 25.9581, 'lon': -80.2389},
+    'Imola Autodromo Internazionale Enzo e Dino Ferrari': {'lat': 44.3439, 'lon': 11.7167},
+    'Circuit de Monaco': {'lat': 43.7347, 'lon': 7.4206},
+    'Circuit de Barcelona-Catalunya': {'lat': 41.5700, 'lon': 2.2611},
+    'Circuit Gilles Villeneuve': {'lat': 45.5000, 'lon': -73.5228},
+    'Red Bull Ring': {'lat': 47.2197, 'lon': 14.7647},
+    'Silverstone Circuit': {'lat': 52.0786, 'lon': -1.0169},
+    'Circuit de Spa-Francorchamps': {'lat': 50.4372, 'lon': 5.9714},
+    'Hungaroring': {'lat': 47.5839, 'lon': 19.2486},
+    'Circuit Zandvoort': {'lat': 52.3888, 'lon': 4.5409},
+    'Autodromo Nazionale Monza': {'lat': 45.6156, 'lon': 9.2811},
+    'Baku City Circuit': {'lat': 40.3725, 'lon': 49.8533},
+    'Marina Bay Street Circuit': {'lat': 1.2914, 'lon': 103.8642},
+    'Circuit of The Americas': {'lat': 30.1328, 'lon': -97.6411},
+    'Autódromo Hermanos Rodríguez': {'lat': 19.4042, 'lon': -99.0907},
+    'Autodromo José Carlos Pace | Interlagos': {'lat': -23.7036, 'lon': -46.6997},
+    'Las Vegas Strip Circuit': {'lat': 36.1147, 'lon': -115.1728},
+    'Lusail International Circuit': {'lat': 25.4900, 'lon': 51.4542},
+    'Yas Marina Circuit': {'lat': 24.4672, 'lon': 54.6031}
 }
 
 class EventModel(QAbstractListModel):
@@ -2273,7 +2273,8 @@ if __name__ == '__main__':
             QApplication.setStyle(fusion_style)
     
     app = QApplication(sys.argv)
-    app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
+    if platform.system() != 'Windows':
+        app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
     # Load fonts
     font_path = os.path.join(os.path.dirname(__file__), "assets", "D-DIN.ttf")
@@ -3198,56 +3199,56 @@ Window {
 
                         delegate: Item {
                             width: ListView.view.width
-                            height: model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model.sessions && model.sessions.length ? model.sessions.length * 18 : 0)) : 40))
+                            height: model && model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model && model.sessions && model.sessions.length ? model.sessions.length * 18 : 0)) : 40))
 
-                            Rectangle { anchors.fill: parent; color: model.isGroup ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: model.isGroup ? 0 : 6 }
+                            Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
 
                             Text {
                                 anchors.left: parent.left
                                 anchors.leftMargin: 15
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: model.isGroup ? model.groupName : ""
-                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: model.isGroup
+                                text: (model && model.isGroup) ? (model.groupName ? model.groupName : "") : ""
+                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: model && model.isGroup
                             }
 
                             Column {
                                 id: launchColumn
                                 anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
                                 spacing: 5
-                                visible: !model.isGroup && backend.mode === "spacex"
+                                visible: !model.isGroup && backend.mode === "spacex" && model && typeof model === 'object'
 
-                                Text { text: model.mission ? model.mission : ""; font.pixelSize: 14; color: backend.theme === "dark" ? "white" : "black" }
+                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; color: backend.theme === "dark" ? "white" : "black" }
                                 Row { spacing: 5
                                     Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Rocket: " + (model.rocket ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
                                 }
                                 Row { spacing: 5
                                     Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Orbit: " + (model.orbit ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
                                 }
                                 Row { spacing: 5
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Pad: " + (model.pad ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-                                Text { text: "Date: " + (model.date ? model.date : "") + (model.time ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: backend.location + ": " + (model.localTime ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
-                                Text { text: "Status: " + (model.status ? model.status : ""); font.pixelSize: 12; color: (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch") ? "#4CAF50" : "#F44336" }
+                                Text { text: "Date: " + ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                Text { text: backend.location + ": " + ((model && model.localTime) ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { text: "Status: " + ((model && model.status) ? model.status : ""); font.pixelSize: 12; color: ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336" }
                             }
 
                             Column {
                                 anchors.fill: parent; anchors.margins: 10
-                                visible: !model.isGroup && backend.mode === "f1"
+                                visible: !model.isGroup && backend.mode === "f1" && model && typeof model === 'object'
                                 
                                 // Race header with flag and name
                                 Row {
                                     spacing: 8
                                     Text { 
-                                        text: backend.getCountryFlag(model.countryName)
+                                        text: model && model.countryName ? backend.getCountryFlag(model.countryName) : '🏁'
                                         font.pixelSize: 16
                                         visible: backend.mode === "f1"
                                     }
                                     Text { 
-                                        text: model.meetingName ? model.meetingName : ""; 
+                                        text: model && model.meetingName ? model.meetingName : ''; 
                                         color: backend.theme === "dark" ? "white" : "black"; 
                                         font.pixelSize: 14; 
                                         font.bold: true
@@ -3255,29 +3256,33 @@ Window {
                                 }
                                 
                                 // Circuit info
-                                Text { text: model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
-                                Text { text: model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
+                                Text { text: model && model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
+                                Text { text: model && model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
                                 
                                 // Sessions list
                                 Column {
                                     spacing: 2
                                     visible: backend.mode === "f1"
+                                    
+                                    property var raceSessions: model ? (model.sessions || []) : []
+                                    
                                     Repeater {
-                                        model: backend.mode === "f1" && model.sessions ? model.sessions : []
+                                        model: parent.raceSessions
                                         delegate: Row {
                                             spacing: 8
-                                            visible: modelData !== undefined
+                                            visible: modelData && typeof modelData === 'object' && modelData.session_name && modelData.date_start
                                             Text { 
                                                 text: "\uf017"; 
                                                 font.family: "Font Awesome 5 Free"; 
                                                 font.pixelSize: 10; 
-                                                color: "#666666";
+                                                color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#666666";
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                             Text { 
-                                                text: modelData && modelData.session_name ? modelData.session_name + ": " + Qt.formatDateTime(new Date(modelData.date_start), "ddd hh:mm") : ""; 
-                                                color: "#999999"; 
+                                                text: (modelData && modelData.session_name ? modelData.session_name : "") + " (" + (modelData && modelData.session_type ? modelData.session_type : "") + "): " + (modelData && modelData.date_start ? Qt.formatDateTime(new Date(modelData.date_start), "MMM dd yyyy, hh:mm") + " UTC" : ""); 
+                                                color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#999999"; 
                                                 font.pixelSize: 11;
+                                                font.bold: modelData && modelData.session_type === "Race";
                                                 anchors.verticalCenter: parent.verticalCenter
                                             }
                                         }
@@ -3345,7 +3350,7 @@ Window {
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        url: backend.mode === "spacex" ? videoUrl : (nextRace ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon + "&t=" + new Date().getTime() : "")
+                        url: backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon + "&t=" + new Date().getTime() : "")
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                     }
                 }
