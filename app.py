@@ -4,8 +4,6 @@ import os
 import json
 import platform
 import fastf1
-import plotly.graph_objects as go
-import plotly.io as pio
 import numpy as np
 import pandas as pd
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene

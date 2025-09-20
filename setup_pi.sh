@@ -5,7 +5,7 @@ set -o pipefail
 # Trap to handle interrupts gracefully
 trap 'log "Setup interrupted by user"; exit 1' INT TERM
 
-# SpaceX Dashboard Setup Script for Raspberry Pi 5 with Ubuntu 24.04
+# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 24.04
 # Optimized with modular functions and better error handling
 
 USER="${SUDO_USER:-harrison}"
@@ -13,7 +13,6 @@ HOME_DIR="/home/$USER"
 LOG_FILE="$HOME_DIR/setup_ubuntu.log"
 REPO_URL="https://github.com/hwpaige/spacex-dashboard"
 REPO_DIR="$HOME_DIR/Desktop/project"
-VENV_DIR="$HOME_DIR/.venv"
 
 log() {
     echo "$@" | tee -a "$LOG_FILE"
@@ -152,17 +151,27 @@ install_packages() {
 
 setup_python_environment() {
     log "Setting up Python environment..."
-    
-    if python3 -c "import PyQt6, requests, pandas, psutil" 2>/dev/null; then
-        log "System Python with all dependencies working (including psutil)"
+
+    if python3 -c "import PyQt6, requests, pandas, psutil, fastf1" 2>/dev/null; then
+        log "System Python with all dependencies working (including fastf1)"
         return
     fi
-    
+
     log "Installing missing Python packages system-wide..."
     apt-get install -y python3-psutil python3-pyqt6 python3-requests python3-pandas
-    
+
+    # Install build tools needed for compiling packages
+    log "Installing build tools for pip packages..."
+    apt-get install -y build-essential python3-dev
+
+    # Install pip packages that aren't available via apt
+    # Use pip with system packages to avoid virtual environment complexity
+    log "Installing pip packages..."
+    export PIP_BREAK_SYSTEM_PACKAGES=1
+    pip3 install --ignore-installed fastf1 || log "WARNING: Failed to install fastf1 via pip"
+
     # Verify installation
-    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil" 2>/dev/null; then
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1" 2>/dev/null; then
         log "✓ All Python packages installed successfully"
     else
         log "⚠ Some packages may still be missing, but continuing..."
@@ -178,7 +187,8 @@ echo \"User: \$(whoami) | Display: \$DISPLAY\"
 echo \"Python: \$(python3 --version 2>/dev/null || echo 'Not found')\"
 echo ''
 echo '=== Package Tests ==='
-python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ All packages working (including psutil)\")' 2>/dev/null || echo '✗ System Python failed'
+python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ System packages working\")' 2>/dev/null || echo '✗ System Python failed'
+python3 -c 'import fastf1; print(\"✓ fastf1 available\")' 2>/dev/null || echo '✗ fastf1 not available'
 echo ''
 echo '=== GPU/DMA Buffer Status ==='
 echo \"GPU devices:\"
@@ -191,13 +201,6 @@ echo \"System memory usage:\"
 free -h 2>/dev/null || echo 'free command not available'
 echo \"GPU cgroup status:\"
 ls -la /sys/fs/cgroup/memory/gpu/ 2>/dev/null || echo 'GPU cgroup not configured'
-echo ''
-if [ -f ~/.venv/bin/activate ]; then
-    source ~/.venv/bin/activate
-    python -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ Virtual environment working\")' 2>/dev/null || echo '✗ Virtual environment failed'
-else
-    echo 'No virtual environment found'
-fi
 EOF"
     sudo -u "$USER" chmod +x "$HOME_DIR/debug_x.sh"
 }
@@ -208,19 +211,8 @@ configure_system() {
     # Enable SSH
     systemctl enable --now ssh
     
-    # Fix WiFi conflicts - disable systemd-networkd to let NetworkManager manage WiFi
-    log "Resolving WiFi management conflicts..."
-    systemctl stop systemd-networkd 2>/dev/null || true
-    systemctl disable systemd-networkd 2>/dev/null || true
-    
-    # Clean up any existing wpa_supplicant control files that might conflict
-    rm -f /run/wpa_supplicant/wlan0 2>/dev/null || true
-    
-    # Enable NetworkManager for nmcli WiFi management
+    # Enable NetworkManager for network management
     systemctl enable --now NetworkManager
-    
-    # Ensure NetworkManager has full control over WiFi devices
-    nmcli device set wlan0 managed yes 2>/dev/null || log "WARNING: Could not set wlan0 as managed"
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true
@@ -273,7 +265,7 @@ Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=EGL_PLATFORM=drm
 WorkingDirectory=/home/$USER/Desktop/project
-ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/app.py
+ExecStart=python3 app.py
 Restart=always
 RestartSec=5
 MemoryLimit=512M
@@ -396,21 +388,14 @@ export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
 if python3 -c 'import PyQt6, pyqtgraph, requests, pandas' 2>/dev/null; then
     echo "Using system PyQt6" | tee ~/xinitrc.log
+    exec python3 ~/Desktop/project/app.py > ~/app.log 2>&1
 elif [ -f ~/.venv/bin/activate ]; then
     source ~/.venv/bin/activate
     echo "Using virtual environment PyQt6" | tee ~/xinitrc.log
+    exec python ~/Desktop/project/app.py > ~/app.log 2>&1
 else
     echo "No working PyQt6 found, aborting" | tee ~/xinitrc.log
     exit 1
-fi
-
-if python3 -c 'import pyqtgraph' 2>/dev/null; then
-    echo "Starting application..." | tee -a ~/xinitrc.log
-    exec python3 ~/Desktop/project/app.py > ~/app.log 2>&1
-else
-    source ~/.venv/bin/activate
-    echo "Starting application with virtual environment..." | tee -a ~/xinitrc.log
-    exec python ~/Desktop/project/app.py > ~/app.log 2>&1
 fi
 EOF
     chown "$USER:$USER" "$HOME_DIR/.xinitrc"
