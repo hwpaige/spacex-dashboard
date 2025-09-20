@@ -2429,12 +2429,12 @@ class ChartItem(QQuickPaintedItem):
             color = colors[s % len(colors)]
             painter.setPen(QPen(color, 3))
             painter.setBrush(QBrush(color.lighter(150)))
-            points = [QPoint(margin, height - margin)]
+            points = [QPoint(int(margin), int(height - margin))]
             for i, value in enumerate(series_data['values']):
                 x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
                 y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
                 points.append(QPoint(int(x), int(y)))
-            points.append(QPoint(width - margin, height - margin))
+            points.append(QPoint(int(width - margin), int(height - margin)))
             painter.drawPolygon(points)
 
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
@@ -2734,7 +2734,7 @@ Window {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
 
-                                chartType: "area"  // Creative area chart for F1
+                                chartType: "bar"  // Default to bar chart for F1
                                 viewMode: "actual"
                                 series: backend.driverPointsSeries
                                 months: backend.driverNames
@@ -2766,9 +2766,8 @@ Window {
                                     spacing: 3
                                     Repeater {
                                         model: [
-                                            {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
-                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
-                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"}
+                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"}
                                         ]
                                         Button {
                                             property var chartData: modelData
@@ -3323,6 +3322,10 @@ Window {
                                 duration: 1600000
                             }
                             PauseAnimation { duration: 4000 }  // 4 second pause
+                            PropertyAnimation {
+                                to: tickerRect.width  // Reset to starting position
+                                duration: 0  // Instant reset
+                            }
                         }
                     }
                 }
