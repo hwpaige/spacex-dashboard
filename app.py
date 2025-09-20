@@ -19,6 +19,10 @@ import time
 import subprocess
 import re
 import calendar
+# DBus imports are now conditional and imported only on Linux
+# import dbus
+# import dbus.mainloop.glib
+# from gi.repository import GLib
 
 # Set console encoding to UTF-8 to handle Unicode characters properly
 if hasattr(sys.stdout, 'reconfigure'):
@@ -1047,235 +1051,431 @@ class Backend(QObject):
 
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks using nmcli (Ubuntu standard) with improved error handling"""
+        """Scan for available WiFi networks using NetworkManager DBus API with robust error handling"""
         try:
             logger.info("Starting WiFi network scan...")
             is_windows = platform.system() == 'Windows'
 
             if is_windows:
                 # Use Windows netsh command to scan for WiFi networks
-                result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-                                      capture_output=True, text=True, timeout=10)
+                logger.info("Scanning WiFi networks using Windows netsh...")
+                try:
+                    result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+                                          capture_output=True, text=True, timeout=15)
 
-                networks = []
-                current_network = {}
+                    if result.returncode != 0:
+                        logger.warning(f"netsh command failed: {result.stderr}")
+                        raise Exception(f"netsh failed with return code {result.returncode}")
 
-                for line in result.stdout.split('\n'):
-                    line = line.strip()
+                    networks = []
+                    current_ssid = None
+                    current_network = None
+                    network_map = {}  # Track networks by SSID to handle multiple BSSIDs
+                    logger.debug(f"netsh output length: {len(result.stdout)}")
 
-                    # Look for SSID
-                    if line.startswith('SSID'):
-                        if current_network and current_network.get('ssid'):
-                            networks.append(current_network)
-                        ssid_match = re.search(r'SSID\s+\d+\s*:\s*(.+)', line)
-                        if ssid_match:
-                            current_network = {'ssid': ssid_match.group(1).strip(), 'signal': 0, 'encrypted': False}
+                    for line in result.stdout.split('\n'):
+                        line = line.strip()
+                        logger.debug(f"Processing line: {line}")
 
-                    # Look for signal strength
-                    elif 'Signal' in line and current_network:
-                        signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
-                        if signal_match:
-                            # Convert percentage to dBm (rough approximation)
-                            percentage = int(signal_match.group(1))
-                            # Convert percentage to dBm (rough approximation: 100% = -30dBm, 0% = -100dBm)
-                            dbm = -30 - ((100 - percentage) * 0.7)
-                            current_network['signal'] = int(dbm)
+                        # Look for SSID (new network)
+                        if line.startswith('SSID') and ':' in line:
+                            ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
+                            if ssid_match:
+                                ssid = ssid_match.group(1).strip()
+                                if ssid and ssid != '<disconnected>':
+                                    current_ssid = ssid
+                                    if current_ssid not in network_map:
+                                        network_map[current_ssid] = {'ssid': current_ssid, 'signal': -100, 'encrypted': False}
+                                    current_network = network_map[current_ssid]
+                                    logger.debug(f"Processing network: {ssid}")
+                                else:
+                                    current_ssid = None
+                                    current_network = None
+                            else:
+                                current_ssid = None
+                                current_network = None
 
-                    # Look for authentication
-                    elif 'Authentication' in line and current_network:
-                        if 'WPA' in line or 'WPA2' in line or 'WPA3' in line:
-                            current_network['encrypted'] = True
+                        # Look for signal strength (take the strongest signal for each SSID)
+                        elif line.startswith('Signal') and ':' in line and current_network:
+                            signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
+                            if signal_match:
+                                percentage = int(signal_match.group(1))
+                                # More accurate conversion from percentage to dBm
+                                # Typical range: 0% = -100dBm, 100% = -30dBm
+                                if percentage >= 0 and percentage <= 100:
+                                    dbm = -100 + (percentage * 0.7)  # -100 to -30 range
+                                    # Keep the strongest signal for this SSID
+                                    if dbm > current_network['signal']:
+                                        current_network['signal'] = int(dbm)
+                                        logger.debug(f"Updated signal for {current_network['ssid']}: {percentage}% = {dbm}dBm")
 
-                # Add the last network
-                if current_network and current_network.get('ssid'):
-                    networks.append(current_network)
+                        # Look for authentication (encryption) - only set once per SSID
+                        elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
+                            if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
+                                current_network['encrypted'] = True
+                                logger.debug(f"Network {current_network['ssid']} is encrypted")
+
+                    # Convert network_map to networks list
+                    networks = list(network_map.values())
+                    logger.info(f"Windows netsh scan found {len(networks)} unique networks")
+
+                except subprocess.TimeoutExpired:
+                    logger.error("Windows WiFi scan timed out")
+                    networks = []
+                except FileNotFoundError:
+                    logger.error("netsh command not found - WiFi scanning not available on this Windows system")
+                    networks = []
+                except Exception as e:
+                    logger.error(f"Windows WiFi scan failed: {e}")
+                    networks = []
             else:
-                # Enhanced Linux WiFi scanning with multiple fallback methods
-                logger.info("Scanning WiFi networks on Linux...")
+                # Use NetworkManager DBus API for proper Linux WiFi scanning
+                logger.info("Scanning WiFi networks using NetworkManager DBus...")
                 networks = []
                 
-                # Method 1: Try nmcli (preferred)
                 try:
-                    logger.info("Attempting nmcli scan...")
+                    # Import DBus modules only on Linux
+                    import dbus
+                    import dbus.mainloop.glib
+                    from gi.repository import GLib
                     
-                    # First check if nmcli is available
-                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
-                    if nmcli_check.returncode != 0:
-                        logger.warning("nmcli not found, trying fallback methods")
-                        raise Exception("nmcli not available")
+                    # Initialize DBus main loop for Qt integration
+                    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 
-                    # Find the WiFi device name
-                    device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
+                    # Get system bus
+                    bus = dbus.SystemBus()
+
+                    # Get NetworkManager object
+                    nm = bus.get_object('org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager')
+                    nm_interface = dbus.Interface(nm, 'org.freedesktop.NetworkManager')
+
+                    # Get all devices
+                    devices = nm_interface.GetDevices()
                     wifi_device = None
-                    if device_result.returncode == 0:
-                        for line in device_result.stdout.split('\n'):
-                            parts = line.split()
-                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
-                                wifi_device = parts[0]
-                                break
-                    
-                    logger.info(f"Found WiFi device: {wifi_device}")
-                    
-                    if wifi_device:
-                        # Check if device is available/managed
-                        device_info = subprocess.run(['nmcli', 'device', 'show', wifi_device], 
-                                                   capture_output=True, text=True, timeout=5)
-                        
-                        if 'unavailable' in device_info.stdout.lower():
-                            logger.warning(f"WiFi device {wifi_device} is unavailable, trying to make it managed")
-                            # Try to set device as managed
-                            subprocess.run(['nmcli', 'device', 'set', wifi_device, 'managed', 'yes'], 
-                                         capture_output=True, timeout=5)
-                        
-                        # Try to enable WiFi (handle the property error gracefully)
-                        enable_result = subprocess.run(['nmcli', 'radio', 'wifi', 'on'], 
-                                                     capture_output=True, text=True, timeout=5)
-                        if enable_result.returncode != 0:
-                            logger.warning(f"WiFi enable failed: {enable_result.stderr}")
-                        
-                        # Try device-specific enable as fallback
+
+                    # Find the first wireless device
+                    for device_path in devices:
                         try:
-                            subprocess.run(['nmcli', 'device', 'set', wifi_device, 'on'], 
-                                         capture_output=True, timeout=5)
-                        except:
-                            pass  # Ignore device set errors
-                        
-                        # Rescan for networks
-                        rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], 
-                                                     capture_output=True, text=True, timeout=10)
-                        logger.info(f"WiFi rescan result: {rescan_result.returncode}")
+                            device = bus.get_object('org.freedesktop.NetworkManager', device_path)
+                            device_interface = dbus.Interface(device, 'org.freedesktop.DBus.Properties')
 
-                        # Scan for networks
-                        result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
-                                              capture_output=True, text=True, timeout=15)
-                        
-                        if result.returncode == 0 and result.stdout.strip():
-                            logger.info("nmcli scan successful")
-                            lines = result.stdout.strip().split('\n')
-                            
-                            # Skip header line
-                            for line in lines[1:]:
-                                parts = line.split()
-                                if len(parts) >= 7:
-                                    # SSID is usually in column 1 (index 0), but skip if it's '*'
-                                    ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
-                                    if ssid and ssid != '--':
-                                        # Signal is usually in column 4
-                                        signal_str = parts[4] if len(parts) > 4 else '0'
-                                        signal = int(signal_str) if signal_str.isdigit() else 0
+                            device_type = device_interface.Get('org.freedesktop.NetworkManager.Device', 'DeviceType')
+                            if device_type == 2:  # NM_DEVICE_TYPE_WIFI
+                                wifi_device = device_path
+                                break
+                        except Exception as device_e:
+                            logger.debug(f"Error checking device {device_path}: {device_e}")
+                            continue
 
-                                        # Security is usually in column 6
-                                        security = parts[6] if len(parts) > 6 else ''
-                                        encrypted = 'WPA' in security or 'WEP' in security
+                    # Check device state before scanning
+                    device_state = device_interface.Get('org.freedesktop.NetworkManager.Device', 'State')
+                    logger.info(f"WiFi device state: {device_state}")
 
-                                        networks.append({
-                                            'ssid': ssid,
-                                            'signal': signal,
-                                            'encrypted': encrypted
-                                        })
-                                        logger.debug(f"Found network: {ssid}, signal: {signal}, encrypted: {encrypted}")
-                        else:
-                            logger.warning(f"nmcli scan failed: {result.stderr}")
-                            raise Exception("nmcli scan failed")
-                    else:
-                        logger.error("No WiFi device found")
-                        raise Exception("No WiFi device found")
+                    # Get additional device info for debugging
+                    try:
+                        device_managed = device_interface.Get('org.freedesktop.NetworkManager.Device', 'Managed')
+                        logger.info(f"WiFi device managed: {device_managed}")
+                    except Exception as info_e:
+                        logger.debug(f"Could not get device managed status: {info_e}")
+
+                    # Device states: 0=unknown, 10=unmanaged, 20=unavailable, 30=disconnected, 40=prepare, 50=config, 60=need auth, 70=ip config, 80=ip check, 90=secondaries, 100=activated, 110=deactivating, 120=failed
+                    if device_state in [20, 120]:  # unavailable or failed
+                        logger.warning(f"WiFi device is in state {device_state} (unavailable/failed), attempting to make it managed")
+                        # Try to manage the device - this often happens when wpa_supplicant is controlling it
+                        try:
+                            # Check if device is in managed list
+                            nm_props = dbus.Interface(nm, 'org.freedesktop.DBus.Properties')
+                            managed_devices = nm_props.Get('org.freedesktop.NetworkManager', 'Devices')
+
+                            if wifi_device not in managed_devices:
+                                logger.info("Device not in managed list, attempting to manage it")
+                                # Try to add device to managed list (this may require admin privileges)
+                                # Note: This is a best-effort attempt
+                            else:
+                                logger.info("Device is in managed list but still unavailable - may be controlled by wpa_supplicant")
+
+                                # Try more aggressive management takeover
+                                logger.info("Attempting to force NetworkManager control...")
+                                try:
+                                    # Try to disconnect and reconnect the device
+                                    device_interface.Disconnect()
+                                    time.sleep(1)
+                                    device_interface.Connect()
+                                    time.sleep(2)
+
+                                    # Check if state changed
+                                    new_state = device_interface.Get('org.freedesktop.NetworkManager.Device', 'State')
+                                    logger.info(f"Device state after reconnect attempt: {new_state}")
+
+                                    if new_state != 20:
+                                        logger.info("Device state improved after reconnect!")
+                                        device_state = new_state
+                                    else:
+                                        logger.info("Device still unavailable after reconnect")
+
+                                except Exception as reconnect_e:
+                                    logger.debug(f"Reconnect attempt failed: {reconnect_e}")
+
+                            # Try to request scan anyway - sometimes it works even in unavailable state
+                            logger.info("Attempting scan despite unavailable state...")
+                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
+                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
+
+                        except Exception as manage_e:
+                            logger.warning(f"Could not manage unavailable device: {manage_e}")
+                            # Continue anyway and try to scan
+                            logger.info("Continuing with scan attempt despite management issues...")
+                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
+                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
+                            # Continue anyway and try to scan - sometimes it works
+                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
+                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
+                    elif device_state in [0, 10]:  # unknown or unmanaged
+                        logger.warning(f"WiFi device is in state {device_state} (unknown/unmanaged), attempting to make it managed")
+                        # Try to set device as managed
+                        try:
+                            nm_interface_props = dbus.Interface(nm, 'org.freedesktop.DBus.Properties')
+                            managed_devices = nm_interface_props.Get('org.freedesktop.NetworkManager', 'Devices')
+                            if wifi_device not in managed_devices:
+                                logger.info("Device not in managed list, attempting to manage it")
+                                # Note: This might require admin privileges
+                        except Exception as manage_e:
+                            logger.warning(f"Could not manage device: {manage_e}")
+
+                    # At this point, we should have wifi_device_obj and wifi_interface set up
+                    # (either from the unavailable case or the normal case)
+                    if 'wifi_device_obj' not in locals():
+                        wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
+                    if 'wifi_interface' not in locals():
+                        wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
+
+                    # Request a scan
+                    logger.info("Requesting WiFi scan via DBus...")
+                    try:
+                        wifi_interface.RequestScan({})  # Empty options dict
+                    except Exception as scan_e:
+                        logger.error(f"Scan request failed: {scan_e}")
+                        raise Exception(f"Failed to request scan: {scan_e}")
+
+                    # Wait a bit for scan to complete (NetworkManager handles this asynchronously)
+                    time.sleep(3)
+
+                    # Get access points
+                    try:
+                        access_points = wifi_interface.GetAllAccessPoints()
+                        logger.info(f"Found {len(access_points)} access points")
+                    except Exception as ap_e:
+                        logger.error(f"Failed to get access points: {ap_e}")
+                        raise Exception(f"Failed to get access points: {ap_e}")
+
+                    for ap_path in access_points:
+                        try:
+                            ap_obj = bus.get_object('org.freedesktop.NetworkManager', ap_path)
+                            ap_props = dbus.Interface(ap_obj, 'org.freedesktop.DBus.Properties')
+
+                            # Get SSID
+                            ssid_bytes = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Ssid')
+                            ssid = ''.join(chr(b) for b in ssid_bytes) if ssid_bytes else ''
+
+                            if not ssid:
+                                continue
+
+                            # Get signal strength
+                            strength = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Strength')
+
+                            # Get security flags
+                            flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Flags')
+                            wpa_flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'WpaFlags')
+                            rsn_flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'RsnFlags')
+
+                            # Determine if encrypted
+                            encrypted = bool(flags & 0x1) or bool(wpa_flags) or bool(rsn_flags)
+
+                            networks.append({
+                                'ssid': ssid,
+                                'signal': strength,  # Already in 0-100 range
+                                'encrypted': encrypted
+                            })
+
+                            logger.debug(f"Found network: {ssid}, signal: {strength}, encrypted: {encrypted}")
+
+                        except Exception as e:
+                            logger.debug(f"Error processing access point {ap_path}: {e}")
+                            continue
                         
                 except Exception as e:
-                    logger.warning(f"nmcli scan failed: {e}, trying iw scan...")
-                    
-                    # Method 2: Fallback to iw (requires wireless-tools)
+                    logger.error(f"NetworkManager DBus scan failed: {e}")
+                    logger.info("WiFi device is controlled by wpa_supplicant - attempting direct wpa_supplicant scan...")
+
+                    # Try to scan directly via wpa_supplicant/wpa_cli
                     try:
-                        # Find wireless interface
-                        interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
-                        wifi_interface = None
-                        
-                        for interface in interfaces:
-                            try:
-                                result = subprocess.run(['iw', 'dev', interface, 'info'], 
-                                                      capture_output=True, timeout=5)
-                                if result.returncode == 0:
-                                    wifi_interface = interface
-                                    break
-                            except:
-                                continue
-                        
-                        if wifi_interface:
-                            logger.info(f"Using iw with interface {wifi_interface}")
-                            
-                            # Bring interface up if needed
-                            subprocess.run(['ip', 'link', 'set', wifi_interface, 'up'], 
-                                         capture_output=True, timeout=5)
-                            
-                            # Scan for networks
-                            scan_result = subprocess.run(['iw', 'dev', wifi_interface, 'scan'], 
-                                                       capture_output=True, text=True, timeout=15)
-                            
+                        # Check if wpa_cli is available
+                        wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                        if wpa_check.returncode == 0:
+                            logger.info("wpa_cli found, attempting direct wpa_supplicant scan")
+
+                            # Try to scan using wpa_cli
+                            scan_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan'],
+                                                       capture_output=True, text=True, timeout=5)
+
                             if scan_result.returncode == 0:
-                                current_network = {}
-                                for line in scan_result.stdout.split('\n'):
+                                logger.info("wpa_cli scan initiated successfully")
+
+                                # Wait for scan results
+                                time.sleep(3)
+
+                                # Get scan results
+                                results_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan_results'],
+                                                              capture_output=True, text=True, timeout=5)
+
+                                if results_result.returncode == 0 and results_result.stdout.strip():
+                                    logger.info("wpa_cli scan results retrieved successfully")
+                                    networks = []
+
+                                    lines = results_result.stdout.strip().split('\n')
+                                    # Skip header line
+                                    for line in lines[1:]:
+                                        logger.debug(f"Processing wpa_cli line: {line}")
+                                        parts = line.split('\t')
+                                        if len(parts) >= 5:
+                                            # Format: bssid, frequency, signal, flags, ssid
+                                            bssid = parts[0]
+                                            frequency = parts[1]
+                                            signal_level = int(parts[2]) if parts[2].isdigit() else -100
+                                            flags = parts[3]
+                                            ssid = parts[4] if len(parts) > 4 else ''
+
+                                            if ssid and ssid != '<hidden>':
+                                                # Convert signal level to percentage (rough approximation)
+                                                # wpa_supplicant signal is in dBm, convert to 0-100 scale
+                                                signal_percent = min(100, max(0, 100 + signal_level))
+
+                                                encrypted = 'WPA' in flags or 'WEP' in flags
+
+                                                networks.append({
+                                                    'ssid': ssid,
+                                                    'signal': signal_percent,
+                                                    'encrypted': encrypted
+                                                })
+                                                logger.debug(f"Found network via wpa_cli: {ssid}, signal: {signal_percent}, encrypted: {encrypted}")
+
+                                    logger.info(f"wpa_cli scan found {len(networks)} networks")
+                                else:
+                                    logger.warning("wpa_cli scan_results failed or returned empty")
+                                    networks = []
+                            else:
+                                logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
+                                networks = []
+                        else:
+                            logger.info("wpa_cli not found, trying nmcli fallback")
+                            networks = []
+
+                    except subprocess.TimeoutExpired:
+                        logger.warning("wpa_cli scan timed out")
+                        networks = []
+                    except Exception as wpa_e:
+                        logger.warning(f"wpa_cli scan failed: {wpa_e}")
+                        networks = []
+
+                    # If wpa_cli also failed, fall back to nmcli
+                    if not networks:
+                        logger.info("wpa_cli failed, trying nmcli fallback...")
+                        try:
+                            # nmcli fallback code here...
+                            device_check = subprocess.run(['nmcli', 'device', 'show', 'wlan0'],
+                                                        capture_output=True, text=True, timeout=5)
+
+                            if device_check.returncode == 0:
+                                logger.info("nmcli can access wlan0 device")
+
+                                rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'],
+                                                             capture_output=True, text=True, timeout=10)
+
+                                if rescan_result.returncode == 0:
+                                    logger.info("nmcli rescan completed successfully")
+                                    time.sleep(2)
+
+                                    list_result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
+                                                               capture_output=True, text=True, timeout=10)
+
+                                    if list_result.returncode == 0 and list_result.stdout.strip():
+                                        logger.info("nmcli network list successful")
+                                        networks = []
+
+                                        lines = list_result.stdout.strip().split('\n')
+                                        logger.debug(f"nmcli returned {len(lines)} lines")
+
+                                        for line in lines[1:]:
+                                            logger.debug(f"Processing nmcli line: {line}")
+                                            parts = line.split()
+                                            if len(parts) >= 7:
+                                                ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
+                                                if ssid and ssid != '--':
+                                                    signal_str = parts[4] if len(parts) > 4 else '0'
+                                                    signal = int(signal_str) if signal_str.isdigit() else 0
+                                                    security = parts[6] if len(parts) > 6 else ''
+                                                    encrypted = 'WPA' in security or 'WEP' in security
+
+                                                    networks.append({
+                                                        'ssid': ssid,
+                                                        'signal': signal,
+                                                        'encrypted': encrypted
+                                                    })
+                                                    logger.debug(f"Found network via nmcli: {ssid}, signal: {signal}, encrypted: {encrypted}")
+
+                                        logger.info(f"nmcli fallback found {len(networks)} networks")
+                                    else:
+                                        logger.warning(f"nmcli list failed: {list_result.stderr}")
+                                        networks = []
+                                else:
+                                    logger.warning(f"nmcli rescan failed: {rescan_result.stderr}")
+                                    networks = []
+                            else:
+                                logger.warning(f"nmcli cannot access wlan0: {device_check.stderr}")
+                                networks = []
+
+                        except Exception as nmcli_e:
+                            logger.warning(f"nmcli fallback failed: {nmcli_e}")
+                            networks = []
+
+                    # Final fallback to iw current network
+                    if not networks:
+                        logger.info("All methods failed, trying simple iw fallback...")
+                        try:
+                            result = subprocess.run(['iw', 'dev', 'wlan0', 'link'],
+                                                  capture_output=True, text=True, timeout=5)
+
+                            if result.returncode == 0 and 'Connected' in result.stdout:
+                                lines = result.stdout.split('\n')
+                                current_ssid = None
+                                current_signal = -50
+
+                                for line in lines:
                                     line = line.strip()
-                                    
-                                    if line.startswith('BSS ') and '(' in line:
-                                        if current_network and current_network.get('ssid'):
-                                            networks.append(current_network)
-                                        bss_match = re.search(r'BSS\s+([0-9a-f:]+)', line)
-                                        if bss_match:
-                                            current_network = {'ssid': '', 'signal': 0, 'encrypted': False}
-                                    
-                                    elif line.startswith('SSID:') and current_network is not None:
+                                    if line.startswith('SSID:'):
                                         ssid_match = re.search(r'SSID:\s*(.+)', line)
                                         if ssid_match:
-                                            current_network['ssid'] = ssid_match.group(1).strip()
-                                    
-                                    elif line.startswith('signal:') and current_network is not None:
-                                        signal_match = re.search(r'signal:\s*(-?\d+\.?\d*)', line)
+                                            current_ssid = ssid_match.group(1).strip()
+                                    elif line.startswith('signal:'):
+                                        signal_match = re.search(r'signal:\s*(-?\d+)', line)
                                         if signal_match:
-                                            current_network['signal'] = int(float(signal_match.group(1)))
-                                    
-                                    elif line.startswith('RSN:') or line.startswith('WPA:'):
-                                        current_network['encrypted'] = True
-                                
-                                # Add the last network
-                                if current_network and current_network.get('ssid'):
-                                    networks.append(current_network)
-                            
-                    except Exception as e2:
-                        logger.warning(f"iw scan also failed: {e2}")
-                        
-                        # Method 3: Try iwlist as last resort
-                        try:
-                            logger.info("Trying iwlist scan...")
-                            scan_result = subprocess.run(['iwlist', 'wlan0', 'scan'], 
-                                                       capture_output=True, text=True, timeout=20)
-                            
-                            if scan_result.returncode == 0:
-                                current_network = {}
-                                for line in scan_result.stdout.split('\n'):
-                                    line = line.strip()
-                                    
-                                    if 'ESSID:' in line:
-                                        if current_network and current_network.get('ssid'):
-                                            networks.append(current_network)
-                                        essid_match = re.search(r'ESSID:"([^"]*)"', line)
-                                        if essid_match:
-                                            current_network = {'ssid': essid_match.group(1), 'signal': 0, 'encrypted': False}
-                                    
-                                    elif 'Signal level=' in line and current_network:
-                                        signal_match = re.search(r'Signal level=(-?\d+)', line)
-                                        if signal_match:
-                                            current_network['signal'] = int(signal_match.group(1))
-                                    
-                                    elif 'Encryption key:' in line and current_network:
-                                        if 'on' in line:
-                                            current_network['encrypted'] = True
-                                
-                                # Add the last network
-                                if current_network and current_network.get('ssid'):
-                                    networks.append(current_network)
-                                    
-                        except Exception as e3:
-                            logger.error(f"All WiFi scanning methods failed: nmcli({e}), iw({e2}), iwlist({e3})")
+                                            current_signal = int(signal_match.group(1))
+
+                                if current_ssid:
+                                    networks = [{
+                                        'ssid': current_ssid,
+                                        'signal': current_signal,
+                                        'encrypted': True
+                                    }]
+                                    logger.info(f"Found current network via iw fallback: {current_ssid}")
+                                else:
+                                    networks = []
+                            else:
+                                networks = []
+
+                        except Exception as iw_e:
+                            logger.warning(f"iw fallback also failed: {iw_e}")
+                            networks = []
 
             # Remove duplicates and sort by signal strength
             seen_ssids = set()
@@ -2793,8 +2993,8 @@ Window {
         // WiFi popup
         Popup {
             id: wifiPopup
-            width: 300
-            height: 400
+            width: 500
+            height: 300
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -2813,57 +3013,61 @@ Window {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 10
+                anchors.margins: 10
+                spacing: 5
 
                 Text {
                     text: "WiFi Networks"
-                    font.pixelSize: 18
+                    font.pixelSize: 16
                     font.bold: true
                     color: backend.theme === "dark" ? "white" : "black"
                     Layout.alignment: Qt.AlignHCenter
                 }
 
-                // Current connection status
+                // Current connection status - compact
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 30
                     color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
                     radius: 4
-                    
+
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 10
-                        
+                        anchors.margins: 5
+                        spacing: 5
+
                         Text {
                             text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
                             font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 16
+                            font.pixelSize: 12
                             color: backend.wifiConnected ? "#4CAF50" : "#F44336"
                         }
-                        
+
                         Text {
-                            text: backend.wifiConnected ? ("Connected to " + backend.currentWifiSsid) : "Not connected"
+                            text: backend.wifiConnected ? ("Connected: " + backend.currentWifiSsid) : "Not connected"
                             color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 12
+                            font.pixelSize: 11
                             Layout.fillWidth: true
+                            elide: Text.ElideRight
                         }
-                        
+
                         Button {
                             text: "Disconnect"
                             visible: backend.wifiConnected
+                            Layout.preferredWidth: 60
+                            Layout.preferredHeight: 20
                             onClicked: {
                                 backend.disconnectWifi()
                                 wifiPopup.close()
                             }
                             background: Rectangle {
                                 color: "#F44336"
-                                radius: 4
+                                radius: 3
                             }
                             contentItem: Text {
                                 text: parent.text
                                 color: "white"
-                                font.pixelSize: 10
+                                font.pixelSize: 9
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                             }
@@ -2871,114 +3075,106 @@ Window {
                     }
                 }
 
-                // Scan button
+                // Scan button - compact
                 Button {
                     text: backend.wifiConnecting ? "Connecting..." : "Scan Networks"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 35
+                    Layout.preferredHeight: 25
                     enabled: !backend.wifiConnecting
                     onClicked: backend.scanWifiNetworks()
-                    
+
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
-                        radius: 4
+                        radius: 3
                     }
-                    
+
                     contentItem: Text {
                         text: parent.text
                         color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 12
+                        font.pixelSize: 11
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
 
-                // Debug info button (for troubleshooting)
+                // Debug info button - compact
                 Button {
                     text: "Interface Info"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 30
+                    Layout.preferredHeight: 22
                     onClicked: debugDialog.open()
-                    
+
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
-                        radius: 4
+                        radius: 3
                     }
-                    
+
                     contentItem: Text {
                         text: parent.text
                         color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
                 }
 
-                // Networks list
+                // Networks list - compact single line layout
                 ListView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     model: backend.wifiNetworks
                     clip: true
-                    spacing: 5
-                    
+                    spacing: 2
+
                     delegate: Rectangle {
                         width: ListView.view.width
-                        height: 50
+                        height: 32
                         color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
-                        radius: 4
-                        
+                        radius: 3
+
                         RowLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
-                            
-                            ColumnLayout {
-                                Layout.fillWidth: true
-                                spacing: 2
-                                
-                                Text {
-                                    text: modelData.ssid
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    font.pixelSize: 14
-                                    font.bold: true
-                                }
-                                
-                                RowLayout {
-                                    spacing: 5
-                                    
-                                    Text {
-                                        text: modelData.encrypted ? "\uf023" : "\uf09c"
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 10
-                                        color: modelData.encrypted ? "#FF9800" : "#4CAF50"
-                                    }
-                                    
-                                    Text {
-                                        text: "Signal: " + modelData.signal + " dBm"
-                                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                        font.pixelSize: 10
-                                    }
-                                }
+                            anchors.margins: 5
+                            spacing: 8
+
+                            // Network icon
+                            Text {
+                                text: modelData.encrypted ? "\uf023" : "\uf09c"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 12
+                                color: modelData.encrypted ? "#FF9800" : "#4CAF50"
+                                Layout.preferredWidth: 16
                             }
-                            
+
+                            // Network info in one line
+                            Text {
+                                text: modelData.ssid + " (" + modelData.signal + " dBm)"
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+
+                            // Connect button - compact
                             Button {
                                 text: "Connect"
-                                Layout.preferredWidth: 70
-                                Layout.preferredHeight: 30
+                                Layout.preferredWidth: 55
+                                Layout.preferredHeight: 22
                                 onClicked: {
                                     selectedNetwork = modelData.ssid
                                     passwordDialog.open()
                                 }
-                                
+
                                 background: Rectangle {
                                     color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
-                                    radius: 4
+                                    radius: 3
                                 }
-                                
+
                                 contentItem: Text {
                                     text: parent.text
                                     color: backend.theme === "dark" ? "white" : "black"
-                                    font.pixelSize: 10
+                                    font.pixelSize: 9
                                     horizontalAlignment: Text.AlignHCenter
                                     verticalAlignment: Text.AlignVCenter
                                 }
@@ -2992,8 +3188,8 @@ Window {
         // Password dialog
         Popup {
             id: passwordDialog
-            width: 280
-            height: 180
+            width: 320
+            height: 140
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -3011,78 +3207,79 @@ Window {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 15
+                anchors.margins: 10
+                spacing: 8
 
                 Text {
-                    text: "Enter password for " + passwordDialog.selectedNetwork
+                    text: "Password for " + passwordDialog.selectedNetwork
                     color: backend.theme === "dark" ? "white" : "black"
-                    font.pixelSize: 14
-                    wrapMode: Text.Wrap
+                    font.pixelSize: 13
+                    font.bold: true
+                    elide: Text.ElideRight
                     Layout.fillWidth: true
                 }
 
                 TextField {
                     id: passwordField
-                    placeholderText: "Password"
+                    placeholderText: "Enter password"
                     echoMode: TextField.Password
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 35
-                    
+                    Layout.preferredHeight: 28
+
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
                         border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
                         border.width: 1
-                        radius: 4
+                        radius: 3
                     }
                 }
 
                 RowLayout {
-                    spacing: 10
-                    
+                    spacing: 8
+
                     Button {
                         text: "Cancel"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 35
+                        Layout.preferredHeight: 24
                         onClicked: {
                             passwordField.text = ""
                             passwordDialog.close()
                         }
-                        
+
                         background: Rectangle {
                             color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
-                            radius: 4
+                            radius: 3
                         }
-                        
+
                         contentItem: Text {
                             text: parent.text
                             color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 12
+                            font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
                     }
-                    
+
                     Button {
                         text: "Connect"
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 35
+                        Layout.preferredHeight: 24
                         onClicked: {
                             backend.connectToWifi(passwordDialog.selectedNetwork, passwordField.text)
                             passwordField.text = ""
                             passwordDialog.close()
                             wifiPopup.close()
                         }
-                        
+
                         background: Rectangle {
                             color: "#4CAF50"
-                            radius: 4
+                            radius: 3
                         }
-                        
+
                         contentItem: Text {
                             text: parent.text
                             color: "white"
-                            font.pixelSize: 12
+                            font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
                         }
@@ -3094,8 +3291,8 @@ Window {
         // Debug info dialog
         Popup {
             id: debugDialog
-            width: 400
-            height: 300
+            width: 450
+            height: 250
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -3111,13 +3308,13 @@ Window {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 15
+                anchors.margins: 10
+                spacing: 8
 
                 Text {
                     text: "WiFi Interface Information"
                     color: backend.theme === "dark" ? "white" : "black"
-                    font.pixelSize: 16
+                    font.pixelSize: 14
                     font.bold: true
                     Layout.alignment: Qt.AlignHCenter
                 }
@@ -3125,7 +3322,7 @@ Window {
                 ScrollView {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    
+
                     TextArea {
                         id: debugText
                         text: backend.getWifiInterfaceInfo()
@@ -3135,10 +3332,10 @@ Window {
                             color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
                             border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
                             border.width: 1
-                            radius: 4
+                            radius: 3
                         }
                         color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 10
+                        font.pixelSize: 9
                         font.family: "Courier New"
                     }
                 }
@@ -3146,18 +3343,18 @@ Window {
                 Button {
                     text: "Refresh"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 35
+                    Layout.preferredHeight: 24
                     onClicked: debugText.text = backend.getWifiInterfaceInfo()
-                    
+
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
-                        radius: 4
+                        radius: 3
                     }
-                    
+
                     contentItem: Text {
                         text: parent.text
                         color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 12
+                        font.pixelSize: 10
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }

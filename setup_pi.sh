@@ -208,66 +208,19 @@ configure_system() {
     # Enable SSH
     systemctl enable --now ssh
     
-    # WiFi conflict resolution - handle carefully to avoid disconnection
-    log "Resolving WiFi management conflicts (this may cause brief disconnection)..."
-    
-    # First, ensure we have a stable connection before making changes
-    log "Checking current WiFi connection..."
-    if nmcli device status | grep -q "wlan0.*connected"; then
-        log "✓ WiFi is currently connected, proceeding with configuration..."
-    else
-        log "⚠ WiFi not showing as connected in NetworkManager, but may still be connected via systemd-networkd"
-    fi
-    
-    # Stop systemd-networkd but don't disable it yet (in case we need to rollback)
-    systemctl stop systemd-networkd 2>/dev/null || log "systemd-networkd was not running"
+    # Fix WiFi conflicts - disable systemd-networkd to let NetworkManager manage WiFi
+    log "Resolving WiFi management conflicts..."
+    systemctl stop systemd-networkd 2>/dev/null || true
+    systemctl disable systemd-networkd 2>/dev/null || true
     
     # Clean up any existing wpa_supplicant control files that might conflict
     rm -f /run/wpa_supplicant/wlan0 2>/dev/null || true
     
-    # Restart NetworkManager to take over WiFi management
-    log "Restarting NetworkManager to take control of WiFi..."
-    systemctl restart NetworkManager
+    # Enable NetworkManager for nmcli WiFi management
+    systemctl enable --now NetworkManager
     
-    # Wait for NetworkManager to settle
-    sleep 5
-    
-    # Check if WiFi is still connected after NetworkManager restart
-    if nmcli device status | grep -q "wlan0.*connected"; then
-        log "✓ WiFi remained connected after NetworkManager restart"
-        
-        # Now it's safe to disable systemd-networkd
-        systemctl disable systemd-networkd 2>/dev/null || log "Could not disable systemd-networkd"
-        
-        # Ensure NetworkManager has full control over WiFi devices
-        nmcli device set wlan0 managed yes 2>/dev/null || log "WARNING: Could not set wlan0 as managed"
-        
-    else
-        log "⚠ WiFi disconnected after NetworkManager restart, attempting recovery..."
-        
-        # Try to reconnect using current connection
-        nmcli device wifi rescan 2>/dev/null || true
-        sleep 3
-        
-        # Try to connect to the current network
-        CURRENT_SSID=$(iw dev wlan0 link 2>/dev/null | grep "SSID:" | cut -d: -f2 | xargs)
-        if [ -n "$CURRENT_SSID" ]; then
-            log "Attempting to reconnect to $CURRENT_SSID..."
-            nmcli device wifi connect "$CURRENT_SSID" 2>/dev/null || log "Could not reconnect to $CURRENT_SSID"
-        fi
-        
-        # If still not connected, re-enable systemd-networkd as fallback
-        if ! nmcli device status | grep -q "wlan0.*connected"; then
-            log "❌ WiFi reconnection failed, restoring systemd-networkd..."
-            systemctl start systemd-networkd
-            systemctl enable systemd-networkd
-            log "systemd-networkd restored - WiFi should work but conflicts may remain"
-        else
-            log "✓ WiFi reconnected successfully"
-            # Now disable systemd-networkd since NetworkManager is working
-            systemctl disable systemd-networkd 2>/dev/null || true
-        fi
-    fi
+    # Ensure NetworkManager has full control over WiFi devices
+    nmcli device set wlan0 managed yes 2>/dev/null || log "WARNING: Could not set wlan0 as managed"
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true
