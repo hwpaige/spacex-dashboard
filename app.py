@@ -23,6 +23,7 @@ import subprocess
 import re
 import calendar
 from track_generator import generate_track_map
+from plotly_charts import generate_f1_standings_chart
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
@@ -1173,14 +1174,131 @@ class Backend(QObject):
         return max_value
 
     @pyqtProperty(str, notify=f1Changed)
-    def f1ChartStat(self):
-        return getattr(self, '_f1_chart_stat', 'points')
+    def f1ChartType(self):
+        return getattr(self, '_f1_chart_type', 'standings')
 
-    @f1ChartStat.setter
-    def f1ChartStat(self, value):
-        if self._f1_chart_stat != value:
-            self._f1_chart_stat = value
+    @f1ChartType.setter
+    def f1ChartType(self, value):
+        if self._f1_chart_type != value:
+            self._f1_chart_type = value
             self.f1Changed.emit()
+
+    @pyqtProperty(str, notify=f1Changed)
+    def f1ChartUrl(self):
+        """Generate URL for interactive Plotly chart HTML for F1 data"""
+        logging.info("f1ChartUrl property accessed")
+        chart_type = getattr(self, '_f1_chart_type', 'standings')
+        logging.info(f"F1 chart URL: chart type = {chart_type}")
+        
+        try:
+            if chart_type == 'standings':
+                standings = self._f1_data['driver_standings']
+                logging.info(f"F1 chart URL: standings count = {len(standings) if standings else 0}")
+                if not standings:
+                    logging.info("F1 chart URL: No standings data, returning placeholder")
+                    return self._get_empty_chart_url()
+
+                # Convert current standings data to format expected by plotly_charts
+                driver_data = []
+                stat_key = getattr(self, '_f1_chart_stat', 'points')
+
+                # Get top 10 drivers
+                top_drivers = standings[:10]
+                logging.info(f"F1 chart URL: Processing {len(top_drivers)} drivers with stat '{stat_key}'")
+
+                # For now, we'll show current standings as a single "round"
+                # In the future, this could be expanded to show historical data
+                for driver in top_drivers:
+                    driver_name = f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}"
+                    points = float(driver.get(stat_key, 0))
+                    driver_data.append({
+                        'driver': driver_name,
+                        'round': 1,  # Current round
+                        'points': points
+                    })
+
+                plot_chart_type = getattr(self, '_chart_type', 'line')
+                theme = getattr(self, '_theme', 'dark')
+                logging.info(f"F1 chart URL: Generating {plot_chart_type} chart for {len(driver_data)} drivers")
+
+                html = generate_f1_standings_chart(driver_data, plot_chart_type, theme)
+            elif chart_type == 'telemetry':
+                html = generate_f1_telemetry_chart(getattr(self, '_theme', 'dark'))
+            elif chart_type == 'weather':
+                html = generate_f1_weather_chart(getattr(self, '_theme', 'dark'))
+            elif chart_type == 'positions':
+                html = generate_f1_positions_chart(getattr(self, '_theme', 'dark'))
+            elif chart_type == 'laps':
+                html = generate_f1_laps_chart(getattr(self, '_theme', 'dark'))
+            else:
+                html = generate_f1_standings_chart([], 'line', getattr(self, '_theme', 'dark'))
+            
+            logging.info(f"F1 chart URL: Generated HTML length = {len(html)}")
+
+            # Save to temporary file
+            import tempfile
+            import os
+            temp_file = os.path.join(tempfile.gettempdir(), 'f1_chart.html')
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(html)
+
+            file_url = f'file:///{temp_file.replace("\\", "/")}'
+            logging.info(f"F1 chart URL: Saved to {file_url}")
+            return file_url
+
+        except Exception as e:
+            logging.error(f"F1 chart URL error: {e}")
+            import traceback
+            logging.error(traceback.format_exc())
+            return self._get_empty_chart_url()
+
+    def _get_empty_chart_url(self):
+        """Return URL for empty chart state"""
+        try:
+            html = self._get_empty_chart_html()
+            import tempfile
+            import os
+            temp_file = os.path.join(tempfile.gettempdir(), 'f1_chart_empty.html')
+            with open(temp_file, 'w', encoding='utf-8') as f:
+                f.write(html)
+            return f'file:///{temp_file.replace("\\", "/")}'
+        except Exception as e:
+            logging.error(f"Error creating empty chart URL: {e}")
+            return ""
+
+    def _get_empty_chart_html(self):
+        """Return HTML for empty chart state"""
+        theme = getattr(self, '_theme', 'dark')
+        bg_color = 'rgba(42,46,46,1)' if theme == 'dark' else 'rgba(240,240,240,1)'
+        text_color = 'white' if theme == 'dark' else 'black'
+
+        return f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <style>
+                body {{
+                    margin: 0;
+                    padding: 20px;
+                    background-color: {bg_color};
+                    color: {text_color};
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    height: 100vh;
+                    text-align: center;
+                }}
+            </style>
+        </head>
+        <body>
+            <div>
+                <h3>No F1 Data Available</h3>
+                <p>Please check your internet connection and try again.</p>
+            </div>
+        </body>
+        </html>
+        """
 
     @pyqtProperty(str, notify=f1Changed)
     def f1StandingsType(self):
@@ -1291,6 +1409,7 @@ class Backend(QObject):
 
     @pyqtSlot(dict, dict, dict)
     def on_data_loaded(self, launch_data, f1_data, weather_data):
+        logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
         self._f1_data = f1_data
         self._weather_data = weather_data
@@ -1301,6 +1420,7 @@ class Backend(QObject):
         self.loadingFinished.emit()
         self.launchesChanged.emit()
         self.f1Changed.emit()
+        logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
         self.thread.quit()
@@ -2633,7 +2753,7 @@ context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1&preload=none&iv_load_policy=3&disablekb=1&fs=0')
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1&preload=none&iv_load_policy=3&disablekb=1&fs=0&origin=https://www.youtube.com')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -2898,16 +3018,12 @@ Window {
                                 Layout.margins: 5
                             }
 
-                            ChartItem {
+                            WebEngineView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
 
-                                chartType: backend.chartType
-                                viewMode: "actual"
-                                series: backend.driverStandingsOverTimeSeries
-                                months: ["Current"]  // Single point for now
-                                maxValue: backend.driverPointsMaxValue
-                                theme: backend.theme
+                                // Bind url to chart file URL that updates reactively
+                                url: backend.f1ChartUrl
 
                                 opacity: showAnimated
 
