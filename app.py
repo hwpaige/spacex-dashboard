@@ -731,6 +731,7 @@ class Backend(QObject):
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'line'  # 'bar' or 'line'
         self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
+        self._f1_chart_type = 'standings'  # 'standings', 'weather', 'telemetry', etc.
         self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._isLoading = True
         self._launch_data = {'previous': [], 'upcoming': []}
@@ -3045,13 +3046,16 @@ Window {
                                 Layout.margins: 5
                                 spacing: 10
 
-                                // Chart type buttons
+                                // Chart category buttons
                                 RowLayout {
                                     spacing: 3
                                     Repeater {
                                         model: [
-                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"}
+                                            {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
+                                            {"type": "weather", "icon": "\uf6c4", "tooltip": "Weather Data"},
+                                            {"type": "telemetry", "icon": "\uf0e4", "tooltip": "Telemetry"},
+                                            {"type": "positions", "icon": "\uf3c5", "tooltip": "Driver Positions"},
+                                            {"type": "laps", "icon": "\uf2f1", "tooltip": "Lap Times"}
                                         ]
                                         Button {
                                             property var chartData: modelData
@@ -3061,10 +3065,10 @@ Window {
                                             font.family: "Font Awesome 5 Free"
                                             text: chartData.icon
                                             onClicked: {
-                                                backend.chartType = chartData.type
+                                                backend.f1ChartType = chartData.type
                                             }
                                             background: Rectangle {
-                                                color: backend.chartType === chartData.type ? 
+                                                color: backend.f1ChartType === chartData.type ? 
                                                        (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
                                                        (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"

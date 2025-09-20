@@ -72,6 +72,19 @@ def generate_f1_standings_chart(driver_data: List[Dict], chart_type: str = 'line
                     ),
                     hovertemplate=f'<b>{driver}</b><br>Round: %{{x}}<br>Points: %{{y}}<extra></extra>'
                 ))
+            elif chart_type == 'area':
+                fig.add_trace(go.Scatter(
+                    x=driver_standings['round'],
+                    y=driver_standings['cumulative_points'],
+                    mode='lines',
+                    name=driver,
+                    fill='tozeroy',
+                    line=dict(
+                        color=colors[i % len(colors)],
+                        width=2
+                    ),
+                    hovertemplate=f'<b>{driver}</b><br>Round: %{{x}}<br>Points: %{{y}}<extra></extra>'
+                ))
             elif chart_type == 'bar':
                 # For bar charts, show points per round
                 fig.add_trace(go.Bar(
