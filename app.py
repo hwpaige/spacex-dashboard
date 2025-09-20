@@ -4,7 +4,7 @@ import os
 import json
 import platform
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
@@ -644,6 +644,28 @@ class EventModel(QAbstractListModel):
         self._grouped_data = grouped
         self.endResetModel()
 
+class DataLoader(QObject):
+    finished = pyqtSignal(dict, dict, dict)
+
+    def run(self):
+        launch_data = fetch_launches()
+        f1_data = fetch_f1_data()
+        weather_data = {}
+        for location, settings in location_settings.items():
+            try:
+                weather = fetch_weather(settings['lat'], settings['lon'], location)
+                weather_data[location] = weather
+            except Exception as e:
+                weather_data[location] = {
+                    'temperature_c': 25,
+                    'temperature_f': 77,
+                    'wind_speed_ms': 5,
+                    'wind_speed_kts': 9.7,
+                    'wind_direction': 90,
+                    'cloud_cover': 50
+                }
+        self.finished.emit(launch_data, f1_data, weather_data)
+
 class Backend(QObject):
     modeChanged = pyqtSignal()
     eventTypeChanged = pyqtSignal()
@@ -660,6 +682,7 @@ class Backend(QObject):
     wifiNetworksChanged = pyqtSignal()
     wifiConnectedChanged = pyqtSignal()
     wifiConnectingChanged = pyqtSignal()
+    loadingFinished = pyqtSignal()
 
     def __init__(self):
         super().__init__()
@@ -670,10 +693,11 @@ class Backend(QObject):
         self._location = 'Starbase'
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'bar'  # 'bar' or 'line'
-        logger.info("Fetching initial data...")
-        self._launch_data = fetch_launches()
-        self._f1_data = fetch_f1_data()
-        self._weather_data = self.initialize_weather()
+        self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
+        self._isLoading = True
+        self._launch_data = {'previous': [], 'upcoming': []}
+        self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+        self._weather_data = {}
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
@@ -683,6 +707,14 @@ class Backend(QObject):
         self._wifi_connected = False
         self._wifi_connecting = False
         self._current_wifi_ssid = ""
+
+        # Start loading data in background
+        self.loader = DataLoader()
+        self.thread = QThread()
+        self.loader.moveToThread(self.thread)
+        self.loader.finished.connect(self.on_data_loaded)
+        self.thread.started.connect(self.loader.run)
+        self.thread.start()
 
         logger.info("Setting up timers...")
         # Timers
@@ -772,6 +804,10 @@ class Backend(QObject):
             self._theme = value
             self.themeChanged.emit()
 
+    @pyqtProperty(bool, notify=loadingFinished)
+    def isLoading(self):
+        return self._isLoading
+
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
         return self._location
@@ -846,6 +882,8 @@ class Backend(QObject):
     def launchTrends(self):
         launches = self._launch_data['previous']
         df = pd.DataFrame(launches)
+        if df.empty:
+            return {'months': [], 'series': []}
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
         df = df[df['date'].dt.year == current_year]
@@ -870,6 +908,8 @@ class Backend(QObject):
     def launchTrendsMonths(self):
         launches = self._launch_data['previous']
         df = pd.DataFrame(launches)
+        if df.empty:
+            return []
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
         df = df[df['date'].dt.year == current_year]
@@ -885,6 +925,8 @@ class Backend(QObject):
     def launchTrendsMaxValue(self):
         launches = self._launch_data['previous']
         df = pd.DataFrame(launches)
+        if df.empty:
+            return 0
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
         df = df[df['date'].dt.year == current_year]
@@ -922,6 +964,8 @@ class Backend(QObject):
     def launchTrendsSeries(self):
         launches = self._launch_data['previous']
         df = pd.DataFrame(launches)
+        if df.empty:
+            return []
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
         df = df[df['date'].dt.year == current_year]
@@ -951,6 +995,120 @@ class Backend(QObject):
     @pyqtProperty(list, notify=f1Changed)
     def raceCalendar(self):
         return sorted(self._f1_data['schedule'], key=lambda x: parse(x['date_start']))
+
+    @pyqtProperty(list, notify=f1Changed)
+    def constructorStandings(self):
+        return self._f1_data['constructor_standings']
+
+    @pyqtProperty(QVariant, notify=f1Changed)
+    def driverPointsChart(self):
+        standings = self._f1_data['driver_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 drivers
+        top_drivers = standings[:10]
+        data = []
+        for driver in top_drivers:
+            data.append({
+                'label': f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}",
+                'value': float(driver['points'])
+            })
+        return data
+
+    @pyqtProperty(QVariant, notify=f1Changed)
+    def constructorPointsChart(self):
+        standings = self._f1_data['constructor_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 constructors
+        top_constructors = standings[:10]
+        data = []
+        for constructor in top_constructors:
+            data.append({
+                'label': constructor['Constructor']['name'],
+                'value': float(constructor['points'])
+            })
+        return data
+
+    @pyqtProperty(QVariant, notify=f1Changed)
+    def driverPointsSeries(self):
+        standings = self._f1_data['driver_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 drivers
+        top_drivers = standings[:10]
+        stat_key = getattr(self, '_f1_chart_stat', 'points')
+        values = [float(driver.get(stat_key, 0)) for driver in top_drivers]
+        return [{'label': stat_key.title(), 'values': values}]
+
+    @pyqtProperty(QVariant, notify=f1Changed)
+    def constructorPointsSeries(self):
+        standings = self._f1_data['constructor_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 constructors
+        top_constructors = standings[:10]
+        stat_key = getattr(self, '_f1_chart_stat', 'points')
+        values = [float(constructor.get(stat_key, 0)) for constructor in top_constructors]
+        return [{'label': stat_key.title(), 'values': values}]
+
+    @pyqtProperty(list, notify=f1Changed)
+    def driverNames(self):
+        standings = self._f1_data['driver_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 drivers
+        top_drivers = standings[:10]
+        return [f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}" for driver in top_drivers]
+
+    @pyqtProperty(list, notify=f1Changed)
+    def constructorNames(self):
+        standings = self._f1_data['constructor_standings']
+        if not standings:
+            return []
+        
+        # Get top 10 constructors
+        top_constructors = standings[:10]
+        return [constructor['Constructor']['name'] for constructor in top_constructors]
+
+    @pyqtProperty(float, notify=f1Changed)
+    def driverPointsMaxValue(self):
+        standings = self._f1_data['driver_standings']
+        if not standings:
+            return 0
+        
+        # Get top 10 drivers
+        top_drivers = standings[:10]
+        stat_key = getattr(self, '_f1_chart_stat', 'points')
+        max_value = max([float(driver.get(stat_key, 0)) for driver in top_drivers]) if top_drivers else 0
+        return max_value
+
+    @pyqtProperty(float, notify=f1Changed)
+    def constructorPointsMaxValue(self):
+        standings = self._f1_data['constructor_standings']
+        if not standings:
+            return 0
+        
+        # Get top 10 constructors
+        top_constructors = standings[:10]
+        stat_key = getattr(self, '_f1_chart_stat', 'points')
+        max_value = max([float(constructor.get(stat_key, 0)) for constructor in top_constructors]) if top_constructors else 0
+        return max_value
+
+    @pyqtProperty(str, notify=f1Changed)
+    def f1ChartStat(self):
+        return getattr(self, '_f1_chart_stat', 'points')
+
+    @f1ChartStat.setter
+    def f1ChartStat(self, value):
+        if self._f1_chart_stat != value:
+            self._f1_chart_stat = value
+            self.f1Changed.emit()
 
     @pyqtProperty(list, notify=launchesChanged)
     def launchDescriptions(self):
@@ -1048,6 +1206,23 @@ class Backend(QObject):
     def update_event_model(self):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
+
+    @pyqtSlot(dict, dict, dict)
+    def on_data_loaded(self, launch_data, f1_data, weather_data):
+        self._launch_data = launch_data
+        self._f1_data = f1_data
+        self._weather_data = weather_data
+        # Update the EventModel's data reference
+        self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
+        self._event_model.update_data()
+        self._isLoading = False
+        self.loadingFinished.emit()
+        self.launchesChanged.emit()
+        self.f1Changed.emit()
+        self.weatherChanged.emit()
+        self.eventModelChanged.emit()
+        self.thread.quit()
+        self.thread.wait()
 
     @pyqtSlot()
     def scanWifiNetworks(self):
@@ -2288,9 +2463,9 @@ context = engine.rootContext()
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
-context.setContextProperty("spacexLogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'spacex_logo.png')}")
-context.setContextProperty("f1LogoPath", f"file://{os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1')
+context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
+context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1&preload=none&iv_load_policy=3&disablekb=1&fs=0')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -2314,14 +2489,83 @@ Window {
         console.log("Window created - bottom bar should be visible")
     }
 
+    Rectangle {
+        id: loadingScreen
+        anchors.fill: parent
+        color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
+        visible: backend.isLoading
+        z: 1
+
+        Image {
+            source: "file:///" + spacexLogoPath
+            anchors.centerIn: parent
+            width: 300
+            height: 300
+            fillMode: Image.PreserveAspectFit
+        }
+
+        // Loading animation with bouncing dots
+        Row {
+            anchors.top: parent.verticalCenter
+            anchors.topMargin: 180
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: 8
+
+            Repeater {
+                model: 3
+                Rectangle {
+                    width: 12
+                    height: 12
+                    radius: 6
+                    color: backend.theme === "dark" ? "white" : "#333333"
+                    
+                    SequentialAnimation on y {
+                        loops: Animation.Infinite
+                        PropertyAnimation { to: -10; duration: 300; easing.type: Easing.InOutQuad }
+                        PropertyAnimation { to: 0; duration: 300; easing.type: Easing.InOutQuad }
+                        PauseAnimation { duration: 400 }
+                    }
+                    
+                    // Stagger the animations
+                    Component.onCompleted: {
+                        animationDelay.start()
+                    }
+                    
+                    Timer {
+                        id: animationDelay
+                        interval: index * 200
+                        running: true
+                        repeat: false
+                        onTriggered: parent.SequentialAnimation.running = true
+                    }
+                }
+            }
+        }
+    }
+
     // Cache expensive / repeated lookups
     property var nextRace: backend.get_next_race()
     Timer { interval: 60000; running: true; repeat: true; onTriggered: nextRace = backend.get_next_race() }
+
+    Connections {
+        target: backend
+        function onModeChanged() {
+            if (backend.mode === "f1") {
+                nextRace = backend.get_next_race()
+            }
+        }
+        function onF1Changed() {
+            if (backend.mode === "f1") {
+                nextRace = backend.get_next_race()
+            }
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: 5
         spacing: 5
+        visible: !backend.isLoading
 
         RowLayout {
             Layout.fillWidth: true
@@ -2467,20 +2711,140 @@ Window {
                         }
                     }
 
-                    ListView {
+                    // F1 Driver Points Chart
+                    Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: backend.mode === "f1"
-                        model: backend.driverStandings
-                        delegate: Rectangle {
-                            width: ListView.view.width
-                            height: 40
-                            color: "transparent"
 
-                            Row {
-                                Text { text: modelData.position; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.Driver.givenName + " " + modelData.Driver.familyName; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.points; color: backend.theme === "dark" ? "white" : "black" }
+                        ColumnLayout {
+                            anchors.fill: parent
+                            spacing: 5
+
+                            Text {
+                                text: "F1 Driver Performance"
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.margins: 5
+                            }
+
+                            ChartItem {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+
+                                chartType: "area"  // Creative area chart for F1
+                                viewMode: "actual"
+                                series: backend.driverPointsSeries
+                                months: backend.driverNames
+                                maxValue: backend.driverPointsMaxValue
+                                theme: backend.theme
+
+                                opacity: showAnimated
+
+                                property real showAnimated: 0
+
+                                Component.onCompleted: showAnimated = 1
+
+                                Behavior on showAnimated {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                }
+                            }
+
+                            // F1 Stat selector buttons
+                            RowLayout {
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.margins: 5
+                                spacing: 10
+
+                                // Chart type buttons
+                                RowLayout {
+                                    spacing: 3
+                                    Repeater {
+                                        model: [
+                                            {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
+                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"}
+                                        ]
+                                        Button {
+                                            property var chartData: modelData
+                                            Layout.preferredWidth: 35
+                                            Layout.preferredHeight: 25
+                                            font.pixelSize: 12
+                                            font.family: "Font Awesome 5 Free"
+                                            text: chartData.icon
+                                            onClicked: {
+                                                backend.chartType = chartData.type
+                                            }
+                                            background: Rectangle {
+                                                color: backend.chartType === chartData.type ? 
+                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                                border.width: 1
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.chartData.icon
+                                                font: parent.font
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            ToolTip {
+                                                text: parent.chartData.tooltip
+                                                visible: parent.hovered
+                                                delay: 500
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Stat type buttons
+                                RowLayout {
+                                    spacing: 3
+                                    Repeater {
+                                        model: [
+                                            {"type": "points", "icon": "\uf091", "tooltip": "Points"},
+                                            {"type": "wins", "icon": "\uf005", "tooltip": "Wins"}
+                                        ]
+                                        Button {
+                                            property var statData: modelData
+                                            Layout.preferredWidth: 35
+                                            Layout.preferredHeight: 25
+                                            font.pixelSize: 12
+                                            font.family: "Font Awesome 5 Free"
+                                            text: statData.icon
+                                            onClicked: {
+                                                backend.f1ChartStat = statData.type
+                                            }
+                                            background: Rectangle {
+                                                color: backend.f1ChartStat === statData.type ? 
+                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
+                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                                border.width: 1
+                                                radius: 3
+                                            }
+                                            contentItem: Text {
+                                                text: parent.statData.icon
+                                                font: parent.font
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                horizontalAlignment: Text.AlignHCenter
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
+                                            ToolTip {
+                                                text: parent.statData.tooltip
+                                                visible: parent.hovered
+                                                delay: 500
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2566,23 +2930,141 @@ Window {
                         }
                     }
 
-                    ListView {
+                    // F1 Leaderboards
+                    ColumnLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: backend.mode === "f1"
-                        model: backend.raceCalendar
-                        delegate: Rectangle {
-                            width: ListView.view.width
-                            height: 40
-                            color: "transparent"
+                        spacing: 5
 
-                            Column {
-                                Text { text: modelData.meeting_name; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.circuit_short_name; color: backend.theme === "dark" ? "white" : "black" }
-                                Text { text: modelData.date_start; color: backend.theme === "dark" ? "white" : "black" }
+                        Text {
+                            text: "F1 Standings"
+                            font.pixelSize: 14
+                            font.bold: true
+                            color: backend.theme === "dark" ? "white" : "black"
+                            Layout.alignment: Qt.AlignHCenter
+                            Layout.margins: 5
+                        }
+
+                        // Driver Standings
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            radius: 6
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 2
+
+                                Text {
+                                    text: "Driver Standings"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.margins: 5
+                                }
+
+                                ListView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: backend.driverStandings.slice(0, 10)
+                                    clip: true
+                                    delegate: Rectangle {
+                                        width: ListView.view.width
+                                        height: 35
+                                        color: "transparent"
+
+                                        Row {
+                                            spacing: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 10
+
+                                            Text { 
+                                                text: modelData.position; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 20
+                                            }
+                                            Text { 
+                                                text: modelData.Driver.givenName + " " + modelData.Driver.familyName; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 120
+                                            }
+                                            Text { 
+                                                text: modelData.points; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 40
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
-                        Behavior on opacity { NumberAnimation { duration: 200 } }
+
+                        // Constructor Standings
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            radius: 6
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 2
+
+                                Text {
+                                    text: "Constructor Standings"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Layout.margins: 5
+                                }
+
+                                ListView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: backend.constructorStandings.slice(0, 10)
+                                    clip: true
+                                    delegate: Rectangle {
+                                        width: ListView.view.width
+                                        height: 35
+                                        color: "transparent"
+
+                                        Row {
+                                            spacing: 10
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 10
+
+                                            Text { 
+                                                text: modelData.position; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 20
+                                            }
+                                            Text { 
+                                                text: modelData.Constructor.name; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 120
+                                            }
+                                            Text { 
+                                                text: modelData.points; 
+                                                font.pixelSize: 12; 
+                                                color: backend.theme === "dark" ? "white" : "black";
+                                                width: 40
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
 
                     // Weather view buttons
@@ -2758,7 +3240,7 @@ Window {
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        url: backend.mode === "spacex" ? videoUrl : (nextRace ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")
+                        url: backend.mode === "spacex" ? videoUrl : (nextRace ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon + "&t=" + new Date().getTime() : "")
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                     }
                 }
@@ -2815,6 +3297,7 @@ Window {
 
                 // Scrolling launch ticker
                 Rectangle {
+                    id: tickerRect
                     Layout.preferredWidth: 600
                     Layout.maximumWidth: 600
                     height: 30
@@ -2835,7 +3318,7 @@ Window {
                         SequentialAnimation on x {
                             loops: Animation.Infinite
                             NumberAnimation {
-                                from: parent.parent.width
+                                from: tickerRect.width
                                 to: -tickerText.width + 400  // Pause with text still visible
                                 duration: 1600000
                             }
