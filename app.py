@@ -1533,6 +1533,8 @@ class Backend(QObject):
 
                             if results_result.returncode == 0 and results_result.stdout.strip():
                                 logger.info("wpa_cli scan results retrieved successfully")
+                                raw_output = results_result.stdout.strip()
+                                logger.debug(f"Raw wpa_cli scan_results output:\n{raw_output}")
                                 networks = []
 
                                 lines = results_result.stdout.strip().split('\n')
@@ -1561,6 +1563,10 @@ class Backend(QObject):
                                                 'encrypted': encrypted
                                             })
                                             logger.debug(f"Found network via wpa_cli: {ssid}, signal: {signal_percent}, encrypted: {encrypted}")
+                                        else:
+                                            logger.debug(f"Skipping network with empty or hidden SSID: '{ssid}'")
+                                    else:
+                                        logger.debug(f"Skipping line with insufficient parts: {len(parts)} parts")
 
                                 logger.info(f"wpa_cli scan found {len(networks)} networks")
                             else:
@@ -1578,12 +1584,18 @@ class Backend(QObject):
                 except Exception as wpa_e:
                     logger.error(f"wpa_cli scan failed: {wpa_e}")
             # Remove duplicates and sort by signal strength
-            seen_ssids = set()
-            unique_networks = []
+            seen_ssids = {}
             for network in networks:
-                if network['ssid'] not in seen_ssids and network['ssid']:
-                    seen_ssids.add(network['ssid'])
-                    unique_networks.append(network)
+                ssid = network['ssid']
+                if ssid:
+                    if ssid not in seen_ssids or network['signal'] > seen_ssids[ssid]['signal']:
+                        seen_ssids[ssid] = network
+                        logger.debug(f"Keeping network {ssid} with signal {network['signal']}")
+
+            unique_networks = list(seen_ssids.values())
+            logger.info(f"After deduplication: {len(unique_networks)} unique networks from {len(networks)} total entries")
+            for network in unique_networks:
+                logger.debug(f"Final network: {network['ssid']} (signal: {network['signal']})")
 
             self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
             logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
@@ -1767,16 +1779,15 @@ class Backend(QObject):
 
     @pyqtSlot()
     def startWifiTimer(self):
-        """Start WiFi status checking timer"""
-        if not self.wifi_timer.isActive():
-            self.wifi_timer.start(5000)  # Check every 5 seconds when popup is open
-            logger.info("WiFi status timer started")
-            # Update status immediately when starting
-            self.update_wifi_status()
+        """Perform one-time WiFi status check when popup opens (no periodic checking)"""
+        # Only update status once when popup opens - no periodic timer
+        logger.info("Performing one-time WiFi status check on popup open")
+        self.update_wifi_status()
 
     @pyqtSlot()
     def stopWifiTimer(self):
-        """Stop WiFi status checking timer"""
+        """Stop WiFi status checking timer (no longer used - timer not started)"""
+        # Timer is no longer started, but keep method for compatibility
         if self.wifi_timer.isActive():
             self.wifi_timer.stop()
             logger.info("WiFi status timer stopped")
@@ -2170,9 +2181,7 @@ if __name__ == '__main__':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
             "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
-            "--disable-web-security --allow-running-insecure-content "
-            "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
-            "--disable-gpu-driver-bug-workarounds"
+            "--disable-web-security --allow-running-insecure-content"
         )
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -2476,7 +2485,7 @@ context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&color=white&modestbranding=1&rel=0&enablejsapi=1&preload=none&iv_load_policy=3&disablekb=1&fs=0&origin=https://www.youtube.com')
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&fs=0')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -2894,7 +2903,7 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    url: radarLocations[backend.location].replace("radar", modelData) + "&rand=" + new Date().getTime()
+                                    url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
                                     settings {
                                         webGLEnabled: true
                                         accelerated2dCanvasEnabled: true
@@ -3335,8 +3344,24 @@ Window {
                     WebEngineView {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        url: backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon + "&t=" + new Date().getTime() : "")
+                        url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
+                        settings {
+                            webGLEnabled: true
+                            accelerated2dCanvasEnabled: true
+                            allowRunningInsecureContent: true
+                            javascriptEnabled: true
+                            localContentCanAccessRemoteUrls: true
+                            playbackRequiresUserGesture: false  // Allow autoplay
+                            pluginsEnabled: true
+                        }
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
+                        onLoadingChanged: function(loadRequest) {
+                            if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                            } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                console.log("YouTube/Map WebEngineView loaded successfully");
+                            }
+                        }
                     }
                 }
             }
@@ -3584,6 +3609,8 @@ Window {
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+            property string selectedNetwork: ""
+
             onOpened: backend.startWifiTimer()
             onClosed: backend.stopWifiTimer()
 
@@ -3745,7 +3772,7 @@ Window {
                                 Layout.preferredWidth: 55
                                 Layout.preferredHeight: 22
                                 onClicked: {
-                                    selectedNetwork = modelData.ssid
+                                    wifiPopup.selectedNetwork = modelData.ssid
                                     passwordDialog.open()
                                 }
 
@@ -3772,14 +3799,12 @@ Window {
         Popup {
             id: passwordDialog
             width: 320
-            height: 140
+            height: 120
             x: (parent.width - width) / 2
-            y: (parent.height - height) / 2
+            y: (parent.height - height - 200) / 2  // Leave room for keyboard
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-
-            property string selectedNetwork: ""
 
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -3794,7 +3819,7 @@ Window {
                 spacing: 8
 
                 Text {
-                    text: "Password for " + passwordDialog.selectedNetwork
+                    text: "Password for " + wifiPopup.selectedNetwork
                     color: backend.theme === "dark" ? "white" : "black"
                     font.pixelSize: 13
                     font.bold: true
@@ -3848,11 +3873,231 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
                         onClicked: {
-                            backend.connectToWifi(passwordDialog.selectedNetwork, passwordField.text)
+                            backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordField.text = ""
                             passwordDialog.close()
                             wifiPopup.close()
                         }
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        // Virtual Keyboard for password entry
+        Popup {
+            id: virtualKeyboard
+            width: 400
+            height: 180
+            x: (parent.width - width) / 2
+            y: passwordDialog.y + passwordDialog.height + 5
+            modal: false
+            focus: false
+            visible: passwordField.focus && passwordDialog.visible
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 5
+
+                // QWERTY keyboard rows
+                RowLayout {
+                    spacing: 3
+                    Layout.fillWidth: true
+
+                    Repeater {
+                        model: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"]
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 25
+                            Layout.preferredHeight: 30
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                radius: 3
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.fillWidth: true
+
+                    Repeater {
+                        model: ["a", "s", "d", "f", "g", "h", "j", "k", "l"]
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 25
+                            Layout.preferredHeight: 30
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                radius: 3
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.fillWidth: true
+
+                    Button {
+                        text: "⇧"
+                        Layout.preferredWidth: 35
+                        Layout.preferredHeight: 30
+                        onClicked: {
+                            // Toggle shift - for now just show uppercase
+                            // Could be enhanced to actually toggle case
+                        }
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Repeater {
+                        model: ["z", "x", "c", "v", "b", "n", "m"]
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 25
+                            Layout.preferredHeight: 30
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                radius: 3
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: "⌫"
+                        Layout.preferredWidth: 35
+                        Layout.preferredHeight: 30
+                        onClicked: passwordField.text = passwordField.text.slice(0, -1)
+
+                        background: Rectangle {
+                            color: "#FF5722"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.fillWidth: true
+
+                    Button {
+                        text: "123"
+                        Layout.preferredWidth: 40
+                        Layout.preferredHeight: 30
+                        onClicked: {
+                            // Could switch to number/symbol keyboard
+                        }
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Space"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        onClicked: passwordField.text += " "
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Done"
+                        Layout.preferredWidth: 50
+                        Layout.preferredHeight: 30
+                        onClicked: virtualKeyboard.visible = false
 
                         background: Rectangle {
                             color: "#4CAF50"
