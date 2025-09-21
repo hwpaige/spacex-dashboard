@@ -152,8 +152,8 @@ install_packages() {
 setup_python_environment() {
     log "Setting up Python environment..."
 
-    if python3 -c "import PyQt6, requests, pandas, psutil, fastf1" 2>/dev/null; then
-        log "System Python with all dependencies working (including fastf1)"
+    if python3 -c "import PyQt6, requests, pandas, psutil, fastf1, plotly" 2>/dev/null; then
+        log "System Python with all dependencies working (including fastf1 and plotly)"
         return
     fi
 
@@ -168,10 +168,10 @@ setup_python_environment() {
     # Use pip with system packages to avoid virtual environment complexity
     log "Installing pip packages..."
     export PIP_BREAK_SYSTEM_PACKAGES=1
-    pip3 install --ignore-installed fastf1 || log "WARNING: Failed to install fastf1 via pip"
+    pip3 install --ignore-installed fastf1 plotly==5.24.1 || log "WARNING: Failed to install pip packages"
 
     # Verify installation
-    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1" 2>/dev/null; then
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1, plotly" 2>/dev/null; then
         log "✓ All Python packages installed successfully"
     else
         log "⚠ Some packages may still be missing, but continuing..."
@@ -211,8 +211,9 @@ configure_system() {
     # Enable SSH
     systemctl enable --now ssh
     
-    # Enable NetworkManager for network management
-    systemctl enable --now NetworkManager
+    # Disable NetworkManager to avoid conflicts with wpa_supplicant
+    systemctl disable NetworkManager
+    systemctl stop NetworkManager
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true

@@ -1429,7 +1429,7 @@ class Backend(QObject):
 
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks using NetworkManager DBus API with robust error handling"""
+        """Scan for available WiFi networks using wpa_supplicant directly"""
         try:
             logger.info("Starting WiFi network scan...")
             is_windows = platform.system() == 'Windows'
@@ -1507,354 +1507,76 @@ class Backend(QObject):
                     logger.error(f"Windows WiFi scan failed: {e}")
                     networks = []
             else:
-                # Use NetworkManager DBus API for proper Linux WiFi scanning
-                logger.info("Scanning WiFi networks using NetworkManager DBus...")
+                # Use wpa_supplicant directly for Linux WiFi scanning (NetworkManager disabled)
+                logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli)...")
                 networks = []
                 
                 try:
-                    # Import DBus modules only on Linux
-                    import dbus
-                    import dbus.mainloop.glib
-                    from gi.repository import GLib
-                    
-                    # Initialize DBus main loop for Qt integration
-                    dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
+                    # Check if wpa_cli is available
+                    wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                    if wpa_check.returncode == 0:
+                        logger.info("wpa_cli found, attempting direct wpa_supplicant scan")
 
-                    # Get system bus
-                    bus = dbus.SystemBus()
+                        # Try to scan using wpa_cli
+                        scan_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan'],
+                                                   capture_output=True, text=True, timeout=5)
 
-                    # Get NetworkManager object
-                    nm = bus.get_object('org.freedesktop.NetworkManager', '/org/freedesktop/NetworkManager')
-                    nm_interface = dbus.Interface(nm, 'org.freedesktop.NetworkManager')
+                        if scan_result.returncode == 0:
+                            logger.info("wpa_cli scan initiated successfully")
 
-                    # Get all devices
-                    devices = nm_interface.GetDevices()
-                    wifi_device = None
+                            # Wait for scan results
+                            time.sleep(3)
 
-                    # Find the first wireless device
-                    for device_path in devices:
-                        try:
-                            device = bus.get_object('org.freedesktop.NetworkManager', device_path)
-                            device_interface = dbus.Interface(device, 'org.freedesktop.DBus.Properties')
+                            # Get scan results
+                            results_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan_results'],
+                                                          capture_output=True, text=True, timeout=5)
 
-                            device_type = device_interface.Get('org.freedesktop.NetworkManager.Device', 'DeviceType')
-                            if device_type == 2:  # NM_DEVICE_TYPE_WIFI
-                                wifi_device = device_path
-                                break
-                        except Exception as device_e:
-                            logger.debug(f"Error checking device {device_path}: {device_e}")
-                            continue
+                            if results_result.returncode == 0 and results_result.stdout.strip():
+                                logger.info("wpa_cli scan results retrieved successfully")
+                                networks = []
 
-                    # Check device state before scanning
-                    device_state = device_interface.Get('org.freedesktop.NetworkManager.Device', 'State')
-                    logger.info(f"WiFi device state: {device_state}")
+                                lines = results_result.stdout.strip().split('\n')
+                                # Skip header line
+                                for line in lines[1:]:
+                                    logger.debug(f"Processing wpa_cli line: {line}")
+                                    parts = line.split('\t')
+                                    if len(parts) >= 5:
+                                        # Format: bssid, frequency, signal, flags, ssid
+                                        bssid = parts[0]
+                                        frequency = parts[1]
+                                        signal_level = int(parts[2]) if parts[2].isdigit() else -100
+                                        flags = parts[3]
+                                        ssid = parts[4] if len(parts) > 4 else ''
 
-                    # Get additional device info for debugging
-                    try:
-                        device_managed = device_interface.Get('org.freedesktop.NetworkManager.Device', 'Managed')
-                        logger.info(f"WiFi device managed: {device_managed}")
-                    except Exception as info_e:
-                        logger.debug(f"Could not get device managed status: {info_e}")
+                                        if ssid and ssid != '<hidden>':
+                                            # Convert signal level to percentage (rough approximation)
+                                            # wpa_supplicant signal is in dBm, convert to 0-100 scale
+                                            signal_percent = min(100, max(0, 100 + signal_level))
 
-                    # Device states: 0=unknown, 10=unmanaged, 20=unavailable, 30=disconnected, 40=prepare, 50=config, 60=need auth, 70=ip config, 80=ip check, 90=secondaries, 100=activated, 110=deactivating, 120=failed
-                    if device_state in [20, 120]:  # unavailable or failed
-                        logger.warning(f"WiFi device is in state {device_state} (unavailable/failed), attempting to make it managed")
-                        # Try to manage the device - this often happens when wpa_supplicant is controlling it
-                        try:
-                            # Check if device is in managed list
-                            nm_props = dbus.Interface(nm, 'org.freedesktop.DBus.Properties')
-                            managed_devices = nm_props.Get('org.freedesktop.NetworkManager', 'Devices')
+                                            encrypted = 'WPA' in flags or 'WEP' in flags
 
-                            if wifi_device not in managed_devices:
-                                logger.info("Device not in managed list, attempting to manage it")
-                                # Try to add device to managed list (this may require admin privileges)
-                                # Note: This is a best-effort attempt
+                                            networks.append({
+                                                'ssid': ssid,
+                                                'signal': signal_percent,
+                                                'encrypted': encrypted
+                                            })
+                                            logger.debug(f"Found network via wpa_cli: {ssid}, signal: {signal_percent}, encrypted: {encrypted}")
+
+                                logger.info(f"wpa_cli scan found {len(networks)} networks")
                             else:
-                                logger.info("Device is in managed list but still unavailable - may be controlled by wpa_supplicant")
-
-                                # Try more aggressive management takeover
-                                logger.info("Attempting to force NetworkManager control...")
-                                try:
-                                    # Try to disconnect and reconnect the device
-                                    device_interface.Disconnect()
-                                    time.sleep(1)
-                                    device_interface.Connect()
-                                    time.sleep(2)
-
-                                    # Check if state changed
-                                    new_state = device_interface.Get('org.freedesktop.NetworkManager.Device', 'State')
-                                    logger.info(f"Device state after reconnect attempt: {new_state}")
-
-                                    if new_state != 20:
-                                        logger.info("Device state improved after reconnect!")
-                                        device_state = new_state
-                                    else:
-                                        logger.info("Device still unavailable after reconnect")
-
-                                except Exception as reconnect_e:
-                                    logger.debug(f"Reconnect attempt failed: {reconnect_e}")
-
-                            # Try to request scan anyway - sometimes it works even in unavailable state
-                            logger.info("Attempting scan despite unavailable state...")
-                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
-                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
-
-                        except Exception as manage_e:
-                            logger.warning(f"Could not manage unavailable device: {manage_e}")
-                            # Continue anyway and try to scan
-                            logger.info("Continuing with scan attempt despite management issues...")
-                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
-                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
-                            # Continue anyway and try to scan - sometimes it works
-                            wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
-                            wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
-                    elif device_state in [0, 10]:  # unknown or unmanaged
-                        logger.warning(f"WiFi device is in state {device_state} (unknown/unmanaged), attempting to make it managed")
-                        # Try to set device as managed
-                        try:
-                            nm_interface_props = dbus.Interface(nm, 'org.freedesktop.DBus.Properties')
-                            managed_devices = nm_interface_props.Get('org.freedesktop.NetworkManager', 'Devices')
-                            if wifi_device not in managed_devices:
-                                logger.info("Device not in managed list, attempting to manage it")
-                                # Note: This might require admin privileges
-                        except Exception as manage_e:
-                            logger.warning(f"Could not manage device: {manage_e}")
-
-                    # At this point, we should have wifi_device_obj and wifi_interface set up
-                    # (either from the unavailable case or the normal case)
-                    if 'wifi_device_obj' not in locals():
-                        wifi_device_obj = bus.get_object('org.freedesktop.NetworkManager', wifi_device)
-                    if 'wifi_interface' not in locals():
-                        wifi_interface = dbus.Interface(wifi_device_obj, 'org.freedesktop.NetworkManager.Device.Wireless')
-
-                    # Request a scan
-                    logger.info("Requesting WiFi scan via DBus...")
-                    try:
-                        wifi_interface.RequestScan({})  # Empty options dict
-                    except Exception as scan_e:
-                        logger.error(f"Scan request failed: {scan_e}")
-                        raise Exception(f"Failed to request scan: {scan_e}")
-
-                    # Wait a bit for scan to complete (NetworkManager handles this asynchronously)
-                    time.sleep(3)
-
-                    # Get access points
-                    try:
-                        access_points = wifi_interface.GetAllAccessPoints()
-                        logger.info(f"Found {len(access_points)} access points")
-                    except Exception as ap_e:
-                        logger.error(f"Failed to get access points: {ap_e}")
-                        raise Exception(f"Failed to get access points: {ap_e}")
-
-                    for ap_path in access_points:
-                        try:
-                            ap_obj = bus.get_object('org.freedesktop.NetworkManager', ap_path)
-                            ap_props = dbus.Interface(ap_obj, 'org.freedesktop.DBus.Properties')
-
-                            # Get SSID
-                            ssid_bytes = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Ssid')
-                            ssid = ''.join(chr(b) for b in ssid_bytes) if ssid_bytes else ''
-
-                            if not ssid:
-                                continue
-
-                            # Get signal strength
-                            strength = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Strength')
-
-                            # Get security flags
-                            flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'Flags')
-                            wpa_flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'WpaFlags')
-                            rsn_flags = ap_props.Get('org.freedesktop.NetworkManager.AccessPoint', 'RsnFlags')
-
-                            # Determine if encrypted
-                            encrypted = bool(flags & 0x1) or bool(wpa_flags) or bool(rsn_flags)
-
-                            networks.append({
-                                'ssid': ssid,
-                                'signal': strength,  # Already in 0-100 range
-                                'encrypted': encrypted
-                            })
-
-                            logger.debug(f"Found network: {ssid}, signal: {strength}, encrypted: {encrypted}")
-
-                        except Exception as e:
-                            logger.debug(f"Error processing access point {ap_path}: {e}")
-                            continue
-                        
-                except Exception as e:
-                    logger.error(f"NetworkManager DBus scan failed: {e}")
-                    logger.info("WiFi device is controlled by wpa_supplicant - attempting direct wpa_supplicant scan...")
-
-                    # Try to scan directly via wpa_supplicant/wpa_cli
-                    try:
-                        # Check if wpa_cli is available
-                        wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
-                        if wpa_check.returncode == 0:
-                            logger.info("wpa_cli found, attempting direct wpa_supplicant scan")
-
-                            # Try to scan using wpa_cli
-                            scan_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan'],
-                                                       capture_output=True, text=True, timeout=5)
-
-                            if scan_result.returncode == 0:
-                                logger.info("wpa_cli scan initiated successfully")
-
-                                # Wait for scan results
-                                time.sleep(3)
-
-                                # Get scan results
-                                results_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan_results'],
-                                                              capture_output=True, text=True, timeout=5)
-
-                                if results_result.returncode == 0 and results_result.stdout.strip():
-                                    logger.info("wpa_cli scan results retrieved successfully")
-                                    networks = []
-
-                                    lines = results_result.stdout.strip().split('\n')
-                                    # Skip header line
-                                    for line in lines[1:]:
-                                        logger.debug(f"Processing wpa_cli line: {line}")
-                                        parts = line.split('\t')
-                                        if len(parts) >= 5:
-                                            # Format: bssid, frequency, signal, flags, ssid
-                                            bssid = parts[0]
-                                            frequency = parts[1]
-                                            signal_level = int(parts[2]) if parts[2].isdigit() else -100
-                                            flags = parts[3]
-                                            ssid = parts[4] if len(parts) > 4 else ''
-
-                                            if ssid and ssid != '<hidden>':
-                                                # Convert signal level to percentage (rough approximation)
-                                                # wpa_supplicant signal is in dBm, convert to 0-100 scale
-                                                signal_percent = min(100, max(0, 100 + signal_level))
-
-                                                encrypted = 'WPA' in flags or 'WEP' in flags
-
-                                                networks.append({
-                                                    'ssid': ssid,
-                                                    'signal': signal_percent,
-                                                    'encrypted': encrypted
-                                                })
-                                                logger.debug(f"Found network via wpa_cli: {ssid}, signal: {signal_percent}, encrypted: {encrypted}")
-
-                                    logger.info(f"wpa_cli scan found {len(networks)} networks")
-                                else:
-                                    logger.warning("wpa_cli scan_results failed or returned empty")
-                                    networks = []
-                            else:
-                                logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
+                                logger.warning("wpa_cli scan_results failed or returned empty")
                                 networks = []
                         else:
-                            logger.info("wpa_cli not found, trying nmcli fallback")
+                            logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
                             networks = []
-
-                    except subprocess.TimeoutExpired:
-                        logger.warning("wpa_cli scan timed out")
+                    else:
+                        logger.error("wpa_cli not found - WiFi scanning not available")
                         networks = []
-                    except Exception as wpa_e:
-                        logger.warning(f"wpa_cli scan failed: {wpa_e}")
-                        networks = []
-
-                    # If wpa_cli also failed, fall back to nmcli
-                    if not networks:
-                        logger.info("wpa_cli failed, trying nmcli fallback...")
-                        try:
-                            # nmcli fallback code here...
-                            device_check = subprocess.run(['nmcli', 'device', 'show', 'wlan0'],
-                                                        capture_output=True, text=True, timeout=5)
-
-                            if device_check.returncode == 0:
-                                logger.info("nmcli can access wlan0 device")
-
-                                rescan_result = subprocess.run(['nmcli', 'device', 'wifi', 'rescan'],
-                                                             capture_output=True, text=True, timeout=10)
-
-                                if rescan_result.returncode == 0:
-                                    logger.info("nmcli rescan completed successfully")
-                                    time.sleep(2)
-
-                                    list_result = subprocess.run(['nmcli', 'device', 'wifi', 'list'],
-                                                               capture_output=True, text=True, timeout=10)
-
-                                    if list_result.returncode == 0 and list_result.stdout.strip():
-                                        logger.info("nmcli network list successful")
-                                        networks = []
-
-                                        lines = list_result.stdout.strip().split('\n')
-                                        logger.debug(f"nmcli returned {len(lines)} lines")
-
-                                        for line in lines[1:]:
-                                            logger.debug(f"Processing nmcli line: {line}")
-                                            parts = line.split()
-                                            if len(parts) >= 7:
-                                                ssid = parts[0] if parts[0] != '*' else (parts[1] if len(parts) > 1 else '')
-                                                if ssid and ssid != '--':
-                                                    signal_str = parts[4] if len(parts) > 4 else '0'
-                                                    signal = int(signal_str) if signal_str.isdigit() else 0
-                                                    security = parts[6] if len(parts) > 6 else ''
-                                                    encrypted = 'WPA' in security or 'WEP' in security
-
-                                                    networks.append({
-                                                        'ssid': ssid,
-                                                        'signal': signal,
-                                                        'encrypted': encrypted
-                                                    })
-                                                    logger.debug(f"Found network via nmcli: {ssid}, signal: {signal}, encrypted: {encrypted}")
-
-                                        logger.info(f"nmcli fallback found {len(networks)} networks")
-                                    else:
-                                        logger.warning(f"nmcli list failed: {list_result.stderr}")
-                                        networks = []
-                                else:
-                                    logger.warning(f"nmcli rescan failed: {rescan_result.stderr}")
-                                    networks = []
-                            else:
-                                logger.warning(f"nmcli cannot access wlan0: {device_check.stderr}")
-                                networks = []
-
-                        except Exception as nmcli_e:
-                            logger.warning(f"nmcli fallback failed: {nmcli_e}")
-                            networks = []
-
-                    # Final fallback to iw current network
-                    if not networks:
-                        logger.info("All methods failed, trying simple iw fallback...")
-                        try:
-                            result = subprocess.run(['iw', 'dev', 'wlan0', 'link'],
-                                                  capture_output=True, text=True, timeout=5)
-
-                            if result.returncode == 0 and 'Connected' in result.stdout:
-                                lines = result.stdout.split('\n')
-                                current_ssid = None
-                                current_signal = -50
-
-                                for line in lines:
-                                    line = line.strip()
-                                    if line.startswith('SSID:'):
-                                        ssid_match = re.search(r'SSID:\s*(.+)', line)
-                                        if ssid_match:
-                                            current_ssid = ssid_match.group(1).strip()
-                                    elif line.startswith('signal:'):
-                                        signal_match = re.search(r'signal:\s*(-?\d+)', line)
-                                        if signal_match:
-                                            current_signal = int(signal_match.group(1))
-
-                                if current_ssid:
-                                    networks = [{
-                                        'ssid': current_ssid,
-                                        'signal': current_signal,
-                                        'encrypted': True
-                                    }]
-                                    logger.info(f"Found current network via iw fallback: {current_ssid}")
-                                else:
-                                    networks = []
-                            else:
-                                networks = []
-
-                        except Exception as iw_e:
-                            logger.warning(f"iw fallback also failed: {iw_e}")
-                            networks = []
-
+                except subprocess.TimeoutExpired:
+                    logger.warning("wpa_cli scan timed out")
+                    networks = []
+                except Exception as wpa_e:
+                    logger.error(f"wpa_cli scan failed: {wpa_e}")
             # Remove duplicates and sort by signal strength
             seen_ssids = set()
             unique_networks = []
