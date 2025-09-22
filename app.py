@@ -1360,6 +1360,12 @@ class Backend(QObject):
         return None
 
     @pyqtSlot(result=QVariant)
+    def get_upcoming_launches(self):
+        current_time = datetime.now(pytz.UTC)
+        valid_launches = [l for l in self._launch_data['upcoming'] if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
+        return sorted(valid_launches, key=lambda x: parse(x['net']))[:10]  # Return next 10 launches
+
+    @pyqtSlot(result=QVariant)
     def get_next_race(self):
         races = self._f1_data['schedule']
         current = datetime.now(pytz.UTC)
@@ -2485,7 +2491,7 @@ context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&iv_load_policy=3&fs=0')
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -3353,13 +3359,32 @@ Window {
                             localContentCanAccessRemoteUrls: true
                             playbackRequiresUserGesture: false  // Allow autoplay
                             pluginsEnabled: true
+                            javascriptCanOpenWindows: false
+                            javascriptCanAccessClipboard: false
+                            allowWindowActivationFromJavaScript: false
                         }
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                         onLoadingChanged: function(loadRequest) {
                             if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                 console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                                // Retry loading after a delay
+                                retryTimer.start();
                             } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                 console.log("YouTube/Map WebEngineView loaded successfully");
+                                retryTimer.stop(); // Stop any pending retries
+                            }
+                        }
+
+                        Timer {
+                            id: retryTimer
+                            interval: 2000
+                            repeat: false
+                            onTriggered: {
+                                console.log("Retrying YouTube/Map load...");
+                                var currentUrl = backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "");
+                                // Force reload by clearing and setting URL
+                                url = "";
+                                url = currentUrl;
                             }
                         }
                     }
@@ -3504,6 +3529,29 @@ Window {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
+                    }
+                }
+
+                // Launch details tray button
+                Rectangle {
+                    width: 80
+                    height: 28
+                    radius: 14
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+                    visible: backend.mode === "spacex"
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "🚀"
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 14
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: launchTray.visible = !launchTray.visible
                     }
                 }
 
@@ -3806,6 +3854,8 @@ Window {
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
+            onOpened: passwordField.focus = true
+
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
@@ -3827,18 +3877,44 @@ Window {
                     Layout.fillWidth: true
                 }
 
-                TextField {
-                    id: passwordField
-                    placeholderText: "Enter password"
-                    echoMode: TextField.Password
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 28
+                RowLayout {
+                    spacing: 5
 
-                    background: Rectangle {
-                        color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
-                        border.width: 1
-                        radius: 3
+                    TextField {
+                        id: passwordField
+                        placeholderText: "Enter password"
+                        echoMode: TextField.Password
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            border.width: 1
+                            radius: 3
+                        }
+
+                        color: backend.theme === "dark" ? "white" : "black"
+                    }
+
+                    Button {
+                        text: "👁"
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 28
+                        onClicked: passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
                     }
                 }
 
@@ -3899,13 +3975,15 @@ Window {
         // Virtual Keyboard for password entry
         Popup {
             id: virtualKeyboard
-            width: 400
+            width: 360
             height: 180
-            x: (parent.width - width) / 2
+            x: passwordDialog.x + passwordDialog.width / 2 - width / 2
             y: passwordDialog.y + passwordDialog.height + 5
             modal: false
-            focus: false
-            visible: passwordField.focus && passwordDialog.visible
+            focus: true
+            visible: passwordDialog.visible
+            property bool shiftPressed: false
+            property bool numberMode: false
 
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -3922,10 +4000,11 @@ Window {
                 // QWERTY keyboard rows
                 RowLayout {
                     spacing: 3
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 340
 
                     Repeater {
-                        model: ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"]
+                        model: virtualKeyboard.numberMode ? ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] : (virtualKeyboard.shiftPressed ? ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"] : ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"])
                         Button {
                             text: modelData
                             Layout.preferredWidth: 25
@@ -3950,10 +4029,11 @@ Window {
 
                 RowLayout {
                     spacing: 3
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 340
 
                     Repeater {
-                        model: ["a", "s", "d", "f", "g", "h", "j", "k", "l"]
+                        model: virtualKeyboard.numberMode ? ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"] : (virtualKeyboard.shiftPressed ? ["A", "S", "D", "F", "G", "H", "J", "K", "L"] : ["a", "s", "d", "f", "g", "h", "j", "k", "l"])
                         Button {
                             text: modelData
                             Layout.preferredWidth: 25
@@ -3978,19 +4058,20 @@ Window {
 
                 RowLayout {
                     spacing: 3
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 340
 
                     Button {
                         text: "⇧"
                         Layout.preferredWidth: 35
                         Layout.preferredHeight: 30
+                        enabled: !virtualKeyboard.numberMode
                         onClicked: {
-                            // Toggle shift - for now just show uppercase
-                            // Could be enhanced to actually toggle case
+                            virtualKeyboard.shiftPressed = !virtualKeyboard.shiftPressed
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                            color: virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#2a2e2e" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"))
                             radius: 3
                         }
 
@@ -4004,7 +4085,7 @@ Window {
                     }
 
                     Repeater {
-                        model: ["z", "x", "c", "v", "b", "n", "m"]
+                        model: virtualKeyboard.numberMode ? ["-", "_", "+", "=", "{", "}", "[", "]", "|"] : (virtualKeyboard.shiftPressed ? ["Z", "X", "C", "V", "B", "N", "M"] : ["z", "x", "c", "v", "b", "n", "m"])
                         Button {
                             text: modelData
                             Layout.preferredWidth: 25
@@ -4049,14 +4130,16 @@ Window {
 
                 RowLayout {
                     spacing: 3
-                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 340
 
                     Button {
-                        text: "123"
+                        text: virtualKeyboard.numberMode ? "ABC" : "123"
                         Layout.preferredWidth: 40
                         Layout.preferredHeight: 30
                         onClicked: {
-                            // Could switch to number/symbol keyboard
+                            virtualKeyboard.numberMode = !virtualKeyboard.numberMode
+                            virtualKeyboard.shiftPressed = false  // Reset shift when switching modes
                         }
 
                         background: Rectangle {
@@ -4075,7 +4158,7 @@ Window {
 
                     Button {
                         text: "Space"
-                        Layout.fillWidth: true
+                        Layout.preferredWidth: 200
                         Layout.preferredHeight: 30
                         onClicked: passwordField.text += " "
 
@@ -4185,6 +4268,313 @@ Window {
                         font.pixelSize: 10
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+
+        // Sliding launch details tray
+        Popup {
+            id: launchTray
+            width: parent.width
+            height: 15  // Start with collapsed height
+            x: 0
+            y: 0  // Position at top of screen
+            modal: false
+            focus: false
+            visible: !backend.isLoading && backend.mode === "spacex"
+            closePolicy: Popup.NoAutoClose
+
+            property real expandedHeight: parent.height
+            property real collapsedHeight: 12  // Reduced for more compact collapsed state
+            property var nextLaunch: null
+            property real colorFactor: (height - collapsedHeight) / (expandedHeight - collapsedHeight)
+            property color collapsedColor: "#FF3838"
+            property color expandedColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+            property string tMinus: ""
+
+            Timer {
+                interval: 1000  // Update every second for testing
+                running: true
+                repeat: true
+                onTriggered: {
+                    var arr = backend.get_upcoming_launches();
+                    launchTray.nextLaunch = arr && arr[0] ? arr[0] : null;
+                    if (launchTray.nextLaunch) {
+                        var launchDate = new Date(launchTray.nextLaunch.date + ' ' + launchTray.nextLaunch.time);
+                        var now = new Date();
+                        var diff = launchDate - now;
+                        if (diff > 0) {
+                            var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                            var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                            var minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+                            launchTray.tMinus = 'T-' + (days > 0 ? days + 'd ' : '') + hours + 'h ' + minutes + 'm';
+                        } else {
+                            launchTray.tMinus = 'Launched';
+                        }
+                    } else {
+                        launchTray.tMinus = '';
+                    }
+                }
+            }
+
+            background: Rectangle {
+                color: Qt.rgba(
+                    launchTray.collapsedColor.r + launchTray.colorFactor * (launchTray.expandedColor.r - launchTray.collapsedColor.r),
+                    launchTray.collapsedColor.g + launchTray.colorFactor * (launchTray.expandedColor.g - launchTray.collapsedColor.g),
+                    launchTray.collapsedColor.b + launchTray.colorFactor * (launchTray.expandedColor.b - launchTray.collapsedColor.b),
+                    0.7 + launchTray.colorFactor * 0.3  // Fade from 70% to 100% opacity
+                )
+                radius: 12
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+
+                Behavior on color {
+                    ColorAnimation { duration: 300 }
+                }
+            }
+
+            // Smooth animation for height changes
+            Behavior on height {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            // Drag handle at bottom
+            Rectangle {
+                width: parent.width
+                height: 80  // Increased for even larger vertical touch area
+                color: "transparent"
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 2  // Very small margin to position handle right at bottom
+
+                Rectangle {
+                    width: 60
+                    height: 4
+                    radius: 2
+                    color: backend.theme === "dark" ? "#555555" : "#cccccc"
+                    anchors.bottom: parent.bottom  // Position visual handle at bottom
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                MouseArea {
+                    anchors.fill: parent  // Now fills the larger 40px height area
+
+                    property real startMouseY: 0
+                    property real startHeight: 0
+                    property bool isDragging: false
+
+                    onPressed: {
+                        startMouseY = mouse.y
+                        startHeight = launchTray.height
+                        isDragging = true
+                    }
+
+                    onPositionChanged: {
+                        if (isDragging && pressed) {
+                            var deltaY = mouse.y - startMouseY
+                            var newHeight = startHeight + deltaY
+
+                            // Constrain the height
+                            newHeight = Math.max(launchTray.collapsedHeight, Math.min(launchTray.expandedHeight, newHeight))
+
+                            launchTray.height = newHeight
+                        }
+                    }
+
+                    onReleased: {
+                        isDragging = false
+
+                        // Snap based on drag distance from start position
+                        var delta = launchTray.height - startHeight
+                        var range = launchTray.expandedHeight - launchTray.collapsedHeight
+                        var threshold = 0.15 * range
+
+                        if (delta > threshold) {
+                            // Dragged down enough, snap to expanded
+                            launchTray.height = launchTray.expandedHeight
+                        } else if (delta < -threshold) {
+                            // Dragged up enough, snap to collapsed
+                            launchTray.height = launchTray.collapsedHeight
+                        } else {
+                            // Not dragged enough, snap back to start
+                            launchTray.height = startHeight
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10  // Reduced to bring content closer to bottom handle
+                spacing: 10
+                clip: true  // Ensure content doesn't overflow
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 15
+
+                    RowLayout {
+                        opacity: 1 - launchTray.colorFactor
+                        visible: launchTray.height <= launchTray.collapsedHeight + 10
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+                        spacing: 5
+                        Layout.alignment: Qt.AlignVCenter
+
+                        Text {
+                            text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
+                            font.pixelSize: 10
+                            color: backend.theme === "dark" ? "white" : "black"
+                            elide: Text.ElideRight
+                            Layout.fillWidth: true
+                        }
+
+                        Text {
+                            text: launchTray.tMinus
+                            font.pixelSize: 10
+                            color: backend.theme === "dark" ? "white" : "black"
+                        }
+                    }
+
+                    RowLayout {
+                        opacity: launchTray.colorFactor
+                        visible: launchTray.height > launchTray.collapsedHeight + 10
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 10
+
+                        Flickable {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            contentHeight: launchDetailsColumn.height
+                            clip: true
+
+                            Rectangle {
+                                id: launchDetailsColumn
+                                width: parent.width
+                                radius: 12
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                implicitHeight: launchDetailsLayout.height
+
+                                ColumnLayout {
+                                    id: launchDetailsLayout
+                                    anchors.fill: parent
+                                    anchors.margins: 15
+                                    spacing: 10
+
+                                    ColumnLayout {
+                                        spacing: 8
+
+                                        Text {
+                                            text: "🚀 Mission: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches")
+                                            font.pixelSize: 16
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                        }
+
+                                        Text {
+                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.date : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.time : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "📡 NET: " + (launchTray.nextLaunch ? launchTray.nextLaunch.net : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "📊 Status: " + (launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🚀 Rocket: " + (launchTray.nextLaunch ? launchTray.nextLaunch.rocket : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🛰️ Orbit: " + (launchTray.nextLaunch ? launchTray.nextLaunch.orbit : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🏗️ Pad: " + (launchTray.nextLaunch ? launchTray.nextLaunch.pad : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🎥 Video URL: " + (launchTray.nextLaunch ? launchTray.nextLaunch.video_url : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillHeight: true
+                            radius: 12
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+
+                            WebEngineView {
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                url: "https://x.com/SpaceX"
+                            }
+                        }
                     }
                 }
             }

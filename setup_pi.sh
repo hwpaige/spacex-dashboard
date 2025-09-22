@@ -160,6 +160,10 @@ setup_python_environment() {
     log "Installing missing Python packages system-wide..."
     apt-get install -y python3-psutil python3-pyqt6 python3-requests python3-pandas
 
+    # Install emoji fonts for proper emoji display in the app
+    log "Installing emoji fonts for app display..."
+    apt-get install -y fonts-noto-color-emoji
+
     # Install build tools needed for compiling packages
     log "Installing build tools for pip packages..."
     apt-get install -y build-essential python3-dev
