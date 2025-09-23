@@ -3763,15 +3763,14 @@ Window {
 
                         Repeater {
                             model: [
-                                {"type": "upcoming", "icon": "\uf135"},
+                                {"type": "upcoming", "icon": "🚀"},
                                 {"type": "past", "icon": "\uf1da"}
                             ]
                             Button {
                                 property var launchData: modelData
-                                Layout.preferredWidth: 35
-                                Layout.preferredHeight: 23
+                                Layout.preferredWidth: 25
+                                Layout.preferredHeight: 20
                                 font.pixelSize: 12
-                                font.family: "Font Awesome 5 Free"
                                 text: launchData.icon
                                 onClicked: {
                                     backend.eventType = launchData.type
@@ -4739,7 +4738,7 @@ Window {
         Popup {
             id: launchTray
             width: parent.width
-            height: 15  // Start with collapsed height
+            height: 25  // Start with larger collapsed height
             x: 0
             y: 0  // Position at top of screen
             modal: false
@@ -4748,7 +4747,7 @@ Window {
             closePolicy: Popup.NoAutoClose
 
             property real expandedHeight: parent.height
-            property real collapsedHeight: 16  // Increased for better visibility when collapsed
+            property real collapsedHeight: 25  // Increased for better visibility when collapsed
             property var nextLaunch: null
             property real colorFactor: (height - collapsedHeight) / (expandedHeight - collapsedHeight)
             property color collapsedColor: "#FF3838"
@@ -4801,6 +4800,38 @@ Window {
                 NumberAnimation {
                     duration: 300
                     easing.type: Easing.OutCubic
+                }
+            }
+
+            // Bottom status text - T-minus on left, launch name on right
+            Item {
+                width: parent.width
+                height: 20
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 85  // Position above the drag handle
+
+                Text {
+                    text: launchTray.tMinus || "T-0"
+                    font.pixelSize: 12
+                    font.bold: true
+                    font.family: "D-DIN"
+                    color: "white"
+                    anchors.left: parent.left
+                    anchors.leftMargin: 15
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+
+                Text {
+                    text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
+                    font.pixelSize: 11
+                    font.bold: true
+                    color: "white"
+                    elide: Text.ElideRight
+                    anchors.right: parent.right
+                    anchors.rightMargin: 15
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width / 2  // Limit width to half the tray to avoid overlap
+                    horizontalAlignment: Text.AlignRight
                 }
             }
 

@@ -212,8 +212,8 @@ EOF"
 configure_system() {
     log "Configuring system services..."
     
-    # Enable SSH
-    systemctl enable --now ssh
+    # # Enable SSH
+    # systemctl enable --now ssh
     
     # Note: NetworkManager is left enabled by default
     # systemctl disable NetworkManager
@@ -361,12 +361,12 @@ Window.SetBackgroundBottomColor(0.11, 0.15, 0.15); # #1c2526 dark background
 logo.image = Image("logo.png");
 logo.sprite = Sprite(logo.image);
 
-# Scale down the logo to fit within screen bounds (about 40% of original size)
-logo.sprite.SetScale(0.4, 0.4);
+# Scale up the logo to 200% of original size for testing
+logo.sprite.SetScale(2.0, 2.0);
 
 # Center the scaled logo on screen
-logo.sprite.SetPosition(Window.GetWidth()/2 - (logo.image.GetWidth() * 0.4)/2,
-                       Window.GetHeight()/2 - (logo.image.GetHeight() * 0.4)/2, 10000);
+logo.sprite.SetPosition(Window.GetWidth()/2 - (logo.image.GetWidth() * 2.0)/2,
+                       Window.GetHeight()/2 - (logo.image.GetHeight() * 2.0)/2, 10000);
 EOF
     
     # Set the custom SpaceX theme as default
@@ -423,7 +423,7 @@ unclutter -idle 0 -root &
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 # Hardware acceleration Chromium flags for Raspberry Pi with WebGL support
-export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-web-security --allow-running-insecure-content --gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF --disable-gpu-driver-bug-workarounds --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=128 --memory-reducer --gpu-memory-buffer-size-mb=32 --max-tiles-for-interest-area=128 --num-raster-threads=1"
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
