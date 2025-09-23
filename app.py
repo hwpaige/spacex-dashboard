@@ -6,6 +6,7 @@ import platform
 import fastf1
 import numpy as np
 import pandas as pd
+import shlex
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -198,6 +199,131 @@ def save_cache_to_file(cache_file, data, timestamp):
     with open(cache_file, 'w') as f:
         json.dump(cache_data, f)
 
+def check_wifi_status():
+    """Check WiFi connection status and return (connected, ssid) tuple"""
+    try:
+        is_windows = platform.system() == 'Windows'
+        
+        if is_windows:
+            # Check WiFi interface status using Windows commands
+            result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+                                  capture_output=True, text=True, timeout=5)
+            
+            connected = False
+            current_ssid = ""
+            
+            for line in result.stdout.split('\n'):
+                line = line.strip()
+                
+                if 'State' in line and 'connected' in line.lower():
+                    connected = True
+                
+                if 'SSID' in line and 'BSSID' not in line:
+                    ssid_match = re.search(r'SSID\s*:\s*(.+)', line)
+                    if ssid_match:
+                        current_ssid = ssid_match.group(1).strip()
+            return connected, current_ssid
+        else:
+            # Enhanced Linux WiFi status checking with multiple methods
+            connected = False
+            current_ssid = ""
+
+            # Method 1: Try nmcli first
+            try:
+                result = subprocess.run(['nmcli', 'device', 'status'],
+                                      capture_output=True, text=True, timeout=5)
+                
+                if result.returncode == 0:
+                    lines = result.stdout.split('\n')
+                    for line in lines:
+                        parts = line.split()
+                        if len(parts) >= 4:
+                            device_type = parts[1].lower()
+                            state = parts[2].lower()
+                            if device_type == 'wifi' and state == 'connected':
+                                connected = True
+                                break
+
+                # Get current SSID if connected via nmcli
+                if connected:
+                    connected_device = None
+                    for line in result.stdout.split('\n'):
+                        parts = line.split()
+                        if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
+                            connected_device = parts[0]
+                            break
+                    
+                    if connected_device:
+                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', connected_device],
+                                                   capture_output=True, text=True, timeout=5)
+                        if ssid_result.returncode == 0:
+                            for line in ssid_result.stdout.split('\n'):
+                                if line.startswith('yes:'):
+                                    current_ssid = line.split(':', 1)[1].strip()
+                                    break
+                    else:
+                        # Fallback to active connections
+                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'name', 'connection', 'show', '--active'],
+                                                   capture_output=True, text=True, timeout=5)
+                        if ssid_result.returncode == 0:
+                            connections = ssid_result.stdout.strip().split('\n')
+                            if connections and connections[0]:
+                                current_ssid = connections[0]
+
+            except Exception as e:
+                logger.debug(f"nmcli status check failed: {e}, trying fallback methods...")
+            
+            # Method 2: Check IP address and interface status
+            if not connected:
+                interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
+                has_ip = False
+                active_interface = None
+
+                for interface in interfaces:
+                    try:
+                        # Check if interface has an IP address
+                        result = subprocess.run(['ip', 'addr', 'show', interface],
+                                              capture_output=True, text=True, timeout=5)
+
+                        if 'inet ' in result.stdout and 'UP' in result.stdout:
+                            has_ip = True
+                            active_interface = interface
+                            break
+                    except Exception as e:
+                        logger.debug(f"Error checking {interface}: {e}")
+                        continue
+
+                if has_ip:
+                    connected = True
+                    
+                    # Method 3: Try iw to get SSID
+                    if active_interface:
+                        try:
+                            iw_result = subprocess.run(['iw', 'dev', active_interface, 'link'],
+                                                     capture_output=True, text=True, timeout=5)
+                            if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
+                                ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
+                                if ssid_match:
+                                    current_ssid = ssid_match.group(1).strip()
+                        except Exception as e:
+                            logger.debug(f"iw link check failed: {e}")
+                        
+                        # Method 4: Try iwgetid as fallback
+                        if not current_ssid:
+                            try:
+                                ssid_result = subprocess.run(['iwgetid', '-r'],
+                                                           capture_output=True, text=True, timeout=5)
+                                if ssid_result.returncode == 0:
+                                    current_ssid = ssid_result.stdout.strip()
+                            except Exception as e:
+                                logger.debug(f"iwgetid failed: {e}")
+            
+            return connected, current_ssid
+            
+    except Exception as e:
+        logger.error(f"Error checking WiFi status: {e}")
+        return False, ""
+
 # Fetch SpaceX launch data
 def fetch_launches():
     logger.info("Fetching SpaceX launch data")
@@ -235,7 +361,7 @@ def fetch_launches():
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=1&rel=0&enablejsapi=1'},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
             ]
 
@@ -719,9 +845,10 @@ class Backend(QObject):
     wifiNetworksChanged = pyqtSignal()
     wifiConnectedChanged = pyqtSignal()
     wifiConnectingChanged = pyqtSignal()
+    rememberedNetworksChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
         logger.info("Backend initializing...")
         self._mode = 'spacex'
@@ -741,19 +868,174 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
         
-        # WiFi properties
+        # WiFi properties - initialize with provided values
         self._wifi_networks = []
-        self._wifi_connected = False
+        self._wifi_connected = initial_wifi_connected
         self._wifi_connecting = False
-        self._current_wifi_ssid = ""
+        self._current_wifi_ssid = initial_wifi_ssid
+        self._remembered_networks = self.load_remembered_networks()
+        self._last_connected_network = self.load_last_connected_network()
 
-        # Start loading data in background
-        self.loader = DataLoader()
-        self.thread = QThread()
-        self.loader.moveToThread(self.thread)
-        self.loader.finished.connect(self.on_data_loaded)
-        self.thread.started.connect(self.loader.run)
-        self.thread.start()
+        # DataLoader will be started after WiFi check in main startup
+        self.loader = None
+        self.thread = None
+
+        logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
+        logger.info("Setting up timers...")
+
+    def get_wifi_interface(self):
+        """Get the WiFi interface name"""
+        try:
+            # Try nmcli first
+            device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
+            if device_result.returncode == 0:
+                for line in device_result.stdout.split('\n'):
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1].lower() == 'wifi':
+                        return parts[0]
+            
+            # Fallback to common interface names
+            import os
+            for iface in ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']:
+                if os.path.exists(f'/sys/class/net/{iface}'):
+                    return iface
+        except Exception as e:
+            logger.debug(f"Error detecting WiFi interface: {e}")
+        
+        return 'wlan0'  # Default fallback
+
+    def load_remembered_networks(self):
+        """Load remembered WiFi networks from file"""
+        try:
+            remembered_file = os.path.join(os.path.dirname(__file__), 'remembered_networks.json')
+            if os.path.exists(remembered_file):
+                with open(remembered_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            return []
+        except Exception as e:
+            logger.error(f"Error loading remembered networks: {e}")
+            return []
+
+    def save_remembered_networks(self):
+        """Save remembered WiFi networks to file"""
+        try:
+            remembered_file = os.path.join(os.path.dirname(__file__), 'remembered_networks.json')
+            with open(remembered_file, 'w', encoding='utf-8') as f:
+                json.dump(self._remembered_networks, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error saving remembered networks: {e}")
+
+    def add_remembered_network(self, ssid, password=None):
+        """Add a network to remembered networks"""
+        # Remove if already exists
+        self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
+        # Add to front
+        self._remembered_networks.insert(0, {'ssid': ssid, 'password': password})
+        # Keep only last 10
+        self._remembered_networks = self._remembered_networks[:10]
+        self.save_remembered_networks()
+        self.rememberedNetworksChanged.emit()
+
+    def load_last_connected_network(self):
+        """Load the last connected network from file"""
+        try:
+            last_connected_file = os.path.join(os.path.dirname(__file__), 'last_connected_network.json')
+            if os.path.exists(last_connected_file):
+                with open(last_connected_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            logger.error(f"Error loading last connected network: {e}")
+        return None
+
+    def save_last_connected_network(self, ssid):
+        """Save the last connected network to file"""
+        try:
+            last_connected_file = os.path.join(os.path.dirname(__file__), 'last_connected_network.json')
+            with open(last_connected_file, 'w', encoding='utf-8') as f:
+                json.dump({'ssid': ssid, 'timestamp': time.time()}, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            logger.error(f"Error saving last connected network: {e}")
+
+    def _try_nmcli_connection(self, ssid, password, wifi_device):
+        """Try to connect using nmcli as fallback"""
+        # Check if nmcli is available
+        nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
+        if nmcli_check.returncode != 0:
+            logger.error("nmcli not found. Please install network-manager: sudo apt install network-manager")
+            return False
+
+        logger.info(f"Trying nmcli connection to: {ssid}")
+
+        # Check what networks nmcli can see
+        # First rescan to ensure nmcli has fresh data
+        rescan_cmd = ['nmcli', 'device', 'wifi', 'rescan']
+        if wifi_device:
+            rescan_cmd.extend(['ifname', wifi_device])
+        rescan_result = subprocess.run(rescan_cmd, capture_output=True, text=True, timeout=10)
+        if rescan_result.returncode != 0:
+            logger.debug(f"nmcli rescan failed: {rescan_result.stderr}")
+        
+        # Wait a moment for rescan to complete
+        time.sleep(3)
+        
+        # List networks with specific interface
+        list_cmd = ['nmcli', 'device', 'wifi', 'list']
+        if wifi_device:
+            list_cmd.extend(['ifname', wifi_device])
+        list_result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=10)
+        logger.debug(f"nmcli wifi list output: {list_result.stdout}")
+        
+        # Parse the output to find SSIDs
+        available_networks = []
+        lines = list_result.stdout.strip().split('\n')
+        if lines:
+            # Skip header line
+            for line in lines[1:]:
+                parts = line.split()
+                if len(parts) >= 1:
+                    # SSID is usually the last column
+                    ssid_candidate = parts[-1] if parts else ""
+                    if ssid_candidate and ssid_candidate != '--' and ssid_candidate != 'SSID':
+                        available_networks.append(ssid_candidate)
+        
+        logger.debug(f"Parsed available networks: {available_networks}")
+        
+        if ssid not in available_networks:
+            logger.warning(f"Network '{ssid}' not found in nmcli wifi list. Available networks: {available_networks}")
+            return False
+
+        # Connect to the new network
+        # Use shlex.quote to properly escape the SSID and password for shell
+        if password:
+            # For networks with password
+            cmd = f'nmcli device wifi connect {shlex.quote(ssid)} password {shlex.quote(password)}'
+            if wifi_device:
+                cmd += f' ifname {wifi_device}'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+        else:
+            # For open networks
+            cmd = f'nmcli device wifi connect {shlex.quote(ssid)}'
+            if wifi_device:
+                cmd += f' ifname {wifi_device}'
+            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
+
+        if result.returncode == 0:
+            logger.info(f"Successfully connected to {ssid} using nmcli")
+            return True
+        else:
+            logger.error(f"nmcli connection failed: {result.stderr}")
+            return False
+
+    def startDataLoader(self):
+        """Start the data loading thread after WiFi check completes"""
+        if self.loader is None:
+            logger.info("Starting data loader after WiFi check...")
+            self.loader = DataLoader()
+            self.thread = QThread()
+            self.loader.moveToThread(self.thread)
+            self.loader.finished.connect(self.on_data_loaded)
+            self.thread.started.connect(self.loader.run)
+            self.thread.start()
 
         logger.info("Setting up timers...")
         # Timers
@@ -778,8 +1060,7 @@ class Backend(QObject):
         self.wifi_timer.timeout.connect(self.update_wifi_status)
         # Don't start timer automatically - only when WiFi popup is open
         
-        # Check WiFi interface availability on startup
-        self.check_wifi_interface()
+    # ...existing code...
         
         logger.info("Backend initialization complete")
         logger.info(f"Initial theme: {self._theme}")
@@ -879,6 +1160,10 @@ class Backend(QObject):
     @pyqtProperty(str, notify=wifiConnectedChanged)
     def currentWifiSsid(self):
         return self._current_wifi_ssid
+
+    @pyqtProperty(list, notify=rememberedNetworksChanged)
+    def rememberedNetworks(self):
+        return self._remembered_networks
 
     @pyqtProperty(str, notify=timeChanged)
     def currentTime(self):
@@ -1433,6 +1718,41 @@ class Backend(QObject):
         self.thread.quit()
         self.thread.wait()
 
+        # Auto-reconnect to last connected network if not currently connected
+        self._auto_reconnect_to_last_network()
+
+    def _auto_reconnect_to_last_network(self):
+        """Auto-reconnect to the last connected network if not currently connected"""
+        try:
+            # Only attempt reconnection if we're not already connected
+            if not self._wifi_connected and self._last_connected_network:
+                last_ssid = self._last_connected_network.get('ssid')
+                if last_ssid:
+                    logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
+                    
+                    # Find the network in remembered networks
+                    remembered_network = None
+                    for network in self._remembered_networks:
+                        if network['ssid'] == last_ssid:
+                            remembered_network = network
+                            break
+                    
+                    if remembered_network and remembered_network.get('password'):
+                        # Attempt to connect
+                        self.connectToWifi(last_ssid, remembered_network['password'])
+                        logger.info(f"Auto-reconnection initiated for network: {last_ssid}")
+                    else:
+                        logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
+                else:
+                    logger.debug("No last connected network SSID found")
+            else:
+                if self._wifi_connected:
+                    logger.debug("Already connected to WiFi, skipping auto-reconnection")
+                else:
+                    logger.debug("No last connected network to auto-reconnect to")
+        except Exception as e:
+            logger.error(f"Error during auto-reconnection: {e}")
+
     @pyqtSlot()
     def scanWifiNetworks(self):
         """Scan for available WiFi networks using wpa_supplicant directly"""
@@ -1523,8 +1843,12 @@ class Backend(QObject):
                     if wpa_check.returncode == 0:
                         logger.info("wpa_cli found, attempting direct wpa_supplicant scan")
 
+                        # Get the WiFi interface
+                        wifi_interface = self.get_wifi_interface()
+                        logger.debug(f"Using WiFi interface: {wifi_interface}")
+
                         # Try to scan using wpa_cli
-                        scan_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan'],
+                        scan_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
                                                    capture_output=True, text=True, timeout=5)
 
                         if scan_result.returncode == 0:
@@ -1534,7 +1858,7 @@ class Backend(QObject):
                             time.sleep(3)
 
                             # Get scan results
-                            results_result = subprocess.run(['wpa_cli', '-i', 'wlan0', 'scan_results'],
+                            results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
                                                           capture_output=True, text=True, timeout=5)
 
                             if results_result.returncode == 0 and results_result.stdout.strip():
@@ -1555,6 +1879,14 @@ class Backend(QObject):
                                         signal_level = int(parts[2]) if parts[2].isdigit() else -100
                                         flags = parts[3]
                                         ssid = parts[4] if len(parts) > 4 else ''
+
+                                        # Decode escape sequences in SSID if present (wpa_cli may output \x escapes for non-ASCII)
+                                        if ssid and '\\x' in ssid:
+                                            try:
+                                                # wpa_cli outputs UTF-8 bytes as \x escapes, need to decode properly
+                                                ssid = ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to decode SSID escapes: {e}, keeping original")
 
                                         if ssid and ssid != '<hidden>':
                                             # Convert signal level to percentage (rough approximation)
@@ -1669,62 +2001,99 @@ class Backend(QObject):
                 except:
                     pass
             else:
-                # Use nmcli for Ubuntu/Linux (much simpler and more reliable)
+                # Try wpa_cli first (more reliable), then nmcli as fallback
                 try:
-                    # Check if nmcli is available
-                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
-                    if nmcli_check.returncode != 0:
-                        logger.error("nmcli not found. Please install network-manager: sudo apt install network-manager")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                        return
+                    # Get the WiFi interface
+                    wifi_interface = self.get_wifi_interface()
+                    logger.debug(f"Using WiFi interface: {wifi_interface}")
 
-                    logger.info(f"Connecting to WiFi network: {ssid}")
-
-                    # Find the WiFi device
-                    device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
-                    wifi_device = None
-                    if device_result.returncode == 0:
-                        for line in device_result.stdout.split('\n'):
-                            parts = line.split()
-                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
-                                wifi_device = parts[0]
-                                break
-                    
-                    if not wifi_device:
-                        logger.error("No WiFi device found for connection")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                        return
-
-                    # First, disconnect from current network if connected
-                    try:
-                        disconnect_result = subprocess.run(['nmcli', 'device', 'disconnect', wifi_device],
-                                                         capture_output=True, text=True, timeout=10)
-                        logger.info(f"Disconnect result: {disconnect_result.returncode}")
-                    except Exception as e:
-                        logger.warning(f"Disconnect failed: {e}")
-
-                    # Connect to the new network
-                    if password:
-                        # For networks with password
-                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
-                                              capture_output=True, text=True, timeout=30)
+                    # Check if wpa_cli is available
+                    wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                    if wpa_check.returncode == 0:
+                        logger.info(f"Trying wpa_cli connection to: {ssid}")
+                        
+                        # Use wpa_cli directly
+                        # Add network
+                        add_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'add_network'], 
+                                                  capture_output=True, text=True, timeout=5)
+                        if add_result.returncode == 0:
+                                network_id = add_result.stdout.strip()
+                                logger.info(f"Added network with ID: {network_id}")
+                                
+                                # Set SSID - handle Unicode characters by hex encoding if necessary
+                                if all(ord(c) < 128 for c in ssid):
+                                    # ASCII SSID
+                                    ssid_param = f'"{ssid}"'
+                                else:
+                                    # Unicode SSID - encode as hex
+                                    ssid_hex = ssid.encode('utf-8').hex()
+                                    ssid_param = ssid_hex
+                                
+                                ssid_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'ssid', ssid_param], 
+                                                           capture_output=True, text=True, timeout=5)
+                                if ssid_result.returncode != 0:
+                                    logger.error(f"Failed to set SSID: {ssid_result.stderr}")
+                                    # Clean up
+                                    subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
+                                    self._wifi_connecting = False
+                                    self.wifiConnectingChanged.emit()
+                                    return
+                                
+                                if password:
+                                    # Set password
+                                    psk_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'psk', f'"{password}"'], 
+                                                              capture_output=True, text=True, timeout=5)
+                                    if psk_result.returncode != 0:
+                                        logger.error(f"Failed to set password: {psk_result.stderr}")
+                                        # Clean up
+                                        subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
+                                        self._wifi_connecting = False
+                                        self.wifiConnectingChanged.emit()
+                                        return
+                                
+                                # Enable network
+                                enable_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'enable_network', network_id], 
+                                                             capture_output=True, text=True, timeout=5)
+                                if enable_result.returncode != 0:
+                                    logger.error(f"Failed to enable network: {enable_result.stderr}")
+                                    # Clean up
+                                    subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
+                                    self._wifi_connecting = False
+                                    self.wifiConnectingChanged.emit()
+                                    return
+                                
+                                # Select network
+                                select_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'select_network', network_id], 
+                                                             capture_output=True, text=True, timeout=5)
+                                if select_result.returncode == 0:
+                                    logger.info(f"Successfully connected to {ssid} using wpa_cli")
+                                    # Remember this network for future connections
+                                    self.add_remembered_network(ssid, password)
+                                    # Save as last connected network
+                                    self.save_last_connected_network(ssid)
+                                else:
+                                    logger.error(f"Failed to select network: {select_result.stderr}")
+                                    # Clean up
+                                    subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
+                        else:
+                            logger.error(f"Failed to add network: {add_result.stderr}")
                     else:
-                        # For open networks
-                        result = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid],
-                                              capture_output=True, text=True, timeout=30)
-
-                    if result.returncode == 0:
-                        logger.info(f"Successfully connected to {ssid}")
-                    else:
-                        logger.error(f"Failed to connect to {ssid}: {result.stderr}")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                        return
-
+                        logger.warning("wpa_cli not available, trying nmcli fallback")
+                        # Fallback to nmcli
+                        if self._try_nmcli_connection(ssid, password, wifi_interface):
+                            self.add_remembered_network(ssid, password)
+                            self.save_last_connected_network(ssid)
+                        
                 except Exception as e:
-                    logger.error(f"nmcli connection failed: {e}")
+                    logger.error(f"wpa_cli connection failed: {e}")
+                    # Try nmcli as fallback
+                    try:
+                        if self._try_nmcli_connection(ssid, password, self.get_wifi_interface()):
+                            self.add_remembered_network(ssid, password)
+                            self.save_last_connected_network(ssid)
+                    except Exception as e2:
+                        logger.error(f"nmcli fallback also failed: {e2}")
+                    
                     self._wifi_connecting = False
                     self.wifiConnectingChanged.emit()
                     return
@@ -1739,11 +2108,16 @@ class Backend(QObject):
             logger.error(f"Error connecting to WiFi: {e}")
             self._wifi_connecting = False
             self.wifiConnectingChanged.emit()
-            
-        except Exception as e:
-            logger.error(f"Error connecting to WiFi: {e}")
-            self._wifi_connecting = False
-            self.wifiConnectingChanged.emit()
+
+    @pyqtSlot(str)
+    def connectToRememberedNetwork(self, ssid):
+        """Connect to a remembered WiFi network"""
+        for network in self._remembered_networks:
+            if network['ssid'] == ssid:
+                password = network.get('password')
+                self.connectToWifi(ssid, password)
+                return
+        logger.error(f"Remembered network '{ssid}' not found")
 
     @pyqtSlot()
     def disconnectWifi(self):
@@ -1765,13 +2139,15 @@ class Backend(QObject):
                         logger.warning(f"nmcli disconnect failed: {result.stderr}")
                         # Fallback to killing wpa_supplicant and releasing DHCP
                         try:
+                            wifi_interface = self.get_wifi_interface()
                             subprocess.run(['sudo', 'killall', 'wpa_supplicant'], capture_output=True)
-                            subprocess.run(['sudo', 'dhclient', '-r', 'wlan0'], capture_output=True)
+                            subprocess.run(['sudo', 'dhclient', '-r', wifi_interface], capture_output=True)
                         except:
                             # Try without sudo
                             try:
+                                wifi_interface = self.get_wifi_interface()
                                 subprocess.run(['killall', 'wpa_supplicant'], capture_output=True)
-                                subprocess.run(['dhclient', '-r', 'wlan0'], capture_output=True)
+                                subprocess.run(['dhclient', '-r', wifi_interface], capture_output=True)
                             except Exception as e:
                                 logger.error(f"Error disconnecting WiFi: {e}")
                 except Exception as e:
@@ -1862,6 +2238,12 @@ class Backend(QObject):
                                 for line in ssid_result.stdout.split('\n'):
                                     if line.startswith('yes:'):
                                         current_ssid = line.split(':', 1)[1].strip()
+                                        # Decode SSID if it contains escape sequences
+                                        if current_ssid and '\\x' in current_ssid:
+                                            try:
+                                                current_ssid = current_ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to decode current SSID: {e}")
                                         logger.info(f"Current SSID via nmcli: {current_ssid}")
                                         break
                         else:
@@ -1872,6 +2254,12 @@ class Backend(QObject):
                                 connections = ssid_result.stdout.strip().split('\n')
                                 if connections and connections[0]:
                                     current_ssid = connections[0]
+                                    # Decode SSID if it contains escape sequences
+                                    if current_ssid and '\\x' in current_ssid:
+                                        try:
+                                            current_ssid = current_ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                        except Exception as e:
+                                            logger.debug(f"Failed to decode current SSID from active connections: {e}")
                                     logger.info(f"Current SSID (fallback): {current_ssid}")
 
                 except Exception as e:
@@ -1911,6 +2299,12 @@ class Backend(QObject):
                                     ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
                                     if ssid_match:
                                         current_ssid = ssid_match.group(1).strip()
+                                        # Decode SSID if it contains escape sequences
+                                        if current_ssid and '\\x' in current_ssid:
+                                            try:
+                                                current_ssid = current_ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to decode current SSID from iw: {e}")
                                         logger.info(f"Current SSID via iw: {current_ssid}")
                             except Exception as e:
                                 logger.debug(f"iw link check failed: {e}")
@@ -1922,6 +2316,12 @@ class Backend(QObject):
                                                                capture_output=True, text=True, timeout=5)
                                     if ssid_result.returncode == 0:
                                         current_ssid = ssid_result.stdout.strip()
+                                        # Decode SSID if it contains escape sequences
+                                        if current_ssid and '\\x' in current_ssid:
+                                            try:
+                                                current_ssid = current_ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to decode current SSID from iwgetid: {e}")
                                         logger.info(f"Current SSID via iwgetid: {current_ssid}")
                                 except Exception as e:
                                     logger.debug(f"iwgetid failed: {e}")
@@ -2465,6 +2865,13 @@ class ChartItem(QQuickPaintedItem):
 
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
+# Check WiFi status before creating Backend to ensure accurate initial state
+wifi_connected, wifi_ssid = check_wifi_status()
+
+backend = Backend(initial_wifi_connected=wifi_connected, initial_wifi_ssid=wifi_ssid)
+# Now start the data loader after WiFi is stable
+backend.startDataLoader()
+
 engine = QQmlApplicationEngine()
 # Connect QML warnings signal (list of QQmlError objects)
 def _log_qml_warnings(errors):
@@ -2484,7 +2891,6 @@ try:
     engine.warnings.connect(_log_qml_warnings)
 except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
-backend = Backend()
 context = engine.rootContext()
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
@@ -3367,24 +3773,8 @@ Window {
                         onLoadingChanged: function(loadRequest) {
                             if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                 console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
-                                // Retry loading after a delay
-                                retryTimer.start();
                             } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                 console.log("YouTube/Map WebEngineView loaded successfully");
-                                retryTimer.stop(); // Stop any pending retries
-                            }
-                        }
-
-                        Timer {
-                            id: retryTimer
-                            interval: 2000
-                            repeat: false
-                            onTriggered: {
-                                console.log("Retrying YouTube/Map load...");
-                                var currentUrl = backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "");
-                                // Force reload by clearing and setting URL
-                                url = "";
-                                url = currentUrl;
                             }
                         }
                     }
@@ -3489,11 +3879,10 @@ Window {
 
                     Text {
                         anchors.centerIn: parent
-                        text: backend.wifiConnected ? "W" : "w"  // Simplified, no Font Awesome
+                        text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                        font.family: "Font Awesome 5 Free"
                         font.pixelSize: 12
-                        font.bold: true
-                        color: backend.wifiConnected ? "#4CAF50" : (backend.theme === "dark" ? "white" : "black")
-                        font.family: "D-DIN"
+                        color: backend.wifiConnected ? "#4CAF50" : "#F44336"
                     }
 
                     MouseArea {
@@ -3854,7 +4243,10 @@ Window {
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
-            onOpened: passwordField.focus = true
+            onOpened: {
+                passwordField.focus = true
+                passwordField.text = ""
+            }
 
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -3901,7 +4293,10 @@ Window {
                         text: "👁"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
-                        onClicked: passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
+                        onClicked: {
+                            passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
+                            passwordField.focus = true
+                        }
 
                         background: Rectangle {
                             color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
@@ -3950,7 +4345,6 @@ Window {
                         Layout.preferredHeight: 24
                         onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
-                            passwordField.text = ""
                             passwordDialog.close()
                             wifiPopup.close()
                         }
@@ -3980,10 +4374,16 @@ Window {
             x: passwordDialog.x + passwordDialog.width / 2 - width / 2
             y: passwordDialog.y + passwordDialog.height + 5
             modal: false
-            focus: true
+            focus: false
             visible: passwordDialog.visible
             property bool shiftPressed: false
             property bool numberMode: false
+
+            onOpened: {
+                // Reset keyboard state when opened
+                shiftPressed = false
+                numberMode = false
+            }
 
             background: Rectangle {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -4012,8 +4412,9 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
                                 radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
                             }
 
                             contentItem: Text {
@@ -4041,8 +4442,9 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
                                 radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
                             }
 
                             contentItem: Text {
@@ -4071,8 +4473,9 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#2a2e2e" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"))
+                            color: parent.pressed ? "#FF6B35" : (virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#2a2e2e" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")))
                             radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
                         }
 
                         contentItem: Text {
@@ -4093,8 +4496,9 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
                                 radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
                             }
 
                             contentItem: Text {
@@ -4114,8 +4518,9 @@ Window {
                         onClicked: passwordField.text = passwordField.text.slice(0, -1)
 
                         background: Rectangle {
-                            color: "#FF5722"
+                            color: parent.pressed ? "#D84315" : "#FF5722"
                             radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
                         }
 
                         contentItem: Text {
@@ -4143,8 +4548,9 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                            color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")
                             radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
                         }
 
                         contentItem: Text {
@@ -4286,7 +4692,7 @@ Window {
             closePolicy: Popup.NoAutoClose
 
             property real expandedHeight: parent.height
-            property real collapsedHeight: 12  // Reduced for more compact collapsed state
+            property real collapsedHeight: 16  // Increased for better visibility when collapsed
             property var nextLaunch: null
             property real colorFactor: (height - collapsedHeight) / (expandedHeight - collapsedHeight)
             property color collapsedColor: "#FF3838"

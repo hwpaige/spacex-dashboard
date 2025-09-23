@@ -117,7 +117,7 @@ install_packages() {
         
         # System utilities
         unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
-        xserver-xorg xinit x11-xserver-utils openbox libinput-tools
+        xserver-xorg xinit x11-xserver-utils openbox libinput-tools imagemagick
         ubuntu-raspi-settings xserver-xorg-video-modesetting
         
         # Graphics and display
@@ -329,19 +329,57 @@ setup_repository() {
 }
 
 configure_plymouth() {
-    log "Configuring Plymouth..."
+    log "Configuring Plymouth with custom SpaceX theme..."
     
-    # Copy custom logo
-    cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
+    # Create custom SpaceX Plymouth theme directory
+    local theme_dir="/usr/share/plymouth/themes/spacex"
+    mkdir -p "$theme_dir"
     
-    # Set theme
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth 100
-    update-alternatives --set default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth
+    # Rotate the SpaceX logo 270 degrees clockwise (90 degrees left)
+    convert "$REPO_DIR/spacex_logo.png" -rotate 270 "$theme_dir/logo.png"
+    
+    # Create Plymouth theme configuration file
+    cat << EOF > "$theme_dir/spacex.plymouth"
+[Plymouth Theme]
+Name=SpaceX
+Description=A SpaceX-themed Plymouth boot splash
+ModuleName=script
+
+[script]
+ImageDir=$theme_dir
+ScriptFile=$theme_dir/spacex.script
+EOF
+    
+    # Create Plymouth script for the SpaceX theme
+    cat << 'EOF' > "$theme_dir/spacex.script"
+# SpaceX Plymouth Theme Script
+# Matches the app loading screen background color and logo positioning
+
+Window.SetBackgroundTopColor(0.11, 0.15, 0.15);    # #1c2526 dark background
+Window.SetBackgroundBottomColor(0.11, 0.15, 0.15); # #1c2526 dark background
+
+logo.image = Image("logo.png");
+logo.sprite = Sprite(logo.image);
+
+# Center the logo on screen
+logo.sprite.SetPosition(Window.GetWidth()/2 - logo.image.GetWidth()/2,
+                       Window.GetHeight()/2 - logo.image.GetHeight()/2, 10000);
+
+# Add a subtle fade-in effect
+logo.sprite.SetOpacity(0);
+logo.sprite.SetOpacity(1.0, 0.5);  # Fade in over 0.5 seconds
+EOF
+    
+    # Set the custom SpaceX theme as default
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$theme_dir/spacex.plymouth" 200
+    update-alternatives --set default.plymouth "$theme_dir/spacex.plymouth"
     
     # Rebuild initramfs
     if ! update-initramfs -u; then
         log "WARNING: Initramfs rebuild failed"
     fi
+    
+    log "Custom SpaceX Plymouth theme configured"
 }
 
 configure_touch_rotation() {
