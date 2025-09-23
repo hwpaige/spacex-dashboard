@@ -215,9 +215,9 @@ configure_system() {
     # Enable SSH
     systemctl enable --now ssh
     
-    # Disable NetworkManager to avoid conflicts with wpa_supplicant
-    systemctl disable NetworkManager
-    systemctl stop NetworkManager
+    # Note: NetworkManager is left enabled by default
+    # systemctl disable NetworkManager
+    # systemctl stop NetworkManager
     
     # Remove problematic driver
     apt-get remove --purge xserver-xorg-video-fbdev -y || true
@@ -361,13 +361,12 @@ Window.SetBackgroundBottomColor(0.11, 0.15, 0.15); # #1c2526 dark background
 logo.image = Image("logo.png");
 logo.sprite = Sprite(logo.image);
 
-# Center the logo on screen
-logo.sprite.SetPosition(Window.GetWidth()/2 - logo.image.GetWidth()/2,
-                       Window.GetHeight()/2 - logo.image.GetHeight()/2, 10000);
+# Scale down the logo to fit within screen bounds (about 40% of original size)
+logo.sprite.SetScale(0.4, 0.4);
 
-# Add a subtle fade-in effect
-logo.sprite.SetOpacity(0);
-logo.sprite.SetOpacity(1.0, 0.5);  # Fade in over 0.5 seconds
+# Center the scaled logo on screen
+logo.sprite.SetPosition(Window.GetWidth()/2 - (logo.image.GetWidth() * 0.4)/2,
+                       Window.GetHeight()/2 - (logo.image.GetHeight() * 0.4)/2, 10000);
 EOF
     
     # Set the custom SpaceX theme as default

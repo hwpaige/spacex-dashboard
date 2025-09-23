@@ -829,6 +829,36 @@ class DataLoader(QObject):
                 }
         self.finished.emit(launch_data, f1_data, weather_data)
 
+class LaunchUpdater(QObject):
+    finished = pyqtSignal(dict)
+
+    def run(self):
+        launch_data = fetch_launches()
+        self.finished.emit(launch_data)
+
+class WeatherUpdater(QObject):
+    finished = pyqtSignal(dict)
+
+    def run(self):
+        weather_data = {}
+        for location, settings in location_settings.items():
+            try:
+                weather = fetch_weather(settings['lat'], settings['lon'], location)
+                weather_data[location] = weather
+                logger.info(f"Weather updated for {location}: {weather}")
+            except Exception as e:
+                logger.error(f"Failed to update weather for {location}: {e}")
+                # Provide fallback data
+                weather_data[location] = {
+                    'temperature_c': 25,
+                    'temperature_f': 77,
+                    'wind_speed_ms': 5,
+                    'wind_speed_kts': 9.7,
+                    'wind_direction': 90,
+                    'cloud_cover': 50
+                }
+        self.finished.emit(weather_data)
+
 class Backend(QObject):
     modeChanged = pyqtSignal()
     eventTypeChanged = pyqtSignal()
@@ -1680,14 +1710,28 @@ class Backend(QObject):
         return weather_data
 
     def update_weather(self):
-        self._weather_data = self.initialize_weather()
-        self.weatherChanged.emit()
+        """Update weather data in a separate thread to avoid blocking UI"""
+        if hasattr(self, '_weather_updater_thread') and self._weather_updater_thread.isRunning():
+            return  # Skip if already updating
+
+        self._weather_updater = WeatherUpdater()
+        self._weather_updater_thread = QThread()
+        self._weather_updater.moveToThread(self._weather_updater_thread)
+        self._weather_updater.finished.connect(self._on_weather_updated)
+        self._weather_updater_thread.started.connect(self._weather_updater.run)
+        self._weather_updater_thread.start()
 
     def update_launches_periodic(self):
-        self._launch_data = fetch_launches()
-        self._launch_trends_cache.clear()  # Clear cache when data updates
-        self.launchesChanged.emit()
-        self.update_event_model()
+        """Update launch data in a separate thread to avoid blocking UI"""
+        if hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning():
+            return  # Skip if already updating
+
+        self._launch_updater = LaunchUpdater()
+        self._launch_updater_thread = QThread()
+        self._launch_updater.moveToThread(self._launch_updater_thread)
+        self._launch_updater.finished.connect(self._on_launches_updated)
+        self._launch_updater_thread.started.connect(self._launch_updater.run)
+        self._launch_updater_thread.start()
 
     def update_time(self):
         self.timeChanged.emit()
@@ -1717,6 +1761,18 @@ class Backend(QObject):
         self.eventModelChanged.emit()
         self.thread.quit()
         self.thread.wait()
+
+    @pyqtSlot(dict)
+    def _on_launches_updated(self, launch_data):
+        """Handle launch data update completion"""
+        self._launch_data = launch_data
+        self._launch_trends_cache.clear()  # Clear cache when data updates
+        self.launchesChanged.emit()
+        self.update_event_model()
+        # Clean up thread
+        if hasattr(self, '_launch_updater_thread'):
+            self._launch_updater_thread.quit()
+            self._launch_updater_thread.wait()
 
         # Auto-reconnect to last connected network if not currently connected
         self._auto_reconnect_to_last_network()
