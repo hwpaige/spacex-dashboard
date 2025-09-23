@@ -3763,14 +3763,15 @@ Window {
 
                         Repeater {
                             model: [
-                                {"type": "upcoming", "icon": "🚀"},
+                                {"type": "upcoming", "icon": "\uf135"},
                                 {"type": "past", "icon": "\uf1da"}
                             ]
                             Button {
                                 property var launchData: modelData
-                                Layout.preferredWidth: 25
-                                Layout.preferredHeight: 20
+                                Layout.preferredWidth: 35
+                                Layout.preferredHeight: 23
                                 font.pixelSize: 12
+                                font.family: "Font Awesome 5 Free"
                                 text: launchData.icon
                                 onClicked: {
                                     backend.eventType = launchData.type
@@ -4769,7 +4770,8 @@ Window {
                             var days = Math.floor(diff / (1000 * 60 * 60 * 24));
                             var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
                             var minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                            launchTray.tMinus = 'T-' + (days > 0 ? days + 'd ' : '') + hours + 'h ' + minutes + 'm';
+                            var seconds = Math.floor((diff % (1000 * 60)) / 1000);
+                            launchTray.tMinus = 'T-' + (days > 0 ? days + 'd ' : '') + hours + 'h ' + minutes + 'm ' + seconds + 's';
                         } else {
                             launchTray.tMinus = 'Launched';
                         }
@@ -4808,7 +4810,7 @@ Window {
                 width: parent.width
                 height: 20
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 85  // Position above the drag handle
+                anchors.bottomMargin: 0  // Position very close to bottom edge
 
                 Text {
                     text: launchTray.tMinus || "T-0"
