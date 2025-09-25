@@ -212,8 +212,8 @@ EOF"
 configure_system() {
     log "Configuring system services..."
     
-    # # Enable SSH
-    # systemctl enable --now ssh
+    # Enable SSH for debugging
+    systemctl enable --now ssh
     
     # Note: NetworkManager is left enabled by default
     # systemctl disable NetworkManager
@@ -323,62 +323,26 @@ EOF
 setup_repository() {
     log "Setting up repository..."
     
+    mkdir -p "$HOME_DIR/Desktop"
     [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
     sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
     chown -R "$USER:$USER" "$REPO_DIR"
 }
-
+    
 configure_plymouth() {
-    log "Configuring Plymouth with custom SpaceX theme..."
+    log "Configuring Plymouth..."
     
-    # Create custom SpaceX Plymouth theme directory
-    local theme_dir="/usr/share/plymouth/themes/spacex"
-    mkdir -p "$theme_dir"
+    # Copy custom logo
+    cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
     
-    # Rotate the SpaceX logo 270 degrees clockwise (90 degrees left)
-    convert "$REPO_DIR/spacex_logo.png" -rotate 270 "$theme_dir/logo.png"
-    
-    # Create Plymouth theme configuration file
-    cat << EOF > "$theme_dir/spacex.plymouth"
-[Plymouth Theme]
-Name=SpaceX
-Description=A SpaceX-themed Plymouth boot splash
-ModuleName=script
-
-[script]
-ImageDir=$theme_dir
-ScriptFile=$theme_dir/spacex.script
-EOF
-    
-    # Create Plymouth script for the SpaceX theme
-    cat << 'EOF' > "$theme_dir/spacex.script"
-# SpaceX Plymouth Theme Script
-# Matches the app loading screen background color and logo positioning
-
-Window.SetBackgroundTopColor(0.11, 0.15, 0.15);    # #1c2526 dark background
-Window.SetBackgroundBottomColor(0.11, 0.15, 0.15); # #1c2526 dark background
-
-logo.image = Image("logo.png");
-logo.sprite = Sprite(logo.image);
-
-# Scale up the logo to 200% of original size for testing
-logo.sprite.SetScale(2.0, 2.0);
-
-# Center the scaled logo on screen
-logo.sprite.SetPosition(Window.GetWidth()/2 - (logo.image.GetWidth() * 2.0)/2,
-                       Window.GetHeight()/2 - (logo.image.GetHeight() * 2.0)/2, 10000);
-EOF
-    
-    # Set the custom SpaceX theme as default
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$theme_dir/spacex.plymouth" 200
-    update-alternatives --set default.plymouth "$theme_dir/spacex.plymouth"
+    # Set theme
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth 100
+    update-alternatives --set default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth
     
     # Rebuild initramfs
     if ! update-initramfs -u; then
         log "WARNING: Initramfs rebuild failed"
     fi
-    
-    log "Custom SpaceX Plymouth theme configured"
 }
 
 configure_touch_rotation() {
@@ -411,10 +375,13 @@ create_xinitrc() {
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
+echo "Starting openbox at $(date)" > ~/xinitrc.log
 openbox-session &
 sleep 2
 
-xrandr --output HDMI-1 --rotate left 2>&1 | tee ~/xrandr.log
+echo "Rotating display" >> ~/xinitrc.log
+xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+echo "Setting xset options" >> ~/xinitrc.log
 xset s off
 xset -dpms
 xset s noblank
@@ -428,15 +395,18 @@ export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
+cd ~/Desktop/project
+echo "Changed to project directory: $(pwd)" >> ~/xinitrc.log
+
 if python3 -c 'import PyQt6, pyqtgraph, requests, pandas' 2>/dev/null; then
-    echo "Using system PyQt6" | tee ~/xinitrc.log
-    exec python3 ~/Desktop/project/app.py > ~/app.log 2>&1
+    echo "Using system PyQt6 at $(date)" | tee -a ~/xinitrc.log
+    exec python3 app.py >> ~/app.log 2>&1
 elif [ -f ~/.venv/bin/activate ]; then
     source ~/.venv/bin/activate
-    echo "Using virtual environment PyQt6" | tee ~/xinitrc.log
-    exec python ~/Desktop/project/app.py > ~/app.log 2>&1
+    echo "Using virtual environment PyQt6 at $(date)" | tee -a ~/xinitrc.log
+    exec python app.py >> ~/app.log 2>&1
 else
-    echo "No working PyQt6 found, aborting" | tee ~/xinitrc.log
+    echo "No working PyQt6 found, aborting at $(date)" | tee -a ~/xinitrc.log
     exit 1
 fi
 EOF
@@ -510,8 +480,8 @@ main() {
     configure_autologin
     optimize_performance
     
-    # Enable the systemd service
-    systemctl enable spacex-dashboard
+    # Note: Using autologin instead of systemd service to avoid conflicts
+    # systemctl enable spacex-dashboard
     
     cleanup
     
