@@ -95,7 +95,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8'),  # Banana Pi log path
+        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), mode='w', encoding='utf-8'),  # Overwrite log file at each launch
         logging.StreamHandler(sys.stdout)
     ]
 )
