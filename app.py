@@ -138,11 +138,27 @@ for handler in root_logger.handlers[:]:
 # Add our custom handler
 root_logger.addHandler(console_handler)
 
-# Ensure file handler uses UTF-8
-file_handler = logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), encoding='utf-8')
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-root_logger.addHandler(file_handler)
+# Ensure file handler uses UTF-8 and proper path
+try:
+    # Try to write to app.log in the current directory first
+    log_file_path = os.path.join(os.path.dirname(__file__), 'app.log')
+
+    # If we can't write to the current directory, try /tmp
+    if not os.access(os.path.dirname(log_file_path), os.W_OK):
+        log_file_path = '/tmp/spacex_dashboard_app.log'
+        print(f"Using log file: {log_file_path}")
+
+    file_handler = logging.FileHandler(log_file_path, mode='w', encoding='utf-8')
+    print(f"File logging to: {log_file_path}")
+
+except (OSError, PermissionError) as e:
+    print(f"Warning: Cannot set up file logging: {e}, skipping file handler")
+    file_handler = None
+
+if file_handler:
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+    root_logger.addHandler(file_handler)
 
 logger = logging.getLogger(__name__)
 
