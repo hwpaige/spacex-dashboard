@@ -23,6 +23,7 @@ import time
 import subprocess
 import re
 import calendar
+from cryptography.fernet import Fernet
 from track_generator import generate_track_map
 from plotly_charts import generate_f1_standings_chart
 # DBus imports are now conditional and imported only on Linux
@@ -913,6 +914,42 @@ class Backend(QObject):
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
 
+    def get_encryption_key(self):
+        """Get or create encryption key for WiFi passwords"""
+        key_file = os.path.join(os.path.dirname(__file__), 'wifi_key.bin')
+        if os.path.exists(key_file):
+            with open(key_file, 'rb') as f:
+                return f.read()
+        else:
+            # Generate a new key
+            key = Fernet.generate_key()
+            with open(key_file, 'wb') as f:
+                f.write(key)
+            # Set restrictive permissions on Linux
+            if platform.system() != 'Windows':
+                try:
+                    os.chmod(key_file, 0o600)
+                except:
+                    pass
+            return key
+
+    def encrypt_password(self, password):
+        """Encrypt a password"""
+        if not password:
+            return None
+        f = Fernet(self.get_encryption_key())
+        return f.encrypt(password.encode()).decode()
+
+    def decrypt_password(self, encrypted_password):
+        """Decrypt a password"""
+        if not encrypted_password:
+            return None
+        try:
+            f = Fernet(self.get_encryption_key())
+            return f.decrypt(encrypted_password.encode()).decode()
+        except:
+            return None
+
     def get_wifi_interface(self):
         """Get the WiFi interface name"""
         try:
@@ -940,7 +977,12 @@ class Backend(QObject):
             remembered_file = os.path.join(os.path.dirname(__file__), 'remembered_networks.json')
             if os.path.exists(remembered_file):
                 with open(remembered_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    networks = json.load(f)
+                    # Decrypt passwords
+                    for network in networks:
+                        if 'password' in network and network['password']:
+                            network['password'] = self.decrypt_password(network['password'])
+                    return networks
             return []
         except Exception as e:
             logger.error(f"Error loading remembered networks: {e}")
@@ -950,8 +992,15 @@ class Backend(QObject):
         """Save remembered WiFi networks to file"""
         try:
             remembered_file = os.path.join(os.path.dirname(__file__), 'remembered_networks.json')
+            # Encrypt passwords before saving
+            networks_to_save = []
+            for network in self._remembered_networks:
+                network_copy = network.copy()
+                if 'password' in network_copy and network_copy['password']:
+                    network_copy['password'] = self.encrypt_password(network_copy['password'])
+                networks_to_save.append(network_copy)
             with open(remembered_file, 'w', encoding='utf-8') as f:
-                json.dump(self._remembered_networks, f, indent=2, ensure_ascii=False)
+                json.dump(networks_to_save, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving remembered networks: {e}")
 
@@ -1209,8 +1258,8 @@ class Backend(QObject):
             next_launch = self.get_next_launch()
             if not next_launch:
                 return "No upcoming launches"
-            launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC)
-            current_time = datetime.now(pytz.UTC)
+            launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
+            current_time = datetime.now(self._tz)
             if launch_time <= current_time:
                 return "Launch in progress"
             delta = launch_time - current_time
@@ -1678,7 +1727,14 @@ class Backend(QObject):
     def get_upcoming_launches(self):
         current_time = datetime.now(pytz.UTC)
         valid_launches = [l for l in self._launch_data['upcoming'] if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
-        return sorted(valid_launches, key=lambda x: parse(x['net']))[:10]  # Return next 10 launches
+        launches = []
+        for l in sorted(valid_launches, key=lambda x: parse(x['net']))[:10]:
+            launch = l.copy()
+            launch_datetime = parse(l['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
+            launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
+            launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            launches.append(launch)
+        return launches
 
     @pyqtSlot(result=QVariant)
     def get_next_race(self):
@@ -2123,6 +2179,13 @@ class Backend(QObject):
                                                              capture_output=True, text=True, timeout=5)
                                 if select_result.returncode == 0:
                                     logger.info(f"Successfully connected to {ssid} using wpa_cli")
+                                    # Save the configuration to persist across reboots
+                                    save_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'save_config'], 
+                                                               capture_output=True, text=True, timeout=5)
+                                    if save_result.returncode == 0:
+                                        logger.info("WiFi configuration saved to persist across reboots")
+                                    else:
+                                        logger.warning(f"Failed to save WiFi config: {save_result.stderr}")
                                     # Remember this network for future connections
                                     self.add_remembered_network(ssid, password)
                                     # Save as last connected network
@@ -3953,33 +4016,40 @@ Window {
 
                 Item { Layout.fillWidth: true }
 
-                // Logo toggle - SIMPLIFIED
-                Rectangle {
-                    width: 80
-                    height: 28
-                    radius: 14
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                    border.width: 1
+                // Mode selector - F1/SpaceX toggle
+                Row {
+                    spacing: 2
+                    Repeater {
+                        model: ["F1", "SpaceX"]
+                        Rectangle {
+                            width: 40
+                            height: 28
+                            color: backend.mode === modelData.toLowerCase() ?
+                                   (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
+                                   (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                            radius: 4
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            border.width: 1
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: backend.mode === "f1" ? "F1" : "SX"
-                        color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 12
-                        font.bold: true
-                        font.family: "D-DIN"
-                    }
+                            Image {
+                                anchors.centerIn: parent
+                                source: modelData === "F1" ? "file:///C:/Users/harri/Projects/spacex-dashboard/assets/f1-logo.png" : "file:///C:/Users/harri/Projects/spacex-dashboard/spacex_logo.png"
+                                width: 40
+                                height: 40
+                                fillMode: Image.PreserveAspectFit
+                            }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: backend.mode = backend.mode === "spacex" ? "f1" : "spacex"
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: backend.mode = modelData.toLowerCase()
+                            }
+                        }
                     }
                 }
 
                 // Launch details tray button
                 Rectangle {
-                    width: 80
+                    width: 28
                     height: 28
                     radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -4747,6 +4817,15 @@ Window {
             visible: !backend.isLoading && backend.mode === "spacex"
             closePolicy: Popup.NoAutoClose
 
+            leftPadding: 0
+            rightPadding: 0
+            topPadding: 0
+            bottomPadding: 0
+            leftMargin: 0
+            rightMargin: 0
+            topMargin: 0
+            bottomMargin: 0
+
             property real expandedHeight: parent.height
             property real collapsedHeight: 25  // Increased for better visibility when collapsed
             property var nextLaunch: null
@@ -4763,7 +4842,7 @@ Window {
                     var arr = backend.get_upcoming_launches();
                     launchTray.nextLaunch = arr && arr[0] ? arr[0] : null;
                     if (launchTray.nextLaunch) {
-                        var launchDate = new Date(launchTray.nextLaunch.date + ' ' + launchTray.nextLaunch.time);
+                        var launchDate = new Date(launchTray.nextLaunch.local_date + ' ' + launchTray.nextLaunch.local_time);
                         var now = new Date();
                         var diff = launchDate - now;
                         if (diff > 0) {
@@ -4810,7 +4889,8 @@ Window {
                 width: parent.width
                 height: 20
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 0  // Position very close to bottom edge
+                anchors.bottomMargin: 0  // Position at tray bottom
+                z: -1  // Ensure this is behind the drag handle
 
                 Text {
                     text: launchTray.tMinus || "T-0"
@@ -4840,36 +4920,38 @@ Window {
             // Drag handle at bottom
             Rectangle {
                 width: parent.width
-                height: 80  // Increased for even larger vertical touch area
+                height: 60  // Reduced height for more compact touch area
                 color: "transparent"
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 2  // Very small margin to position handle right at bottom
+                anchors.bottomMargin: 2  // Small gap to match original spacing
+                z: 1  // Ensure this is on top for touch events
 
                 Rectangle {
                     width: 60
                     height: 4
                     radius: 2
                     color: backend.theme === "dark" ? "#555555" : "#cccccc"
-                    anchors.bottom: parent.bottom  // Position visual handle at bottom
+                    anchors.bottom: parent.bottom  // Position at bottom of touch area
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
                 MouseArea {
                     anchors.fill: parent  // Now fills the larger 40px height area
 
-                    property real startMouseY: 0
+                    property point startGlobalPos: Qt.point(0, 0)
                     property real startHeight: 0
                     property bool isDragging: false
 
                     onPressed: {
-                        startMouseY = mouse.y
+                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                         startHeight = launchTray.height
                         isDragging = true
                     }
 
                     onPositionChanged: {
                         if (isDragging && pressed) {
-                            var deltaY = mouse.y - startMouseY
+                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                            var deltaY = currentGlobalPos.y - startGlobalPos.y
                             var newHeight = startHeight + deltaY
 
                             // Constrain the height
@@ -4912,28 +4994,6 @@ Window {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 15
-
-                    RowLayout {
-                        opacity: 1 - launchTray.colorFactor
-                        visible: launchTray.height <= launchTray.collapsedHeight + 10
-                        Behavior on opacity { NumberAnimation { duration: 300 } }
-                        spacing: 5
-                        Layout.alignment: Qt.AlignVCenter
-
-                        Text {
-                            text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
-                            font.pixelSize: 10
-                            color: backend.theme === "dark" ? "white" : "black"
-                            elide: Text.ElideRight
-                            Layout.fillWidth: true
-                        }
-
-                        Text {
-                            text: launchTray.tMinus
-                            font.pixelSize: 10
-                            color: backend.theme === "dark" ? "white" : "black"
-                        }
-                    }
 
                     RowLayout {
                         opacity: launchTray.colorFactor

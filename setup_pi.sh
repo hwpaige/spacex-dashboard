@@ -172,10 +172,10 @@ setup_python_environment() {
     # Use pip with system packages to avoid virtual environment complexity
     log "Installing pip packages..."
     export PIP_BREAK_SYSTEM_PACKAGES=1
-    pip3 install --ignore-installed fastf1 plotly==5.24.1 || log "WARNING: Failed to install pip packages"
+    pip3 install --ignore-installed fastf1 plotly==5.24.1 cryptography || log "WARNING: Failed to install pip packages"
 
     # Verify installation
-    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1, plotly" 2>/dev/null; then
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1, plotly, cryptography" 2>/dev/null; then
         log "✓ All Python packages installed successfully"
     else
         log "⚠ Some packages may still be missing, but continuing..."
