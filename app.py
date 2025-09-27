@@ -91,14 +91,33 @@ elif platform.system() == 'Linux':
     os.environ["LIBGL_ALWAYS_SOFTWARE"] = "0"  # Force hardware rendering, never software
 
 # Set up logging to console and file
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(os.path.join(os.path.dirname(__file__), 'app_launch.log'), mode='w', encoding='utf-8'),  # Overwrite log file at each launch
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+try:
+    log_file_path = os.path.join(os.path.dirname(__file__), 'app_launch.log')
+    # Ensure the log file is writable
+    log_dir = os.path.dirname(log_file_path)
+    if not os.access(log_dir, os.W_OK):
+        print(f"Warning: Cannot write to log directory {log_dir}, using console only")
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[logging.StreamHandler(sys.stdout)]
+        )
+    else:
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[
+                logging.FileHandler(log_file_path, mode='w', encoding='utf-8'),  # Overwrite log file at each launch
+                logging.StreamHandler(sys.stdout)
+            ]
+        )
+except (OSError, PermissionError) as e:
+    print(f"Warning: Cannot set up file logging: {e}, using console only")
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)]
+    )
 
 # Configure console handler to handle Unicode properly
 console_handler = logging.StreamHandler(sys.stdout)
