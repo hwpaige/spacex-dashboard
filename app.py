@@ -339,25 +339,44 @@ def fetch_launches():
         logger.info("Using persistent cached previous launches")
     else:
         try:
+            all_launches = []
             url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_year}-12-31&limit=100'
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            previous_launches = [
-                {
-                    'mission': launch['name'],
-                    'date': launch['net'].split('T')[0],
-                    'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
-                    'net': launch['net'],
-                    'status': launch['status']['name'],
-                    'rocket': launch['rocket']['configuration']['name'],
-                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
-                    'pad': launch['pad']['name'],
-                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
-                } for launch in data['results']
-            ]
+
+            while url:
+                response = requests.get(url, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+
+                # Process this page of results
+                page_launches = []
+                for launch in data['results']:
+                    try:
+                        launch_data = {
+                            'mission': launch['name'],
+                            'date': launch['net'].split('T')[0],
+                            'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
+                            'net': launch['net'],
+                            'status': launch['status']['name'],
+                            'rocket': launch['rocket']['configuration']['name'],
+                            'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
+                            'pad': launch['pad']['name'],
+                            'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
+                        }
+                        page_launches.append(launch_data)
+                    except Exception as e:
+                        logger.warning(f"Skipping launch {launch.get('name', 'Unknown')} due to error: {e}")
+                        continue
+
+                all_launches.extend(page_launches)
+
+                # Check if there's a next page
+                url = data.get('next')
+                if url:
+                    time.sleep(0.5)  # Avoid rate limiting between pages
+
+            previous_launches = all_launches
             save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
-            logger.info("Successfully fetched and saved previous launches")
+            logger.info(f"Successfully fetched and saved {len(previous_launches)} previous launches")
             time.sleep(1)  # Avoid rate limiting
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
@@ -1315,14 +1334,21 @@ class Backend(QObject):
             return []
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
+        current_month = datetime.now(pytz.UTC).month
         df = df[df['date'].dt.year == current_year]
         rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
         df = df[df['rocket'].isin(rocket_types)]
         df['month'] = df['date'].dt.to_period('M').astype(str)
         df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
         df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
-        months = df_pivot.index.tolist()
-        return months
+
+        # Generate all months from January to current month
+        all_months = []
+        for month in range(1, current_month + 1):
+            month_str = f"{current_year}-{month:02d}"
+            all_months.append(month_str)
+
+        return all_months
 
     @pyqtProperty(int, notify=launchesChanged)
     def launchTrendsMaxValue(self):
@@ -1371,12 +1397,23 @@ class Backend(QObject):
             return []
         df['date'] = pd.to_datetime(df['date'])
         current_year = datetime.now(pytz.UTC).year
+        current_month = datetime.now(pytz.UTC).month
         df = df[df['date'].dt.year == current_year]
         rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
         df = df[df['rocket'].isin(rocket_types)]
         df['month'] = df['date'].dt.to_period('M').astype(str)
         df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
         df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
+
+        # Generate all months from January to current month
+        all_months = []
+        for month in range(1, current_month + 1):
+            month_str = f"{current_year}-{month:02d}"
+            all_months.append(month_str)
+
+        # Reindex the pivot table to include all months, filling missing ones with 0
+        df_pivot = df_pivot.reindex(all_months, fill_value=0)
+
         for col in rocket_types:
             if col not in df_pivot.columns:
                 df_pivot[col] = 0
@@ -1832,6 +1869,16 @@ class Backend(QObject):
 
         # Auto-reconnect to last connected network if not currently connected
         self._auto_reconnect_to_last_network()
+
+    @pyqtSlot(dict)
+    def _on_weather_updated(self, weather_data):
+        """Handle weather data update completion"""
+        self._weather_data = weather_data
+        self.weatherChanged.emit()
+        # Clean up thread
+        if hasattr(self, '_weather_updater_thread'):
+            self._weather_updater_thread.quit()
+            self._weather_updater_thread.wait()
 
     def _auto_reconnect_to_last_network(self):
         """Auto-reconnect to the last connected network if not currently connected"""
@@ -2858,7 +2905,7 @@ class ChartItem(QQuickPaintedItem):
         if self._theme == "dark":
             bg_color = QColor("#2a2e2e")  # Match card background
             text_color = QColor("#ffffff")
-            grid_color = QColor("#333333")  # Finer grid
+            grid_color = QColor("#ffffff")  # Tesla-style white grid lines
             axis_color = QColor("#666666")
             colors = [QColor("#00D4FF"), QColor("#FF6B6B"), QColor("#4ECDC4")]
         else:
@@ -2870,8 +2917,10 @@ class ChartItem(QQuickPaintedItem):
 
         painter.fillRect(0, 0, int(width), int(height), bg_color)
 
-        # Draw finer grid lines
-        painter.setPen(QPen(grid_color, 1, Qt.PenStyle.DotLine))
+        # Draw Tesla-style grid lines (subtle white solid lines with transparency)
+        grid_pen = QPen(grid_color, 1, Qt.PenStyle.SolidLine)
+        grid_pen.setColor(QColor(grid_color.red(), grid_color.green(), grid_color.blue(), 60))  # 60/255 alpha for subtlety
+        painter.setPen(grid_pen)
         for i in range(0, 11):
             y = margin + (height - 2 * margin) * i / 10
             painter.drawLine(int(margin), int(y), int(width - margin), int(y))
@@ -2896,8 +2945,10 @@ class ChartItem(QQuickPaintedItem):
         if self._months:
             for i, month in enumerate(self._months):
                 x = margin + (width - 2 * margin) * i / (len(self._months) - 1) if len(self._months) > 1 else margin
-                month_letter = month[6:7] if len(month) >= 7 else month
-                painter.drawText(int(x - 10), int(height - 5), month_letter)
+                # Convert month period (e.g., "2024-01") to short month name (e.g., "Jan")
+                month_num = int(month.split('-')[1])
+                month_name = calendar.month_abbr[month_num]
+                painter.drawText(int(x - 10), int(height - 5), month_name)
 
         # Draw legend
         legend_x = width - margin - 100
@@ -3114,7 +3165,10 @@ Window {
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 5
+        anchors.leftMargin: 5
+        anchors.rightMargin: 5
+        anchors.topMargin: 5
+        anchors.bottomMargin: 5
         spacing: 5
         visible: !backend.isLoading
 
@@ -3141,6 +3195,7 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.margins: 10
                             spacing: 5
 
                             ChartItem {
@@ -3171,7 +3226,7 @@ Window {
                             // Chart control buttons
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 5
+                                Layout.margins: 0
                                 spacing: 10
 
                                 // Chart type buttons
@@ -3270,6 +3325,7 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
+                            anchors.margins: 10
                             spacing: 5
 
                             Text {
@@ -3305,7 +3361,7 @@ Window {
                             // F1 Stat selector buttons
                             RowLayout {
                                 Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 5
+                                Layout.margins: 0
                                 spacing: 10
 
                                 // Chart category buttons
@@ -3416,6 +3472,7 @@ Window {
                         id: weatherSwipe
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        anchors.margins: 10
                         visible: backend.mode === "spacex"
                         orientation: Qt.Vertical
                         clip: true
@@ -3480,11 +3537,15 @@ Window {
                     }
 
                     // F1 Leaderboards
-                    ColumnLayout {
+                    Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         visible: backend.mode === "f1"
-                        spacing: 5
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            spacing: 5
 
                         Text {
                             text: backend.f1StandingsType === "drivers" ? "Driver Standings" : "Constructor Standings"
@@ -3584,7 +3645,7 @@ Window {
                         // Standings type selector buttons
                         RowLayout {
                             Layout.alignment: Qt.AlignHCenter
-                            Layout.margins: 5
+                            Layout.margins: 0
                             spacing: 10
 
                             // Standings type buttons
@@ -3630,11 +3691,12 @@ Window {
                             }
                         }
                     }
+                }
 
                     // Weather view buttons
                     RowLayout {
                         Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                        Layout.margins: 2
+                        Layout.margins: 0
                         visible: backend.mode === "spacex"
                         spacing: 3
 
@@ -4031,12 +4093,12 @@ Window {
                             border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                             border.width: 1
 
-                            Image {
+                            Text {
                                 anchors.centerIn: parent
-                                source: modelData === "F1" ? "file:///C:/Users/harri/Projects/spacex-dashboard/assets/f1-logo.png" : "file:///C:/Users/harri/Projects/spacex-dashboard/spacex_logo.png"
-                                width: 40
-                                height: 40
-                                fillMode: Image.PreserveAspectFit
+                                text: modelData === "F1" ? "\uf1b9" : "\uf135"  // Car for F1, Rocket for SpaceX
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 16
+                                font.family: "Font Awesome 5 Free"
                             }
 
                             MouseArea {
@@ -4074,13 +4136,14 @@ Window {
 
                 // Right pill (countdown, location, theme) - FIXED WIDTH
                 Rectangle {
-                    Layout.preferredWidth: 450
-                    Layout.maximumWidth: 450
+                    Layout.preferredWidth: 400
+                    Layout.maximumWidth: 400
                     height: 28
                     radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
+
 
                     Row {
                         anchors.centerIn: parent
@@ -4142,11 +4205,10 @@ Window {
 
                                     Text {
                                         anchors.centerIn: parent
-                                        text: modelData.substring(0, 1)  // L or D
+                                        text: modelData === "Light" ? "\uf185" : "\uf186"  // Sun for Light, Moon for Dark
                                         color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 12
-                                        font.bold: true
-                                        font.family: "D-DIN"
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
                                     }
 
                                     MouseArea {
@@ -4817,8 +4879,8 @@ Window {
             visible: !backend.isLoading && backend.mode === "spacex"
             closePolicy: Popup.NoAutoClose
 
-            leftPadding: 0
-            rightPadding: 0
+            leftPadding: 15
+            rightPadding: 15
             topPadding: 0
             bottomPadding: 0
             leftMargin: 0
@@ -4894,25 +4956,27 @@ Window {
 
                 Text {
                     text: launchTray.tMinus || "T-0"
-                    font.pixelSize: 12
+                    font.pixelSize: 14
                     font.bold: true
-                    font.family: "D-DIN"
                     color: "white"
                     anchors.left: parent.left
-                    anchors.leftMargin: 15
+                    anchors.leftMargin: 0
+                    anchors.right: parent.horizontalCenter
+                    anchors.rightMargin: 10
                     anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignLeft
                 }
 
                 Text {
                     text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
-                    font.pixelSize: 11
+                    font.pixelSize: 14
                     font.bold: true
                     color: "white"
                     elide: Text.ElideRight
                     anchors.right: parent.right
-                    anchors.rightMargin: 15
+                    anchors.rightMargin: 0
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width / 2  // Limit width to half the tray to avoid overlap
                     horizontalAlignment: Text.AlignRight
                 }
             }
@@ -4926,13 +4990,23 @@ Window {
                 anchors.bottomMargin: 2  // Small gap to match original spacing
                 z: 1  // Ensure this is on top for touch events
 
-                Rectangle {
+                // Double chevron indicator
+                Item {
                     width: 60
-                    height: 4
-                    radius: 2
-                    color: backend.theme === "dark" ? "#555555" : "#cccccc"
-                    anchors.bottom: parent.bottom  // Position at bottom of touch area
+                    height: 30
+                    anchors.bottom: parent.bottom
                     anchors.horizontalCenter: parent.horizontalCenter
+
+                    Image {
+                        source: "file:///C:/Users/harri/Projects/spacex-dashboard/assets/double-chevron.png"
+                        width: 24
+                        height: 24
+                        anchors.centerIn: parent
+                        rotation: launchTray.height > launchTray.collapsedHeight + 50 ? -90 : 90  // Point up when expanded, down when collapsed
+                        Behavior on rotation {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                    }
                 }
 
                 MouseArea {
