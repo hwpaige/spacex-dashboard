@@ -92,25 +92,24 @@ elif platform.system() == 'Linux':
 
 # Set up logging to console and file
 try:
-    log_file_path = os.path.join(os.path.dirname(__file__), 'app_launch.log')
-    # Ensure the log file is writable
-    log_dir = os.path.dirname(log_file_path)
-    if not os.access(log_dir, os.W_OK):
-        print(f"Warning: Cannot write to log directory {log_dir}, using console only")
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[logging.StreamHandler(sys.stdout)]
-        )
-    else:
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                logging.FileHandler(log_file_path, mode='w', encoding='utf-8'),  # Overwrite log file at each launch
-                logging.StreamHandler(sys.stdout)
-            ]
-        )
+    # Try to write to app.log in the current directory first
+    log_file_path = os.path.join(os.path.dirname(__file__), 'app.log')
+
+    # If we can't write to the current directory, try /tmp
+    if not os.access(os.path.dirname(log_file_path), os.W_OK):
+        log_file_path = '/tmp/spacex_dashboard_app.log'
+        print(f"Using log file: {log_file_path}")
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(log_file_path, mode='w', encoding='utf-8'),  # Overwrite log file at each launch
+            logging.StreamHandler(sys.stdout)
+        ]
+    )
+    print(f"Logging to: {log_file_path}")
+
 except (OSError, PermissionError) as e:
     print(f"Warning: Cannot set up file logging: {e}, using console only")
     logging.basicConfig(
