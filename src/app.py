@@ -3476,11 +3476,6 @@ Window {
             if (trajectoryData && globeView && globeView.runJavaScript) {
                 globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
             }
-            // Update weather
-            var weatherData = backend.get_weather();
-            if (weatherData && globeView && globeView.runJavaScript) {
-                globeView.runJavaScript("updateWeather(" + JSON.stringify(weatherData) + ");");
-            }
         }
     }
 
@@ -3502,6 +3497,7 @@ Window {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: 1
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: false
@@ -3781,6 +3777,7 @@ Window {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: 1
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: true
@@ -4066,6 +4063,7 @@ Window {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: 1
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: true
@@ -4256,6 +4254,7 @@ Window {
                     spacing: 0
 
                     WebEngineView {
+                        id: youtubeView
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
@@ -4275,8 +4274,42 @@ Window {
                         onLoadingChanged: function(loadRequest) {
                             if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                 console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                                console.log("Error code:", loadRequest.errorCode);
+                                console.log("Error domain:", loadRequest.errorDomain);
+
+                                // Handle specific error codes
+                                if (loadRequest.errorCode === 153) {
+                                    console.log("ERR_CONTENT_LENGTH_MISMATCH detected - This is common with YouTube adaptive streaming");
+                                    console.log("Possible causes: Network interruption, CDN issues, or adaptive bitrate changes");
+                                    console.log("The video may still work despite this error - attempting reload in 3 seconds...");
+
+                                    // Auto-retry for content length mismatch errors
+                                    reloadTimer.restart();
+                                } else if (loadRequest.errorCode === 2) {
+                                    console.log("ERR_FAILED - Network or server error. Check your internet connection.");
+                                } else if (loadRequest.errorCode === 3) {
+                                    console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
+                                } else if (loadRequest.errorCode === 6) {
+                                    console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
+                                } else if (loadRequest.errorCode === -3) {
+                                    console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
+                                } else {
+                                    console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
+                                }
                             } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                 console.log("YouTube/Map WebEngineView loaded successfully");
+                                reloadTimer.stop(); // Stop any pending retries
+                            }
+                        }
+
+                        // Auto-retry timer for content length mismatch
+                        Timer {
+                            id: reloadTimer
+                            interval: 3000 // 3 seconds
+                            repeat: false
+                            onTriggered: {
+                                console.log("Attempting to reload YouTube video after error 153...");
+                                youtubeView.reload();
                             }
                         }
                     }
@@ -5400,9 +5433,7 @@ Window {
                         spacing: 10
 
                         Flickable {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: launchTray.width / 3 - 10
-                            Layout.maximumWidth: launchTray.width / 3 - 10
+                            Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
                             contentHeight: launchDetailsColumn.height
                             clip: true
@@ -5412,104 +5443,419 @@ Window {
                                 width: parent.width
                                 radius: 12
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
                                 implicitHeight: launchDetailsLayout.height
 
                                 ColumnLayout {
                                     id: launchDetailsLayout
                                     anchors.fill: parent
-                                    anchors.margins: 15
-                                    spacing: 10
+                                    anchors.margins: 20
+                                    spacing: 16
 
+                                    // Header with mission name
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 60
+                                        color: backend.theme === "dark" ? "#1a4f5a" : "#e8f4f8"
+                                        radius: 8
+                                        border.color: backend.theme === "dark" ? "#2a6f7a" : "#c8e4e8"
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 12
+
+                                            Rectangle {
+                                                width: 36
+                                                height: 36
+                                                radius: 18
+                                                color: "#005288"
+                                                Layout.alignment: Qt.AlignVCenter
+
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: "\uf135"  // rocket icon
+                                                    font.family: "Font Awesome 5 Free"
+                                                    font.pixelSize: 16
+                                                    color: "white"
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 2
+
+                                                Text {
+                                                    text: "NEXT LAUNCH"
+                                                    font.pixelSize: 10
+                                                    font.bold: true
+                                                    font.letterSpacing: 1
+                                                    color: backend.theme === "dark" ? "#80c4d4" : "#4a90a4"
+                                                    opacity: 0.8
+                                                }
+
+                                                Text {
+                                                    text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
+                                                    font.pixelSize: 16
+                                                    font.bold: true
+                                                    color: backend.theme === "dark" ? "white" : "black"
+                                                    wrapMode: Text.Wrap
+                                                    Layout.fillWidth: true
+                                                    maximumLineCount: 2
+                                                    elide: Text.ElideRight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Launch details grid
                                     ColumnLayout {
-                                        spacing: 8
+                                        Layout.fillWidth: true
+                                        spacing: 12
 
-                                        Text {
-                                            text: "🚀 Mission: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches")
-                                            font.pixelSize: 16
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
+                                        // Row 1: Date & Time, NET Status
+                                        RowLayout {
                                             Layout.fillWidth: true
+                                            spacing: 16
+
+                                            // Date & Time
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: "\uf073"  // calendar icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "#ff9500"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.date : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.time : ""
+                                                            font.pixelSize: 10
+                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // NET Status
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: "\uf017"  // clock icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "#007aff"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: "NET"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            wrapMode: Text.Wrap
+                                                            maximumLineCount: 2
+                                                            elide: Text.ElideRight
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
 
-                                        Text {
-                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.date : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
+                                        // Row 2: Rocket, Orbit
+                                        RowLayout {
                                             Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                            spacing: 16
+
+                                            // Rocket
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: "\uf135"  // rocket icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "#ff3b30"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: "ROCKET"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Orbit
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: "\uf186"  // globe icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "#34c759"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: "ORBIT"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
 
-                                        Text {
-                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.time : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
+                                        // Row 3: Launch Pad, Status
+                                        RowLayout {
                                             Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                            spacing: 16
+
+                                            // Launch Pad
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: "\uf015"  // home icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "#ff9500"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: "PAD"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.pad : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            // Status
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 50
+                                                color: {
+                                                    if (!launchTray.nextLaunch) return backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8";
+                                                    var status = launchTray.nextLaunch.status.toLowerCase();
+                                                    if (status.includes("success")) return "#34c759";
+                                                    if (status.includes("failure") || status.includes("failed")) return "#ff3b30";
+                                                    if (status.includes("upcoming") || status.includes("scheduled")) return "#007aff";
+                                                    return backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8";
+                                                }
+                                                radius: 6
+                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Text {
+                                                        text: {
+                                                            if (!launchTray.nextLaunch) return "\uf128"; // question icon
+                                                            var status = launchTray.nextLaunch.status.toLowerCase();
+                                                            if (status.includes("success")) return "\uf00c"; // check icon
+                                                            if (status.includes("failure") || status.includes("failed")) return "\uf00d"; // x icon
+                                                            if (status.includes("upcoming") || status.includes("scheduled")) return "\uf017"; // clock icon
+                                                            return "\uf128"; // question icon
+                                                        }
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        color: "white"
+                                                        Layout.preferredWidth: 20
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 1
+
+                                                        Text {
+                                                            text: "STATUS"
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: "white"
+                                                            opacity: 0.8
+                                                        }
+
+                                                        Text {
+                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.status : ""
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            color: "white"
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // Video link (if available)
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 45
+                                        color: backend.theme === "dark" ? "#2a4a2a" : "#f0f8f0"
+                                        radius: 6
+                                        border.color: backend.theme === "dark" ? "#3a5a3a" : "#e0e8e0"
+                                        border.width: 1
+                                        visible: launchTray.nextLaunch && launchTray.nextLaunch.video_url
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            Text {
+                                                text: "\uf03d"  // video icon
+                                                font.family: "Font Awesome 5 Free"
+                                                font.pixelSize: 14
+                                                color: "#34c759"
+                                                Layout.preferredWidth: 20
+                                            }
+
+                                            Text {
+                                                text: "Live Stream Available"
+                                                font.pixelSize: 12
+                                                font.bold: true
+                                                color: backend.theme === "dark" ? "#a0d0a0" : "#2a5a2a"
+                                                Layout.fillWidth: true
+                                            }
+
+                                            Text {
+                                                text: "\uf35d"  // external link icon
+                                                font.family: "Font Awesome 5 Free"
+                                                font.pixelSize: 12
+                                                color: backend.theme === "dark" ? "#a0d0a0" : "#2a5a2a"
+                                            }
                                         }
 
-                                        Text {
-                                            text: "📡 NET: " + (launchTray.nextLaunch ? launchTray.nextLaunch.net : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
-                                        }
-
-                                        Text {
-                                            text: "📊 Status: " + (launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
-                                        }
-
-                                        Text {
-                                            text: "🚀 Rocket: " + (launchTray.nextLaunch ? launchTray.nextLaunch.rocket : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
-                                        }
-
-                                        Text {
-                                            text: "🛰️ Orbit: " + (launchTray.nextLaunch ? launchTray.nextLaunch.orbit : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
-                                        }
-
-                                        Text {
-                                            text: "🏗️ Pad: " + (launchTray.nextLaunch ? launchTray.nextLaunch.pad : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
-                                        }
-
-                                        Text {
-                                            text: "🎥 Video URL: " + (launchTray.nextLaunch ? launchTray.nextLaunch.video_url : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (launchTray.nextLaunch && launchTray.nextLaunch.video_url) {
+                                                    Qt.openUrlExternally(launchTray.nextLaunch.video_url);
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -5517,9 +5863,7 @@ Window {
                         }
 
                         Rectangle {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: launchTray.width / 3 - 10
-                            Layout.maximumWidth: launchTray.width / 3 - 10
+                            Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
                             radius: 0
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -5550,9 +5894,7 @@ Window {
                         }
 
                         Rectangle {
-                            Layout.fillWidth: true
-                            Layout.minimumWidth: launchTray.width / 3 - 10
-                            Layout.maximumWidth: launchTray.width / 3 - 10
+                            Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
                             radius: 12
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"

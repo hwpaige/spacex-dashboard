@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Earth Globe</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         body {
             margin: 0;
@@ -16,16 +17,6 @@
         canvas {
             display: block;
         }
-        #weatherInfo {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            padding: 10px;
-            border-radius: 5px;
-            font-size: 12px;
-            max-width: 200px;
-        }
         #playPauseBtn {
             position: absolute;
             top: 10px;
@@ -34,26 +25,19 @@
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 5px;
-            padding: 8px;
-            font-size: 16px;
+            padding: 8px 12px;
+            font-size: 14px;
             cursor: pointer;
             transition: background-color 0.2s;
-            width: 40px;
-            height: 40px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
         }
         #playPauseBtn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <button id="playPauseBtn"><i class="fas fa-pause"></i></button>
-    <div id="weatherInfo">Loading weather...</div>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
         let momentumX = 0, momentumY = 0;
@@ -205,39 +189,16 @@
                 }
             }
 
-            // Rotate clouds with realistic motion
+            // Rotate clouds slower than the globe
             const clouds = scene.getObjectByName('clouds');
             if (clouds) {
-                const time = Date.now() * 0.0001; // Slow time scale
-                
-                // Main rotation (eastward movement)
                 clouds.rotation.y += 0.0005;
-                
-                // Add realistic cloud motion with multiple frequencies
-                clouds.rotation.x = Math.sin(time * 0.5) * 0.02; // Slow vertical oscillation
-                clouds.rotation.z = Math.cos(time * 0.3) * 0.01; // Subtle tilt variation
-                
-                // Add some horizontal drift
-                clouds.position.x = Math.sin(time * 0.2) * 0.001;
-                clouds.position.z = Math.cos(time * 0.2) * 0.001;
             }
 
             if (renderer && scene && camera) {
                 renderer.render(scene, camera);
             }
         }
-
-        function updateWeather(weatherData) {
-            const weatherDiv = document.getElementById('weatherInfo');
-            if (weatherData) {
-                weatherDiv.innerHTML = '<strong>Weather at ' + weatherData.location + '</strong><br>' +
-                    'Temp: ' + weatherData.temp + '°C<br>' +
-                    'Condition: ' + weatherData.description + '<br>' +
-                    'Wind: ' + weatherData.wind_speed + ' m/s';
-            } else {
-                weatherDiv.innerHTML = 'Weather data unavailable';
-            }
-            }
 
         function updateTrajectory(trajectoryData) {            // Remove existing trajectory line
             if (trajectoryLine) {
@@ -397,7 +358,6 @@
 
         // Expose functions to Qt
         window.updateTrajectory = updateTrajectory;
-        window.updateWeather = updateWeather;
 
         // Make globe interactive
         let isMouseDown = false;
