@@ -202,7 +202,7 @@ echo 'Testing SpaceX API...'
 curl -s --max-time 10 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5' | head -c 200 && echo -e '\n✓ API reachable' || echo '✗ API unreachable'
 echo ''
 echo 'Testing Python requests to API with SSL debugging...'
-python3 -c "
+python3 -c \"
 import requests
 import ssl
 print('SSL version:', ssl.OPENSSL_VERSION)
@@ -218,7 +218,7 @@ except Exception as e:
         print(f'✓ Non-SSL request successful: {response.status_code}')
     except Exception as e2:
         print(f'✗ Non-SSL request also failed: {e2}')
-" 2>/dev/null || echo '✗ Python SSL test failed'
+\" 2>/dev/null || echo '✗ Python SSL test failed'
 echo ''
 echo '=== GPU/DMA Buffer Status ==='
 echo \"GPU devices:\"
@@ -488,6 +488,15 @@ export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
 cd ~/Desktop/project/src
 echo "Changed to project src directory: $(pwd)" >> ~/xinitrc.log
+
+# Truncate the app log file to start fresh on each boot
+# Also rotate old logs to prevent disk space issues
+if [ -f ~/app.log ]; then
+    # Keep one backup of the previous log
+    mv ~/app.log ~/app.log.old 2>/dev/null || true
+fi
+> ~/app.log
+echo "Starting SpaceX Dashboard at $(date)" >> ~/app.log
 
 if python3 -c 'import PyQt6, pyqtgraph, requests, pandas' 2>/dev/null; then
     echo "Using system PyQt6 at $(date)" | tee -a ~/xinitrc.log
