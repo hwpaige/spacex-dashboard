@@ -2047,6 +2047,23 @@ class Backend(QObject):
         return result
 
     @pyqtSlot(result=QVariant)
+    def get_weather(self):
+        try:
+            # Fetch weather for Cape Canaveral
+            response = requests.get('https://wttr.in/Cape Canaveral?format=j1', timeout=10)
+            data = response.json()
+            current = data['current_condition'][0]
+            return {
+                'location': 'Cape Canaveral',
+                'temp': current['temp_C'],
+                'description': current['weatherDesc'][0]['value'],
+                'wind_speed': current['windspeedKmph']
+            }
+        except Exception as e:
+            logger.error(f"Error fetching weather: {e}")
+            return None
+
+    @pyqtSlot(result=QVariant)
     def get_next_race(self):
         races = self._f1_data['schedule']
         current = datetime.now(pytz.UTC)
@@ -3458,6 +3475,11 @@ Window {
             var trajectoryData = backend.get_launch_trajectory();
             if (trajectoryData && globeView && globeView.runJavaScript) {
                 globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+            }
+            // Update weather
+            var weatherData = backend.get_weather();
+            if (weatherData && globeView && globeView.runJavaScript) {
+                globeView.runJavaScript("updateWeather(" + JSON.stringify(weatherData) + ");");
             }
         }
     }

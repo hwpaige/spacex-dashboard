@@ -16,10 +16,21 @@
         canvas {
             display: block;
         }
+        #weatherInfo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            max-width: 200px;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <div id="weatherInfo">Loading weather...</div>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
 
@@ -57,6 +68,28 @@
                         // Mesh
                         globe = new THREE.Mesh(geometry, material);
                         scene.add(globe);
+
+                        // Cloud layer
+                        const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
+                        textureLoader.load(
+                            'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
+                            function(cloudTexture) {
+                                const cloudMaterial = new THREE.MeshLambertMaterial({
+                                    map: cloudTexture,
+                                    transparent: true,
+                                    opacity: 0.8,
+                                    alphaMap: cloudTexture
+                                });
+                                const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                                clouds.name = 'clouds';
+                                globe.add(clouds);
+                                console.log("Cloud layer added");
+                            },
+                            undefined,
+                            function(error) {
+                                console.error("Error loading cloud texture:", error);
+                            }
+                        );
 
                         // Lighting
                         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -99,7 +132,7 @@
                 // Controls
                 controls = {
                     autoRotate: true,
-                    autoRotateSpeed: 0.5,
+                    autoRotateSpeed: 0.3,
                     enableZoom: true,
                     enablePan: false,
                     enableRotate: true
@@ -127,15 +160,30 @@
                 globe.rotation.y += controls.autoRotateSpeed * 0.01;
             }
 
+            // Rotate clouds slower than the globe
+            const clouds = scene.getObjectByName('clouds');
+            if (clouds) {
+                clouds.rotation.y += 0.0005;
+            }
+
             if (renderer && scene && camera) {
                 renderer.render(scene, camera);
             }
         }
 
-        function updateTrajectory(trajectoryData) {
-            console.log("updateTrajectory called with data:", trajectoryData);
+        function updateWeather(weatherData) {
+            const weatherDiv = document.getElementById('weatherInfo');
+            if (weatherData) {
+                weatherDiv.innerHTML = '<strong>Weather at ' + weatherData.location + '</strong><br>' +
+                    'Temp: ' + weatherData.temp + '°C<br>' +
+                    'Condition: ' + weatherData.description + '<br>' +
+                    'Wind: ' + weatherData.wind_speed + ' m/s';
+            } else {
+                weatherDiv.innerHTML = 'Weather data unavailable';
+            }
+            }
 
-            // Remove existing trajectory line
+        function updateTrajectory(trajectoryData) {            // Remove existing trajectory line
             if (trajectoryLine) {
                 if (globe) globe.remove(trajectoryLine);
                 scene.remove(trajectoryLine);
@@ -293,6 +341,7 @@
 
         // Expose functions to Qt
         window.updateTrajectory = updateTrajectory;
+        window.updateWeather = updateWeather;
 
         // Make globe interactive
         let isMouseDown = false;
