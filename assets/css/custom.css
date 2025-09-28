@@ -1,0 +1,172 @@
+.theme-light {
+    --bg-color: #f6f6f6;
+    --text-color: #333;
+    --text-color-secondary: #666;
+    --card-bg: #fff;
+    --bar-bg: #e0e0e0;
+    --status-success: #2ecc71;
+    --status-failure: #e67e22;
+}
+
+.theme-dark {
+    --bg-color: #333;
+    --text-color: #f6f6f6;
+    --text-color-secondary: #ccc;
+    --card-bg: #444;
+    --bar-bg: #555;
+    --status-success: #2ecc71;
+    --status-failure: #e67e22;
+}
+
+#root {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+}
+
+#bottom-bar-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 100%;
+    height: 5vh;
+    padding: 0 10px;
+}
+
+#left-bar, #right-bar {
+    background-color: var(--bar-bg);
+    color: var(--text-color);
+    border-radius: 20px;
+    -webkit-border-radius: 20px;
+    -moz-border-radius: 20px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    height: 5vh;
+    flex: 1;
+    min-width: 400px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    font-family: 'D-DIN', sans-serif;
+    overflow: hidden;
+}
+
+#left-bar {
+    margin-right: 10px;
+}
+
+#right-bar {
+    margin-left: 10px;
+    justify-content: flex-end;
+}
+
+#left-bar span, #right-bar span {
+    font-size: 12px;
+    color: var(--text-color-secondary);
+    white-space: nowrap;
+    margin-right: 10px;
+}
+
+#current-weather {
+    display: inline;
+    font-size: 10px;
+}
+
+#bottom-bar-container img {
+    width: 80px;
+    margin: 0 10px;
+}
+
+.theme-light #bottom-bar-container img {
+    filter: invert(0);
+    opacity: 0.7;
+}
+
+.theme-dark #bottom-bar-container img {
+    filter: invert(1);
+    opacity: 0.7;
+}
+
+.card {
+    background-color: var(--card-bg);
+}
+
+/* Segmented Control Styles */
+.mantine-SegmentedControl-root {
+    background-color: var(--bar-bg);
+    border-radius: 6px;
+    -webkit-border-radius: 6px;
+    -moz-border-radius: 6px;
+    padding: 2px;
+    font-family: 'D-DIN', sans-serif;
+    border: 1px solid var(--text-color-secondary);
+}
+
+.mantine-SegmentedControl-label {
+    color: var(--text-color-secondary);
+    font-size: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.mantine-SegmentedControl-label[data-active] {
+    background-color: var(--card-bg);
+    color: var(--text-color);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+.mantine-SegmentedControl-control {
+    transition: background-color 0.2s;
+}
+
+.mantine-SegmentedControl-control:hover .mantine-SegmentedControl-label:not([data-active]) {
+    background-color: rgba(255,255,255,0.1);
+    color: var(--text-color);
+}
+
+.mantine-SegmentedControl-label[data-active]:hover {
+    background-color: var(--card-bg);
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--card-bg);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--text-color-secondary);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-color);
+}
+
+/* Fallback for non-WebKit browsers */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-color-secondary) var(--card-bg);
+}
+
+/* Responsive adjustments for 320px width */
+@media (max-width: 320px) {
+    #left-bar, #right-bar {
+        min-width: 100%;
+        flex-wrap: wrap;
+        justify-content: center;
+        padding: 5px;
+    }
+    #left-bar span, #right-bar span, .mantine-SegmentedControl-root {
+        margin: 2px 5px;
+    }
+    #current-weather {
+        font-size: 9px;
+    }
+}

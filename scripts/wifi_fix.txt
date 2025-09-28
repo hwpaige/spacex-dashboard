@@ -1,0 +1,30 @@
+sudo nano /boot/armbianEnv.txt
+Look for a line starting with overlays=. If it exists, append bananapi-m4-sdio-wifi-bt to it (space-separated, e.g., overlays=existing-overlay bananapi-m4-sdio-wifi-bt).
+If no overlays= line exists, add this at the end:
+
+overlays=bananapi-m4-sdio-wifi-bt
+
+sudo reboot
+
+ip link show | grep wlan
+It should now show wlan0. If not, your image might lack the driver—try a different Armbian build (e.g., the latest rolling release Debian Testing Minimal from armbian.com, or even a Banana Pi-provided Ubuntu image for testing, as their 5.4 kernel builds often have WiFi working out-of-box).forum.armbian.com+3 more
+Step 3: Configure WiFi (No NetworkManager Needed)
+Since you're on a fresh minimal/server install without internet, we'll use built-in tools like wpa_supplicant (pre-installed in Armbian) and Netplan or dhclient for IP assignment. This avoids needing to install anything.
+
+Bring up the interface:
+
+sudo ip link set wlan0 up
+
+
+2. Disable WiFi Direct (P2P) in the Driver
+This directly addresses the "Unknown Frame" warning by turning off P2P support, which isn't needed for standard WiFi.
+
+Create a modprobe config file:
+echo "options brcmfmac p2p=0" | sudo tee /etc/modprobe.d/brcmfmac.conf
+
+Reload the module:
+textsudo modprobe -r brcmfmac
+sudo modprobe brcmfmac
+
+Reboot to apply persistently:
+textsudo reboot
