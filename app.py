@@ -221,18 +221,24 @@ F1_TEAM_COLORS = {
 
 # Load cache from file
 def load_cache_from_file(cache_file):
-    if os.path.exists(cache_file):
-        with open(cache_file, 'r') as f:
-            cache_data = json.load(f)
-            cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp']).replace(tzinfo=pytz.UTC)
-            return cache_data
+    try:
+        if os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                cache_data = json.load(f)
+                cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp']).replace(tzinfo=pytz.UTC)
+                return cache_data
+    except (OSError, PermissionError, json.JSONDecodeError, ValueError) as e:
+        logger.warning(f"Failed to load cache from {cache_file}: {e}")
     return None
 
 # Save cache to file
 def save_cache_to_file(cache_file, data, timestamp):
-    cache_data = {'data': data, 'timestamp': timestamp.isoformat()}
-    with open(cache_file, 'w') as f:
-        json.dump(cache_data, f)
+    try:
+        cache_data = {'data': data, 'timestamp': timestamp.isoformat()}
+        with open(cache_file, 'w') as f:
+            json.dump(cache_data, f)
+    except (OSError, PermissionError) as e:
+        logger.warning(f"Failed to save cache to {cache_file}: {e}")
 
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
@@ -361,6 +367,7 @@ def check_wifi_status():
 
 # Fetch SpaceX launch data
 def fetch_launches():
+    print("DEBUG: fetch_launches called")  # Temporary debug
     logger.info("Fetching SpaceX launch data")
     current_time = datetime.now(pytz.UTC)
     current_date_str = current_time.strftime('%Y-%m-%d')
@@ -865,14 +872,23 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, dict)
 
     def run(self):
-        launch_data = fetch_launches()
+        logger.info("DataLoader: Starting data loading...")
+        try:
+            logger.info("DataLoader: Calling fetch_launches...")
+            launch_data = fetch_launches()
+            logger.info(f"DataLoader: fetch_launches returned {len(launch_data.get('upcoming', []))} upcoming launches")
+        except Exception as e:
+            logger.error(f"DataLoader: fetch_launches failed: {e}")
+            launch_data = {'previous': [], 'upcoming': []}
         f1_data = fetch_f1_data()
         weather_data = {}
         for location, settings in location_settings.items():
             try:
                 weather = fetch_weather(settings['lat'], settings['lon'], location)
                 weather_data[location] = weather
+                logger.info(f"DataLoader: Fetched weather for {location}")
             except Exception as e:
+                logger.warning(f"DataLoader: Failed to fetch weather for {location}: {e}")
                 weather_data[location] = {
                     'temperature_c': 25,
                     'temperature_f': 77,
@@ -881,6 +897,7 @@ class DataLoader(QObject):
                     'wind_direction': 90,
                     'cloud_cover': 50
                 }
+        logger.info("DataLoader: Finished loading all data")
         self.finished.emit(launch_data, f1_data, weather_data)
 
 class LaunchUpdater(QObject):
@@ -1160,14 +1177,18 @@ class Backend(QObject):
 
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
+        logger.info("Backend: startDataLoader called")
         if self.loader is None:
-            logger.info("Starting data loader after WiFi check...")
+            logger.info("Backend: Creating new DataLoader...")
             self.loader = DataLoader()
             self.thread = QThread()
             self.loader.moveToThread(self.thread)
             self.loader.finished.connect(self.on_data_loaded)
             self.thread.started.connect(self.loader.run)
+            logger.info("Backend: Starting DataLoader thread...")
             self.thread.start()
+        else:
+            logger.info("Backend: DataLoader already exists")
 
         logger.info("Setting up timers...")
         # Timers
@@ -1872,6 +1893,8 @@ class Backend(QObject):
 
     @pyqtSlot(dict, dict, dict)
     def on_data_loaded(self, launch_data, f1_data, weather_data):
+        logger.info("Backend: on_data_loaded called")
+        logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
         logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
         self._f1_data = f1_data
@@ -1886,6 +1909,7 @@ class Backend(QObject):
         logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
+        logger.info("Backend: Data loading complete, cleaning up thread")
         self.thread.quit()
         self.thread.wait()
 
@@ -3101,6 +3125,7 @@ context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
+context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), 'assets', 'double-chevron.png').replace('\\', '/'))
 context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
@@ -4985,7 +5010,7 @@ Window {
                 width: parent.width
                 height: 20
                 anchors.bottom: parent.bottom
-                anchors.bottomMargin: 0  // Position at tray bottom
+                anchors.bottomMargin: 3  // Moved up slightly for better centering
                 z: -1  // Ensure this is behind the drag handle
 
                 Text {
@@ -5029,10 +5054,11 @@ Window {
                     width: 60
                     height: 30
                     anchors.bottom: parent.bottom
+                    anchors.bottomMargin: -3  // Moved down slightly for better centering
                     anchors.horizontalCenter: parent.horizontalCenter
 
                     Image {
-                        source: "file:///C:/Users/harri/Projects/spacex-dashboard/assets/double-chevron.png"
+                        source: "file:///" + chevronPath
                         width: 24
                         height: 24
                         anchors.centerIn: parent
