@@ -3126,6 +3126,7 @@ context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), 'assets', 'f1-logo.png').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), 'assets', 'double-chevron.png').replace('\\', '/'))
+context.setContextProperty("globeUrl", "file:///" + os.path.join(os.path.dirname(__file__), 'globe.html').replace('\\', '/'))
 context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
@@ -5138,7 +5139,7 @@ Window {
                         spacing: 10
 
                         Flickable {
-                            Layout.fillWidth: true
+                            Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
                             contentHeight: launchDetailsColumn.height
                             clip: true
@@ -5249,6 +5250,21 @@ Window {
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillHeight: true
+                            radius: 12
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+
+                            WebEngineView {
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                url: globeUrl
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: false
                             }
                         }
 
