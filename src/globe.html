@@ -159,6 +159,7 @@
             }
 
             console.log("Creating trajectory with", trajectoryData.trajectory.length, "points");
+            console.log("Orbit path present:", !!trajectoryData.orbit_path, "with", trajectoryData.orbit_path ? trajectoryData.orbit_path.length : 0, "points");
 
             try {
                 // Create trajectory points from the curved lat/lon data
@@ -229,6 +230,52 @@
                         scene.add(launchMarker);
                         console.log("Launch site marker added to scene");
                     }
+                }
+
+                // Remove previous orbit line if it exists
+                if (window.currentOrbitLine) {
+                    if (globe) globe.remove(window.currentOrbitLine);
+                    scene.remove(window.currentOrbitLine);
+                    window.currentOrbitLine.geometry.dispose();
+                    window.currentOrbitLine.material.dispose();
+                    window.currentOrbitLine = null;
+                    console.log("Removed existing orbit line");
+                }
+
+                // Draw orbital path if present
+                if (trajectoryData.orbit_path && trajectoryData.orbit_path.length > 2) {
+                    console.log("Rendering orbit path with", trajectoryData.orbit_path.length, "points");
+
+                    const orbitPoints = [];
+                    trajectoryData.orbit_path.forEach((point, index) => {
+                        const phi = (90 - point.lat) * (Math.PI / 180);
+                        const theta = (point.lon + 180) * (Math.PI / 180);
+                        // Keep orbit at a slightly higher radius for visibility
+                        const radius = 1.04;
+                        const x = -(radius * Math.sin(phi) * Math.cos(theta));
+                        const z = radius * Math.sin(phi) * Math.sin(theta);
+                        const y = radius * Math.cos(phi);
+                        orbitPoints.push(new THREE.Vector3(x, y, z));
+                    });
+                    // Use LineSegments for dashed effect
+                    const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
+                    const orbitMaterial = new THREE.LineDashedMaterial({
+                        color: 0x00ffff,
+                        linewidth: 2,
+                        dashSize: 0.03,
+                        gapSize: 0.02,
+                        transparent: true,
+                        opacity: 0.7
+                    });
+                    const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
+                    orbitLine.computeLineDistances();
+                    if (globe) {
+                        globe.add(orbitLine);
+                    } else {
+                        scene.add(orbitLine);
+                    }
+                    window.currentOrbitLine = orbitLine;
+                    console.log("Orbit line added");
                 }
 
                 // Force a render

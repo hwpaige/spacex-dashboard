@@ -1854,6 +1854,21 @@ class Backend(QObject):
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
+        # Example: Add logging to show the orbit type being processed
+        next_launch = None
+        if self._launch_data and self._launch_data.get('upcoming'):
+            next_launch = self._launch_data['upcoming'][0] if self._launch_data['upcoming'] else None
+        if not next_launch:
+            logger.info("No upcoming launch found for trajectory generation")
+            return None
+
+        logger.info(f"Next launch: {next_launch.get('mission', 'Unknown')} from {next_launch.get('pad', 'Unknown')}")
+        pad = next_launch.get('pad', '')
+        orbit = next_launch.get('orbit', '')
+
+        logger.info(f"Processing orbit type: '{orbit}' for trajectory generation")
+
+        # ...existing code for trajectory generation...
         """Get trajectory data for the next upcoming launch"""
         logger.info("get_launch_trajectory called")
         upcoming = self.get_upcoming_launches()
@@ -1926,8 +1941,8 @@ class Backend(QObject):
 
             # Lift the control point upward for the arc effect
             if orbit_type == 'polar':
-                control_lat = min(85.0, mid_lat + 30)  # High arc for polar orbits
-                control_lon = mid_lon - 45  # Curve westward
+                control_lat = max(-85.0, mid_lat - 20)  # South arc for polar orbits from Vandenberg
+                control_lon = mid_lon - 20  # Slight westward curve
             elif orbit_type == 'equatorial':
                 control_lat = mid_lat + 15  # Moderate arc
                 control_lon = mid_lon + 30  # Curve eastward
@@ -1958,12 +1973,13 @@ class Backend(QObject):
 
         # Generate trajectory based on orbit type
         trajectory = []
+        logger.info(f"Generating ascent trajectory for orbit type: '{orbit}'")
 
         if 'Low Earth Orbit' in orbit or 'LEO' in orbit:
             # LEO trajectory - create a curved arc
             if launch_site['name'] == 'Vandenberg, CA':
-                # Vandenberg LEO trajectory - arc northwest (typical for Starlink)
-                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 25, 'lon': launch_site['lon'] - 45}, 20, orbit_type='polar')
+                # Vandenberg polar LEO trajectory - launch south-southwest over Pacific (~190° azimuth)
+                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] - 30, 'lon': launch_site['lon'] - 10}, 20, orbit_type='polar')
             else:
                 # Equatorial orbit from Florida/Texas - arc eastward
                 trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 35, orbit_type='equatorial')
@@ -1987,6 +2003,46 @@ class Backend(QObject):
             'mission': next_launch.get('mission', ''),
             'pad': pad
         }
+
+        # --- Add orbital path as a circular or elliptical arc ---
+        def generate_orbit_path(trajectory, orbit_type='LEO', num_points=60):
+            # Use the last point of the ascent as the starting point of the orbit
+            if not trajectory:
+                return []
+            start = trajectory[-1]
+            # For LEO, use a circular path at the same latitude as the end of ascent
+            # For GTO, use a more elliptical path (simulate higher apogee)
+            # For polar, sweep longitude, keep latitude near end point
+            points = []
+            if orbit_type in ['LEO', 'Low Earth Orbit', 'polar', 'equatorial']:
+                # Circular orbit in the plane of the end point
+                lat = start['lat']
+                for i in range(num_points):
+                    theta = (i / num_points) * 360.0
+                    lon = (start['lon'] + theta) % 360 - 180
+                    points.append({'lat': lat, 'lon': lon})
+            elif orbit_type in ['GTO', 'Geostationary']:
+                # Elliptical: latitude oscillates, longitude sweeps
+                for i in range(num_points):
+                    theta = (i / num_points) * 360.0
+                    lon = (start['lon'] + theta) % 360 - 180
+                    # Simulate elliptical inclination
+                    lat = start['lat'] + 10 * math.sin(math.radians(theta))
+                    points.append({'lat': lat, 'lon': lon})
+            else:
+                # Default: circular at end latitude
+                lat = start['lat']
+                for i in range(num_points):
+                    theta = (i / num_points) * 360.0
+                    lon = (start['lon'] + theta) % 360 - 180
+                    points.append({'lat': lat, 'lon': lon})
+            return points
+
+        result['orbit_path'] = generate_orbit_path(trajectory, orbit, 90)
+        logger.info(f"Generated orbit path with {len(result['orbit_path'])} points for orbit type: '{orbit}'")
+        logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
+        logger.info(f"Generated orbit path with {len(result['orbit_path'])} points")
+        logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Returning trajectory with {len(trajectory)} points")
         return result
 
