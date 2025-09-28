@@ -7,6 +7,7 @@ import fastf1
 import numpy as np
 import pandas as pd
 import shlex
+import math
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -948,6 +949,7 @@ class Backend(QObject):
     wifiConnectingChanged = pyqtSignal()
     rememberedNetworksChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
+    updateGlobeTrajectory = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1829,6 +1831,144 @@ class Backend(QObject):
         return launches
 
     @pyqtSlot(result=QVariant)
+    def get_launch_trajectory(self):
+        """Get trajectory data for the next upcoming launch"""
+        logger.info("get_launch_trajectory called")
+        upcoming = self.get_upcoming_launches()
+        logger.info(f"Found {len(upcoming)} upcoming launches")
+
+        # If no upcoming launches, try to use recent launches for demo
+        if not upcoming:
+            logger.info("No upcoming launches, trying recent launches")
+            if self._launch_data and self._launch_data.get('previous'):
+                recent_launches = self._launch_data['previous'][:5]  # Get first 5 recent launches
+                if recent_launches:
+                    upcoming = [{
+                        'mission': launch.get('mission', 'Unknown'),
+                        'pad': launch.get('pad', 'Cape Canaveral'),
+                        'orbit': launch.get('orbit', 'LEO')
+                    } for launch in recent_launches]
+                    logger.info(f"Using {len(upcoming)} recent launches for demo")
+
+        if not upcoming:
+            logger.info("No launches available at all")
+            return None
+
+        next_launch = upcoming[0]
+        logger.info(f"Next launch: {next_launch.get('mission', 'Unknown')} from {next_launch.get('pad', 'Unknown')}")
+        pad = next_launch.get('pad', '')
+        orbit = next_launch.get('orbit', '')
+
+        # Launch site coordinates
+        launch_sites = {
+            'LC-39A': {'lat': 28.6084, 'lon': -80.6043, 'name': 'Cape Canaveral, FL'},
+            'LC-40': {'lat': 28.5619, 'lon': -80.5773, 'name': 'Cape Canaveral, FL'},
+            'SLC-4E': {'lat': 34.6321, 'lon': -120.6107, 'name': 'Vandenberg, CA'},
+            'Starbase': {'lat': 25.9975, 'lon': -97.1566, 'name': 'Starbase, TX'},
+            'Launch Complex 39A': {'lat': 28.6084, 'lon': -80.6043, 'name': 'Cape Canaveral, FL'},
+            'Launch Complex 40': {'lat': 28.5619, 'lon': -80.5773, 'name': 'Cape Canaveral, FL'},
+            'Space Launch Complex 4E': {'lat': 34.6321, 'lon': -120.6107, 'name': 'Vandenberg, CA'}
+        }
+
+        # Find launch site coordinates
+        launch_site = None
+        for site_key, site_data in launch_sites.items():
+            if site_key in pad:
+                launch_site = site_data
+                break
+
+        if not launch_site:
+            # Default to Cape Canaveral if pad not recognized
+            launch_site = launch_sites['LC-39A']
+            logger.info(f"Using default launch site: {launch_site}")
+
+        logger.info(f"Launch site: {launch_site}")
+
+        def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default'):
+            """Generate a curved trajectory with multiple points"""
+            points = []
+
+            start_lat = start_point['lat']
+            start_lon = start_point['lon']
+            end_lat = end_point['lat']
+            end_lon = end_point['lon']
+
+            # Calculate intermediate points with curvature
+            for i in range(num_points + 1):
+                t = i / num_points  # Parameter from 0 to 1
+
+                # Linear interpolation for basic position
+                lat = start_lat + (end_lat - start_lat) * t
+                lon = start_lon + (end_lon - start_lon) * t
+
+                # Add curvature based on orbit type
+                if orbit_type == 'polar':
+                    # Curve northward with some east-west movement
+                    lat_offset = 10 * math.sin(t * math.pi)  # Arc upward
+                    lon_offset = -20 * t * (1 - t) * 2  # Slight curve
+                elif orbit_type == 'equatorial':
+                    # Curve along equator with height
+                    lat_offset = 5 * math.sin(t * math.pi)  # Gentle arc
+                    lon_offset = 0
+                elif orbit_type == 'gto':
+                    # Higher arc for GTO
+                    lat_offset = 15 * math.sin(t * math.pi)  # Higher arc
+                    lon_offset = 10 * t * (1 - t) * 2  # Side curve
+                elif orbit_type == 'suborbital':
+                    # Lower, shorter arc
+                    lat_offset = 3 * math.sin(t * math.pi)  # Low arc
+                    lon_offset = 5 * t * (1 - t) * 2  # Slight curve
+                else:
+                    # Default gentle curve
+                    lat_offset = 8 * math.sin(t * math.pi)
+                    lon_offset = 0
+
+                # Apply offsets
+                final_lat = lat + lat_offset
+                final_lon = lon + lon_offset
+
+                # Keep longitude in valid range
+                final_lon = (final_lon + 180) % 360 - 180
+
+                points.append({'lat': final_lat, 'lon': final_lon})
+
+            return points
+
+        # Generate trajectory based on orbit type
+        trajectory = []
+
+        if 'Low Earth Orbit' in orbit or 'LEO' in orbit:
+            # LEO trajectory - create a curved arc
+            if launch_site['name'] == 'Vandenberg, CA':
+                # Polar orbit from Vandenberg - arc northward
+                trajectory = generate_curved_trajectory(launch_site, {'lat': 85.0, 'lon': launch_site['lon'] - 90}, 20, orbit_type='polar')
+            else:
+                # Equatorial orbit from Florida/Texas - arc eastward
+                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 25, orbit_type='equatorial')
+
+        elif 'Geostationary' in orbit or 'GTO' in orbit:
+            # Geostationary transfer orbit - higher arc toward equator
+            trajectory = generate_curved_trajectory(launch_site, {'lat': 0, 'lon': launch_site['lon'] + 150}, 30, orbit_type='gto')
+
+        elif 'Suborbital' in orbit:
+            # Suborbital trajectory - shorter, lower arc
+            trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 15, 'lon': launch_site['lon'] + 45}, 15, orbit_type='suborbital')
+
+        else:
+            # Default trajectory
+            trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
+
+        result = {
+            'launch_site': launch_site,
+            'trajectory': trajectory,
+            'orbit': orbit,
+            'mission': next_launch.get('mission', ''),
+            'pad': pad
+        }
+        logger.info(f"Returning trajectory with {len(trajectory)} points")
+        return result
+
+    @pyqtSlot(result=QVariant)
     def get_next_race(self):
         races = self._f1_data['schedule']
         current = datetime.now(pytz.UTC)
@@ -1909,6 +2049,10 @@ class Backend(QObject):
         logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
+
+        # Update trajectory now that data is loaded
+        self.updateGlobeTrajectory.emit()
+
         logger.info("Backend: Data loading complete, cleaning up thread")
         self.thread.quit()
         self.thread.wait()
@@ -3126,7 +3270,17 @@ context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1-logo.png').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
-context.setContextProperty("globeUrl", "file:///" + os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html').replace('\\', '/'))
+
+globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
+print(f"DEBUG: Globe file path: {globe_file_path}")
+print(f"DEBUG: Globe file exists: {os.path.exists(globe_file_path)}")
+
+earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
+print(f"DEBUG: Earth texture path: {earth_texture_path}")
+print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
+
+context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
+print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
 context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
@@ -3219,6 +3373,20 @@ Window {
         function onF1Changed() {
             if (backend.mode === "f1") {
                 nextRace = backend.get_next_race()
+            }
+        }
+        function onUpdateGlobeTrajectory() {
+            // Update trajectory when data loads
+            var trajectoryData = backend.get_launch_trajectory();
+            if (trajectoryData && globeView && globeView.runJavaScript) {
+                var simpleData = {
+                    trajectory: [
+                        {lat: 28.6, lon: -80.6},  // Cape Canaveral
+                        {lat: 35.0, lon: -70.0},  // Point 2
+                        {lat: 40.0, lon: -60.0}   // Point 3
+                    ]
+                };
+                globeView.runJavaScript("updateTrajectory(" + JSON.stringify(simpleData) + ");");
             }
         }
     }
@@ -5256,15 +5424,39 @@ Window {
                         Rectangle {
                             Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
-                            radius: 12
+                            radius: 0
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
 
                             WebEngineView {
+                                id: globeView
                                 anchors.fill: parent
-                                anchors.margins: 5
+                                anchors.margins: 0
                                 url: globeUrl
+                                backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: false
+
+                                onLoadingChanged: function(loadRequest) {
+                                    console.log("WebEngineView loading changed:", loadRequest.status, loadRequest.url);
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        console.log("Globe HTML loaded successfully");
+                                        // Update trajectory when globe loads
+                                        var trajectoryData = backend.get_launch_trajectory();
+                                        if (trajectoryData) {
+                                            // Simplify the data for testing
+                                            var simpleData = {
+                                                trajectory: [
+                                                    {lat: 28.6, lon: -80.6},  // Cape Canaveral
+                                                    {lat: 35.0, lon: -70.0},  // Point 2
+                                                    {lat: 40.0, lon: -60.0}   // Point 3
+                                                ]
+                                            };
+                                            globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(simpleData) + "); console.log('Called updateTrajectory');");
+                                        }
+                                    } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                        console.log("Globe HTML failed to load:", loadRequest.errorString);
+                                    }
+                                }
                             }
                         }
 
@@ -5287,8 +5479,6 @@ Window {
     }
 }
 """
-
-# Load QML from string (for complete single file)
 engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
 if not engine.rootObjects():
     logger.error("QML root object creation failed (see earlier QML errors above).")

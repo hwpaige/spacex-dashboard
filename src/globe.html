@@ -10,68 +10,108 @@
             padding: 0;
             background: transparent;
             overflow: hidden;
+            color: white;
+            font-family: Arial, sans-serif;
         }
         canvas {
             display: block;
         }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script>
-        let scene, camera, renderer, globe, controls;
+        let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
 
         function init() {
-            // Scene
-            scene = new THREE.Scene();
+            try {
+                // Scene
+                scene = new THREE.Scene();
 
-            // Camera
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.z = 2.5;
+                // Camera
+                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.z = 1.8; // Closer to make globe larger
 
-            // Renderer
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setClearColor(0x000000, 0); // Transparent background
-            document.body.appendChild(renderer.domElement);
+                // Renderer
+                renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.setClearColor(0x000000, 0); // Transparent background
+                document.body.appendChild(renderer.domElement);
 
-            // Globe geometry
-            const geometry = new THREE.SphereGeometry(1, 64, 64);
+                // Globe geometry
+                const geometry = new THREE.SphereGeometry(1, 64, 64);
 
-            // Earth texture
-            const textureLoader = new THREE.TextureLoader();
-            const earthTexture = textureLoader.load('./earth_texture.jpg');
+                // Earth texture - try multiple paths
+                const textureLoader = new THREE.TextureLoader();
 
-            // Material
-            const material = new THREE.MeshPhongMaterial({
-                map: earthTexture,
-                transparent: true,
-                opacity: 0.9
-            });
+                textureLoader.load(
+                    '../assets/images/earth_texture.jpg',
+                    function(texture) {
+                        // Material
+                        const material = new THREE.MeshPhongMaterial({
+                            map: texture,
+                            transparent: true,
+                            opacity: 0.9
+                        });
 
-            // Mesh
-            globe = new THREE.Mesh(geometry, material);
-            scene.add(globe);
+                        // Mesh
+                        globe = new THREE.Mesh(geometry, material);
+                        scene.add(globe);
 
-            // Lighting
-            const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-            scene.add(ambientLight);
+                        // Lighting
+                        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                        scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 1);
-            scene.add(directionalLight);
+                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                        directionalLight.position.set(1, 1, 1);
+                        scene.add(directionalLight);
 
-            // Controls
-            controls = {
-                autoRotate: true,
-                autoRotateSpeed: 0.5,
-                enableZoom: true,
-                enablePan: false,
-                enableRotate: true
-            };
+                        // Start animation
+                        animate();
+                    },
+                    function(progress) {
+                        // Loading progress
+                    },
+                    function(error) {
+                        console.error("Error loading texture:", error);
+                        // Fallback: create globe without texture
+                        const material = new THREE.MeshPhongMaterial({
+                            color: 0x2233ff,
+                            transparent: true,
+                            opacity: 0.9
+                        });
 
-            // Handle window resize
-            window.addEventListener('resize', onWindowResize, false);
+                        globe = new THREE.Mesh(geometry, material);
+                        scene.add(globe);
+
+                        // Lighting
+                        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+                        scene.add(ambientLight);
+
+                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                        directionalLight.position.set(1, 1, 1);
+                        scene.add(directionalLight);
+
+                        animate();
+                    }
+                );
+
+                // Controls
+                controls = {
+                    autoRotate: true,
+                    autoRotateSpeed: 0.5,
+                    enableZoom: true,
+                    enablePan: false,
+                    enableRotate: true
+                };
+
+                // Handle window resize
+                window.addEventListener('resize', onWindowResize, false);
+                console.log("Event listeners added");
+
+            } catch (error) {
+                console.error("Error during initialization:", error);
+            }
         }
 
         function onWindowResize() {
@@ -83,16 +123,130 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (controls.autoRotate) {
+            if (globe && controls && controls.autoRotate) {
                 globe.rotation.y += controls.autoRotateSpeed * 0.01;
             }
 
-            renderer.render(scene, camera);
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
+        }
+
+        function updateTrajectory(trajectoryData) {
+            console.log("updateTrajectory called with data:", trajectoryData);
+
+            // Remove existing trajectory line
+            if (trajectoryLine) {
+                if (globe) globe.remove(trajectoryLine);
+                scene.remove(trajectoryLine);
+                trajectoryLine.geometry.dispose();
+                trajectoryLine.material.dispose();
+                console.log("Removed existing trajectory");
+            }
+
+            // Remove existing launch marker
+            if (launchMarker) {
+                if (globe) globe.remove(launchMarker);
+                scene.remove(launchMarker);
+                launchMarker.geometry.dispose();
+                launchMarker.material.dispose();
+                console.log("Removed existing launch marker");
+            }
+
+            if (!trajectoryData || !trajectoryData.trajectory || trajectoryData.trajectory.length < 2) {
+                console.log("No valid trajectory data");
+                return;
+            }
+
+            console.log("Creating trajectory with", trajectoryData.trajectory.length, "points");
+
+            try {
+                // Create trajectory points
+                const points = [];
+                trajectoryData.trajectory.forEach((point, index) => {
+                    console.log("Processing point", index, ":", point);
+                    // Convert lat/lon to 3D coordinates on sphere
+                    const phi = (90 - point.lat) * (Math.PI / 180);
+                    const theta = (point.lon + 180) * (Math.PI / 180);
+
+                    // Vary radius based on trajectory progress for 3D arc effect
+                    const progress = index / (trajectoryData.trajectory.length - 1);
+                    const baseRadius = 1.01; // Just above globe surface
+                    const maxArcHeight = 0.15; // How high the arc goes
+                    const arcHeight = maxArcHeight * Math.sin(progress * Math.PI); // Peak in middle
+                    const radius = baseRadius + arcHeight;
+
+                    const x = -(radius * Math.sin(phi) * Math.cos(theta));
+                    const z = radius * Math.sin(phi) * Math.sin(theta);
+                    const y = radius * Math.cos(phi);
+
+                    points.push(new THREE.Vector3(x, y, z));
+                });
+
+                console.log("Created", points.length, "3D points");
+
+                // Create trajectory geometry and material
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const material = new THREE.LineBasicMaterial({
+                    color: 0xff4444,
+                    linewidth: 3,
+                    transparent: true,
+                    opacity: 0.8
+                });
+
+                // Create trajectory line
+                trajectoryLine = new THREE.Line(geometry, material);
+
+                // Add trajectory as a child of the globe so it rotates with it
+                if (globe) {
+                    globe.add(trajectoryLine);
+                    console.log("Trajectory line added as child of globe");
+                } else {
+                    scene.add(trajectoryLine);
+                    console.log("Trajectory line added to scene (globe not available)");
+                }
+
+                // Add launch site marker
+                if (trajectoryData.launch_site) {
+                    const launchPoint = trajectoryData.trajectory[0];
+                    const phi = (90 - launchPoint.lat) * (Math.PI / 180);
+                    const theta = (launchPoint.lon + 180) * (Math.PI / 180);
+                    const radius = 1.02;
+
+                    const x = -(radius * Math.sin(phi) * Math.cos(theta));
+                    const z = radius * Math.sin(phi) * Math.sin(theta);
+                    const y = radius * Math.cos(phi);
+
+                    const markerGeometry = new THREE.SphereGeometry(0.01, 8, 8);
+                    const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                    launchMarker = new THREE.Mesh(markerGeometry, markerMaterial);
+                    launchMarker.position.set(x, y, z);
+
+                    // Add marker as child of globe too
+                    if (globe) {
+                        globe.add(launchMarker);
+                        console.log("Launch site marker added as child of globe");
+                    } else {
+                        scene.add(launchMarker);
+                        console.log("Launch site marker added to scene");
+                    }
+                }
+
+                // Force a render
+                renderer.render(scene, camera);
+                console.log("Forced render");
+
+            } catch (error) {
+                console.error("Error in updateTrajectory:", error);
+            }
         }
 
         // Initialize and start animation
+        console.log("Starting initialization...");
         init();
-        animate();
+
+        // Expose functions to Qt
+        window.updateTrajectory = updateTrajectory;
 
         // Make globe interactive
         let isMouseDown = false;

@@ -269,7 +269,7 @@ Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=EGL_PLATFORM=drm
-WorkingDirectory=/home/$USER/Desktop/project
+WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=python3 app.py
 Restart=always
 RestartSec=5
@@ -324,6 +324,8 @@ setup_repository() {
     log "Setting up repository..."
     
     mkdir -p "$HOME_DIR/Desktop"
+    # Change to home directory before deleting project directory to avoid working directory issues
+    cd "$HOME_DIR"
     [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
     sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
     chown -R "$USER:$USER" "$REPO_DIR"
@@ -333,7 +335,7 @@ configure_plymouth() {
     log "Configuring Plymouth..."
     
     # Copy custom logo
-    cp "$REPO_DIR/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
+    cp "$REPO_DIR/assets/images/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
     
     # Set theme
     update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth 100
@@ -395,8 +397,8 @@ export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
-cd ~/Desktop/project
-echo "Changed to project directory: $(pwd)" >> ~/xinitrc.log
+cd ~/Desktop/project/src
+echo "Changed to project src directory: $(pwd)" >> ~/xinitrc.log
 
 if python3 -c 'import PyQt6, pyqtgraph, requests, pandas' 2>/dev/null; then
     echo "Using system PyQt6 at $(date)" | tee -a ~/xinitrc.log
