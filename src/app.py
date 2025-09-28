@@ -381,13 +381,21 @@ def fetch_launches():
         logger.info("Using persistent cached previous launches")
     else:
         try:
+            logger.info("Fetching fresh previous launches from API")
             all_launches = []
             url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_year}-12-31&limit=100'
+            logger.info(f"API URL: {url}")
 
             while url:
-                response = requests.get(url, timeout=10)
+                logger.info(f"Fetching page: {url}")
+                try:
+                    response = requests.get(url, timeout=10, verify=True)
+                except Exception as ssl_error:
+                    logger.warning(f"SSL verification failed, trying without verification: {ssl_error}")
+                    response = requests.get(url, timeout=10, verify=False)
                 response.raise_for_status()
                 data = response.json()
+                logger.info(f"API response received, status: {response.status_code}")
 
                 # Process this page of results
                 page_launches = []
@@ -410,6 +418,7 @@ def fetch_launches():
                         continue
 
                 all_launches.extend(page_launches)
+                logger.info(f"Processed {len(page_launches)} launches from this page")
 
                 # Check if there's a next page
                 url = data.get('next')
@@ -422,6 +431,9 @@ def fetch_launches():
             time.sleep(1)  # Avoid rate limiting
         except Exception as e:
             logger.error(f"LL2 API error: {e}")
+            logger.error(f"Exception type: {type(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             previous_launches = [
                 {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
@@ -434,10 +446,17 @@ def fetch_launches():
         logger.info("Using persistent cached upcoming launches")
     else:
         try:
+            logger.info("Fetching fresh upcoming launches from API")
             url = 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=50'
-            response = requests.get(url, timeout=10)
+            logger.info(f"API URL: {url}")
+            try:
+                response = requests.get(url, timeout=10, verify=True)
+            except Exception as ssl_error:
+                logger.warning(f"SSL verification failed for upcoming launches, trying without verification: {ssl_error}")
+                response = requests.get(url, timeout=10, verify=False)
             response.raise_for_status()
             data = response.json()
+            logger.info(f"API response received, status: {response.status_code}")
             upcoming_launches = [
                 {
                     'mission': launch['name'],
@@ -452,9 +471,12 @@ def fetch_launches():
                 } for launch in data['results']
             ]
             save_cache_to_file(CACHE_FILE_UPCOMING, upcoming_launches, current_time)
-            logger.info("Successfully fetched and saved upcoming launches")
+            logger.info(f"Successfully fetched and saved {len(upcoming_launches)} upcoming launches")
         except Exception as e:
-            logger.error(f"LL2 API error: {e}")
+            logger.error(f"LL2 API error for upcoming launches: {e}")
+            logger.error(f"Exception type: {type(e)}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             upcoming_launches = []
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}

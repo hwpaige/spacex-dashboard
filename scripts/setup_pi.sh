@@ -194,6 +194,32 @@ echo '=== Package Tests ==='
 python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ System packages working\")' 2>/dev/null || echo '✗ System Python failed'
 python3 -c 'import fastf1; print(\"✓ fastf1 available\")' 2>/dev/null || echo '✗ fastf1 not available'
 echo ''
+echo '=== Network Tests ==='
+echo 'Testing internet connectivity...'
+ping -c 3 8.8.8.8 2>/dev/null && echo '✓ Internet connectivity OK' || echo '✗ No internet connectivity'
+echo ''
+echo 'Testing SpaceX API...'
+curl -s --max-time 10 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5' | head -c 200 && echo -e '\n✓ API reachable' || echo '✗ API unreachable'
+echo ''
+echo 'Testing Python requests to API with SSL debugging...'
+python3 -c "
+import requests
+import ssl
+print('SSL version:', ssl.OPENSSL_VERSION)
+try:
+    # First try with SSL verification
+    response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=True)
+    print(f'✓ SSL verified request successful: {response.status_code}')
+except Exception as e:
+    print(f'✗ SSL verified request failed: {e}')
+    try:
+        # Try without SSL verification as fallback
+        response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=False)
+        print(f'✓ Non-SSL request successful: {response.status_code}')
+    except Exception as e2:
+        print(f'✗ Non-SSL request also failed: {e2}')
+" 2>/dev/null || echo '✗ Python SSL test failed'
+echo ''
 echo '=== GPU/DMA Buffer Status ==='
 echo \"GPU devices:\"
 ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
@@ -334,12 +360,75 @@ setup_repository() {
 configure_plymouth() {
     log "Configuring Plymouth..."
     
-    # Copy custom logo
-    cp "$REPO_DIR/assets/images/spacex_logo.png" /usr/share/plymouth/themes/spinner/bgrt-fallback.png
+    # Create custom SpaceX Plymouth theme
+    THEME_DIR="/usr/share/plymouth/themes/spacex"
+    mkdir -p "$THEME_DIR"
     
-    # Set theme
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth 100
-    update-alternatives --set default.plymouth /usr/share/plymouth/themes/spinner/spinner.plymouth
+    # Copy the SpaceX logo
+    cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
+    
+    # Create theme configuration file
+    cat > "$THEME_DIR/spacex.plymouth" << 'EOF'
+[Plymouth Theme]
+Name=SpaceX
+Description=A SpaceX themed Plymouth boot splash
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/spacex
+ScriptFile=/usr/share/plymouth/themes/spacex/spacex.script
+EOF
+    
+    # Create the script file for the theme
+    cat > "$THEME_DIR/spacex.script" << 'EOF'
+# SpaceX Plymouth Theme Script
+# Based on spinner theme but with centered, properly scaled logo
+
+Window.SetBackgroundTopColor(0.0, 0.0, 0.0);
+Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+
+# Load the SpaceX logo
+logo.image = Image("spacex_logo.png");
+
+# Scale the logo to 300x300 pixels while preserving aspect ratio
+logo.width = 300;
+logo.height = 300;
+logo.image = logo.image.Scale(logo.width, logo.height);
+
+# Center the logo on screen
+logo.x = Window.GetWidth() / 2 - logo.width / 2;
+logo.y = Window.GetHeight() / 2 - logo.height / 2;
+
+# Draw the logo
+logo.image.Draw(logo.x, logo.y);
+
+# Optional: Add a subtle loading animation
+spinner.radius = 50;
+spinner.x = Window.GetWidth() / 2;
+spinner.y = Window.GetHeight() / 2 + 200;
+spinner.angle = 0;
+
+fun refresh_callback ()
+{
+    # Clear and redraw logo
+    logo.image.Draw(logo.x, logo.y);
+    
+    # Draw spinner if desired (comment out if not wanted)
+    # spinner.angle = spinner.angle + 10;
+    # Plymouth.DrawCircle(spinner.x, spinner.y, spinner.radius, 2, 1.0, 1.0, 1.0, 0.5);
+}
+
+Plymouth.SetRefreshFunction(refresh_callback);
+EOF
+    
+    # Set permissions
+    chmod 644 "$THEME_DIR/spacex.plymouth"
+    chmod 755 "$THEME_DIR/spacex.script"
+    chmod 644 "$THEME_DIR/spacex_logo.png"
+    
+    # Install and set the custom theme
+    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/spacex.plymouth" 200
+    update-alternatives --set default.plymouth "$THEME_DIR/spacex.plymouth"
     
     # Rebuild initramfs
     if ! update-initramfs -u; then
