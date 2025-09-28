@@ -2047,23 +2047,6 @@ class Backend(QObject):
         return result
 
     @pyqtSlot(result=QVariant)
-    def get_weather(self):
-        try:
-            # Fetch weather for Cape Canaveral
-            response = requests.get('https://wttr.in/Cape Canaveral?format=j1', timeout=10)
-            data = response.json()
-            current = data['current_condition'][0]
-            return {
-                'location': 'Cape Canaveral',
-                'temp': current['temp_C'],
-                'description': current['weatherDesc'][0]['value'],
-                'wind_speed': current['windspeedKmph']
-            }
-        except Exception as e:
-            logger.error(f"Error fetching weather: {e}")
-            return None
-
-    @pyqtSlot(result=QVariant)
     def get_next_race(self):
         races = self._f1_data['schedule']
         current = datetime.now(pytz.UTC)
@@ -5443,419 +5426,104 @@ Window {
                                 width: parent.width
                                 radius: 12
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                border.width: 1
                                 implicitHeight: launchDetailsLayout.height
 
                                 ColumnLayout {
                                     id: launchDetailsLayout
                                     anchors.fill: parent
-                                    anchors.margins: 20
-                                    spacing: 16
+                                    anchors.margins: 15
+                                    spacing: 10
 
-                                    // Header with mission name
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 60
-                                        color: backend.theme === "dark" ? "#1a4f5a" : "#e8f4f8"
-                                        radius: 8
-                                        border.color: backend.theme === "dark" ? "#2a6f7a" : "#c8e4e8"
-                                        border.width: 1
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 12
-                                            spacing: 12
-
-                                            Rectangle {
-                                                width: 36
-                                                height: 36
-                                                radius: 18
-                                                color: "#005288"
-                                                Layout.alignment: Qt.AlignVCenter
-
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: "\uf135"  // rocket icon
-                                                    font.family: "Font Awesome 5 Free"
-                                                    font.pixelSize: 16
-                                                    color: "white"
-                                                }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 2
-
-                                                Text {
-                                                    text: "NEXT LAUNCH"
-                                                    font.pixelSize: 10
-                                                    font.bold: true
-                                                    font.letterSpacing: 1
-                                                    color: backend.theme === "dark" ? "#80c4d4" : "#4a90a4"
-                                                    opacity: 0.8
-                                                }
-
-                                                Text {
-                                                    text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
-                                                    font.pixelSize: 16
-                                                    font.bold: true
-                                                    color: backend.theme === "dark" ? "white" : "black"
-                                                    wrapMode: Text.Wrap
-                                                    Layout.fillWidth: true
-                                                    maximumLineCount: 2
-                                                    elide: Text.ElideRight
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Launch details grid
                                     ColumnLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 12
+                                        spacing: 8
 
-                                        // Row 1: Date & Time, NET Status
-                                        RowLayout {
+                                        Text {
+                                            text: "🚀 Mission: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches")
+                                            font.pixelSize: 16
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
                                             Layout.fillWidth: true
-                                            spacing: 16
-
-                                            // Date & Time
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: "\uf073"  // calendar icon
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "#ff9500"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.date : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.time : ""
-                                                            font.pixelSize: 10
-                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // NET Status
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: "\uf017"  // clock icon
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "#007aff"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: "NET"
-                                                            font.pixelSize: 10
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                            wrapMode: Text.Wrap
-                                                            maximumLineCount: 2
-                                                            elide: Text.ElideRight
-                                                        }
-                                                    }
-                                                }
-                                            }
                                         }
 
-                                        // Row 2: Rocket, Orbit
-                                        RowLayout {
+                                        Text {
+                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.date : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
                                             Layout.fillWidth: true
-                                            spacing: 16
-
-                                            // Rocket
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: "\uf135"  // rocket icon
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "#ff3b30"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: "ROCKET"
-                                                            font.pixelSize: 10
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Orbit
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: "\uf186"  // globe icon
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "#34c759"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: "ORBIT"
-                                                            font.pixelSize: 10
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                        }
-                                                    }
-                                                }
-                                            }
+                                            visible: launchTray.nextLaunch
                                         }
 
-                                        // Row 3: Launch Pad, Status
-                                        RowLayout {
+                                        Text {
+                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.time : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
                                             Layout.fillWidth: true
-                                            spacing: 16
-
-                                            // Launch Pad
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8"
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: "\uf015"  // home icon
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "#ff9500"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: "PAD"
-                                                            font.pixelSize: 10
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.pad : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            // Status
-                                            Rectangle {
-                                                Layout.fillWidth: true
-                                                Layout.preferredHeight: 50
-                                                color: {
-                                                    if (!launchTray.nextLaunch) return backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8";
-                                                    var status = launchTray.nextLaunch.status.toLowerCase();
-                                                    if (status.includes("success")) return "#34c759";
-                                                    if (status.includes("failure") || status.includes("failed")) return "#ff3b30";
-                                                    if (status.includes("upcoming") || status.includes("scheduled")) return "#007aff";
-                                                    return backend.theme === "dark" ? "#3a3e3e" : "#f8f8f8";
-                                                }
-                                                radius: 6
-                                                border.color: backend.theme === "dark" ? "#4a4e4e" : "#e8e8e8"
-                                                border.width: 1
-
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 10
-                                                    spacing: 8
-
-                                                    Text {
-                                                        text: {
-                                                            if (!launchTray.nextLaunch) return "\uf128"; // question icon
-                                                            var status = launchTray.nextLaunch.status.toLowerCase();
-                                                            if (status.includes("success")) return "\uf00c"; // check icon
-                                                            if (status.includes("failure") || status.includes("failed")) return "\uf00d"; // x icon
-                                                            if (status.includes("upcoming") || status.includes("scheduled")) return "\uf017"; // clock icon
-                                                            return "\uf128"; // question icon
-                                                        }
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 14
-                                                        color: "white"
-                                                        Layout.preferredWidth: 20
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 1
-
-                                                        Text {
-                                                            text: "STATUS"
-                                                            font.pixelSize: 10
-                                                            font.bold: true
-                                                            color: "white"
-                                                            opacity: 0.8
-                                                        }
-
-                                                        Text {
-                                                            text: launchTray.nextLaunch ? launchTray.nextLaunch.status : ""
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            color: "white"
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // Video link (if available)
-                                    Rectangle {
-                                        Layout.fillWidth: true
-                                        Layout.preferredHeight: 45
-                                        color: backend.theme === "dark" ? "#2a4a2a" : "#f0f8f0"
-                                        radius: 6
-                                        border.color: backend.theme === "dark" ? "#3a5a3a" : "#e0e8e0"
-                                        border.width: 1
-                                        visible: launchTray.nextLaunch && launchTray.nextLaunch.video_url
-
-                                        RowLayout {
-                                            anchors.fill: parent
-                                            anchors.margins: 10
-                                            spacing: 8
-
-                                            Text {
-                                                text: "\uf03d"  // video icon
-                                                font.family: "Font Awesome 5 Free"
-                                                font.pixelSize: 14
-                                                color: "#34c759"
-                                                Layout.preferredWidth: 20
-                                            }
-
-                                            Text {
-                                                text: "Live Stream Available"
-                                                font.pixelSize: 12
-                                                font.bold: true
-                                                color: backend.theme === "dark" ? "#a0d0a0" : "#2a5a2a"
-                                                Layout.fillWidth: true
-                                            }
-
-                                            Text {
-                                                text: "\uf35d"  // external link icon
-                                                font.family: "Font Awesome 5 Free"
-                                                font.pixelSize: 12
-                                                color: backend.theme === "dark" ? "#a0d0a0" : "#2a5a2a"
-                                            }
+                                            visible: launchTray.nextLaunch
                                         }
 
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                if (launchTray.nextLaunch && launchTray.nextLaunch.video_url) {
-                                                    Qt.openUrlExternally(launchTray.nextLaunch.video_url);
-                                                }
-                                            }
+                                        Text {
+                                            text: "📡 NET: " + (launchTray.nextLaunch ? launchTray.nextLaunch.net : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "📊 Status: " + (launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🚀 Rocket: " + (launchTray.nextLaunch ? launchTray.nextLaunch.rocket : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🛰️ Orbit: " + (launchTray.nextLaunch ? launchTray.nextLaunch.orbit : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🏗️ Pad: " + (launchTray.nextLaunch ? launchTray.nextLaunch.pad : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
+                                        }
+
+                                        Text {
+                                            text: "🎥 Video URL: " + (launchTray.nextLaunch ? launchTray.nextLaunch.video_url : "")
+                                            font.pixelSize: 14
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                            visible: launchTray.nextLaunch
                                         }
                                     }
                                 }
