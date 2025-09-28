@@ -26,13 +26,34 @@
             font-size: 12px;
             max-width: 200px;
         }
+        #playPauseBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 5px;
+            padding: 8px 12px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        #playPauseBtn:hover {
+            background: rgba(0, 0, 0, 0.9);
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <button id="playPauseBtn">⏸️ Pause</button>
     <div id="weatherInfo">Loading weather...</div>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
+        let momentumX = 0, momentumY = 0;
+        let isInMomentum = false;
+        let lastTime = Date.now();
+        let isAutoRotatePaused = false;
 
         function init() {
             try {
@@ -156,8 +177,26 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            if (globe && controls && controls.autoRotate) {
-                globe.rotation.y += controls.autoRotateSpeed * 0.01;
+            if (globe) {
+                if (isInMomentum) {
+                    // Apply momentum
+                    globe.rotation.y += momentumX;
+                    globe.rotation.x += momentumY;
+
+                    // Decay momentum
+                    momentumX *= 0.95; // Friction/damping
+                    momentumY *= 0.95;
+
+                    // Check if momentum is low enough to return to auto-rotation
+                    if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
+                        isInMomentum = false;
+                        momentumX = 0;
+                        momentumY = 0;
+                    }
+                } else if (controls && controls.autoRotate && !isAutoRotatePaused) {
+                    // Normal auto-rotation (only if not paused)
+                    globe.rotation.y += controls.autoRotateSpeed * 0.01;
+                }
             }
 
             // Rotate clouds slower than the globe
@@ -349,14 +388,28 @@
 
         document.addEventListener('mousedown', (event) => {
             isMouseDown = true;
+            isInMomentum = false; // Stop momentum when user takes control
+            momentumX = 0;
+            momentumY = 0;
+            lastTime = Date.now();
             previousMousePosition = { x: event.clientX, y: event.clientY };
         });
 
         document.addEventListener('mousemove', (event) => {
             if (!isMouseDown) return;
 
+            const currentTime = Date.now();
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
             const deltaX = event.clientX - previousMousePosition.x;
             const deltaY = event.clientY - previousMousePosition.y;
+
+            // Track velocity for momentum
+            if (deltaTime > 0) {
+                momentumX = deltaX / deltaTime * 0.1; // Scale for smooth momentum
+                momentumY = deltaY / deltaTime * 0.1;
+            }
 
             globe.rotation.y += deltaX * 0.01;
             globe.rotation.x += deltaY * 0.01;
@@ -366,12 +419,17 @@
 
         document.addEventListener('mouseup', () => {
             isMouseDown = false;
+            isInMomentum = true; // Start momentum mode
         });
 
         // Touch support for mobile
         document.addEventListener('touchstart', (event) => {
             if (event.touches.length === 1) {
                 isMouseDown = true;
+                isInMomentum = false; // Stop momentum when user takes control
+                momentumX = 0;
+                momentumY = 0;
+                lastTime = Date.now();
                 previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
             }
         });
@@ -381,8 +439,18 @@
 
             event.preventDefault();
 
+            const currentTime = Date.now();
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+
             const deltaX = event.touches[0].clientX - previousMousePosition.x;
             const deltaY = event.touches[0].clientY - previousMousePosition.y;
+
+            // Track velocity for momentum
+            if (deltaTime > 0) {
+                momentumX = deltaX / deltaTime * 0.1;
+                momentumY = deltaY / deltaTime * 0.1;
+            }
 
             globe.rotation.y += deltaX * 0.01;
             globe.rotation.x += deltaY * 0.01;
@@ -392,6 +460,18 @@
 
         document.addEventListener('touchend', () => {
             isMouseDown = false;
+            isInMomentum = true; // Start momentum mode
+        });
+
+        // Play/Pause button functionality
+        document.getElementById('playPauseBtn').addEventListener('click', () => {
+            isAutoRotatePaused = !isAutoRotatePaused;
+            const button = document.getElementById('playPauseBtn');
+            if (isAutoRotatePaused) {
+                button.innerHTML = '▶️ Play';
+            } else {
+                button.innerHTML = '⏸️ Pause';
+            }
         });
     </script>
 </body>
