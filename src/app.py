@@ -1962,8 +1962,8 @@ class Backend(QObject):
         if 'Low Earth Orbit' in orbit or 'LEO' in orbit:
             # LEO trajectory - create a curved arc
             if launch_site['name'] == 'Vandenberg, CA':
-                # Polar orbit from Vandenberg - arc northward
-                trajectory = generate_curved_trajectory(launch_site, {'lat': 85.0, 'lon': launch_site['lon'] - 90}, 20, orbit_type='polar')
+                # Vandenberg LEO trajectory - arc northwest (typical for Starlink)
+                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 25, 'lon': launch_site['lon'] - 45}, 20, orbit_type='polar')
             else:
                 # Equatorial orbit from Florida/Texas - arc eastward
                 trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 35, orbit_type='equatorial')
