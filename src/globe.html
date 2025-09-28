@@ -161,19 +161,18 @@
             console.log("Creating trajectory with", trajectoryData.trajectory.length, "points");
 
             try {
-                // Create trajectory points
+                // Create trajectory points from the curved lat/lon data
                 const points = [];
+
                 trajectoryData.trajectory.forEach((point, index) => {
-                    console.log("Processing point", index, ":", point);
-                    // Convert lat/lon to 3D coordinates on sphere
+                    // Convert lat/lon to 3D coordinates on sphere with subtle arc height
                     const phi = (90 - point.lat) * (Math.PI / 180);
                     const theta = (point.lon + 180) * (Math.PI / 180);
 
-                    // Vary radius based on trajectory progress for 3D arc effect
+                    // Add subtle height variation for visual effect
                     const progress = index / (trajectoryData.trajectory.length - 1);
-                    const baseRadius = 1.01; // Just above globe surface
-                    const maxArcHeight = 0.15; // How high the arc goes
-                    const arcHeight = maxArcHeight * Math.sin(progress * Math.PI); // Peak in middle
+                    const baseRadius = 1.01; // Slightly above surface
+                    const arcHeight = 0.03 * Math.sin(progress * Math.PI); // Very subtle arc
                     const radius = baseRadius + arcHeight;
 
                     const x = -(radius * Math.sin(phi) * Math.cos(theta));

@@ -1907,7 +1907,7 @@ class Backend(QObject):
         logger.info(f"Launch site: {launch_site}")
 
         def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default'):
-            """Generate a curved trajectory with multiple points"""
+            """Generate a smooth rocket launch trajectory with continuous curvature"""
             points = []
 
             start_lat = start_point['lat']
@@ -1915,44 +1915,44 @@ class Backend(QObject):
             end_lat = end_point['lat']
             end_lon = end_point['lon']
 
-            # Calculate intermediate points with curvature
+            # Calculate total distance
+            lat_diff = end_lat - start_lat
+            lon_diff = (end_lon - start_lon + 180) % 360 - 180  # Handle longitude wraparound
+
+            # Create control point for quadratic Bézier curve
+            # Control point is positioned above and between start and end
+            mid_lat = (start_lat + end_lat) / 2
+            mid_lon = (start_lon + end_lon) / 2
+
+            # Lift the control point upward for the arc effect
+            if orbit_type == 'polar':
+                control_lat = min(85.0, mid_lat + 30)  # High arc for polar orbits
+                control_lon = mid_lon - 45  # Curve westward
+            elif orbit_type == 'equatorial':
+                control_lat = mid_lat + 15  # Moderate arc
+                control_lon = mid_lon + 30  # Curve eastward
+            elif orbit_type == 'gto':
+                control_lat = mid_lat + 25  # Higher arc for GTO
+                control_lon = mid_lon + 60  # Longer eastward curve
+            elif orbit_type == 'suborbital':
+                control_lat = mid_lat + 10  # Lower arc for suborbital
+                control_lon = mid_lon + 15  # Shorter curve
+            else:  # default
+                control_lat = mid_lat + 20  # Standard arc
+                control_lon = mid_lon + 45  # Standard curve
+
+            # Generate points along quadratic Bézier curve
             for i in range(num_points + 1):
                 t = i / num_points  # Parameter from 0 to 1
 
-                # Linear interpolation for basic position
-                lat = start_lat + (end_lat - start_lat) * t
-                lon = start_lon + (end_lon - start_lon) * t
-
-                # Add curvature based on orbit type
-                if orbit_type == 'polar':
-                    # Curve northward with some east-west movement
-                    lat_offset = 10 * math.sin(t * math.pi)  # Arc upward
-                    lon_offset = -20 * t * (1 - t) * 2  # Slight curve
-                elif orbit_type == 'equatorial':
-                    # Curve along equator with height
-                    lat_offset = 5 * math.sin(t * math.pi)  # Gentle arc
-                    lon_offset = 0
-                elif orbit_type == 'gto':
-                    # Higher arc for GTO
-                    lat_offset = 15 * math.sin(t * math.pi)  # Higher arc
-                    lon_offset = 10 * t * (1 - t) * 2  # Side curve
-                elif orbit_type == 'suborbital':
-                    # Lower, shorter arc
-                    lat_offset = 3 * math.sin(t * math.pi)  # Low arc
-                    lon_offset = 5 * t * (1 - t) * 2  # Slight curve
-                else:
-                    # Default gentle curve
-                    lat_offset = 8 * math.sin(t * math.pi)
-                    lon_offset = 0
-
-                # Apply offsets
-                final_lat = lat + lat_offset
-                final_lon = lon + lon_offset
+                # Quadratic Bézier formula: B(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂
+                lat = (1-t)**2 * start_lat + 2*(1-t)*t * control_lat + t**2 * end_lat
+                lon = (1-t)**2 * start_lon + 2*(1-t)*t * control_lon + t**2 * end_lon
 
                 # Keep longitude in valid range
-                final_lon = (final_lon + 180) % 360 - 180
+                lon = (lon + 180) % 360 - 180
 
-                points.append({'lat': final_lat, 'lon': final_lon})
+                points.append({'lat': lat, 'lon': lon})
 
             return points
 
@@ -1966,7 +1966,7 @@ class Backend(QObject):
                 trajectory = generate_curved_trajectory(launch_site, {'lat': 85.0, 'lon': launch_site['lon'] - 90}, 20, orbit_type='polar')
             else:
                 # Equatorial orbit from Florida/Texas - arc eastward
-                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 25, orbit_type='equatorial')
+                trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 35, orbit_type='equatorial')
 
         elif 'Geostationary' in orbit or 'GTO' in orbit:
             # Geostationary transfer orbit - higher arc toward equator
@@ -3401,14 +3401,7 @@ Window {
             // Update trajectory when data loads
             var trajectoryData = backend.get_launch_trajectory();
             if (trajectoryData && globeView && globeView.runJavaScript) {
-                var simpleData = {
-                    trajectory: [
-                        {lat: 28.6, lon: -80.6},  // Cape Canaveral
-                        {lat: 35.0, lon: -70.0},  // Point 2
-                        {lat: 40.0, lon: -60.0}   // Point 3
-                    ]
-                };
-                globeView.runJavaScript("updateTrajectory(" + JSON.stringify(simpleData) + ");");
+                globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
             }
         }
     }
@@ -5465,15 +5458,7 @@ Window {
                                         // Update trajectory when globe loads
                                         var trajectoryData = backend.get_launch_trajectory();
                                         if (trajectoryData) {
-                                            // Simplify the data for testing
-                                            var simpleData = {
-                                                trajectory: [
-                                                    {lat: 28.6, lon: -80.6},  // Cape Canaveral
-                                                    {lat: 35.0, lon: -70.0},  // Point 2
-                                                    {lat: 40.0, lon: -60.0}   // Point 3
-                                                ]
-                                            };
-                                            globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(simpleData) + "); console.log('Called updateTrajectory');");
+                                            globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
                                         }
                                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                         console.log("Globe HTML failed to load:", loadRequest.errorString);
