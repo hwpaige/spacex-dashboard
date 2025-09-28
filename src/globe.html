@@ -34,19 +34,25 @@
             color: white;
             border: 1px solid rgba(255, 255, 255, 0.3);
             border-radius: 5px;
-            padding: 8px 12px;
-            font-size: 14px;
+            padding: 8px;
+            font-size: 16px;
             cursor: pointer;
             transition: background-color 0.2s;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
         #playPauseBtn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
-    <button id="playPauseBtn">⏸️ Pause</button>
+    <button id="playPauseBtn"><i class="fas fa-pause"></i></button>
     <div id="weatherInfo">Loading weather...</div>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
@@ -199,10 +205,21 @@
                 }
             }
 
-            // Rotate clouds slower than the globe
+            // Rotate clouds with realistic motion
             const clouds = scene.getObjectByName('clouds');
             if (clouds) {
+                const time = Date.now() * 0.0001; // Slow time scale
+                
+                // Main rotation (eastward movement)
                 clouds.rotation.y += 0.0005;
+                
+                // Add realistic cloud motion with multiple frequencies
+                clouds.rotation.x = Math.sin(time * 0.5) * 0.02; // Slow vertical oscillation
+                clouds.rotation.z = Math.cos(time * 0.3) * 0.01; // Subtle tilt variation
+                
+                // Add some horizontal drift
+                clouds.position.x = Math.sin(time * 0.2) * 0.001;
+                clouds.position.z = Math.cos(time * 0.2) * 0.001;
             }
 
             if (renderer && scene && camera) {
@@ -467,10 +484,11 @@
         document.getElementById('playPauseBtn').addEventListener('click', () => {
             isAutoRotatePaused = !isAutoRotatePaused;
             const button = document.getElementById('playPauseBtn');
+            const icon = button.querySelector('i');
             if (isAutoRotatePaused) {
-                button.innerHTML = '▶️ Play';
+                icon.className = 'fas fa-play';
             } else {
-                button.innerHTML = '⏸️ Pause';
+                icon.className = 'fas fa-pause';
             }
         });
     </script>

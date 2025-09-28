@@ -5400,7 +5400,9 @@ Window {
                         spacing: 10
 
                         Flickable {
-                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: launchTray.width / 3 - 10
+                            Layout.maximumWidth: launchTray.width / 3 - 10
                             Layout.fillHeight: true
                             contentHeight: launchDetailsColumn.height
                             clip: true
@@ -5515,7 +5517,9 @@ Window {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: launchTray.width / 3 - 10
+                            Layout.maximumWidth: launchTray.width / 3 - 10
                             Layout.fillHeight: true
                             radius: 0
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -5546,7 +5550,9 @@ Window {
                         }
 
                         Rectangle {
-                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillWidth: true
+                            Layout.minimumWidth: launchTray.width / 3 - 10
+                            Layout.maximumWidth: launchTray.width / 3 - 10
                             Layout.fillHeight: true
                             radius: 12
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
