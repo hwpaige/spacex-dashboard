@@ -101,38 +101,15 @@ update_system() {
 
 install_packages() {
     log "Installing system packages..."
-    local packages=(
-        # Python and core
-        python3 python3-pip python3-full python3-venv git
-        
-        # PyQt6 and related
-        python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick
-        qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls
-        qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine
-        
-        # Data and utilities
-        python3-requests python3-dateutil python3-pandas python3-tz python3-pytz
-        python3-numpy python3-scipy python3-matplotlib python3-opengl python3-pyqtgraph
-        python3-psutil
-        
-        # System utilities
-        unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
-        xserver-xorg xinit x11-xserver-utils openbox libinput-tools imagemagick
-        ubuntu-raspi-settings xserver-xorg-video-modesetting lightdm
-        
-        # Graphics and display
-        libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 mesa-vulkan-drivers
-        mesa-opencl-icd ocl-icd-opencl-dev libgles2-mesa-dev libegl-mesa0
-        libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
-        libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1
-        libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg
-        
-        # WebEngine dependencies
-        libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0
-        libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1
-        libasound2t64 libgtk-3-0 lz4 plymouth-theme-spinner
-    )
     
+    # First try to install all packages at once for speed
+    if apt-get install -y --no-install-recommends "${packages[@]}"; then
+        log "✓ All packages installed successfully in one batch"
+        return
+    fi
+    
+    # If batch install failed, try individual installs to identify problematic packages
+    log "Batch install failed, trying individual package installs..."
     local failed_packages=""
     for package in "${packages[@]}"; do
         if ! apt-get install -y --no-install-recommends "$package" 2>/dev/null; then
@@ -383,10 +360,11 @@ EOF
     # Create the script file for the theme
     cat > "$THEME_DIR/spacex.script" << 'EOF'
 # SpaceX Plymouth Theme Script
-# Based on spinner theme but with centered, properly scaled logo
+# Matches the Qt app loading screen exactly
 
-Window.SetBackgroundTopColor(0.0, 0.0, 0.0);
-Window.SetBackgroundBottomColor(0.0, 0.0, 0.0);
+# Set background color to match Qt dark theme (#1c2526)
+Window.SetBackgroundTopColor(0.11, 0.145, 0.149);
+Window.SetBackgroundBottomColor(0.11, 0.145, 0.149);
 
 # Load the SpaceX logo
 logo.image = Image("spacex_logo.png");
@@ -400,23 +378,65 @@ logo.image = logo.image.Scale(logo.width, logo.height);
 logo.x = Window.GetWidth() / 2 - logo.width / 2;
 logo.y = Window.GetHeight() / 2 - logo.height / 2;
 
-# Draw the logo
-logo.image.Draw(logo.x, logo.y);
-
-# Optional: Add a subtle loading animation
-spinner.radius = 50;
-spinner.x = Window.GetWidth() / 2;
-spinner.y = Window.GetHeight() / 2 + 200;
-spinner.angle = 0;
+# Initialize bouncing dots animation
+dot1.y_offset = 0;
+dot2.y_offset = 0;
+dot3.y_offset = 0;
+dot1.animation_phase = 0;
+dot2.animation_phase = 0.33;  # Offset phases for staggered animation
+dot3.animation_phase = 0.66;
 
 fun refresh_callback ()
 {
-    # Clear and redraw logo
+    # Clear screen with background color
+    Plymouth.FillScreen(0.11, 0.145, 0.149);
+    
+    # Draw the logo
     logo.image.Draw(logo.x, logo.y);
     
-    # Draw spinner if desired (comment out if not wanted)
-    # spinner.angle = spinner.angle + 10;
-    # Plymouth.DrawCircle(spinner.x, spinner.y, spinner.radius, 2, 1.0, 1.0, 1.0, 0.5);
+    # Calculate dot positions (below logo, matching Qt layout)
+    dot_y_base = logo.y + logo.height + 30;  # 30px below logo
+    dot_spacing = 20;  # Space between dots
+    dot_size = 12;
+    
+    # Calculate animation offsets for bouncing effect
+    time = Plymouth.GetTime() / 1000.0;  # Convert to seconds
+    
+    # Dot 1 animation (bounce every 1.4 seconds)
+    dot1.animation_phase = (time * 1.4) % 1.0;
+    if (dot1.animation_phase < 0.5) {
+        dot1.y_offset = -10 * Plymouth.Sin(dot1.animation_phase * 3.14159);
+    } else {
+        dot1.y_offset = -10 * Plymouth.Sin((1.0 - dot1.animation_phase) * 3.14159);
+    }
+    
+    # Dot 2 animation (offset by 0.33)
+    dot2.animation_phase = ((time * 1.4) + 0.33) % 1.0;
+    if (dot2.animation_phase < 0.5) {
+        dot2.y_offset = -10 * Plymouth.Sin(dot2.animation_phase * 3.14159);
+    } else {
+        dot2.y_offset = -10 * Plymouth.Sin((1.0 - dot2.animation_phase) * 3.14159);
+    }
+    
+    # Dot 3 animation (offset by 0.66)
+    dot3.animation_phase = ((time * 1.4) + 0.66) % 1.0;
+    if (dot3.animation_phase < 0.5) {
+        dot3.y_offset = -10 * Plymouth.Sin(dot3.animation_phase * 3.14159);
+    } else {
+        dot3.y_offset = -10 * Plymouth.Sin((1.0 - dot3.animation_phase) * 3.14159);
+    }
+    
+    # Draw the three bouncing dots
+    center_x = Window.GetWidth() / 2;
+    
+    # Dot 1 (left)
+    Plymouth.FillCircle(center_x - dot_spacing - dot_size/2, dot_y_base + dot1.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
+    
+    # Dot 2 (center)
+    Plymouth.FillCircle(center_x, dot_y_base + dot2.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
+    
+    # Dot 3 (right)
+    Plymouth.FillCircle(center_x + dot_spacing + dot_size/2, dot_y_base + dot3.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
