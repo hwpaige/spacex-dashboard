@@ -203,8 +203,17 @@ CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
 CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), '..', 'cache', 'upcoming_launches_cache.json')
 
-# Cache for F1 data
-CACHE_FILE_F1 = os.path.join(os.path.dirname(__file__), '..', 'cache', 'f1_cache.json')
+# Cache for F1 data - moved to persistent location outside git repo
+CACHE_DIR_F1 = os.path.expanduser('~/.cache/spacex-dashboard')  # Persistent cache directory
+os.makedirs(CACHE_DIR_F1, exist_ok=True)
+CACHE_FILE_F1_SCHEDULE = os.path.join(CACHE_DIR_F1, 'f1_schedule_cache.json')
+CACHE_FILE_F1_DRIVERS = os.path.join(CACHE_DIR_F1, 'f1_drivers_cache.json')
+CACHE_FILE_F1_CONSTRUCTORS = os.path.join(CACHE_DIR_F1, 'f1_constructors_cache.json')
+
+# Different refresh intervals for different F1 data types
+CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely changes)
+CACHE_REFRESH_INTERVAL_F1_STANDINGS = 3600  # 1 hour for standings (updates frequently)
+
 f1_cache = None
 
 # F1 Team colors for visualization
@@ -482,22 +491,24 @@ def fetch_launches():
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
 
-# Fetch F1 data
+# Fetch F1 data with optimized component-based caching
 def fetch_f1_data():
-    logger.info("Fetching F1 data")
+    logger.info("Fetching F1 data with optimized caching")
     global f1_cache
     if f1_cache:
         return f1_cache
+
     current_time = datetime.now(pytz.UTC)
-    cache = load_cache_from_file(CACHE_FILE_F1)
-    if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1:
-        f1_cache = cache['data']
-        logger.info("Using persistent cached F1 data")
-        return f1_cache
+    f1_data = {}
+
+    # Fetch race schedule (infrequently changing)
+    schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
+    if schedule_cache and (current_time - schedule_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_SCHEDULE:
+        f1_data['schedule'] = schedule_cache['data']
+        logger.info("Using cached F1 schedule data")
     else:
+        logger.info("Fetching fresh F1 schedule data")
         try:
-            current_year = current_time.year
-            # Fetch current season data
             url = f"https://f1api.dev/api/current"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
@@ -505,6 +516,7 @@ def fetch_f1_data():
             logger.info(f"F1 API response keys: {list(data.keys())}")
             races = data.get('races', [])
             meetings = []
+
             for race in races:
                 meeting = {
                     "circuit_short_name": race['circuit']['circuitName'],
@@ -518,6 +530,7 @@ def fetch_f1_data():
                     "teamWinner": race.get('teamWinner', {}),
                     "fast_lap": race.get('fast_lap', {})
                 }
+
                 # Parse sessions
                 sessions = []
                 schedule = race['schedule']
@@ -530,6 +543,7 @@ def fetch_f1_data():
                     "sprintRace": "Sprint",
                     "race": "Race"
                 }
+
                 for session_key, session_data in schedule.items():
                     if session_data and session_data.get('date'):
                         sessions.append({
@@ -541,12 +555,15 @@ def fetch_f1_data():
                             "circuit_short_name": meeting['circuit_short_name'],
                             "year": meeting['year']
                         })
+
                 meeting['sessions'] = sorted(sessions, key=lambda x: parse(x['date_start']))
+
                 # Generate track map
                 track_map_path = generate_track_map(race['circuit']['circuitName'])
                 # Sanitize circuit name for filename (same as in track_generator.py)
                 safe_circuit_name = race['circuit']['circuitName'].replace('|', '-').replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', '-').replace('<', '-').replace('>', '-')
                 meeting['track_map_path'] = f'file:///{os.path.join(os.path.dirname(__file__), "..", "cache", "tracks", f"{safe_circuit_name}_track.png")}' if track_map_path else ''
+
                 if sessions:
                     # Use the race session date as the primary date for sorting
                     race_session = next((s for s in sessions if s['session_type'] == 'Race'), None)
@@ -556,12 +573,28 @@ def fetch_f1_data():
                         meeting['date_start'] = min(s['date_start'] for s in sessions)
                 meetings.append(meeting)
 
-            # Fetch driver standings
+            f1_data['schedule'] = meetings
+            save_cache_to_file(CACHE_FILE_F1_SCHEDULE, meetings, current_time)
+            logger.info(f"Cached F1 schedule with {len(meetings)} races")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch F1 schedule: {e}")
+            f1_data['schedule'] = []
+
+    # Fetch driver standings (frequently changing)
+    drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
+    if drivers_cache and (current_time - drivers_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
+        f1_data['driver_standings'] = drivers_cache['data']
+        logger.info("Using cached F1 driver standings")
+    else:
+        logger.info("Fetching fresh F1 driver standings")
+        try:
             url = "https://f1api.dev/api/current/drivers-championship"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
             driver_standings = data.get('drivers_championship', [])
+
             # Normalize to expected format
             for standing in driver_standings:
                 if 'driver' in standing and 'Driver' not in standing:
@@ -579,12 +612,28 @@ def fetch_f1_data():
                         'nationality': standing['team']['country']
                     }
 
-            # Fetch constructor standings
+            f1_data['driver_standings'] = driver_standings
+            save_cache_to_file(CACHE_FILE_F1_DRIVERS, driver_standings, current_time)
+            logger.info(f"Cached F1 driver standings with {len(driver_standings)} drivers")
+
+        except Exception as e:
+            logger.error(f"Failed to fetch F1 driver standings: {e}")
+            f1_data['driver_standings'] = []
+
+    # Fetch constructor standings (frequently changing)
+    constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
+    if constructors_cache and (current_time - constructors_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
+        f1_data['constructor_standings'] = constructors_cache['data']
+        logger.info("Using cached F1 constructor standings")
+    else:
+        logger.info("Fetching fresh F1 constructor standings")
+        try:
             url = "https://f1api.dev/api/current/constructors-championship"
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             data = response.json()
             constructor_standings = data.get('constructors_championship', [])
+
             # Normalize
             for standing in constructor_standings:
                 if 'team' in standing and 'Constructor' not in standing:
@@ -594,16 +643,17 @@ def fetch_f1_data():
                         'nationality': standing['team']['country']
                     }
 
-            f1_data = {'schedule': meetings, 'driver_standings': driver_standings, 'constructor_standings': constructor_standings}
-            save_cache_to_file(CACHE_FILE_F1, f1_data, current_time)
-            f1_cache = f1_data
-            logger.info("Successfully fetched and saved F1 data from f1api.dev")
-            time.sleep(1)  # Avoid rate limiting
-            return f1_cache
+            f1_data['constructor_standings'] = constructor_standings
+            save_cache_to_file(CACHE_FILE_F1_CONSTRUCTORS, constructor_standings, current_time)
+            logger.info(f"Cached F1 constructor standings with {len(constructor_standings)} teams")
+
         except Exception as e:
-            logger.error(f"f1api.dev API error: {e}")
-            f1_cache = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
-            return f1_cache
+            logger.error(f"Failed to fetch F1 constructor standings: {e}")
+            f1_data['constructor_standings'] = []
+
+    f1_cache = f1_data
+    logger.info("Successfully assembled F1 data from optimized cache")
+    return f1_data
 
 # Fetch weather data
 def fetch_weather(lat, lon, location):

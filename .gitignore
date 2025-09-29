@@ -3,7 +3,11 @@ f1_cache.json
 upcoming_launches_cache.json
 previous_launches_cache.json
 launch_cache.json
-cache/
+cache/f1_cache.json
+cache/f1_*.json  # Old F1 cache files
+
+# Keep track images and other assets in cache/
+!cache/tracks/
 
 # Log files
 app.log
@@ -30,3 +34,6 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Persistent cache (outside git repo)
+# F1 data is now cached in ~/.cache/spacex-dashboard/ for better performance
