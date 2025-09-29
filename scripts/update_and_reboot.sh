@@ -65,6 +65,12 @@ if git diff HEAD~1 --name-only | grep -q "requirements.txt"; then
     fi
 fi
 
+# Clear the cache to ensure fresh data after update
+echo "Clearing cache..."
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+rm -rf "$PROJECT_DIR/cache/*"
+
 echo "Update complete. Rebooting system in 5 seconds..."
 echo "Press Ctrl+C to cancel reboot."
 

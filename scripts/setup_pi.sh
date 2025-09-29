@@ -118,7 +118,7 @@ install_packages() {
         # System utilities
         unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
         xserver-xorg xinit x11-xserver-utils openbox libinput-tools imagemagick
-        ubuntu-raspi-settings xserver-xorg-video-modesetting
+        ubuntu-raspi-settings xserver-xorg-video-modesetting lightdm
         
         # Graphics and display
         libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 mesa-vulkan-drivers
@@ -317,8 +317,9 @@ configure_boot() {
     local cmdline_file="/boot/firmware/cmdline.txt"
     
     # Silent boot settings with enhanced memory optimizations
-    grep -q "quiet" "$cmdline_file" || 
-        sed -i 's/$/ console=tty3 quiet splash loglevel=0 consoleblank=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles rd.systemd.show_status=false cma=512M coherent_pool=2M/' "$cmdline_file"
+    if ! grep -q "fbcon=map:2" "$cmdline_file"; then
+        sed -i 's/$/ fbcon=map:2 logo.nologo/' "$cmdline_file"
+    fi
     
     # Display settings
     if ! grep -q "hdmi_mode=87" "$config_file"; then
@@ -447,12 +448,398 @@ EOF
 configure_openbox() {
     log "Configuring Openbox..."
     sudo -u "$USER" mkdir -p "$HOME_DIR/.config/openbox"
-    sudo -u "$USER" bash -c "cat << EOF > $HOME_DIR/.config/openbox/rc.xml
-<openbox_config xmlns=\"http://openbox.org/3.4/rc\">
+    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.config/openbox/rc.xml
+<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<openbox_config xmlns=\"http://openbox.org/3.4/rc\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://openbox.org/3.4/rc http://openbox.org/3.4/rc.xsd\">
+  <resistance>
+    <strength>0</strength>
+    <screen_edge_strength>20</screen_edge_strength>
+  </resistance>
+  <focus>
+    <focusNew>yes</focusNew>
+    <followMouse>no</followMouse>
+    <focusLast>yes</focusLast>
+    <underMouse>no</underMouse>
+    <focusDelay>200</focusDelay>
+    <raiseOnFocus>no</raiseOnFocus>
+  </focus>
+  <placement>
+    <policy>Smart</policy>
+    <center>yes</center>
+    <monitor>Any</monitor>
+    <primaryMonitor>1</primaryMonitor>
+  </placement>
+  <theme>
+    <name>Clearlooks</name>
+    <titleLayout>NLIMC</titleLayout>
+    <keepBorder>yes</keepBorder>
+    <animateIconify>yes</animateIconify>
+    <font place=\"ActiveWindow\">
+      <name>sans</name>
+      <size>8</size>
+      <weight>bold</weight>
+      <slant>normal</slant>
+    </font>
+    <font place=\"InactiveWindow\">
+      <name>sans</name>
+      <size>8</size>
+      <weight>bold</weight>
+      <slant>normal</slant>
+    </font>
+    <font place=\"MenuHeader\">
+      <name>sans</name>
+      <size>9</size>
+      <weight>normal</weight>
+      <slant>normal</slant>
+    </font>
+    <font place=\"MenuItem\">
+      <name>sans</name>
+      <size>9</size>
+      <weight>normal</weight>
+      <slant>normal</slant>
+    </font>
+    <font place=\"ActiveOnScreenDisplay\">
+      <name>sans</name>
+      <size>9</size>
+      <weight>bold</weight>
+      <slant>normal</slant>
+    </font>
+    <font place=\"InactiveOnScreenDisplay\">
+      <name>sans</name>
+      <size>9</size>
+      <weight>bold</weight>
+      <slant>normal</slant>
+    </font>
+  </theme>
+  <desktops>
+    <number>1</number>
+    <firstdesk>1</firstdesk>
+    <names>
+      <name>desktop</name>
+    </names>
+    <popupTime>875</popupTime>
+  </desktops>
+  <resize>
+    <drawContents>yes</drawContents>
+    <popupShow>Nonpixel</popupShow>
+    <popupPosition>Center</popupPosition>
+  </resize>
+  <margins>
+    <top>0</top>
+    <bottom>0</bottom>
+    <left>0</left>
+    <right>0</right>
+  </margins>
+  <dock>
+    <position>TopLeft</position>
+    <floatingX>0</floatingX>
+    <floatingY>0</floatingY>
+    <noStrut>no</noStrut>
+    <stacking>Above</stacking>
+    <direction>Vertical</direction>
+    <autoHide>no</autoHide>
+    <hideDelay>300</hideDelay>
+    <showDelay>300</showDelay>
+    <moveButton>Middle</moveButton>
+  </dock>
+  <keyboard>
+    <chainQuitKey>C-g</chainQuitKey>
+    <keybind key=\"A-F4\">
+      <action name=\"Close\"/>
+    </keybind>
+    <keybind key=\"A-Escape\">
+      <action name=\"Lower\"/>
+      <action name=\"FocusToBottom\"/>
+      <action name=\"Unfocus\"/>
+    </keybind>
+    <keybind key=\"A-space\">
+      <action name=\"ShowMenu\">
+        <menu>client-menu</menu>
+      </action>
+    </keybind>
+  </keyboard>
+  <mouse>
+    <dragThreshold>1</dragThreshold>
+    <doubleClickTime>500</doubleClickTime>
+    <screenEdgeWarpTime>400</screenEdgeWarpTime>
+    <screenEdgeWarpMouse>false</screenEdgeWarpMouse>
+    <context name=\"Frame\">
+      <mousebind button=\"A-Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"A-Left\" action=\"Click\">
+        <action name=\"Unshade\"/>
+      </mousebind>
+      <mousebind button=\"A-Left\" action=\"Drag\">
+        <action name=\"Move\"/>
+      </mousebind>
+      <mousebind button=\"A-Middle\" action=\"Press\">
+        <action name=\"Lower\"/>
+        <action name=\"FocusToBottom\"/>
+        <action name=\"Unfocus\"/>
+      </mousebind>
+      <mousebind button=\"A-Right\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"ShowMenu\">
+          <menu>client-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Titlebar\">
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Move\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"DoubleClick\">
+        <action name=\"ToggleMaximize\"/>
+      </mousebind>
+      <mousebind button=\"Up\" action=\"Click\">
+        <action name=\"if\">
+          <shaded>no</shaded>
+          <then>
+            <action name=\"Shade\"/>
+            <action name=\"FocusToBottom\"/>
+            <action name=\"Unfocus\"/>
+            <action name=\"Lower\"/>
+          </then>
+        </action>
+      </mousebind>
+      <mousebind button=\"Down\" action=\"Click\">
+        <action name=\"if\">
+          <shaded>yes</shaded>
+          <then>
+            <action name=\"Unshade\"/>
+            <action name=\"Raise\"/>
+          </then>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Titlebar Top Right Bottom Left TLCorner TRCorner BRCorner BLCorner\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"Unshade\"/>
+      </mousebind>
+      <mousebind button=\"Middle\" action=\"Press\">
+        <action name=\"Lower\"/>
+        <action name=\"FocusToBottom\"/>
+        <action name=\"Unfocus\"/>
+      </mousebind>
+      <mousebind button=\"Right\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"ShowMenu\">
+          <menu>client-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Top\">
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Resize\">
+          <edge>top</edge>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Left\">
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Resize\">
+          <edge>left</edge>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Right\">
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Resize\">
+          <edge>right</edge>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"Bottom\">
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Resize\">
+          <edge>bottom</edge>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"TRCorner BRCorner TLCorner BLCorner\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"Unshade\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Drag\">
+        <action name=\"Resize\"/>
+      </mousebind>
+    </context>
+    <context name=\"Client\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Middle\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Right\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+    </context>
+    <context name=\"Icon\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"Unshade\"/>
+        <action name=\"ShowMenu\">
+          <menu>client-menu</menu>
+        </action>
+      </mousebind>
+      <mousebind button=\"Right\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"ShowMenu\">
+          <menu>client-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"AllDesktops\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+        <action name=\"Unshade\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Click\">
+        <action name=\"ToggleOmnipresent\"/>
+      </mousebind>
+    </context>
+    <context name=\"Shade\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Click\">
+        <action name=\"ToggleShade\"/>
+      </mousebind>
+    </context>
+    <context name=\"Iconify\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Click\">
+        <action name=\"Iconify\"/>
+      </mousebind>
+    </context>
+    <context name=\"Maximize\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Click\">
+        <action name=\"ToggleMaximize\"/>
+      </mousebind>
+    </context>
+    <context name=\"Close\">
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Click\">
+        <action name=\"Close\"/>
+      </mousebind>
+    </context>
+    <context name=\"Desktop\">
+      <mousebind button=\"Up\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>previous</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"Down\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>next</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"A-Up\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>previous</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"A-Down\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>next</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"C-A-Up\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>previous</to>
+          <wrap>no</wrap>
+        </action>
+      </mousebind>
+      <mousebind button=\"C-A-Down\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>next</to>
+          <wrap>no</wrap>
+        </action>
+      </mousebind>
+      <mousebind button=\"Left\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+      <mousebind button=\"Right\" action=\"Press\">
+        <action name=\"Focus\"/>
+        <action name=\"Raise\"/>
+      </mousebind>
+    </context>
+    <context name=\"Root\">
+      <mousebind button=\"Middle\" action=\"Press\">
+        <action name=\"ShowMenu\">
+          <menu>client-list-combined-menu</menu>
+        </action>
+      </mousebind>
+      <mousebind button=\"Right\" action=\"Press\">
+        <action name=\"ShowMenu\">
+          <menu>root-menu</menu>
+        </action>
+      </mousebind>
+    </context>
+    <context name=\"MoveResize\">
+      <mousebind button=\"Up\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>previous</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"Down\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>next</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"A-Up\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>previous</to>
+        </action>
+      </mousebind>
+      <mousebind button=\"A-Down\" action=\"Click\">
+        <action name=\"GoToDesktop\">
+          <to>next</to>
+        </action>
+      </mousebind>
+    </context>
+  </mouse>
+  <menu>
+    <file>menu.xml</file>
+    <hideDelay>200</hideDelay>
+    <middle>no</middle>
+    <submenuShowDelay>100</submenuShowDelay>
+    <submenuHideDelay>400</submenuHideDelay>
+    <applicationIcons>yes</applicationIcons>
+    <manageDesktops>yes</manageDesktops>
+  </menu>
   <applications>
     <application class=\"*\">
       <decor>no</decor>
       <maximized>yes</maximized>
+      <fullscreen>yes</fullscreen>
     </application>
   </applications>
 </openbox_config>
@@ -460,80 +847,107 @@ EOF"
 }
 
 create_xinitrc() {
-    log "Creating .xinitrc..."
+    log "Creating .xinitrc (fallback for manual startx)..."
     cat > "$HOME_DIR/.xinitrc" << 'EOF'
 #!/bin/bash
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 echo "Starting openbox at $(date)" > ~/xinitrc.log
-openbox-session &
-sleep 2
-
-echo "Rotating display" >> ~/xinitrc.log
-xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
-echo "Setting xset options" >> ~/xinitrc.log
-xset s off
-xset -dpms
-xset s noblank
-unclutter -idle 0 -root &
-
-export QT_QPA_PLATFORM=xcb
-export XAUTHORITY=~/.Xauthority
-# Hardware acceleration Chromium flags for Raspberry Pi with WebGL support
-export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding"
-export PYQTGRAPH_QT_LIB=PyQt6
-export QT_DEBUG_PLUGINS=0
-export QT_LOGGING_RULES="qt.qpa.plugin=false"
-
-cd ~/Desktop/project/src
-echo "Changed to project src directory: $(pwd)" >> ~/xinitrc.log
-
-# Truncate the app log file to start fresh on each boot
-# Also rotate old logs to prevent disk space issues
-if [ -f ~/app.log ]; then
-    # Keep one backup of the previous log
-    mv ~/app.log ~/app.log.old 2>/dev/null || true
-fi
-> ~/app.log
-echo "Starting SpaceX Dashboard at $(date)" >> ~/app.log
-
-if python3 -c 'import PyQt6, pyqtgraph, requests, pandas' 2>/dev/null; then
-    echo "Using system PyQt6 at $(date)" | tee -a ~/xinitrc.log
-    exec python3 app.py >> ~/app.log 2>&1
-elif [ -f ~/.venv/bin/activate ]; then
-    source ~/.venv/bin/activate
-    echo "Using virtual environment PyQt6 at $(date)" | tee -a ~/xinitrc.log
-    exec python app.py >> ~/app.log 2>&1
-else
-    echo "No working PyQt6 found, aborting at $(date)" | tee -a ~/xinitrc.log
-    exit 1
-fi
+exec openbox-session
 EOF
     chown "$USER:$USER" "$HOME_DIR/.xinitrc"
     chmod +x "$HOME_DIR/.xinitrc"
 }
 
 configure_autologin() {
-    log "Configuring autologin..."
+    log "Configuring LightDM autologin..."
     
-    echo "allowed_users=anybody" > /etc/X11/Xwrapper.config
-    
-    mkdir -p /etc/systemd/system/getty@tty1.service.d
-    cat << EOF > /etc/systemd/system/getty@tty1.service.d/override.conf
-[Service]
-ExecStart=
-ExecStart=-/sbin/agetty --autologin $USER --noclear %I \$TERM
+    # Configure LightDM for autologin
+    mkdir -p /etc/lightdm
+    cat << EOF > /etc/lightdm/lightdm.conf
+[Seat:*]
+autologin-user=$USER
+autologin-user-timeout=0
+user-session=openbox
+greeter-enable=false
+xserver-command=X -core
 EOF
-    systemctl daemon-reload
     
-    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.profile
+    # Create X session script for LightDM
+    mkdir -p /usr/share/xsessions
+    cat << EOF > /usr/share/xsessions/openbox.desktop
+[Desktop Entry]
+Name=Openbox
+Comment=Openbox window manager
+Exec=/home/$USER/.xsession
+TryExec=/home/$USER/.xsession
+Type=Application
+EOF
+    
+    # Create .xsession for the user
+    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.xsession
+#!/bin/bash
 export SHELL=/bin/bash
-if [ \"\$(tty)\" = \"/dev/tty1\" ] && [ -z \"\$DISPLAY\" ]; then
-    echo \"Starting X on tty1...\" | tee ~/.xstart.log
-    exec startx 2>&1 | tee ~/.xstart.log
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+echo \"Starting X session at \$(date)\" > ~/xsession.log
+
+# Clear any console text and switch to X tty
+chvt 7 2>/dev/null || true
+clear 2>/dev/null || true
+
+# Set display settings
+sleep 2
+xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+
+# Set X settings
+xset s off
+xset -dpms
+xset s noblank
+
+# Hide cursor
+unclutter -idle 0 -root &
+
+# Set environment variables
+export QT_QPA_PLATFORM=xcb
+export XAUTHORITY=~/.Xauthority
+export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows\"
+export PYQTGRAPH_QT_LIB=PyQt6
+export QT_DEBUG_PLUGINS=0
+export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
+
+# Change to app directory
+cd ~/Desktop/project/src
+
+# Truncate app log
+if [ -f ~/app.log ]; then
+    mv ~/app.log ~/app.log.old 2>/dev/null || true
 fi
+> ~/app.log
+
+echo \"Starting SpaceX Dashboard at \$(date)\" >> ~/app.log
+
+# Start the application
+exec python3 app.py >> ~/app.log 2>&1
 EOF"
+    sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
+    
+    # Fix X authority permissions
+    sudo -u "$USER" touch "$HOME_DIR/.Xauthority"
+    sudo -u "$USER" chmod 600 "$HOME_DIR/.Xauthority"
+    chown "$USER:$USER" "$HOME_DIR/.Xauthority"
+    
+    # Enable LightDM
+    systemctl enable lightdm
+    systemctl set-default graphical.target
+    
+    # Start LightDM immediately to test autologin
+    log "Starting LightDM to test autologin configuration..."
+    systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
+    
+    # Remove old getty override if it exists
+    rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
 }
 
 optimize_performance() {
@@ -580,7 +994,7 @@ main() {
     configure_autologin
     optimize_performance
     
-    # Note: Using autologin instead of systemd service to avoid conflicts
+    # Note: Using LightDM display manager for clean autologin without console interference
     # systemctl enable spacex-dashboard
     
     cleanup
