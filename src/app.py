@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import shlex
 import math
+import concurrent.futures
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -895,32 +896,60 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, dict)
 
     def run(self):
-        logger.info("DataLoader: Starting data loading...")
-        try:
-            logger.info("DataLoader: Calling fetch_launches...")
-            launch_data = fetch_launches()
-            logger.info(f"DataLoader: fetch_launches returned {len(launch_data.get('upcoming', []))} upcoming launches")
-        except Exception as e:
-            logger.error(f"DataLoader: fetch_launches failed: {e}")
-            launch_data = {'previous': [], 'upcoming': []}
-        f1_data = fetch_f1_data()
-        weather_data = {}
-        for location, settings in location_settings.items():
+        logger.info("DataLoader: Starting parallel data loading...")
+        
+        # Function to fetch launch data
+        def fetch_launch_data():
             try:
-                weather = fetch_weather(settings['lat'], settings['lon'], location)
-                weather_data[location] = weather
-                logger.info(f"DataLoader: Fetched weather for {location}")
+                logger.info("DataLoader: Calling fetch_launches...")
+                launch_data = fetch_launches()
+                logger.info(f"DataLoader: fetch_launches returned {len(launch_data.get('upcoming', []))} upcoming launches")
+                return launch_data
             except Exception as e:
-                logger.warning(f"DataLoader: Failed to fetch weather for {location}: {e}")
-                weather_data[location] = {
-                    'temperature_c': 25,
-                    'temperature_f': 77,
-                    'wind_speed_ms': 5,
-                    'wind_speed_kts': 9.7,
-                    'wind_direction': 90,
-                    'cloud_cover': 50
-                }
-        logger.info("DataLoader: Finished loading all data")
+                logger.error(f"DataLoader: fetch_launches failed: {e}")
+                return {'previous': [], 'upcoming': []}
+        
+        # Function to fetch F1 data
+        def fetch_f1_data_wrapper():
+            try:
+                return fetch_f1_data()
+            except Exception as e:
+                logger.error(f"DataLoader: fetch_f1_data failed: {e}")
+                return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+        
+        # Function to fetch weather data
+        def fetch_weather_data():
+            weather_data = {}
+            for location, settings in location_settings.items():
+                try:
+                    weather = fetch_weather(settings['lat'], settings['lon'], location)
+                    weather_data[location] = weather
+                    logger.info(f"DataLoader: Fetched weather for {location}")
+                except Exception as e:
+                    logger.warning(f"DataLoader: Failed to fetch weather for {location}: {e}")
+                    weather_data[location] = {
+                        'temperature_c': 25,
+                        'temperature_f': 77,
+                        'wind_speed_ms': 5,
+                        'wind_speed_kts': 9.7,
+                        'wind_direction': 90,
+                        'cloud_cover': 50
+                    }
+            return weather_data
+        
+        # Run all API calls in parallel
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            # Submit all tasks
+            launch_future = executor.submit(fetch_launch_data)
+            f1_future = executor.submit(fetch_f1_data_wrapper)
+            weather_future = executor.submit(fetch_weather_data)
+            
+            # Wait for all to complete and get results
+            launch_data = launch_future.result()
+            f1_data = f1_future.result()
+            weather_data = weather_future.result()
+        
+        logger.info("DataLoader: Finished loading all data in parallel")
         self.finished.emit(launch_data, f1_data, weather_data)
 
 class LaunchUpdater(QObject):
