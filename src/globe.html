@@ -433,7 +433,7 @@
             globe.rotation.x += deltaY * 0.01;
 
             previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
-        });
+        }, { passive: false });
 
         document.addEventListener('touchend', () => {
             isMouseDown = false;

@@ -4814,7 +4814,20 @@ Window {
                                 Layout.preferredHeight: 22
                                 onClicked: {
                                     wifiPopup.selectedNetwork = modelData.ssid
-                                    passwordDialog.open()
+                                    // Check if this network is remembered
+                                    var isRemembered = false
+                                    for (var i = 0; i < backend.rememberedNetworks.length; i++) {
+                                        if (backend.rememberedNetworks[i].ssid === modelData.ssid) {
+                                            isRemembered = true
+                                            break
+                                        }
+                                    }
+                                    if (isRemembered) {
+                                        backend.connectToRememberedNetwork(modelData.ssid)
+                                        wifiPopup.close()
+                                    } else {
+                                        passwordDialog.open()
+                                    }
                                 }
 
                                 background: Rectangle {
