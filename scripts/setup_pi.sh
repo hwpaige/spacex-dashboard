@@ -171,6 +171,19 @@ echo '=== Package Tests ==='
 python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ System packages working\")' 2>/dev/null || echo '✗ System Python failed'
 python3 -c 'import fastf1; print(\"✓ fastf1 available\")' 2>/dev/null || echo '✗ fastf1 not available'
 echo ''
+echo '=== Plymouth Status ==='
+echo 'Plymouth version:'
+plymouth --version 2>/dev/null || echo 'Plymouth not found'
+echo ''
+echo 'Current Plymouth theme:'
+plymouth-set-default-theme 2>/dev/null || echo 'Cannot determine theme'
+echo ''
+echo 'Plymouth theme files:'
+ls -la /usr/share/plymouth/themes/spacex/ 2>/dev/null || echo 'SpaceX theme not found'
+echo ''
+echo 'Initramfs Plymouth config:'
+cat /etc/initramfs-tools/conf.d/plymouth 2>/dev/null || echo 'Plymouth initramfs config not found'
+echo ''
 echo '=== Network Tests ==='
 echo 'Testing internet connectivity...'
 ping -c 3 8.8.8.8 2>/dev/null && echo '✓ Internet connectivity OK' || echo '✗ No internet connectivity'
@@ -294,8 +307,9 @@ configure_boot() {
     local cmdline_file="/boot/firmware/cmdline.txt"
     
     # Silent boot settings with enhanced memory optimizations
+    # Note: Removed logo.nologo to allow Plymouth splash screen
     if ! grep -q "fbcon=map:2" "$cmdline_file"; then
-        sed -i 's/$/ fbcon=map:2 logo.nologo/' "$cmdline_file"
+        sed -i 's/$/ fbcon=map:2/' "$cmdline_file"
     fi
     
     # Display settings
@@ -318,8 +332,8 @@ EOF
     # Initramfs settings
     grep -q "^COMPRESS=lz4" /etc/initramfs-tools/initramfs.conf || echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
     
-    # Add required modules
-    for module in drm vc4; do
+    # Add required modules including Plymouth for boot splash
+    for module in drm vc4 plymouth; do
         grep -qxF "$module" /etc/initramfs-tools/modules || echo "$module" >> /etc/initramfs-tools/modules
     done
 }
@@ -337,6 +351,11 @@ setup_repository() {
     
 configure_plymouth() {
     log "Configuring Plymouth..."
+    
+    # Install Plymouth if not already installed
+    if ! command -v plymouth &> /dev/null; then
+        apt-get install -y plymouth plymouth-themes
+    fi
     
     # Create custom SpaceX Plymouth theme
     THEME_DIR="/usr/share/plymouth/themes/spacex"
@@ -451,9 +470,15 @@ EOF
     update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/spacex.plymouth" 200
     update-alternatives --set default.plymouth "$THEME_DIR/spacex.plymouth"
     
+    # Enable Plymouth in initramfs
+    echo "FRAMEBUFFER=y" > /etc/initramfs-tools/conf.d/plymouth
+    echo "plymouth plymouth/themes/select select spacex" | debconf-set-selections
+    
     # Rebuild initramfs
     if ! update-initramfs -u; then
         log "WARNING: Initramfs rebuild failed"
+    else
+        log "✓ Initramfs rebuilt successfully with Plymouth support"
     fi
 }
 
