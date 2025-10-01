@@ -267,7 +267,7 @@ EOF
     cat << EOF > /etc/systemd/system/spacex-dashboard.service
 [Unit]
 Description=SpaceX Dashboard Application
-After=network.target display-manager.service
+After=network-online.target display-manager.service
 Requires=display-manager.service
 
 [Service]
@@ -286,6 +286,7 @@ Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=EGL_PLATFORM=drm
 WorkingDirectory=/home/$USER/Desktop/project/src
+ExecStartPre=/bin/bash -c 'nmcli device wifi rescan; timeout 30 bash -c "until nmcli device | grep wifi | grep -q connected; do sleep 2; done"'
 ExecStart=python3 app.py
 Restart=always
 RestartSec=5
@@ -298,6 +299,7 @@ WantedBy=multi-user.target
 EOF
     
     systemctl daemon-reload
+    systemctl enable NetworkManager-wait-online.service
 }
 
 configure_boot() {

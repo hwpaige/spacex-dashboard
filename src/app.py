@@ -1188,6 +1188,12 @@ class Backend(QObject):
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
 
+    def remove_remembered_network(self, ssid):
+        """Remove a network from remembered networks"""
+        self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
+        self.save_remembered_networks()
+        self.rememberedNetworksChanged.emit()
+
     def load_last_connected_network(self):
         """Load the last connected network from file"""
         try:
@@ -4805,6 +4811,44 @@ Window {
                                 font.bold: true
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
+                            }
+
+                            // Remove button for remembered networks
+                            Button {
+                                text: "\uf2ed"
+                                font.family: "Font Awesome 5 Free"
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                visible: {
+                                    for (var i = 0; i < backend.rememberedNetworks.length; i++) {
+                                        if (backend.rememberedNetworks[i].ssid === modelData.ssid) {
+                                            return true
+                                        }
+                                    }
+                                    return false
+                                }
+                                onClicked: {
+                                    backend.remove_remembered_network(modelData.ssid)
+                                }
+
+                                background: Rectangle {
+                                    color: "#F44336"
+                                    radius: 3
+                                }
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "white"
+                                    font.pixelSize: 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                ToolTip {
+                                    visible: parent.hovered
+                                    text: "Remove from remembered networks"
+                                    delay: 500
+                                }
                             }
 
                             // Connect button - compact
