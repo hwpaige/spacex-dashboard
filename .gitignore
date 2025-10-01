@@ -1,13 +1,14 @@
 # Cache files
 f1_cache.json
 upcoming_launches_cache.json
-previous_launches_cache.json
+# previous_launches_cache.json  # Now tracked in git as source of truth (only additions, with backup fallback)
 launch_cache.json
 cache/f1_cache.json
 cache/f1_*.json  # Old F1 cache files
 
 # Keep track images and other assets in cache/
 !cache/tracks/
+!cache/README_previous_launches_cache.md
 
 # Log files
 app.log

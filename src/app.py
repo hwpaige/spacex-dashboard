@@ -201,6 +201,7 @@ CACHE_REFRESH_INTERVAL_PREVIOUS = 86400  # 24 hours for historical data
 CACHE_REFRESH_INTERVAL_UPCOMING = 3600   # 1 hour for upcoming launches
 CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
+CACHE_FILE_PREVIOUS_BACKUP = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache_backup.json')
 CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), '..', 'cache', 'upcoming_launches_cache.json')
 
 # Cache for F1 data - moved to persistent location outside git repo
@@ -384,66 +385,82 @@ def fetch_launches():
     current_date_str = current_time.strftime('%Y-%m-%d')
     current_year = current_time.year
 
-    # Load previous launches cache
+    # Load previous launches cache (source of truth - only add new launches)
     previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
-    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_PREVIOUS:
+    if previous_cache:
         previous_launches = previous_cache['data']
-        logger.info("Using persistent cached previous launches")
-    else:
+        logger.info(f"Loaded {len(previous_launches)} previous launches from cache")
+        
+        # Check for new launches to add (only recent ones)
         try:
-            logger.info("Fetching fresh previous launches from API")
-            all_launches = []
-            url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&net__lte={current_year}-12-31&limit=100'
-            logger.info(f"API URL: {url}")
-
-            while url:
-                logger.info(f"Fetching page: {url}")
+            logger.info("Checking for new launches to add...")
+            current_year = current_time.year
+            url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&limit=50'
+            
+            try:
+                response = requests.get(url, timeout=10, verify=True)
+            except Exception as ssl_error:
+                logger.warning(f"SSL verification failed, trying without verification: {ssl_error}")
+                response = requests.get(url, timeout=10, verify=False)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Get the most recent launch date from cache
+            if previous_launches:
+                cache_dates = [launch['net'] for launch in previous_launches if launch.get('net')]
+                if cache_dates:
+                    latest_cache_date = max(cache_dates)
+                    logger.info(f"Latest cached launch: {latest_cache_date}")
+                else:
+                    latest_cache_date = None
+            else:
+                latest_cache_date = None
+            
+            new_launches = []
+            for launch in data['results']:
+                launch_net = launch['net']
+                if latest_cache_date and launch_net <= latest_cache_date:
+                    break  # No more new launches
+                
                 try:
-                    response = requests.get(url, timeout=10, verify=True)
-                except Exception as ssl_error:
-                    logger.warning(f"SSL verification failed, trying without verification: {ssl_error}")
-                    response = requests.get(url, timeout=10, verify=False)
-                response.raise_for_status()
-                data = response.json()
-                logger.info(f"API response received, status: {response.status_code}")
-
-                # Process this page of results
-                page_launches = []
-                for launch in data['results']:
-                    try:
-                        launch_data = {
-                            'mission': launch['name'],
-                            'date': launch['net'].split('T')[0],
-                            'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
-                            'net': launch['net'],
-                            'status': launch['status']['name'],
-                            'rocket': launch['rocket']['configuration']['name'],
-                            'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
-                            'pad': launch['pad']['name'],
-                            'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
-                        }
-                        page_launches.append(launch_data)
-                    except Exception as e:
-                        logger.warning(f"Skipping launch {launch.get('name', 'Unknown')} due to error: {e}")
-                        continue
-
-                all_launches.extend(page_launches)
-                logger.info(f"Processed {len(page_launches)} launches from this page")
-
-                # Check if there's a next page
-                url = data.get('next')
-                if url:
-                    time.sleep(0.5)  # Avoid rate limiting between pages
-
-            previous_launches = all_launches
-            save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
-            logger.info(f"Successfully fetched and saved {len(previous_launches)} previous launches")
-            time.sleep(1)  # Avoid rate limiting
+                    launch_data = {
+                        'mission': launch['name'],
+                        'date': launch['net'].split('T')[0],
+                        'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
+                        'net': launch['net'],
+                        'status': launch['status']['name'],
+                        'rocket': launch['rocket']['configuration']['name'],
+                        'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
+                        'pad': launch['pad']['name'],
+                        'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
+                    }
+                    new_launches.append(launch_data)
+                except Exception as e:
+                    logger.warning(f"Skipping launch {launch.get('name', 'Unknown')} due to error: {e}")
+                    continue
+            
+            if new_launches:
+                # Add new launches to the beginning (most recent first)
+                previous_launches = new_launches + previous_launches
+                save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
+                logger.info(f"Added {len(new_launches)} new launches to cache")
+            else:
+                logger.info("No new launches to add")
+                
         except Exception as e:
-            logger.error(f"LL2 API error: {e}")
-            logger.error(f"Exception type: {type(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
+            logger.warning(f"Failed to check for new launches: {e}")
+            
+    else:
+        # Try backup cache if main cache is corrupted/missing
+        logger.warning("Main previous launches cache not found or corrupted, trying backup...")
+        backup_cache = load_cache_from_file(CACHE_FILE_PREVIOUS_BACKUP)
+        if backup_cache:
+            previous_launches = backup_cache['data']
+            logger.info(f"Loaded {len(previous_launches)} previous launches from backup cache")
+            # Save backup as main cache
+            save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
+        else:
+            logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
                 {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
@@ -1051,6 +1068,7 @@ class Backend(QObject):
     rememberedNetworksChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
+    reloadWebContent = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1193,6 +1211,16 @@ class Backend(QObject):
         self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
+
+    def reload_web_content(self):
+        """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
+        try:
+            logger.info("Signaling QML to reload web content after WiFi connection...")
+            self.reloadWebContent.emit()
+            logger.info("Web content reload signal sent")
+            
+        except Exception as e:
+            logger.error(f"Error signaling web content reload: {e}")
 
     def load_last_connected_network(self):
         """Load the last connected network from file"""
@@ -2859,6 +2887,7 @@ class Backend(QObject):
             
             # Update properties
             wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
+            wifi_just_connected = not self._wifi_connected and connected
             
             self._wifi_connected = connected
             self._current_wifi_ssid = current_ssid
@@ -2866,6 +2895,11 @@ class Backend(QObject):
             if wifi_changed:
                 logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
                 self.wifiConnectedChanged.emit()
+                
+                # Reload web content if WiFi just connected
+                if wifi_just_connected:
+                    logger.info("WiFi connection detected - reloading web content")
+                    self.reload_web_content()
                 
         except Exception as e:
             logger.error(f"Error updating WiFi status: {e}")
@@ -3466,6 +3500,25 @@ Window {
 
     Component.onCompleted: {
         console.log("Window created - bottom bar should be visible")
+        // Connect web content reload signal
+        backend.reloadWebContent.connect(function() {
+            console.log("Reloading web content after WiFi connection...")
+            // Reload globe view
+            if (typeof globeView !== 'undefined' && globeView.reload) {
+                globeView.reload()
+                console.log("Globe view reloaded")
+            }
+            // Reload F1 chart view
+            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
+                f1ChartView.reload()
+                console.log("F1 chart view reloaded")
+            }
+            // Reload YouTube/map view
+            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
+                youtubeView.reload()
+                console.log("YouTube/map view reloaded")
+            }
+        })
     }
 
     Rectangle {
@@ -3723,6 +3776,7 @@ Window {
                             }
 
                             WebEngineView {
+                                id: f1ChartView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
 
