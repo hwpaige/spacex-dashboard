@@ -8,7 +8,6 @@ import numpy as np
 import pandas as pd
 import shlex
 import math
-import urllib.parse
 import concurrent.futures
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
@@ -386,10 +385,6 @@ def fetch_launches():
     current_date_str = current_time.strftime('%Y-%m-%d')
     current_year = current_time.year
 
-    # Define YouTube embed HTML for fallback
-    html_content = '<html><head><title>YouTube Video</title></head><body style="margin:0;padding:0;overflow:hidden;"><iframe src="https://www.youtube-nocookie.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0" width="100%" height="100%" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" style="width:100%;height:100%;"></iframe></body></html>'
-    encoded_html = urllib.parse.quote(html_content)
-
     # Load previous launches cache (source of truth - only add new launches)
     previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
     if previous_cache:
@@ -467,7 +462,7 @@ def fetch_launches():
         else:
             logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': f'data:text/html,{encoded_html}'},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
             ]
 
@@ -3483,7 +3478,7 @@ print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", f'data:text/html,{encoded_html}')
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -4382,14 +4377,12 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
-                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                        httpAcceptLanguage: "en-US,en;q=0.9"
+                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpAcceptLanguage: "en-US,en"
                         // Allow sending Referer headers for YouTube embeds
                         offTheRecord: false
                         persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
                         httpCacheType: WebEngineProfile.DiskHttpCache
-                        // Try to suppress Permissions-Policy warnings
-                        httpAccept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
                     }
 
                     WebEngineView {
@@ -4419,11 +4412,11 @@ Window {
 
                                 // Handle specific error codes
                                 if (loadRequest.errorCode === 153) {
-                                    console.log("YouTube embed error 153 - This may be due to YouTube policy changes");
-                                    console.log("The app uses privacy-enhanced embeds (youtube-nocookie.com) to comply with YouTube requirements");
-                                    console.log("Attempting to reload...");
+                                    console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                    console.log("This is a new YouTube policy requiring API client identification");
+                                    console.log("Attempting to reload with proper headers...");
 
-                                    // Auto-retry for embed errors
+                                    // Auto-retry for Referer header errors
                                     reloadTimer.restart();
                                 } else if (loadRequest.errorCode === 2) {
                                     console.log("ERR_FAILED - Network or server error. Check your internet connection.");
