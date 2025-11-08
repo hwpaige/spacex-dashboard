@@ -4389,7 +4389,7 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
-                        httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpUserAgent: "Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
                         // Allow sending Referer headers for YouTube embeds
                         offTheRecord: false
@@ -4400,11 +4400,6 @@ Window {
                         isSpellCheckEnabled: false
                     }
 
-                    WebEngineView {
-                        id: youtubeView
-                        profile: youtubeProfile
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
                     WebEngineView {
                         id: youtubeView
                         profile: youtubeProfile
