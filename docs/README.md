@@ -93,17 +93,22 @@ The application integrates with several APIs:
 
 ### YouTube Embed Issues (Error 153)
 
-If you encounter YouTube embed error 153 or videos not loading, this is due to YouTube's recent changes to embed requirements. The application uses privacy-enhanced embeds (`youtube-nocookie.com`) to comply with YouTube's policies.
+If you encounter YouTube embed error 153 or videos not loading, this is due to YouTube's embed requirements. The application now embeds YouTube videos within proper HTML pages using data URLs to comply with YouTube's policies.
 
 **Symptoms:**
 - Error 153 in console logs
+- Permissions-Policy header warnings in logs
 - YouTube videos show "Video unavailable" or don't load
 - Autoplay fails
 
-**Solution:**
-The application has been updated to use `https://www.youtube-nocookie.com/embed/` instead of `https://www.youtube.com/embed/`. This bypasses referer header requirements that desktop applications cannot satisfy.
+**Technical Details:**
+- Uses privacy-enhanced embeds (`youtube-nocookie.com`)
+- Embeds videos in HTML pages via data URLs instead of direct embed URLs
+- Includes proper iframe permissions (`allow` attribute) for autoplay and media features
+- Updated user agent to Chrome 131 for compatibility
 
-If issues persist:
+**Solution:**
+The application has been updated to wrap YouTube embeds in proper HTML pages with correct permissions. If issues persist:
 1. Check your internet connection
 2. Ensure Qt WebEngine is properly installed
 3. Verify the YouTube playlist URL in `docs/youtube_url.txt` is accessible
