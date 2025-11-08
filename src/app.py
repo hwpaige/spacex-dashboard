@@ -4375,8 +4375,19 @@ Window {
                     anchors.fill: parent
                     spacing: 0
 
+                    WebEngineProfile {
+                        id: youtubeProfile
+                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpAcceptLanguage: "en-US,en"
+                        // Allow sending Referer headers for YouTube embeds
+                        offTheRecord: false
+                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
+                        httpCacheType: WebEngineProfile.DiskHttpCache
+                    }
+
                     WebEngineView {
                         id: youtubeView
+                        profile: youtubeProfile
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
@@ -4401,11 +4412,11 @@ Window {
 
                                 // Handle specific error codes
                                 if (loadRequest.errorCode === 153) {
-                                    console.log("ERR_CONTENT_LENGTH_MISMATCH detected - This is common with YouTube adaptive streaming");
-                                    console.log("Possible causes: Network interruption, CDN issues, or adaptive bitrate changes");
-                                    console.log("The video may still work despite this error - attempting reload in 3 seconds...");
+                                    console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                    console.log("This is a new YouTube policy requiring API client identification");
+                                    console.log("Attempting to reload with proper headers...");
 
-                                    // Auto-retry for content length mismatch errors
+                                    // Auto-retry for Referer header errors
                                     reloadTimer.restart();
                                 } else if (loadRequest.errorCode === 2) {
                                     console.log("ERR_FAILED - Network or server error. Check your internet connection.");

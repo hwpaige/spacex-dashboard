@@ -99,6 +99,45 @@ update_system() {
     add-apt-repository universe -y 2>/dev/null || log "WARNING: Could not add universe repository"
 }
 
+# Define system packages to install
+packages=(
+    # Core system
+    curl
+    git
+    build-essential
+    python3-dev
+    software-properties-common
+    
+    # Display and GUI
+    xserver-xorg
+    lightdm
+    openbox
+    plymouth
+    plymouth-themes
+    libxcb-cursor0
+    libxcb-xinerama0
+    libxcb-icccm4
+    libxcb-image0
+    libxcb-keysyms1
+    libxcb-randr0
+    libxcb-render-util0
+    libxcb-shape0
+    qml6-module-qtwebengine
+    
+    # Network
+    network-manager
+    
+    # Fonts
+    fonts-noto-color-emoji
+    
+    # Python packages via apt
+    python3-psutil
+    python3-pyqt6
+    python3-requests
+    python3-pandas
+    python3-pyqtgraph
+)
+
 install_packages() {
     log "Installing system packages..."
     
@@ -129,7 +168,7 @@ install_packages() {
 setup_python_environment() {
     log "Setting up Python environment..."
 
-    if python3 -c "import PyQt6, requests, pandas, psutil, fastf1, plotly" 2>/dev/null; then
+    if python3 -c "import PyQt6, pyqtgraph, requests, pandas, psutil, fastf1, plotly" 2>/dev/null; then
         log "System Python with all dependencies working (including fastf1 and plotly)"
         return
     fi
@@ -163,6 +202,8 @@ create_debug_script() {
     log "Creating debug script..."
     sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/debug_x.sh
 #!/bin/bash
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH
+
 echo '=== System Status ==='
 echo \"User: \$(whoami) | Display: \$DISPLAY\"
 echo \"Python: \$(python3 --version 2>/dev/null || echo 'Not found')\"
@@ -891,6 +932,27 @@ configure_openbox() {
   </applications>
 </openbox_config>
 EOF"
+    
+    # Create autostart script for Openbox
+    sudo -u "$USER" mkdir -p "$HOME_DIR/.config/openbox"
+    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.config/openbox/autostart
+#!/bin/bash
+
+# Set environment variables
+export QT_QPA_PLATFORM=xcb
+export XAUTHORITY=~/.Xauthority
+export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows\"
+export PYQTGRAPH_QT_LIB=PyQt6
+export QT_DEBUG_PLUGINS=0
+export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
+
+# Change to app directory
+cd ~/Desktop/project/src
+
+# Start the application
+python3 app.py &
+EOF"
+    sudo -u "$USER" chmod +x "$HOME_DIR/.config/openbox/autostart"
 }
 
 create_xinitrc() {
@@ -916,6 +978,7 @@ configure_autologin() {
 [Seat:*]
 autologin-user=$USER
 autologin-user-timeout=0
+autologin-session=openbox
 user-session=openbox
 greeter-enable=false
 xserver-command=X -core
@@ -929,7 +992,7 @@ Name=Openbox
 Comment=Openbox window manager
 Exec=/home/$USER/.xsession
 TryExec=/home/$USER/.xsession
-Type=Application
+Type=XSession
 EOF
     
     # Create .xsession for the user
@@ -967,16 +1030,8 @@ export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
 # Change to app directory
 cd ~/Desktop/project/src
 
-# Truncate app log
-if [ -f ~/app.log ]; then
-    mv ~/app.log ~/app.log.old 2>/dev/null || true
-fi
-> ~/app.log
-
-echo \"Starting SpaceX Dashboard at \$(date)\" >> ~/app.log
-
-# Start the application
-exec python3 app.py >> ~/app.log 2>&1
+# Start Openbox window manager (app will autostart)
+exec openbox-session >> ~/xsession.log 2>&1
 EOF"
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
     
@@ -991,7 +1046,7 @@ EOF"
     
     # Start LightDM immediately to test autologin
     log "Starting LightDM to test autologin configuration..."
-    systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
+    systemctl restart lightdm || log "WARNING: LightDM failed to restart (this may be normal if X is already running)"
     
     # Remove old getty override if it exists
     rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
