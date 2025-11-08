@@ -462,7 +462,7 @@ def fetch_launches():
         else:
             logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube-nocookie.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
             ]
 
@@ -3478,7 +3478,7 @@ print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
+context.setContextProperty("videoUrl", 'https://www.youtube-nocookie.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -4412,11 +4412,11 @@ Window {
 
                                 // Handle specific error codes
                                 if (loadRequest.errorCode === 153) {
-                                    console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
-                                    console.log("This is a new YouTube policy requiring API client identification");
-                                    console.log("Attempting to reload with proper headers...");
+                                    console.log("YouTube embed error 153 - This may be due to YouTube policy changes");
+                                    console.log("The app uses privacy-enhanced embeds (youtube-nocookie.com) to comply with YouTube requirements");
+                                    console.log("Attempting to reload...");
 
-                                    // Auto-retry for Referer header errors
+                                    // Auto-retry for embed errors
                                     reloadTimer.restart();
                                 } else if (loadRequest.errorCode === 2) {
                                     console.log("ERR_FAILED - Network or server error. Check your internet connection.");

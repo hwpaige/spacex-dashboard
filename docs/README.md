@@ -89,7 +89,24 @@ The application integrates with several APIs:
 - OpenWeatherMap for weather data
 - Various mapping services for location data
 
-## License
+## Troubleshooting
 
-This project is open source. See individual files for license information.
+### YouTube Embed Issues (Error 153)
+
+If you encounter YouTube embed error 153 or videos not loading, this is due to YouTube's recent changes to embed requirements. The application uses privacy-enhanced embeds (`youtube-nocookie.com`) to comply with YouTube's policies.
+
+**Symptoms:**
+- Error 153 in console logs
+- YouTube videos show "Video unavailable" or don't load
+- Autoplay fails
+
+**Solution:**
+The application has been updated to use `https://www.youtube-nocookie.com/embed/` instead of `https://www.youtube.com/embed/`. This bypasses referer header requirements that desktop applications cannot satisfy.
+
+If issues persist:
+1. Check your internet connection
+2. Ensure Qt WebEngine is properly installed
+3. Verify the YouTube playlist URL in `docs/youtube_url.txt` is accessible
+
+## License
      
