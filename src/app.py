@@ -60,7 +60,19 @@ elif platform.system() == 'Linux':
         "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
         "--disable-web-security --allow-running-insecure-content "
         "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
-        "--disable-gpu-driver-bug-workarounds"
+        "--disable-gpu-driver-bug-workarounds "
+        "--disable-features=VizDisplayCompositor "
+        "--disable-background-timer-throttling "
+        "--disable-renderer-backgrounding "
+        "--disable-backgrounding-occluded-windows "
+        "--user-agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' "
+        "--disable-features=TranslateUI "
+        "--disable-ipc-flooding-protection "
+        "--disable-hang-monitor "
+        "--disable-prompt-on-repost "
+        "--force-gpu-rasterization "
+        "--enable-zero-copy "
+        "--disable-low-end-device-mode"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -3478,7 +3490,7 @@ print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&origin=https://www.youtube.com')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -4377,14 +4389,22 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
-                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpUserAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
                         // Allow sending Referer headers for YouTube embeds
                         offTheRecord: false
                         persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
                         httpCacheType: WebEngineProfile.DiskHttpCache
+                        // Additional settings for proper header handling
+                        isPushServiceEnabled: false
+                        isSpellCheckEnabled: false
                     }
 
+                    WebEngineView {
+                        id: youtubeView
+                        profile: youtubeProfile
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
                     WebEngineView {
                         id: youtubeView
                         profile: youtubeProfile
@@ -4402,7 +4422,42 @@ Window {
                             javascriptCanOpenWindows: false
                             javascriptCanAccessClipboard: false
                             allowWindowActivationFromJavaScript: false
+                            // Additional settings for YouTube compatibility
+                            allowGeolocationOnInsecureOrigins: false
+                            allowRunningInsecureContent: true
+                            autoLoadImages: true
+                            autoLoadIconsForPage: true
+                            errorPageEnabled: false
+                            hyperlinksEnabled: true
+                            javascriptCanPaste: false
+                            localStorageEnabled: true
+                            spatialNavigationEnabled: false
+                            touchscreenSupportEnabled: true
+                            webRTCPublicInterfacesOnly: false
                         }
+
+                        WebEngineScript {
+                            id: youtubeScript
+                            name: "youtubeHeaders"
+                            sourceCode: "
+                                // Script to help with YouTube embed headers
+                                (function() {
+                                    // Override XMLHttpRequest to add proper headers
+                                    var originalOpen = XMLHttpRequest.prototype.open;
+                                    XMLHttpRequest.prototype.open = function(method, url) {
+                                        if (url && url.includes('youtube.com')) {
+                                            this.setRequestHeader('Referer', 'https://www.youtube.com/');
+                                            this.setRequestHeader('Origin', 'https://www.youtube.com');
+                                        }
+                                        return originalOpen.apply(this, arguments);
+                                    };
+                                })();
+                            "
+                            injectionPoint: WebEngineScript.DocumentCreation
+                            worldId: WebEngineScript.MainWorld
+                        }
+
+                        userScripts: [youtubeScript]
                         onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                         onLoadingChanged: function(loadRequest) {
                             if (loadRequest.status === WebEngineView.LoadFailedStatus) {
