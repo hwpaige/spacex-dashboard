@@ -3466,7 +3466,7 @@ context = engine.rootContext()
 class RefererInterceptor(QWebEngineUrlRequestInterceptor):
     def interceptRequest(self, info):
         url = info.requestUrl().toString()
-        if 'youtube.com' in url or 'youtu.be' in url:
+        if 'youtube.com' in url or 'youtu.be' in url or 'youtube-nocookie.com' in url:
             info.setHttpHeader(b'Referer', b'https://www.youtube.com/')
 
 youtubeProfile = QWebEngineProfile()
@@ -3474,7 +3474,7 @@ youtubeProfile.setUrlRequestInterceptor(RefererInterceptor())
 
 context.setContextProperty("youtubeProfile", youtubeProfile)
 
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
+context.setContextProperty("videoUrl", 'https://www.youtube-nocookie.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1&origin=https://www.youtube.com')
 
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
