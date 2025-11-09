@@ -15,6 +15,7 @@ from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush,
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
+from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -3461,12 +3462,26 @@ try:
 except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
 context = engine.rootContext()
+
+class RefererInterceptor(QWebEngineUrlRequestInterceptor):
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if 'youtube.com' in url or 'youtu.be' in url or 'youtube-nocookie.com' in url:
+            # Set a valid Referer (use YouTube's own domain to comply with ToS)
+            info.setHttpHeader(b'Referer', b'https://www.youtube.com/')
+
+# Create YouTube profile with interceptor
+youtubeProfile = QWebEngineProfile()
+youtubeProfile.setUrlRequestInterceptor(RefererInterceptor())
+
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1-logo.png').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
+
+context.setContextProperty("youtubeProfile", youtubeProfile)
 
 globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
 print(f"DEBUG: Globe file path: {globe_file_path}")
@@ -3478,7 +3493,7 @@ print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
+context.setContextProperty("videoUrl", 'https://www.youtube-nocookie.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1&origin=https://www.youtube.com')
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -4374,16 +4389,6 @@ Window {
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
-
-                    WebEngineProfile {
-                        id: youtubeProfile
-                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                        httpAcceptLanguage: "en-US,en"
-                        // Allow sending Referer headers for YouTube embeds
-                        offTheRecord: false
-                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
-                        httpCacheType: WebEngineProfile.DiskHttpCache
-                    }
 
                     WebEngineView {
                         id: youtubeView
