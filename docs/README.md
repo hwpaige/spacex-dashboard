@@ -43,11 +43,11 @@ spacex-dashboard/
 
 The dashboard embeds YouTube videos for SpaceX launches. To comply with YouTube's embedding policies and avoid "missing Referer header" errors, the application uses:
 
+- **Local HTML wrapper**: A temporary HTML file containing an iframe with `referrerpolicy="strict-origin-when-cross-origin"`
 - **youtube-nocookie.com** domain for better privacy
-- **Referer header interceptor** that sets a valid `Referer: https://www.youtube.com/` for all YouTube requests
-- **Origin parameter** in the embed URL to match the Referer
+- **Origin parameter** in the embed URL for compliance
 
-This ensures reliable video playback without violating YouTube's Terms of Service.
+The iframe's referrerpolicy attribute controls how much referrer information is sent, ensuring reliable video playback without violating YouTube's Terms of Service.
 - PyQt6
 - Qt WebEngine
 - FastF1 (for F1 data)

@@ -9,13 +9,13 @@ import pandas as pd
 import shlex
 import math
 import concurrent.futures
+import tempfile
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
-from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -3463,16 +3463,33 @@ except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
 context = engine.rootContext()
 
-class RefererInterceptor(QWebEngineUrlRequestInterceptor):
-    def interceptRequest(self, info):
-        url = info.requestUrl().toString()
-        if 'youtube.com' in url or 'youtu.be' in url or 'youtube-nocookie.com' in url:
-            # Set a valid Referer (use YouTube's own domain to comply with ToS)
-            info.setHttpHeader(b'Referer', b'https://www.youtube.com/')
+# Create temporary HTML file with iframe
+html_content = '''
+<html>
+<head>
+    <style>
+        body { margin: 0; padding: 0; background: black; overflow: hidden; }
+        iframe { border: none; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <iframe 
+        src="https://www.youtube-nocookie.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1&origin=https://www.youtube.com"
+        referrerpolicy="strict-origin-when-cross-origin"
+        allow="autoplay; encrypted-media"
+        allowfullscreen
+    ></iframe>
+</body>
+</html>
+'''
 
-# Create YouTube profile with interceptor
-youtubeProfile = QWebEngineProfile()
-youtubeProfile.setUrlRequestInterceptor(RefererInterceptor())
+temp_dir = tempfile.gettempdir()
+html_path = os.path.join(temp_dir, 'youtube_embed.html')
+with open(html_path, 'w', encoding='utf-8') as f:
+    f.write(html_content)
+
+# Update context property to load the local HTML
+context.setContextProperty("videoUrl", f'file:///{html_path.replace("\\", "/")}')
 
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
@@ -3480,8 +3497,6 @@ context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1-logo.png').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
-
-context.setContextProperty("youtubeProfile", youtubeProfile)
 
 globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
 print(f"DEBUG: Globe file path: {globe_file_path}")
@@ -4392,7 +4407,6 @@ Window {
 
                     WebEngineView {
                         id: youtubeView
-                        profile: youtubeProfile
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
