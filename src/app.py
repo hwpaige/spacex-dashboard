@@ -9,16 +9,13 @@ import pandas as pd
 import shlex
 import math
 import concurrent.futures
-import tempfile
-import threading
-import http.server
-import socketserver
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
+from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -3466,61 +3463,18 @@ except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
 context = engine.rootContext()
 
-# HTML content for YouTube embed
-html_content = '''
-<html>
-<head>
-    <style>
-        body { margin: 0; padding: 0; background: black; overflow: hidden; }
-        iframe { border: none; width: 100%; height: 100%; }
-    </style>
-</head>
-<body>
-    <iframe 
-        src="https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allow="autoplay; encrypted-media"
-        allowfullscreen
-    ></iframe>
-</body>
-</html>
-'''
+class RefererInterceptor(QWebEngineUrlRequestInterceptor):
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if 'youtube.com' in url or 'youtu.be' in url:
+            info.setHttpHeader(b'Referer', b'https://www.youtube.com/')
 
-# Simple HTTP server to serve the HTML
-class HTMLHandler(http.server.SimpleHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.end_headers()
-            self.wfile.write(html_content.encode('utf-8'))
-        else:
-            self.send_error(404)
+youtubeProfile = QWebEngineProfile()
+youtubeProfile.setUrlRequestInterceptor(RefererInterceptor())
 
-# Find available port
-def find_available_port(start_port=8080):
-    port = start_port
-    while port < 9000:  # Limit search
-        try:
-            with socketserver.TCPServer(("", port), None):
-                pass
-            return port
-        except OSError:
-            port += 1
-    raise RuntimeError("No available ports found")
+context.setContextProperty("youtubeProfile", youtubeProfile)
 
-port = find_available_port()
-
-# Start server in background thread
-def run_server():
-    with socketserver.TCPServer(("", port), HTMLHandler) as httpd:
-        httpd.serve_forever()
-
-server_thread = threading.Thread(target=run_server, daemon=True)
-server_thread.start()
-
-# Update context property to load from local server
-context.setContextProperty("videoUrl", f"http://localhost:{port}/")
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
 
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
@@ -4438,6 +4392,7 @@ Window {
 
                     WebEngineView {
                         id: youtubeView
+                        profile: youtubeProfile
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
