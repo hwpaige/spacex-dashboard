@@ -3478,7 +3478,9 @@ print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
+youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
+context.setContextProperty("videoUrl", f'file:///{youtube_html_path.replace("\\", "/")}')
+print(f"DEBUG: Video URL set to: {context.property('videoUrl')}")
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """

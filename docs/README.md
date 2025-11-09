@@ -89,6 +89,10 @@ The application integrates with several APIs:
 - OpenWeatherMap for weather data
 - Various mapping services for location data
 
+## YouTube Embed Fix
+
+To resolve YouTube error 153 (missing Referer header), the application uses a local HTML wrapper (`src/youtube_embed.html`) that embeds the YouTube playlist with the `referrerpolicy="strict-origin-when-cross-origin"` attribute. This ensures proper Referer headers are sent, satisfying YouTube's embedding policies. The wrapper uses `youtube-nocookie.com` for reduced tracking and includes autoplay permissions.
+
 ## License
 
 This project is open source. See individual files for license information.
