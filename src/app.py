@@ -15,6 +15,7 @@ from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush,
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
+from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -3462,7 +3463,17 @@ except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
 context = engine.rootContext()
 
-# Update context property to load YouTube directly
+class RefererInterceptor(QWebEngineUrlRequestInterceptor):
+    def interceptRequest(self, info):
+        url = info.requestUrl().toString()
+        if 'youtube.com' in url:
+            info.setHttpHeader(b'Referer', b'https://www.youtube.com/')
+
+youtubeProfile = QWebEngineProfile()
+youtubeProfile.setUrlRequestInterceptor(RefererInterceptor())
+
+context.setContextProperty("youtubeProfile", youtubeProfile)
+
 context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
 
 context.setContextProperty("backend", backend)
@@ -4381,6 +4392,7 @@ Window {
 
                     WebEngineView {
                         id: youtubeView
+                        profile: youtubeProfile
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
@@ -5779,4 +5791,12 @@ if not engine.rootObjects():
     logger.error("QML root object creation failed (see earlier QML errors above).")
     print("QML load failed. Check console for Qt errors.")
     sys.exit(-1)
+
+# Set referrer for YouTube view
+root = engine.rootObjects()[0]
+youtubeView = root.findChild(QObject, "youtubeView")
+if youtubeView:
+    page = youtubeView.page()
+    page.load(QUrl('https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1'), QUrl("https://www.youtube.com/"))
+
 sys.exit(app.exec())
