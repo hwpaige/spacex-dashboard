@@ -9,7 +9,6 @@ import pandas as pd
 import shlex
 import math
 import concurrent.futures
-import tempfile
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -3463,33 +3462,8 @@ except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
 context = engine.rootContext()
 
-# Create temporary HTML file with iframe
-html_content = '''
-<html>
-<head>
-    <style>
-        body { margin: 0; padding: 0; background: black; overflow: hidden; }
-        iframe { border: none; width: 100%; height: 100%; }
-    </style>
-</head>
-<body>
-    <iframe 
-        src="https://www.youtube-nocookie.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1&origin=https://www.youtube.com"
-        referrerpolicy="strict-origin-when-cross-origin"
-        allow="autoplay; encrypted-media"
-        allowfullscreen
-    ></iframe>
-</body>
-</html>
-'''
-
-temp_dir = tempfile.gettempdir()
-html_path = os.path.join(temp_dir, 'youtube_embed.html')
-with open(html_path, 'w', encoding='utf-8') as f:
-    f.write(html_content)
-
-# Update context property to load the local HTML
-context.setContextProperty("videoUrl", f'file:///{html_path.replace("\\", "/")}')
+# Update context property to load YouTube directly
+context.setContextProperty("videoUrl", 'https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
 
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
