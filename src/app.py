@@ -28,6 +28,9 @@ import calendar
 from cryptography.fernet import Fernet
 from track_generator import generate_track_map
 from plotly_charts import generate_f1_standings_chart
+import http.server
+import socketserver
+import threading
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
@@ -3190,6 +3193,18 @@ if __name__ == '__main__':
         if fusion_style:
             QApplication.setStyle(fusion_style)
     
+    # Start local HTTP server for serving HTML files
+    def start_http_server():
+        port = 8080
+        os.chdir(os.path.dirname(__file__))  # Serve from src directory
+        handler = http.server.SimpleHTTPRequestHandler
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            logger.info(f"Serving HTTP on port {port}")
+            httpd.serve_forever()
+    
+    server_thread = threading.Thread(target=start_http_server, daemon=True)
+    server_thread.start()
+    
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -3482,7 +3497,7 @@ print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", "file:///" + youtube_html_path.replace('\\', '/'))
+context.setContextProperty("videoUrl", "http://localhost:8080/youtube_embed.html")
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
