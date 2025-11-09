@@ -3555,43 +3555,7 @@ Window {
             fillMode: Image.PreserveAspectFit
         }
 
-        // Loading animation with bouncing dots
-        Row {
-            anchors.top: parent.verticalCenter
-            anchors.topMargin: 180
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
 
-            Repeater {
-                model: 3
-                Rectangle {
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: backend.theme === "dark" ? "white" : "#333333"
-                    
-                    SequentialAnimation on y {
-                        loops: Animation.Infinite
-                        PropertyAnimation { to: -10; duration: 300; easing.type: Easing.InOutQuad }
-                        PropertyAnimation { to: 0; duration: 300; easing.type: Easing.InOutQuad }
-                        PauseAnimation { duration: 400 }
-                    }
-                    
-                    // Stagger the animations
-                    Component.onCompleted: {
-                        animationDelay.start()
-                    }
-                    
-                    Timer {
-                        id: animationDelay
-                        interval: index * 200
-                        running: true
-                        repeat: false
-                        onTriggered: parent.SequentialAnimation.running = true
-                    }
-                }
-            }
-        }
     }
 
     // Cache expensive / repeated lookups

@@ -422,7 +422,7 @@ EOF
     # Create the script file for the theme
     cat > "$THEME_DIR/spacex.script" << 'EOF'
 # SpaceX Plymouth Theme Script
-# Matches the Qt app loading screen exactly
+# Simple logo display
 
 # Set background color to match Qt dark theme (#1c2526)
 Window.SetBackgroundTopColor(0.11, 0.145, 0.149);
@@ -440,65 +440,14 @@ logo.image = logo.image.Scale(logo.width, logo.height);
 logo.x = Window.GetWidth() / 2 - logo.width / 2;
 logo.y = Window.GetHeight() / 2 - logo.height / 2;
 
-# Initialize bouncing dots animation
-dot1.y_offset = 0;
-dot2.y_offset = 0;
-dot3.y_offset = 0;
-dot1.animation_phase = 0;
-dot2.animation_phase = 0.33;  # Offset phases for staggered animation
-dot3.animation_phase = 0.66;
-
 fun refresh_callback ()
 {
     # Clear screen with background color
-    Plymouth.FillScreen(0.11, 0.145, 0.149);
+    Window.SetBackgroundTopColor(0.11, 0.145, 0.149);
+    Window.SetBackgroundBottomColor(0.11, 0.145, 0.149);
     
     # Draw the logo
     logo.image.Draw(logo.x, logo.y);
-    
-    # Calculate dot positions (below logo, matching Qt layout)
-    dot_y_base = logo.y + logo.height + 30;  # 30px below logo
-    dot_spacing = 20;  # Space between dots
-    dot_size = 12;
-    
-    # Calculate animation offsets for bouncing effect
-    time = Plymouth.GetTime() / 1000.0;  # Convert to seconds
-    
-    # Dot 1 animation (bounce every 1.4 seconds)
-    dot1.animation_phase = (time * 1.4) % 1.0;
-    if (dot1.animation_phase < 0.5) {
-        dot1.y_offset = -10 * Plymouth.Sin(dot1.animation_phase * 3.14159);
-    } else {
-        dot1.y_offset = -10 * Plymouth.Sin((1.0 - dot1.animation_phase) * 3.14159);
-    }
-    
-    # Dot 2 animation (offset by 0.33)
-    dot2.animation_phase = ((time * 1.4) + 0.33) % 1.0;
-    if (dot2.animation_phase < 0.5) {
-        dot2.y_offset = -10 * Plymouth.Sin(dot2.animation_phase * 3.14159);
-    } else {
-        dot2.y_offset = -10 * Plymouth.Sin((1.0 - dot2.animation_phase) * 3.14159);
-    }
-    
-    # Dot 3 animation (offset by 0.66)
-    dot3.animation_phase = ((time * 1.4) + 0.66) % 1.0;
-    if (dot3.animation_phase < 0.5) {
-        dot3.y_offset = -10 * Plymouth.Sin(dot3.animation_phase * 3.14159);
-    } else {
-        dot3.y_offset = -10 * Plymouth.Sin((1.0 - dot3.animation_phase) * 3.14159);
-    }
-    
-    # Draw the three bouncing dots
-    center_x = Window.GetWidth() / 2;
-    
-    # Dot 1 (left)
-    Plymouth.FillCircle(center_x - dot_spacing - dot_size/2, dot_y_base + dot1.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
-    
-    # Dot 2 (center)
-    Plymouth.FillCircle(center_x, dot_y_base + dot2.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
-    
-    # Dot 3 (right)
-    Plymouth.FillCircle(center_x + dot_spacing + dot_size/2, dot_y_base + dot3.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
