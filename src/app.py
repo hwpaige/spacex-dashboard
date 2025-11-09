@@ -15,7 +15,7 @@ from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush,
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
-from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile
+from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInterceptor, QWebEngineProfile, QWebEngineHttpRequest
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -5797,6 +5797,9 @@ root = engine.rootObjects()[0]
 youtubeView = root.findChild(QObject, "youtubeView")
 if youtubeView:
     page = youtubeView.page()
-    page.load(QUrl('https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1'), QUrl("https://www.youtube.com/"))
+    url = QUrl('https://www.youtube.com/embed?listType=playlist&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0&playsinline=1')
+    request = QWebEngineHttpRequest(url)
+    request.setHeader(b'Referer', b'https://www.youtube.com/')
+    page.load(request)
 
 sys.exit(app.exec())

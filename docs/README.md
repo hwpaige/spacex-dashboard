@@ -41,9 +41,9 @@ spacex-dashboard/
 
 ## YouTube Integration
 
-The dashboard embeds YouTube videos for SpaceX launches using the standard `youtube.com/embed` URL with a custom profile that includes a request interceptor. The interceptor sets a valid `Referer` header for all YouTube requests, ensuring compliance with YouTube's embedding policies.
+The dashboard embeds YouTube videos for SpaceX launches using the standard `youtube.com/embed` URL with a custom profile that includes a request interceptor. The interceptor sets a valid `Referer` header for all YouTube requests, and the initial page load uses a `QWebEngineHttpRequest` with an explicit `Referer` header to ensure compliance with YouTube's embedding policies.
 
-Additionally, the initial page load is performed with an explicit referrer to handle any referrer requirements for the main document request.
+This dual approach ensures that both the main document request and any subsequent requests include the required referrer information.
 - PyQt6
 - Qt WebEngine
 - FastF1 (for F1 data)
