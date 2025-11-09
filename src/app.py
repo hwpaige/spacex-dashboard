@@ -3476,9 +3476,13 @@ earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'im
 print(f"DEBUG: Earth texture path: {earth_texture_path}")
 print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
+youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
+print(f"DEBUG: YouTube HTML path: {youtube_html_path}")
+print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
+
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?si=rvwtzwj_URqw2dtK&controls=0&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY')
+context.setContextProperty("videoUrl", "file:///" + youtube_html_path.replace('\\', '/'))
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
