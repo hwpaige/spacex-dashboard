@@ -39,9 +39,9 @@ spacex-dashboard/
 └── .gitignore          # Git ignore rules
 ```
 
-## YouTube Integration
+## Requirements
 
-The dashboard embeds YouTube videos for SpaceX launches using the privacy-focused `youtube-nocookie.com/embed` URL with a custom WebEngine profile that includes a request interceptor. The interceptor automatically adds a `Referer` header (`https://www.youtube.com/`) to all YouTube requests, and the embed URL includes an `origin` parameter for additional compliance with YouTube's embedding policies.
+- Python 3.8+
 - PyQt6
 - Qt WebEngine
 - FastF1 (for F1 data)
