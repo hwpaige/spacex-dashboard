@@ -102,7 +102,6 @@ update_system() {
 
 install_packages() {
     log "Installing system packages..."
-    log "Note: Qt packages will be installed from Ubuntu 25.04 repositories (should be Qt 6.8.x)"
     
     # Define the packages array with system packages (restored from git history)
     local packages=(
@@ -174,19 +173,15 @@ check_qt_version() {
     if [[ $qt_major_minor == "6.8" ]]; then
         log "✓ Qt $qt_version detected - this version is known to work with the SpaceX dashboard"
     elif [[ $qt_major_minor == "6.9" ]]; then
-        log "⚠ CRITICAL WARNING: Qt $qt_version detected - this version (6.9.x) has known GLOzone issues with WebEngine"
-        log "⚠ This will cause the SpaceX dashboard to fail with GLOzone platform errors"
-        log "⚠ RECOMMENDATION: Use Ubuntu 25.04 which ships with Qt 6.8.x, or downgrade Qt packages"
-        log "⚠ The setup will continue, but the application may not work correctly"
+        log "⚠ WARNING: Qt $qt_version detected - this version (6.9.x) has known GLOzone issues with WebEngine"
+        log "⚠ It is recommended to use Ubuntu 25.04 with Qt 6.8.x for best compatibility"
+        log "⚠ The app may not start or may crash with GLOzone errors"
     elif [[ $qt_major_minor == "6.10" ]] || [[ $qt_major_minor == "6.11" ]] || [[ $qt_major_minor == "6.12" ]]; then
-        log "⚠ CRITICAL WARNING: Qt $qt_version detected - this version is newer than tested versions"
-        log "⚠ Compatibility is unknown and may cause GLOzone or other WebEngine issues"
-        log "⚠ RECOMMENDATION: Use Ubuntu 25.04 with Qt 6.8.x for best compatibility"
-        log "⚠ The setup will continue, but the application may not work correctly"
+        log "⚠ WARNING: Qt $qt_version detected - this version is newer than tested versions"
+        log "⚠ Compatibility is unknown - the app may not work correctly"
     else
         log "⚠ WARNING: Unable to determine Qt version or using untested version: $qt_version"
-        log "⚠ This may cause issues with the SpaceX dashboard WebEngine functionality"
-        log "⚠ RECOMMENDATION: Ensure you're using Ubuntu 25.04 with Qt 6.8.x"
+        log "⚠ This may cause issues with the SpaceX dashboard"
     fi
 }
 
