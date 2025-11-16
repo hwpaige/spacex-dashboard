@@ -5,8 +5,9 @@ set -o pipefail
 # Trap to handle interrupts gracefully
 trap 'log "Setup interrupted by user"; exit 1' INT TERM
 
-# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 24.04
-# Optimized with modular functions and better error handling
+# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 25.04 with Qt 6.8.x
+# This script is specifically designed for Qt 6.8.x compatibility
+# Qt 6.9.x and later versions have known GLOzone issues with WebEngine
 
 USER="${SUDO_USER:-harrison}"
 HOME_DIR="/home/$USER"
@@ -101,6 +102,31 @@ update_system() {
 
 install_packages() {
     log "Installing system packages..."
+    log "Note: Qt packages will be installed from Ubuntu 25.04 repositories (should be Qt 6.8.x)"
+    
+    # Define the packages array with system packages (restored from git history)
+    local packages=(
+        python3 python3-pip python3-full python3-venv git
+        python3-pyqt6 python3-pyqt6.qtwebengine python3-pyqt6.qtcharts python3-pyqt6.qtquick python3-pyqt6.qtwebchannel
+        qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtquick-controls
+        qml6-module-qtquick-layouts qml6-module-qtcharts qml6-module-qtwebengine
+        qt6-base-dev qt6-declarative-dev qt6-webengine-dev qt6-charts-dev
+        python3-requests python3-dateutil python3-pandas python3-tz python3-pytz
+        python3-numpy python3-scipy python3-matplotlib python3-opengl python3-pyqtgraph
+        python3-psutil
+        unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
+        xserver-xorg xinit x11-xserver-utils openbox libinput-tools imagemagick
+        ubuntu-raspi-settings xserver-xorg-video-modesetting lightdm
+        libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 mesa-vulkan-drivers
+        mesa-opencl-icd ocl-icd-opencl-dev libgles2-mesa-dev
+        libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
+        libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1
+        libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg
+        libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0t64
+        libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1
+        libasound2t64 libgtk-3-0t64 lz4 plymouth-theme-spinner
+        qt6-webengine-dev-tools libxcb-cursor0
+    )
     
     # First try to install all packages at once for speed
     if apt-get install -y --no-install-recommends "${packages[@]}"; then
@@ -126,6 +152,44 @@ install_packages() {
     fi
 }
 
+check_qt_version() {
+    log "Checking Qt version compatibility..."
+    log "Note: This setup is optimized for Qt 6.8.x - Qt 6.9.x+ has GLOzone WebEngine issues"
+    
+    # Check PyQt6 version
+    local pyqt_version=$(python3 -c "import PyQt6; print(PyQt6.QtCore.PYQT_VERSION_STR)" 2>/dev/null || echo "unknown")
+    log "PyQt6 version: $pyqt_version"
+    
+    # Check Qt6 WebEngine version
+    local qt_version=$(python3 -c "import PyQt6.QtWebEngine; print(PyQt6.QtWebEngine.PYQT_WEBENGINE_VERSION_STR)" 2>/dev/null || echo "unknown")
+    log "Qt WebEngine version: $qt_version"
+    
+    # Extract major.minor version for comparison
+    local qt_major_minor=""
+    if [[ $qt_version =~ ^([0-9]+\.[0-9]+) ]]; then
+        qt_major_minor="${BASH_REMATCH[1]}"
+    fi
+    
+    # Check if we're using Qt 6.8.x (known working version)
+    if [[ $qt_major_minor == "6.8" ]]; then
+        log "✓ Qt $qt_version detected - this version is known to work with the SpaceX dashboard"
+    elif [[ $qt_major_minor == "6.9" ]]; then
+        log "⚠ CRITICAL WARNING: Qt $qt_version detected - this version (6.9.x) has known GLOzone issues with WebEngine"
+        log "⚠ This will cause the SpaceX dashboard to fail with GLOzone platform errors"
+        log "⚠ RECOMMENDATION: Use Ubuntu 25.04 which ships with Qt 6.8.x, or downgrade Qt packages"
+        log "⚠ The setup will continue, but the application may not work correctly"
+    elif [[ $qt_major_minor == "6.10" ]] || [[ $qt_major_minor == "6.11" ]] || [[ $qt_major_minor == "6.12" ]]; then
+        log "⚠ CRITICAL WARNING: Qt $qt_version detected - this version is newer than tested versions"
+        log "⚠ Compatibility is unknown and may cause GLOzone or other WebEngine issues"
+        log "⚠ RECOMMENDATION: Use Ubuntu 25.04 with Qt 6.8.x for best compatibility"
+        log "⚠ The setup will continue, but the application may not work correctly"
+    else
+        log "⚠ WARNING: Unable to determine Qt version or using untested version: $qt_version"
+        log "⚠ This may cause issues with the SpaceX dashboard WebEngine functionality"
+        log "⚠ RECOMMENDATION: Ensure you're using Ubuntu 25.04 with Qt 6.8.x"
+    fi
+}
+
 setup_python_environment() {
     log "Setting up Python environment..."
 
@@ -135,7 +199,8 @@ setup_python_environment() {
     fi
 
     log "Installing missing Python packages system-wide..."
-    apt-get install -y python3-psutil python3-pyqt6 python3-requests python3-pandas
+    # Note: Core Python packages (python3-psutil, python3-pyqt6, python3-requests, python3-pandas) 
+    # are now installed via the packages array in install_packages()
 
     # Install emoji fonts for proper emoji display in the app
     log "Installing emoji fonts for app display..."
@@ -168,8 +233,67 @@ echo \"User: \$(whoami) | Display: \$DISPLAY\"
 echo \"Python: \$(python3 --version 2>/dev/null || echo 'Not found')\"
 echo ''
 echo '=== Package Tests ==='
-python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"✓ System packages working\")' 2>/dev/null || echo '✗ System Python failed'
-python3 -c 'import fastf1; print(\"✓ fastf1 available\")' 2>/dev/null || echo '✗ fastf1 not available'
+python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"System packages working\")' 2>/dev/null || echo 'System Python failed'
+python3 -c 'import fastf1; print(\"fastf1 available\")' 2>/dev/null || echo 'fastf1 not available'
+echo ''
+echo '=== Qt/GPU Debug Info ==='
+echo 'Qt6 Platform Plugins:'
+ls -la /usr/lib/aarch64-linux-gnu/qt6/plugins/platforms/ 2>/dev/null || echo 'Qt6 plugins not found'
+echo ''
+echo 'Qt6 WebEngine Libraries:'
+ls -la /usr/lib/aarch64-linux-gnu/ | grep qt6webengine 2>/dev/null || echo 'Qt6 WebEngine libs not found'
+echo ''
+echo 'EGL/GLES Libraries:'
+ls -la /usr/lib/aarch64-linux-gnu/ | grep -E \"egl\|gles\" 2>/dev/null || echo 'EGL/GLES libs not found'
+echo ''
+echo 'Mesa Libraries:'
+ls -la /usr/lib/aarch64-linux-gnu/ | grep mesa 2>/dev/null || echo 'Mesa libs not found'
+echo ''
+echo 'Environment Variables:'
+echo \"QT_QPA_PLATFORM: \$QT_QPA_PLATFORM\"
+echo \"QTWEBENGINE_CHROMIUM_FLAGS: \$QTWEBENGINE_CHROMIUM_FLAGS\"
+echo \"EGL_PLATFORM: \$EGL_PLATFORM\"
+echo \"GALLIUM_DRIVER: \$GALLIUM_DRIVER\"
+echo \"LIBGL_ALWAYS_SOFTWARE: \$LIBGL_ALWAYS_SOFTWARE\"
+echo ''
+echo '=== GPU Device Info ==='
+echo 'GPU devices:'
+ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
+echo ''
+echo 'GPU memory info:'
+cat /proc/meminfo | grep -E \"MemTotal\|MemAvailable\|Buffers\|Cached\" 2>/dev/null || echo 'Memory info unavailable'
+echo ''
+echo '=== Qt Platform Test ==='
+python3 -c \"
+import os
+os.environ['QT_QPA_PLATFORM'] = 'xcb'
+os.environ['QT_DEBUG_PLUGINS'] = '1'
+try:
+    from PyQt6.QtWidgets import QApplication
+    import sys
+    app = QApplication(sys.argv)
+    print('Qt xcb platform works')
+    app.quit()
+except Exception as e:
+    print('Qt xcb platform failed: ' + str(e))
+\" 2>/dev/null
+echo ''
+echo '=== WebEngine Test ==='
+python3 -c \"
+import os
+os.environ['QT_QPA_PLATFORM'] = 'xcb'
+os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = '--disable-gpu --no-sandbox'
+try:
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+    from PyQt6.QtWidgets import QApplication
+    import sys
+    app = QApplication(sys.argv)
+    view = QWebEngineView()
+    print('Qt WebEngine basic import works')
+    app.quit()
+except Exception as e:
+    print('Qt WebEngine failed: ' + str(e))
+\" 2>/dev/null
 echo ''
 echo '=== Plymouth Status ==='
 echo 'Plymouth version:'
@@ -186,10 +310,10 @@ cat /etc/initramfs-tools/conf.d/plymouth 2>/dev/null || echo 'Plymouth initramfs
 echo ''
 echo '=== Network Tests ==='
 echo 'Testing internet connectivity...'
-ping -c 3 8.8.8.8 2>/dev/null && echo '✓ Internet connectivity OK' || echo '✗ No internet connectivity'
+ping -c 3 8.8.8.8 2>/dev/null && echo 'Internet connectivity OK' || echo 'No internet connectivity'
 echo ''
 echo 'Testing SpaceX API...'
-curl -s --max-time 10 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5' | head -c 200 && echo -e '\n✓ API reachable' || echo '✗ API unreachable'
+curl -s --max-time 10 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5' | head -c 200 && echo -e '\nAPI reachable' || echo 'API unreachable'
 echo ''
 echo 'Testing Python requests to API with SSL debugging...'
 python3 -c \"
@@ -197,18 +321,16 @@ import requests
 import ssl
 print('SSL version:', ssl.OPENSSL_VERSION)
 try:
-    # First try with SSL verification
     response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=True)
-    print(f'✓ SSL verified request successful: {response.status_code}')
+    print('SSL verified request successful:', response.status_code)
 except Exception as e:
-    print(f'✗ SSL verified request failed: {e}')
+    print('SSL verified request failed:', str(e))
     try:
-        # Try without SSL verification as fallback
         response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=False)
-        print(f'✓ Non-SSL request successful: {response.status_code}')
+        print('Non-SSL request successful:', response.status_code)
     except Exception as e2:
-        print(f'✗ Non-SSL request also failed: {e2}')
-\" 2>/dev/null || echo '✗ Python SSL test failed'
+        print('Non-SSL request also failed:', str(e2))
+\" 2>/dev/null || echo 'Python SSL test failed'
 echo ''
 echo '=== GPU/DMA Buffer Status ==='
 echo \"GPU devices:\"
@@ -216,7 +338,7 @@ ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
 echo \"DMA heap:\"
 ls -la /dev/dma_heap/ 2>/dev/null || echo 'No DMA heap found'
 echo \"GPU memory info:\"
-cat /proc/meminfo | grep -E \"(MemTotal|MemAvailable|Buffers|Cached|SwapTotal|SwapFree)\" 2>/dev/null || echo 'Memory info unavailable'
+cat /proc/meminfo | grep -E \"MemTotal\|MemAvailable\|Buffers\|Cached\|SwapTotal\|SwapFree\" 2>/dev/null || echo 'Memory info unavailable'
 echo \"System memory usage:\"
 free -h 2>/dev/null || echo 'free command not available'
 echo \"GPU cgroup status:\"
@@ -276,7 +398,7 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-web-security --allow-running-insecure-content --gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF --disable-gpu-driver-bug-workarounds
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
@@ -284,7 +406,7 @@ Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
-Environment=EGL_PLATFORM=drm
+Environment=QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/qt6/plugins/platforms
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStartPre=/bin/bash -c 'nmcli device wifi rescan; timeout 30 bash -c "until nmcli device | grep wifi | grep -q connected; do sleep 2; done"'
 ExecStart=python3 app.py
@@ -299,7 +421,10 @@ WantedBy=multi-user.target
 EOF
     
     systemctl daemon-reload
-    systemctl enable NetworkManager-wait-online.service
+    # Note: NetworkManager-wait-online.service may not exist in Ubuntu 25.04
+    systemctl enable NetworkManager-wait-online.service 2>/dev/null || log "WARNING: NetworkManager-wait-online.service not available"
+    # Disable the systemd service since we use .xsession for direct app launch
+    systemctl disable spacex-dashboard.service 2>/dev/null || true
 }
 
 configure_boot() {
@@ -327,6 +452,8 @@ max_framebuffer_height=320
 hdmi_group=2
 hdmi_mode=87
 hdmi_timings=1480 0 80 16 32 320 0 16 4 12 0 0 0 60 0 42000000 3
+dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d,cma-128
 dtoverlay=vc4-kms-v3d-pi5
 EOF
     fi
@@ -334,8 +461,8 @@ EOF
     # Initramfs settings
     grep -q "^COMPRESS=lz4" /etc/initramfs-tools/initramfs.conf || echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
     
-    # Add required modules including Plymouth for boot splash
-    for module in drm vc4 plymouth; do
+    # Add required modules
+    for module in drm vc4; do
         grep -qxF "$module" /etc/initramfs-tools/modules || echo "$module" >> /etc/initramfs-tools/modules
     done
 }
@@ -891,6 +1018,8 @@ configure_openbox() {
   </applications>
 </openbox_config>
 EOF"
+
+
 }
 
 create_xinitrc() {
@@ -919,6 +1048,16 @@ autologin-user-timeout=0
 user-session=openbox
 greeter-enable=false
 xserver-command=X -core
+EOF
+    
+    # Also create lightdm.conf.d configuration for better compatibility
+    mkdir -p /etc/lightdm/lightdm.conf.d
+    cat << EOF > /etc/lightdm/lightdm.conf.d/50-autologin.conf
+[Seat:*]
+autologin-user=$USER
+autologin-user-timeout=0
+user-session=openbox
+greeter-enable=false
 EOF
     
     # Create X session script for LightDM
@@ -989,6 +1128,9 @@ EOF"
     systemctl enable lightdm
     systemctl set-default graphical.target
     
+    # Temporarily disable the systemd service to avoid conflicts during autologin testing
+    systemctl disable spacex-dashboard
+    
     # Start LightDM immediately to test autologin
     log "Starting LightDM to test autologin configuration..."
     systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
@@ -1029,6 +1171,7 @@ main() {
     setup_gpu_permissions
     update_system
     install_packages
+    check_qt_version
     setup_python_environment
     create_debug_script
     configure_system
@@ -1036,13 +1179,13 @@ main() {
     setup_repository
     configure_plymouth
     configure_touch_rotation
-    configure_openbox
     create_xinitrc
     configure_autologin
     optimize_performance
     
-    # Note: Using LightDM display manager for clean autologin without console interference
-    # systemctl enable spacex-dashboard
+    # Note: Using LightDM autologin with .xsession for clean startup
+    # The app is started directly by ~/.xsession
+    # systemctl disable spacex-dashboard
     
     cleanup
     

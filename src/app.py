@@ -28,6 +28,9 @@ import calendar
 from cryptography.fernet import Fernet
 from track_generator import generate_track_map
 from plotly_charts import generate_f1_standings_chart
+import http.server
+import socketserver
+import threading
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
@@ -462,7 +465,7 @@ def fetch_launches():
         else:
             logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0'},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?si=rvwtzwj_URqw2dtK&controls=0&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY'},
                 {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
             ]
 
@@ -3190,6 +3193,18 @@ if __name__ == '__main__':
         if fusion_style:
             QApplication.setStyle(fusion_style)
     
+    # Start local HTTP server for serving HTML files
+    def start_http_server():
+        port = 8080
+        os.chdir(os.path.dirname(__file__))  # Serve from src directory
+        handler = http.server.SimpleHTTPRequestHandler
+        with socketserver.TCPServer(("", port), handler) as httpd:
+            logger.info(f"Serving HTTP on port {port}")
+            httpd.serve_forever()
+    
+    server_thread = threading.Thread(target=start_http_server, daemon=True)
+    server_thread.start()
+    
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -3476,9 +3491,13 @@ earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'im
 print(f"DEBUG: Earth texture path: {earth_texture_path}")
 print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
+youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
+print(f"DEBUG: YouTube HTML path: {youtube_html_path}")
+print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
+
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", 'https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&modestbranding=1&rel=0')
+context.setContextProperty("videoUrl", "http://localhost:8080/youtube_embed.html")
 
 # Embedded QML for completeness (main.qml content)
 qml_code = """
@@ -3536,43 +3555,7 @@ Window {
             fillMode: Image.PreserveAspectFit
         }
 
-        // Loading animation with bouncing dots
-        Row {
-            anchors.top: parent.verticalCenter
-            anchors.topMargin: 180
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
 
-            Repeater {
-                model: 3
-                Rectangle {
-                    width: 12
-                    height: 12
-                    radius: 6
-                    color: backend.theme === "dark" ? "white" : "#333333"
-                    
-                    SequentialAnimation on y {
-                        loops: Animation.Infinite
-                        PropertyAnimation { to: -10; duration: 300; easing.type: Easing.InOutQuad }
-                        PropertyAnimation { to: 0; duration: 300; easing.type: Easing.InOutQuad }
-                        PauseAnimation { duration: 400 }
-                    }
-                    
-                    // Stagger the animations
-                    Component.onCompleted: {
-                        animationDelay.start()
-                    }
-                    
-                    Timer {
-                        id: animationDelay
-                        interval: index * 200
-                        running: true
-                        repeat: false
-                        onTriggered: parent.SequentialAnimation.running = true
-                    }
-                }
-            }
-        }
     }
 
     // Cache expensive / repeated lookups
@@ -4375,8 +4358,19 @@ Window {
                     anchors.fill: parent
                     spacing: 0
 
+                    WebEngineProfile {
+                        id: youtubeProfile
+                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpAcceptLanguage: "en-US,en"
+                        // Allow sending Referer headers for YouTube embeds
+                        offTheRecord: false
+                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
+                        httpCacheType: WebEngineProfile.DiskHttpCache
+                    }
+
                     WebEngineView {
                         id: youtubeView
+                        profile: youtubeProfile
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
@@ -4401,11 +4395,11 @@ Window {
 
                                 // Handle specific error codes
                                 if (loadRequest.errorCode === 153) {
-                                    console.log("ERR_CONTENT_LENGTH_MISMATCH detected - This is common with YouTube adaptive streaming");
-                                    console.log("Possible causes: Network interruption, CDN issues, or adaptive bitrate changes");
-                                    console.log("The video may still work despite this error - attempting reload in 3 seconds...");
+                                    console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                    console.log("This is a new YouTube policy requiring API client identification");
+                                    console.log("Attempting to reload with proper headers...");
 
-                                    // Auto-retry for content length mismatch errors
+                                    // Auto-retry for Referer header errors
                                     reloadTimer.restart();
                                 } else if (loadRequest.errorCode === 2) {
                                     console.log("ERR_FAILED - Network or server error. Check your internet connection.");
