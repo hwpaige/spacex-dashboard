@@ -4182,26 +4182,6 @@ Window {
                         model: backend.eventModel
                         clip: true
                         spacing: 5
-                        boundsBehavior: Flickable.StopAtBounds
-                        maximumFlickVelocity: 5000
-                        flickDeceleration: 1500
-                        cacheBuffer: 1000
-                        snapMode: ListView.NoSnap
-
-                        ScrollBar.vertical: ScrollBar {
-                            policy: ScrollBar.AsNeeded
-                            width: 8
-                            background: Rectangle {
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                radius: 4
-                            }
-                            contentItem: Rectangle {
-                                implicitWidth: 8
-                                implicitHeight: 100
-                                radius: 4
-                                color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
-                            }
-                        }
 
                         delegate: Item {
                             width: ListView.view.width
