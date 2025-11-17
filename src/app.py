@@ -3690,6 +3690,31 @@ Window {
                 youtubeView.reload()
                 console.log("YouTube/map view reloaded")
             }
+            // Reload x.com view
+            if (typeof xComView !== 'undefined' && xComView.reload) {
+                xComView.reload()
+                console.log("x.com view reloaded")
+            }
+            // Reload weather views
+            if (typeof weatherSwipe !== 'undefined') {
+                for (var i = 0; i < weatherSwipe.count; i++) {
+                    var item = weatherSwipe.itemAt(i);
+                    if (item && item.children[0] && item.children[0].reload) {
+                        item.children[0].reload();
+                        console.log("Weather view", i, "reloaded");
+                    }
+                }
+            }
+            // Refresh countdown
+            if (typeof backend !== 'undefined' && backend.update_countdown) {
+                backend.update_countdown();
+                console.log("Countdown refreshed");
+            }
+            // Refresh weather data for bottom left pill
+            if (typeof backend !== 'undefined' && backend.update_weather) {
+                backend.update_weather();
+                console.log("Weather data refresh initiated");
+            }
         })
     }
 
@@ -4619,6 +4644,7 @@ Window {
                             font.family: "D-DIN"
                         }
                         Text {
+                            id: weatherText
                             text: {
                                 var weather = backend.weather;
                                 if (weather && weather.temperature_f !== undefined) {
@@ -5905,6 +5931,7 @@ Window {
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
 
                             WebEngineView {
+                                id: xComView
                                 anchors.fill: parent
                                 anchors.margins: 5
                                 url: "https://x.com/SpaceX"
