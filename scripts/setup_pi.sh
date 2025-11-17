@@ -71,8 +71,8 @@ EOF
     
     # Memory limits for the user with GPU memory support
     cat << EOF > /etc/security/limits.d/99-app-limits.conf
-$USER soft memlock 128M
-$USER hard memlock 256M
+$USER soft memlock 1G
+$USER hard memlock 2G
 $USER soft nofile 65536
 $USER hard nofile 65536
 EOF
@@ -393,7 +393,7 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
@@ -407,9 +407,9 @@ ExecStartPre=/bin/bash -c 'nmcli device wifi rescan; timeout 30 bash -c "until n
 ExecStart=python3 app.py
 Restart=always
 RestartSec=5
-MemoryLimit=512M
-MemoryHigh=384M
-MemoryMax=512M
+MemoryLimit=2.5G
+MemoryHigh=2G
+MemoryMax=3G
 
 [Install]
 WantedBy=multi-user.target
@@ -474,20 +474,20 @@ setup_repository() {
 }
     
 configure_plymouth() {
-    log "Configuring Plymouth..."
-    
+    log "Configuring Plymouth boot splash screen..."
+
     # Install Plymouth if not already installed
     if ! command -v plymouth &> /dev/null; then
         apt-get install -y plymouth plymouth-themes
     fi
-    
+
     # Create custom SpaceX Plymouth theme
     THEME_DIR="/usr/share/plymouth/themes/spacex"
     mkdir -p "$THEME_DIR"
-    
+
     # Copy the SpaceX logo
     cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
-    
+
     # Create theme configuration file
     cat > "$THEME_DIR/spacex.plymouth" << 'EOF'
 [Plymouth Theme]
@@ -499,11 +499,10 @@ ModuleName=script
 ImageDir=/usr/share/plymouth/themes/spacex
 ScriptFile=/usr/share/plymouth/themes/spacex/spacex.script
 EOF
-    
-    # Create the script file for the theme
+
+    # Create the script file for the theme (simplified static version for reliability)
     cat > "$THEME_DIR/spacex.script" << 'EOF'
-# SpaceX Plymouth Theme Script
-# Matches the Qt app loading screen exactly
+# SpaceX Plymouth Theme Script - Static logo display for reliability
 
 # Set background color to match Qt dark theme (#1c2526)
 Window.SetBackgroundTopColor(0.11, 0.145, 0.149);
@@ -521,89 +520,87 @@ logo.image = logo.image.Scale(logo.width, logo.height);
 logo.x = Window.GetWidth() / 2 - logo.width / 2;
 logo.y = Window.GetHeight() / 2 - logo.height / 2;
 
-# Initialize bouncing dots animation
-dot1.y_offset = 0;
-dot2.y_offset = 0;
-dot3.y_offset = 0;
-dot1.animation_phase = 0;
-dot2.animation_phase = 0.33;  # Offset phases for staggered animation
-dot3.animation_phase = 0.66;
-
 fun refresh_callback ()
 {
     # Clear screen with background color
     Plymouth.FillScreen(0.11, 0.145, 0.149);
-    
-    # Draw the logo
+
+    # Draw the centered logo
     logo.image.Draw(logo.x, logo.y);
-    
-    # Calculate dot positions (below logo, matching Qt layout)
-    dot_y_base = logo.y + logo.height + 30;  # 30px below logo
-    dot_spacing = 20;  # Space between dots
-    dot_size = 12;
-    
-    # Calculate animation offsets for bouncing effect
-    time = Plymouth.GetTime() / 1000.0;  # Convert to seconds
-    
-    # Dot 1 animation (bounce every 1.4 seconds)
-    dot1.animation_phase = (time * 1.4) % 1.0;
-    if (dot1.animation_phase < 0.5) {
-        dot1.y_offset = -10 * Plymouth.Sin(dot1.animation_phase * 3.14159);
-    } else {
-        dot1.y_offset = -10 * Plymouth.Sin((1.0 - dot1.animation_phase) * 3.14159);
-    }
-    
-    # Dot 2 animation (offset by 0.33)
-    dot2.animation_phase = ((time * 1.4) + 0.33) % 1.0;
-    if (dot2.animation_phase < 0.5) {
-        dot2.y_offset = -10 * Plymouth.Sin(dot2.animation_phase * 3.14159);
-    } else {
-        dot2.y_offset = -10 * Plymouth.Sin((1.0 - dot2.animation_phase) * 3.14159);
-    }
-    
-    # Dot 3 animation (offset by 0.66)
-    dot3.animation_phase = ((time * 1.4) + 0.66) % 1.0;
-    if (dot3.animation_phase < 0.5) {
-        dot3.y_offset = -10 * Plymouth.Sin(dot3.animation_phase * 3.14159);
-    } else {
-        dot3.y_offset = -10 * Plymouth.Sin((1.0 - dot3.animation_phase) * 3.14159);
-    }
-    
-    # Draw the three bouncing dots
-    center_x = Window.GetWidth() / 2;
-    
-    # Dot 1 (left)
-    Plymouth.FillCircle(center_x - dot_spacing - dot_size/2, dot_y_base + dot1.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
-    
-    # Dot 2 (center)
-    Plymouth.FillCircle(center_x, dot_y_base + dot2.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
-    
-    # Dot 3 (right)
-    Plymouth.FillCircle(center_x + dot_spacing + dot_size/2, dot_y_base + dot3.y_offset, dot_size/2, 1.0, 1.0, 1.0, 1.0);
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
 EOF
-    
+
     # Set permissions
     chmod 644 "$THEME_DIR/spacex.plymouth"
     chmod 755 "$THEME_DIR/spacex.script"
     chmod 644 "$THEME_DIR/spacex_logo.png"
-    
-    # Install and set the custom theme
+
+    # Set the custom SpaceX theme using update-alternatives
     update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/spacex.plymouth" 200
     update-alternatives --set default.plymouth "$THEME_DIR/spacex.plymouth"
-    
-    # Enable Plymouth in initramfs
-    echo "FRAMEBUFFER=y" > /etc/initramfs-tools/conf.d/plymouth
-    echo "plymouth plymouth/themes/select select spacex" | debconf-set-selections
-    
-    # Rebuild initramfs
+
+    # Rebuild initramfs with Plymouth embedded
     if ! update-initramfs -u; then
         log "WARNING: Initramfs rebuild failed"
     else
         log "✓ Initramfs rebuilt successfully with Plymouth support"
     fi
+
+    # Copy initramfs to Raspberry Pi firmware directory
+    if [ -f /boot/initrd.img-*-raspi ]; then
+        cp /boot/initrd.img-*-raspi /boot/firmware/
+        log "✓ Initramfs copied to /boot/firmware/"
+    fi
+
+    # Configure kernel command line for Plymouth
+    CMDLINE_FILE="/boot/firmware/cmdline.txt"
+    if [ -f "$CMDLINE_FILE" ]; then
+        # Remove any existing Plymouth-related parameters
+        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g' "$CMDLINE_FILE"
+
+        # Remove serial console to prevent conflicts
+        sed -i 's/ console=serial0,[0-9]*//g' "$CMDLINE_FILE"
+
+        # Add Plymouth parameters
+        if ! grep -q "splash" "$CMDLINE_FILE"; then
+            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
+        fi
+
+        # Ensure fbcon=map:0 for correct framebuffer mapping
+        if ! grep -q "fbcon=map:0" "$CMDLINE_FILE"; then
+            sed -i 's/fbcon=map:[0-9]/fbcon=map:0/g' "$CMDLINE_FILE"
+        fi
+
+        log "✓ Kernel command line updated for Plymouth"
+    fi
+
+    # Configure systemd to prevent getty from interfering with Plymouth
+    mkdir -p /etc/systemd/system/getty@tty1.service.d
+    cat > /etc/systemd/system/getty@tty1.service.d/override.conf << 'EOF'
+[Unit]
+After=plymouth-start.service
+EOF
+
+    # Disable systemd status output on console
+    mkdir -p /etc/systemd/system.conf.d
+    cat > /etc/systemd/system.conf.d/quiet.conf << 'EOF'
+[Manager]
+ShowStatus=no
+StatusUnitFormat=off
+EOF
+
+    # Create Plymouth configuration
+    mkdir -p /etc/plymouth
+    cat > /etc/plymouth/plymouthd.conf << 'EOF'
+[Daemon]
+Theme=spacex
+ShowDelay=0
+DeviceTimeout=8
+EOF
+
+    log "✓ Plymouth configured with custom SpaceX theme"
 }
 
 configure_touch_rotation() {
@@ -1093,7 +1090,7 @@ unclutter -idle 0 -root &
 # Set environment variables
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=256 --memory-reducer --gpu-memory-buffer-size-mb=64 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows\"
+export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows\"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"

@@ -9,6 +9,9 @@ import pandas as pd
 import shlex
 import math
 import concurrent.futures
+import urllib.request
+import urllib.error
+import socket
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
@@ -384,6 +387,26 @@ def check_wifi_status():
 def fetch_launches():
     print("DEBUG: fetch_launches called")  # Temporary debug
     logger.info("Fetching SpaceX launch data")
+
+    # Check network connectivity before making API calls
+    try:
+        urllib.request.urlopen('http://www.google.com', timeout=5)
+        logger.debug("Network connectivity check passed for launch data")
+    except (urllib.error.URLError, socket.timeout, OSError) as e:
+        logger.warning(f"Network connectivity check failed for launch data: {e}")
+        # Return cached data if available
+        previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
+        upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+        if previous_cache and upcoming_cache:
+            logger.info("Returning cached launch data due to network issues")
+            return {
+                'previous': previous_cache['data'],
+                'upcoming': upcoming_cache['data']
+            }
+        else:
+            logger.error("No cached data available and network is down")
+            return {'previous': [], 'upcoming': []}
+
     current_time = datetime.now(pytz.UTC)
     current_date_str = current_time.strftime('%Y-%m-%d')
     current_year = current_time.year
@@ -514,6 +537,28 @@ def fetch_launches():
 # Fetch F1 data with optimized component-based caching
 def fetch_f1_data():
     logger.info("Fetching F1 data with optimized caching")
+
+    # Check network connectivity before making API calls
+    try:
+        urllib.request.urlopen('http://www.google.com', timeout=5)
+        logger.debug("Network connectivity check passed for F1 data")
+    except (urllib.error.URLError, socket.timeout, OSError) as e:
+        logger.warning(f"Network connectivity check failed for F1 data: {e}")
+        # Return cached data if available
+        schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
+        drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
+        constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
+        if schedule_cache and drivers_cache and constructors_cache:
+            logger.info("Returning cached F1 data due to network issues")
+            return {
+                'schedule': schedule_cache['data'],
+                'driver_standings': drivers_cache['data'],
+                'constructor_standings': constructors_cache['data']
+            }
+        else:
+            logger.error("No cached F1 data available and network is down")
+            return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+
     global f1_cache
     if f1_cache:
         return f1_cache
@@ -678,6 +723,24 @@ def fetch_f1_data():
 # Fetch weather data
 def fetch_weather(lat, lon, location):
     logger.info(f"Fetching weather data for {location}")
+
+    # Check network connectivity before making API calls
+    try:
+        urllib.request.urlopen('http://www.google.com', timeout=5)
+        logger.debug("Network connectivity check passed for weather data")
+    except (urllib.error.URLError, socket.timeout, OSError) as e:
+        logger.warning(f"Network connectivity check failed for weather data: {e}")
+        # Return fallback data
+        logger.info("Returning fallback weather data due to network issues")
+        return {
+            'temperature_c': 25,
+            'temperature_f': 77,
+            'wind_speed_ms': 5,
+            'wind_speed_kts': 9.7,
+            'wind_direction': 90,
+            'cloud_cover': 50
+        }
+
     try:
         url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC"
         response = requests.get(url, timeout=5)
@@ -1104,6 +1167,7 @@ class Backend(QObject):
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
         self.thread = None
+        self._data_loading_deferred = False
 
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
@@ -1318,6 +1382,20 @@ class Backend(QObject):
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
         logger.info("Backend: startDataLoader called")
+
+        # Check network connectivity before starting data loading
+        if not self.check_network_connectivity():
+            logger.info("Backend: No network connectivity - deferring data loading")
+            # Set a flag to indicate data loading is deferred
+            self._data_loading_deferred = True
+            # Don't start the data loader yet
+            # Set up timers anyway (they will check connectivity when they run)
+            self._setup_timers()
+            return
+
+        # Clear deferred flag if we have connectivity
+        self._data_loading_deferred = False
+
         if self.loader is None:
             logger.info("Backend: Creating new DataLoader...")
             self.loader = DataLoader()
@@ -1330,6 +1408,10 @@ class Backend(QObject):
         else:
             logger.info("Backend: DataLoader already exists")
 
+        self._setup_timers()
+
+    def _setup_timers(self):
+        """Set up all the periodic timers"""
         logger.info("Setting up timers...")
         # Timers
         self.weather_timer = QTimer(self)
@@ -2279,34 +2361,65 @@ class Backend(QObject):
     def _auto_reconnect_to_last_network(self):
         """Auto-reconnect to the last connected network if not currently connected"""
         try:
-            # Only attempt reconnection if we're not already connected
-            if not self._wifi_connected and self._last_connected_network:
-                last_ssid = self._last_connected_network.get('ssid')
-                if last_ssid:
-                    logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
-                    
-                    # Find the network in remembered networks
-                    remembered_network = None
-                    for network in self._remembered_networks:
-                        if network['ssid'] == last_ssid:
-                            remembered_network = network
-                            break
-                    
-                    if remembered_network and remembered_network.get('password'):
-                        # Attempt to connect
-                        self.connectToWifi(last_ssid, remembered_network['password'])
-                        logger.info(f"Auto-reconnection initiated for network: {last_ssid}")
-                    else:
-                        logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
-                else:
-                    logger.debug("No last connected network SSID found")
-            else:
-                if self._wifi_connected:
-                    logger.debug("Already connected to WiFi, skipping auto-reconnection")
-                else:
-                    logger.debug("No last connected network to auto-reconnect to")
+            # Only attempt reconnection if we're not already connected and not currently connecting
+            if self._wifi_connected or self._wifi_connecting:
+                logger.debug("WiFi already connected or connecting, skipping auto-reconnection")
+                return
+
+            if not self._last_connected_network:
+                logger.debug("No last connected network to auto-reconnect to")
+                return
+
+            last_ssid = self._last_connected_network.get('ssid')
+            if not last_ssid:
+                logger.debug("No last connected network SSID found")
+                return
+
+            # Check if we've attempted reconnection recently (avoid spam)
+            current_time = time.time()
+            if hasattr(self, '_last_reconnect_attempt') and (current_time - self._last_reconnect_attempt) < 30:  # 30 second cooldown
+                logger.debug("Auto-reconnection attempted too recently, skipping")
+                return
+
+            self._last_reconnect_attempt = current_time
+            logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
+
+            # Find the network in remembered networks
+            remembered_network = None
+            for network in self._remembered_networks:
+                if network['ssid'] == last_ssid:
+                    remembered_network = network
+                    break
+
+            if not remembered_network or not remembered_network.get('password'):
+                logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
+                return
+
+            # Check if the network is currently available before attempting connection
+            available_networks = [net['ssid'] for net in self._wifi_networks]
+            if last_ssid not in available_networks:
+                logger.info(f"Last connected network '{last_ssid}' not currently available, skipping auto-reconnection")
+                return
+
+            # Add a small delay before attempting reconnection to avoid race conditions
+            QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(last_ssid, remembered_network['password']))
+
         except Exception as e:
-            logger.error(f"Error during auto-reconnection: {e}")
+            logger.error(f"Error during auto-reconnection setup: {e}")
+
+    def _perform_auto_reconnection(self, ssid, password):
+        """Perform the actual auto-reconnection attempt"""
+        try:
+            if self._wifi_connected or self._wifi_connecting:
+                logger.debug("Connection state changed, aborting auto-reconnection")
+                return
+
+            logger.info(f"Performing auto-reconnection to {ssid}")
+            self.connectToWifi(ssid, password)
+            logger.info(f"Auto-reconnection initiated for network: {ssid}")
+
+        except Exception as e:
+            logger.error(f"Error performing auto-reconnection: {e}")
 
     @pyqtSlot()
     def scanWifiNetworks(self):
@@ -2898,11 +3011,28 @@ class Backend(QObject):
             if wifi_changed:
                 logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
                 self.wifiConnectedChanged.emit()
-                
-                # Reload web content if WiFi just connected
+
+                # Handle WiFi connection established
                 if wifi_just_connected:
                     logger.info("WiFi connection detected - reloading web content")
                     self.reload_web_content()
+
+                    # If data loading was deferred due to no connectivity, start it now
+                    if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
+                        logger.info("WiFi connected - starting deferred data loading")
+                        self._data_loading_deferred = False
+                        # Start data loading now that we have connectivity
+                        if self.loader is None:
+                            logger.info("Backend: Creating deferred DataLoader...")
+                            self.loader = DataLoader()
+                            self.thread = QThread()
+                            self.loader.moveToThread(self.thread)
+                            self.loader.finished.connect(self.on_data_loaded)
+                            self.thread.started.connect(self.loader.run)
+                            logger.info("Backend: Starting deferred DataLoader thread...")
+                            self.thread.start()
+                        else:
+                            logger.info("Backend: Deferred DataLoader already exists")
                 
         except Exception as e:
             logger.error(f"Error updating WiFi status: {e}")
@@ -3130,6 +3260,29 @@ class Backend(QObject):
                 return ""
         
         return f"file:///{flag_path}"
+
+    def check_network_connectivity(self):
+        """Check if we have active network connectivity (beyond just WiFi connection)"""
+        try:
+            # First check if WiFi is connected
+            if not self._wifi_connected:
+                logger.debug("Network connectivity check failed: WiFi not connected")
+                return False
+
+            # Try to reach a reliable external host to verify internet connectivity
+            # Test with a simple HTTP request to a reliable service
+            try:
+                # Use a timeout to avoid hanging
+                urllib.request.urlopen('http://www.google.com', timeout=5)
+                logger.debug("Network connectivity check passed: Internet accessible")
+                return True
+            except (urllib.error.URLError, socket.timeout, OSError) as e:
+                logger.warning(f"Network connectivity check failed: Cannot reach internet ({e})")
+                return False
+
+        except Exception as e:
+            logger.error(f"Error checking network connectivity: {e}")
+            return False
 
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
