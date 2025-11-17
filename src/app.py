@@ -722,7 +722,7 @@ def fetch_f1_data():
 
 # Fetch weather data
 def fetch_weather(lat, lon, location):
-    logger.info(f"Fetching real-time weather data for {location}")
+    logger.info(f"Fetching weather data for {location}")
 
     # Check network connectivity before making API calls
     try:
@@ -742,84 +742,34 @@ def fetch_weather(lat, lon, location):
         }
 
     try:
-        # Use NOAA Weather.gov API for real-time weather station observations
-        headers = {'User-Agent': 'SpaceX-Dashboard/1.0'}
-
-        # Find nearest weather stations
-        stations_url = f"https://api.weather.gov/points/{lat:.3f},{lon:.3f}/stations"
-        stations_response = requests.get(stations_url, headers=headers, timeout=5)
-        stations_response.raise_for_status()
-        stations_data = stations_response.json()
-
-        if not stations_data.get('features'):
-            raise Exception("No weather stations found for this location")
-
-        # Get observations from the closest station
-        station_id = stations_data['features'][0]['properties']['stationIdentifier']
-        obs_url = f"https://api.weather.gov/stations/{station_id}/observations/latest"
-        obs_response = requests.get(obs_url, headers=headers, timeout=5)
-        obs_response.raise_for_status()
-        obs_data = obs_response.json()
-
-        props = obs_data['properties']
-
-        # Extract weather data
-        temp_c = props.get('temperature', {}).get('value')
-        wind_speed_ms = props.get('windSpeed', {}).get('value')
-        wind_direction = props.get('windDirection', {}).get('value')
-
-        if temp_c is None:
-            raise Exception("No temperature data available from weather station")
-
-        # Convert units
-        temp_f = temp_c * 9 / 5 + 32
-        wind_speed_kts = wind_speed_ms * 1.94384 if wind_speed_ms is not None else 0
-
-        logger.info(f"Successfully fetched real-time weather data for {location} from station {station_id}")
+        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        now = datetime.now(pytz.UTC)
+        hourly = data['hourly']
+        times = [datetime.strptime(t, '%Y-%m-%dT%H:%M').replace(tzinfo=pytz.UTC) for t in hourly['time']]
+        closest_idx = min(range(len(times)), key=lambda i: abs((times[i] - now).total_seconds()))
+        logger.info(f"Successfully fetched weather data for {location}")
         time.sleep(1)  # Avoid rate limiting
-
         return {
-            'temperature_c': temp_c,
-            'temperature_f': temp_f,
-            'wind_speed_ms': wind_speed_ms or 0,
-            'wind_speed_kts': wind_speed_kts,
-            'wind_direction': wind_direction or 0,
-            'cloud_cover': 50  # NOAA doesn't provide cloud cover in observations
+            'temperature_c': hourly['temperature_2m'][closest_idx],
+            'temperature_f': hourly['temperature_2m'][closest_idx] * 9 / 5 + 32,
+            'wind_speed_ms': hourly['wind_speed_10m'][closest_idx],
+            'wind_speed_kts': hourly['wind_speed_10m'][closest_idx] * 1.94384,
+            'wind_direction': hourly['wind_direction_10m'][closest_idx],
+            'cloud_cover': hourly['cloud_cover'][closest_idx]
         }
-
     except Exception as e:
-        logger.error(f"NOAA Weather API error for {location}: {e}")
-        # Fall back to Open-Meteo current conditions
-        try:
-            logger.info(f"Falling back to Open-Meteo current conditions for {location}")
-            url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}&current=temperature_2m,wind_speed_10m,wind_direction_10m&timezone=UTC"
-            response = requests.get(url, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-
-            current = data['current']
-            temp_c = current['temperature_2m']
-            wind_speed_ms = current['wind_speed_10m']
-            wind_direction = current['wind_direction_10m']
-
-            return {
-                'temperature_c': temp_c,
-                'temperature_f': temp_c * 9 / 5 + 32,
-                'wind_speed_ms': wind_speed_ms,
-                'wind_speed_kts': wind_speed_ms * 1.94384,
-                'wind_direction': wind_direction,
-                'cloud_cover': 50
-            }
-        except Exception as fallback_error:
-            logger.error(f"Open-Meteo fallback also failed for {location}: {fallback_error}")
-            return {
-                'temperature_c': 25,
-                'temperature_f': 77,
-                'wind_speed_ms': 5,
-                'wind_speed_kts': 9.7,
-                'wind_direction': 90,
-                'cloud_cover': 50
-            }
+        logger.error(f"Open-Meteo API error for {location}: {e}")
+        return {
+            'temperature_c': 25,
+            'temperature_f': 77,
+            'wind_speed_ms': 5,
+            'wind_speed_kts': 9.7,
+            'wind_direction': 90,
+            'cloud_cover': 50
+        }
 
 # Track rotations for F1 circuits
 track_rotations = [('Sakhir', 92.0), ('Jeddah', 104.0), ('Melbourne', 44.0), ('Baku', 357.0), ('Miami', 2.0), ('Monte Carlo', 62.0), ('Catalunya', 95.0), ('Montreal', 62.0), ('Silverstone', 92.0), ('Hungaroring', 40.0), ('Spa-Francorchamps', 91.0), ('Zandvoort', 0.0), ('Monza', 95.0), ('Singapore', 335.0), ('Suzuka', 49.0), ('Lusail', 61.0), ('Austin', 0.0), ('Mexico City', 36.0), ('Interlagos', 0.0), ('Las Vegas', 90.0), ('Yas Marina Circuit', 335.0)]
