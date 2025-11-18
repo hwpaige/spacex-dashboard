@@ -1385,10 +1385,15 @@ class Backend(QObject):
 
         # Check network connectivity before starting data loading
         if not self.check_network_connectivity():
-            logger.info("Backend: No network connectivity - deferring data loading")
+            logger.info("Backend: No network connectivity - deferring data loading and setting loading timeout")
             # Set a flag to indicate data loading is deferred
             self._data_loading_deferred = True
-            # Don't start the data loader yet
+            # Set up a loading timeout timer to prevent indefinite loading screen
+            self._loading_timeout_timer = QTimer(self)
+            self._loading_timeout_timer.setSingleShot(True)
+            self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
+            self._loading_timeout_timer.start(15000)  # 15 second timeout
+            logger.info("Backend: Loading timeout timer started (15 seconds)")
             # Set up timers anyway (they will check connectivity when they run)
             self._setup_timers()
             return
@@ -2329,6 +2334,77 @@ class Backend(QObject):
         # Update trajectory now that data is loaded
         self.updateGlobeTrajectory.emit()
 
+    def _on_loading_timeout(self):
+        """Handle loading timeout when no network connectivity is available"""
+        logger.info("Backend: Loading timeout reached - transitioning to offline mode")
+        # Load cached data if available, otherwise use empty data
+        self._launch_data = self._load_cached_launch_data()
+        self._f1_data = self._load_cached_f1_data()
+        self._weather_data = self._load_cached_weather_data()
+        
+        # Update the EventModel's data reference
+        self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
+        self._event_model.update_data()
+        
+        # Exit loading state
+        self._isLoading = False
+        self.loadingFinished.emit()
+        logger.info("Backend: Offline mode activated - app should now show cached data")
+
+    def _load_cached_launch_data(self):
+        """Load cached launch data for offline mode"""
+        try:
+            previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
+            upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+            if previous_cache and upcoming_cache:
+                logger.info("Backend: Loaded cached launch data for offline mode")
+                return {
+                    'previous': previous_cache['data'],
+                    'upcoming': upcoming_cache['data']
+                }
+        except Exception as e:
+            logger.warning(f"Backend: Failed to load cached launch data: {e}")
+        logger.info("Backend: No cached launch data available")
+        return {'previous': [], 'upcoming': []}
+
+    def _load_cached_f1_data(self):
+        """Load cached F1 data for offline mode"""
+        try:
+            schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
+            drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
+            constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
+            
+            schedule = schedule_cache['data'] if schedule_cache else []
+            driver_standings = drivers_cache['data'] if drivers_cache else []
+            constructor_standings = constructors_cache['data'] if constructors_cache else []
+            
+            logger.info("Backend: Loaded cached F1 data for offline mode")
+            return {
+                'schedule': schedule,
+                'driver_standings': driver_standings,
+                'constructor_standings': constructor_standings
+            }
+        except Exception as e:
+            logger.warning(f"Backend: Failed to load cached F1 data: {e}")
+        logger.info("Backend: No cached F1 data available")
+        return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+
+    def _load_cached_weather_data(self):
+        """Load cached/default weather data for offline mode"""
+        # Return default weather data for all locations
+        weather_data = {}
+        for location in location_settings.keys():
+            weather_data[location] = {
+                'temperature_c': 25,
+                'temperature_f': 77,
+                'wind_speed_ms': 5,
+                'wind_speed_kts': 9.7,
+                'wind_direction': 90,
+                'cloud_cover': 50
+            }
+        logger.info("Backend: Using default weather data for offline mode")
+        return weather_data
+
         logger.info("Backend: Data loading complete, cleaning up thread")
         self.thread.quit()
         self.thread.wait()
@@ -3021,6 +3097,10 @@ class Backend(QObject):
                     if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
                         logger.info("WiFi connected - starting deferred data loading")
                         self._data_loading_deferred = False
+                        # Cancel the loading timeout timer since we're now loading data
+                        if hasattr(self, '_loading_timeout_timer') and self._loading_timeout_timer.isActive():
+                            self._loading_timeout_timer.stop()
+                            logger.info("Backend: Cancelled loading timeout timer - network connected")
                         # Start data loading now that we have connectivity
                         if self.loader is None:
                             logger.info("Backend: Creating deferred DataLoader...")
