@@ -262,125 +262,185 @@ def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
     try:
         is_windows = platform.system() == 'Windows'
-        
+        logger.info(f"BOOT: Checking WiFi status on {platform.system()} platform")
+
         if is_windows:
+            logger.debug("BOOT: Using Windows netsh command to check WiFi status")
             # Check WiFi interface status using Windows commands
-            result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'], 
+            result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'],
                                   capture_output=True, text=True, timeout=5)
-            
+
+            logger.debug(f"BOOT: netsh return code: {result.returncode}")
+            if result.returncode != 0:
+                logger.warning(f"BOOT: netsh command failed with return code {result.returncode}")
+                logger.debug(f"BOOT: netsh stderr: {result.stderr}")
+
             connected = False
             current_ssid = ""
-            
+
+            logger.debug("BOOT: Parsing netsh output...")
             for line in result.stdout.split('\n'):
                 line = line.strip()
-                
+                logger.debug(f"BOOT: netsh line: '{line}'")
+
                 if 'State' in line and 'connected' in line.lower():
                     connected = True
-                
+                    logger.info("BOOT: Windows WiFi state shows CONNECTED")
+
                 if 'SSID' in line and 'BSSID' not in line:
                     ssid_match = re.search(r'SSID\s*:\s*(.+)', line)
                     if ssid_match:
                         current_ssid = ssid_match.group(1).strip()
+                        logger.info(f"BOOT: Windows WiFi SSID found: '{current_ssid}'")
+
+            logger.info(f"BOOT: Windows WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
             return connected, current_ssid
         else:
+            logger.debug("BOOT: Using Linux WiFi checking methods")
             # Enhanced Linux WiFi status checking with multiple methods
             connected = False
             current_ssid = ""
 
             # Method 1: Try nmcli first
+            logger.debug("BOOT: Trying nmcli device status...")
             try:
                 result = subprocess.run(['nmcli', 'device', 'status'],
                                       capture_output=True, text=True, timeout=5)
-                
+
+                logger.debug(f"BOOT: nmcli device status return code: {result.returncode}")
+                if result.returncode != 0:
+                    logger.warning(f"BOOT: nmcli device status failed with return code {result.returncode}")
+                    logger.debug(f"BOOT: nmcli stderr: {result.stderr}")
+
                 if result.returncode == 0:
                     lines = result.stdout.split('\n')
+                    logger.debug(f"BOOT: nmcli output has {len(lines)} lines")
                     for line in lines:
+                        logger.debug(f"BOOT: nmcli line: '{line}'")
                         parts = line.split()
                         if len(parts) >= 4:
                             device_type = parts[1].lower()
                             state = parts[2].lower()
+                            logger.debug(f"BOOT: nmcli device: {parts[0]}, type: {device_type}, state: {state}")
                             if device_type == 'wifi' and state == 'connected':
                                 connected = True
+                                logger.info("BOOT: Linux WiFi connected via nmcli device status")
                                 break
 
                 # Get current SSID if connected via nmcli
                 if connected:
+                    logger.debug("BOOT: Getting SSID from nmcli...")
                     connected_device = None
                     for line in result.stdout.split('\n'):
                         parts = line.split()
                         if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
                             connected_device = parts[0]
+                            logger.debug(f"BOOT: Found connected WiFi device: {connected_device}")
                             break
-                    
+
                     if connected_device:
                         ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', connected_device],
                                                    capture_output=True, text=True, timeout=5)
+                        logger.debug(f"BOOT: nmcli SSID command return code: {ssid_result.returncode}")
                         if ssid_result.returncode == 0:
                             for line in ssid_result.stdout.split('\n'):
+                                logger.debug(f"BOOT: nmcli SSID line: '{line}'")
                                 if line.startswith('yes:'):
                                     current_ssid = line.split(':', 1)[1].strip()
+                                    logger.info(f"BOOT: Linux WiFi SSID from nmcli: '{current_ssid}'")
                                     break
+                        else:
+                            logger.warning(f"BOOT: nmcli SSID command failed: {ssid_result.stderr}")
                     else:
+                        logger.debug("BOOT: No connected device found, trying active connections...")
                         # Fallback to active connections
                         ssid_result = subprocess.run(['nmcli', '-t', '-f', 'name', 'connection', 'show', '--active'],
                                                    capture_output=True, text=True, timeout=5)
+                        logger.debug(f"BOOT: nmcli active connections return code: {ssid_result.returncode}")
                         if ssid_result.returncode == 0:
                             connections = ssid_result.stdout.strip().split('\n')
+                            logger.debug(f"BOOT: Active connections: {connections}")
                             if connections and connections[0]:
                                 current_ssid = connections[0]
+                                logger.info(f"BOOT: Linux WiFi SSID from active connections: '{current_ssid}'")
 
             except Exception as e:
-                logger.debug(f"nmcli status check failed: {e}, trying fallback methods...")
-            
+                logger.warning(f"BOOT: nmcli status check failed: {e}, trying fallback methods...")
+
             # Method 2: Check IP address and interface status
             if not connected:
+                logger.debug("BOOT: nmcli failed, checking IP addresses on common interfaces...")
                 interfaces = ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']
                 has_ip = False
                 active_interface = None
 
                 for interface in interfaces:
                     try:
+                        logger.debug(f"BOOT: Checking interface {interface}...")
                         # Check if interface has an IP address
                         result = subprocess.run(['ip', 'addr', 'show', interface],
                                               capture_output=True, text=True, timeout=5)
 
-                        if 'inet ' in result.stdout and 'UP' in result.stdout:
-                            has_ip = True
-                            active_interface = interface
-                            break
+                        logger.debug(f"BOOT: ip addr show {interface} return code: {result.returncode}")
+                        if result.returncode == 0:
+                            has_inet = 'inet ' in result.stdout
+                            has_up = 'UP' in result.stdout
+                            logger.debug(f"BOOT: {interface} - has inet: {has_inet}, has UP: {has_up}")
+                            if has_inet and has_up:
+                                has_ip = True
+                                active_interface = interface
+                                logger.info(f"BOOT: Linux WiFi interface {interface} has IP address and is UP")
+                                break
+                        else:
+                            logger.debug(f"BOOT: ip addr command failed for {interface}: {result.stderr}")
                     except Exception as e:
-                        logger.debug(f"Error checking {interface}: {e}")
+                        logger.debug(f"BOOT: Error checking {interface}: {e}")
                         continue
 
                 if has_ip:
                     connected = True
-                    
+                    logger.info("BOOT: Linux WiFi connected via IP address check")
+
                     # Method 3: Try iw to get SSID
                     if active_interface:
+                        logger.debug(f"BOOT: Trying iw dev {active_interface} link...")
                         try:
                             iw_result = subprocess.run(['iw', 'dev', active_interface, 'link'],
                                                      capture_output=True, text=True, timeout=5)
+                            logger.debug(f"BOOT: iw command return code: {iw_result.returncode}")
                             if iw_result.returncode == 0 and 'SSID:' in iw_result.stdout:
                                 ssid_match = re.search(r'SSID:\s*(.+)', iw_result.stdout)
                                 if ssid_match:
                                     current_ssid = ssid_match.group(1).strip()
+                                    logger.info(f"BOOT: Linux WiFi SSID via iw: '{current_ssid}'")
+                            else:
+                                logger.debug(f"BOOT: iw command output: {iw_result.stdout}")
                         except Exception as e:
-                            logger.debug(f"iw link check failed: {e}")
-                        
+                            logger.debug(f"BOOT: iw link check failed: {e}")
+
                         # Method 4: Try iwgetid as fallback
                         if not current_ssid:
+                            logger.debug("BOOT: iw failed, trying iwgetid...")
                             try:
                                 ssid_result = subprocess.run(['iwgetid', '-r'],
                                                            capture_output=True, text=True, timeout=5)
+                                logger.debug(f"BOOT: iwgetid return code: {ssid_result.returncode}")
                                 if ssid_result.returncode == 0:
                                     current_ssid = ssid_result.stdout.strip()
+                                    logger.info(f"BOOT: Linux WiFi SSID via iwgetid: '{current_ssid}'")
+                                else:
+                                    logger.debug(f"BOOT: iwgetid failed: {ssid_result.stderr}")
                             except Exception as e:
-                                logger.debug(f"iwgetid failed: {e}")
-            
+                                logger.debug(f"BOOT: iwgetid failed: {e}")
+
+            logger.info(f"BOOT: Linux WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
             return connected, current_ssid
-            
+
     except Exception as e:
-        logger.error(f"Error checking WiFi status: {e}")
+        logger.error(f"BOOT: Error checking WiFi status: {e}")
+        logger.error(f"BOOT: Exception type: {type(e).__name__}")
+        import traceback
+        logger.error(f"BOOT: Traceback: {traceback.format_exc()}")
         return False, ""
 
 # Fetch SpaceX launch data
@@ -1381,37 +1441,45 @@ class Backend(QObject):
 
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
-        logger.info("Backend: startDataLoader called")
+        logger.info("BOOT: startDataLoader called")
 
         # Check network connectivity before starting data loading
-        if not self.check_network_connectivity():
-            logger.info("Backend: No network connectivity - deferring data loading and setting loading timeout")
+        logger.info("BOOT: Checking network connectivity before starting data loading...")
+        connectivity_result = self.check_network_connectivity()
+        logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
+
+        if not connectivity_result:
+            logger.warning("BOOT: No network connectivity detected - deferring data loading")
+            logger.info("BOOT: Setting _data_loading_deferred = True")
             # Set a flag to indicate data loading is deferred
             self._data_loading_deferred = True
             # Set up a loading timeout timer to prevent indefinite loading screen
+            logger.info("BOOT: Creating loading timeout timer (15 seconds)")
             self._loading_timeout_timer = QTimer(self)
             self._loading_timeout_timer.setSingleShot(True)
             self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
             self._loading_timeout_timer.start(15000)  # 15 second timeout
-            logger.info("Backend: Loading timeout timer started (15 seconds)")
+            logger.info("BOOT: Loading timeout timer started (15 seconds)")
             # Set up timers anyway (they will check connectivity when they run)
             self._setup_timers()
+            logger.info("BOOT: Data loading deferred - app will show cached data after timeout")
             return
 
         # Clear deferred flag if we have connectivity
+        logger.info("BOOT: Network connectivity available - clearing deferred flag")
         self._data_loading_deferred = False
 
         if self.loader is None:
-            logger.info("Backend: Creating new DataLoader...")
+            logger.info("BOOT: Creating new DataLoader...")
             self.loader = DataLoader()
             self.thread = QThread()
             self.loader.moveToThread(self.thread)
             self.loader.finished.connect(self.on_data_loaded)
             self.thread.started.connect(self.loader.run)
-            logger.info("Backend: Starting DataLoader thread...")
+            logger.info("BOOT: Starting DataLoader thread...")
             self.thread.start()
         else:
-            logger.info("Backend: DataLoader already exists")
+            logger.info("BOOT: DataLoader already exists")
 
         self._setup_timers()
 
@@ -2336,20 +2404,25 @@ class Backend(QObject):
 
     def _on_loading_timeout(self):
         """Handle loading timeout when no network connectivity is available"""
-        logger.info("Backend: Loading timeout reached - transitioning to offline mode")
+        logger.info("BOOT: Loading timeout reached - transitioning to offline mode")
+        logger.info("BOOT: Loading cached launch data...")
         # Load cached data if available, otherwise use empty data
         self._launch_data = self._load_cached_launch_data()
+        logger.info("BOOT: Loading cached F1 data...")
         self._f1_data = self._load_cached_f1_data()
+        logger.info("BOOT: Loading cached weather data...")
         self._weather_data = self._load_cached_weather_data()
-        
+
         # Update the EventModel's data reference
+        logger.info(f"BOOT: Updating EventModel data (mode: {self._mode})")
         self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
         self._event_model.update_data()
-        
+
         # Exit loading state
+        logger.info("BOOT: Exiting loading state and emitting loadingFinished signal")
         self._isLoading = False
         self.loadingFinished.emit()
-        logger.info("Backend: Offline mode activated - app should now show cached data")
+        logger.info("BOOT: Offline mode activated - app should now show cached data")
 
     def _load_cached_launch_data(self):
         """Load cached launch data for offline mode"""
@@ -3343,25 +3416,28 @@ class Backend(QObject):
 
     def check_network_connectivity(self):
         """Check if we have active network connectivity (beyond just WiFi connection)"""
+        logger.info("BOOT: check_network_connectivity called")
         try:
             # First check if WiFi is connected
+            logger.info(f"BOOT: WiFi connected status: {self._wifi_connected}")
             if not self._wifi_connected:
-                logger.debug("Network connectivity check failed: WiFi not connected")
+                logger.warning("BOOT: Network connectivity check failed: WiFi not connected")
                 return False
 
             # Try to reach a reliable external host to verify internet connectivity
             # Test with a simple HTTP request to a reliable service
+            logger.info("BOOT: Testing internet connectivity with HTTP request to google.com...")
             try:
                 # Use a timeout to avoid hanging
                 urllib.request.urlopen('http://www.google.com', timeout=5)
-                logger.debug("Network connectivity check passed: Internet accessible")
+                logger.info("BOOT: Network connectivity check passed: Internet accessible")
                 return True
             except (urllib.error.URLError, socket.timeout, OSError) as e:
-                logger.warning(f"Network connectivity check failed: Cannot reach internet ({e})")
+                logger.warning(f"BOOT: Network connectivity check failed: Cannot reach internet ({e})")
                 return False
 
         except Exception as e:
-            logger.error(f"Error checking network connectivity: {e}")
+            logger.error(f"BOOT: Error checking network connectivity: {e}")
             return False
 
 if __name__ == '__main__':
@@ -3371,10 +3447,10 @@ if __name__ == '__main__':
     if hasattr(sys.stderr, 'reconfigure'):
         sys.stderr.reconfigure(encoding='utf-8')
     
-    logger.info("Starting SpaceX Dashboard application...")
-    logger.info(f"Python version: {sys.version}")
-    logger.info(f"Platform: {platform.system()} {platform.release()}")
-    logger.info(f"Qt version available: {QApplication.instance() is None}")
+    logger.info("BOOT: Starting SpaceX Dashboard application...")
+    logger.info(f"BOOT: Python version: {sys.version}")
+    logger.info(f"BOOT: Platform: {platform.system()} {platform.release()}")
+    logger.info(f"BOOT: Qt version available: {QApplication.instance() is None}")
     
     # Force hardware acceleration for Qt and Chromium
     if platform.system() == 'Windows':
@@ -3683,10 +3759,14 @@ class ChartItem(QQuickPaintedItem):
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 # Check WiFi status before creating Backend to ensure accurate initial state
+logger.info("BOOT: Checking initial WiFi status before creating Backend...")
 wifi_connected, wifi_ssid = check_wifi_status()
+logger.info(f"BOOT: Initial WiFi check result - connected: {wifi_connected}, SSID: {wifi_ssid}")
 
+logger.info("BOOT: Creating Backend instance...")
 backend = Backend(initial_wifi_connected=wifi_connected, initial_wifi_ssid=wifi_ssid)
 # Now start the data loader after WiFi is stable
+logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
 
 engine = QQmlApplicationEngine()
