@@ -5913,22 +5913,8 @@ Window {
                 onTriggered: {
                     var arr = backend.get_upcoming_launches();
                     launchTray.nextLaunch = arr && arr[0] ? arr[0] : null;
-                    if (launchTray.nextLaunch) {
-                        var launchDate = new Date(launchTray.nextLaunch.local_date + ' ' + launchTray.nextLaunch.local_time);
-                        var now = new Date();
-                        var diff = launchDate - now;
-                        if (diff > 0) {
-                            var days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                            var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                            var minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-                            var seconds = Math.floor((diff % (1000 * 60)) / 1000);
-                            launchTray.tMinus = 'T-' + (days > 0 ? days + 'd ' : '') + hours + 'h ' + minutes + 'm ' + seconds + 's';
-                        } else {
-                            launchTray.tMinus = 'Launched';
-                        }
-                    } else {
-                        launchTray.tMinus = '';
-                    }
+                    // Use the backend's countdown calculation for consistency
+                    launchTray.tMinus = backend.countdown;
                 }
             }
 
