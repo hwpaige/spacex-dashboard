@@ -1087,9 +1087,11 @@ class EventModel(QAbstractListModel):
 
 class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, dict)
+    statusUpdate = pyqtSignal(str)
 
     def run(self):
         logger.info("DataLoader: Starting parallel data loading...")
+        self.statusUpdate.emit("Fetching SpaceX launch data...")
         
         # Function to fetch launch data
         def fetch_launch_data():
@@ -1105,6 +1107,7 @@ class DataLoader(QObject):
         # Function to fetch F1 data
         def fetch_f1_data_wrapper():
             try:
+                self.statusUpdate.emit("Loading F1 race schedule...")
                 return fetch_f1_data()
             except Exception as e:
                 logger.error(f"DataLoader: fetch_f1_data failed: {e}")
@@ -1112,6 +1115,7 @@ class DataLoader(QObject):
         
         # Function to fetch weather data
         def fetch_weather_data():
+            self.statusUpdate.emit("Getting weather data...")
             weather_data = {}
             for location, settings in location_settings.items():
                 try:
@@ -1142,6 +1146,7 @@ class DataLoader(QObject):
             f1_data = f1_future.result()
             weather_data = weather_future.result()
         
+        self.statusUpdate.emit("Data loading complete")
         logger.info("DataLoader: Finished loading all data in parallel")
         self.finished.emit(launch_data, f1_data, weather_data)
 
@@ -1195,6 +1200,8 @@ class Backend(QObject):
     loadingFinished = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
+    launchTrayVisibilityChanged = pyqtSignal()
+    loadingStatusChanged = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1209,12 +1216,14 @@ class Backend(QObject):
         self._f1_chart_type = 'standings'  # 'standings', 'weather', 'telemetry', etc.
         self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._isLoading = True
+        self._loading_status = "Initializing..."
         self._launch_data = {'previous': [], 'upcoming': []}
         self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
         self._weather_data = {}
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
+        self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
         
         # WiFi properties - initialize with provided values
         self._wifi_networks = []
@@ -1442,6 +1451,7 @@ class Backend(QObject):
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
         logger.info("BOOT: startDataLoader called")
+        self.setLoadingStatus("Checking network connectivity...")
 
         # Check network connectivity before starting data loading
         logger.info("BOOT: Checking network connectivity before starting data loading...")
@@ -1451,6 +1461,7 @@ class Backend(QObject):
         if not connectivity_result:
             logger.warning("BOOT: No network connectivity detected - deferring data loading")
             logger.info("BOOT: Setting _data_loading_deferred = True")
+            self.setLoadingStatus("No network connection - using cached data")
             # Set a flag to indicate data loading is deferred
             self._data_loading_deferred = True
             # Set up a loading timeout timer to prevent indefinite loading screen
@@ -1468,6 +1479,7 @@ class Backend(QObject):
         # Clear deferred flag if we have connectivity
         logger.info("BOOT: Network connectivity available - clearing deferred flag")
         self._data_loading_deferred = False
+        self.setLoadingStatus("Loading SpaceX launch data...")
 
         if self.loader is None:
             logger.info("BOOT: Creating new DataLoader...")
@@ -1475,6 +1487,7 @@ class Backend(QObject):
             self.thread = QThread()
             self.loader.moveToThread(self.thread)
             self.loader.finished.connect(self.on_data_loaded)
+            self.loader.statusUpdate.connect(self.setLoadingStatus)
             self.thread.started.connect(self.loader.run)
             logger.info("BOOT: Starting DataLoader thread...")
             self.thread.start()
@@ -1525,6 +1538,7 @@ class Backend(QObject):
         if self._mode != value:
             self._mode = value
             self.modeChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
             self.update_event_model()
 
     @pyqtProperty(str, notify=eventTypeChanged)
@@ -1549,6 +1563,7 @@ class Backend(QObject):
             self.chartViewModeChanged.emit()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
 
     @pyqtProperty(str, notify=chartTypeChanged)
     def chartType(self):
@@ -1561,6 +1576,7 @@ class Backend(QObject):
             self.chartTypeChanged.emit()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
 
     @pyqtProperty(str, notify=themeChanged)
     def theme(self):
@@ -1572,9 +1588,52 @@ class Backend(QObject):
             self._theme = value
             self.themeChanged.emit()
 
+    @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
+    def launchTrayVisible(self):
+        if self._launch_tray_manual_override is not None:
+            return self._launch_tray_manual_override
+        
+        # Auto mode: show if there's a launch within 1 hour
+        if self._mode != 'spacex' or not self._launch_data.get('upcoming'):
+            return False
+            
+        current_time = datetime.now(pytz.UTC)
+        for launch in self._launch_data['upcoming']:
+            if launch.get('time') == 'TBD':
+                continue
+            try:
+                launch_time = parse(launch['net']).replace(tzinfo=pytz.UTC)
+                if current_time <= launch_time <= current_time + timedelta(hours=1):
+                    return True
+            except:
+                continue
+        return False
+
+    @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
+    def launchTrayManualMode(self):
+        return self._launch_tray_manual_override is not None
+
+    @pyqtSlot(bool)
+    def setLaunchTrayManualMode(self, enabled):
+        if enabled:
+            self._launch_tray_manual_override = True
+        else:
+            self._launch_tray_manual_override = None
+        self.launchTrayVisibilityChanged.emit()
+
     @pyqtProperty(bool, notify=loadingFinished)
     def isLoading(self):
         return self._isLoading
+
+    @pyqtProperty(str, notify=loadingStatusChanged)
+    def loadingStatus(self):
+        return self._loading_status
+
+    @pyqtSlot(str)
+    def setLoadingStatus(self, status):
+        if self._loading_status != status:
+            self._loading_status = status
+            self.loadingStatusChanged.emit()
 
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
@@ -2383,6 +2442,7 @@ class Backend(QObject):
     @pyqtSlot(dict, dict, dict)
     def on_data_loaded(self, launch_data, f1_data, weather_data):
         logger.info("Backend: on_data_loaded called")
+        self.setLoadingStatus("Data loaded successfully")
         logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
         logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
@@ -2394,6 +2454,7 @@ class Backend(QObject):
         self._isLoading = False
         self.loadingFinished.emit()
         self.launchesChanged.emit()
+        self.launchTrayVisibilityChanged.emit()
         self.f1Changed.emit()
         logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
@@ -2488,6 +2549,7 @@ class Backend(QObject):
         self._launch_data = launch_data
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
+        self.launchTrayVisibilityChanged.emit()
         self.update_event_model()
         # Clean up thread
         if hasattr(self, '_launch_updater_thread'):
@@ -3181,6 +3243,7 @@ class Backend(QObject):
                             self.thread = QThread()
                             self.loader.moveToThread(self.thread)
                             self.loader.finished.connect(self.on_data_loaded)
+                            self.loader.statusUpdate.connect(self.setLoadingStatus)
                             self.thread.started.connect(self.loader.run)
                             logger.info("Backend: Starting deferred DataLoader thread...")
                             self.thread.start()
@@ -3488,19 +3551,11 @@ if __name__ == '__main__':
     else:
         os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
     
-    # # Set QML style to Fusion
-    # os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
-    
-    QtWebEngineQuick.initialize()
-    # Set style to Material before creating QApplication to support QML control customization
-    material_style = QStyleFactory.create("Material")
-    if material_style:
-        QApplication.setStyle(material_style)
-    else:
-        # Fallback to Fusion if Material is not available
-        fusion_style = QStyleFactory.create("Fusion")
-        if fusion_style:
-            QApplication.setStyle(fusion_style)
+    # Set style to Fusion to ensure compatibility
+    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
+    fusion_style = QStyleFactory.create("Fusion")
+    if fusion_style:
+        QApplication.setStyle(fusion_style)
     
     # Start local HTTP server for serving HTML files
     def start_http_server():
@@ -3885,15 +3940,27 @@ Window {
         visible: backend.isLoading
         z: 1
 
-        Image {
-            source: "file:///" + spacexLogoPath
+        ColumnLayout {
             anchors.centerIn: parent
-            width: 300
-            height: 300
-            fillMode: Image.PreserveAspectFit
+            spacing: 20
+
+            Image {
+                source: "file:///" + spacexLogoPath
+                Layout.alignment: Qt.AlignHCenter
+                width: 300
+                height: 300
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                text: backend.loadingStatus
+                Layout.alignment: Qt.AlignHCenter
+                color: backend.theme === "dark" ? "#ffffff" : "#000000"
+                font.pixelSize: 16
+                font.family: "D-DIN"
+                horizontalAlignment: Text.AlignHCenter
+            }
         }
-
-
     }
 
     // Cache expensive / repeated lookups
@@ -4555,7 +4622,7 @@ Window {
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
                                 Text { text: "Date: " + ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: backend.location + ": " + ((model && model.localTime) ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { text: backend.location + ": " + ((model && model.local_time) ? model.local_time : "TBD"); font.pixelSize: 12; color: "#999999" }
                                 Text { text: "Status: " + ((model && model.status) ? model.status : ""); font.pixelSize: 12; color: ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336" }
                             }
 
@@ -4918,26 +4985,18 @@ Window {
                     }
                 }
 
-                // Launch details tray button
-                Rectangle {
-                    width: 28
-                    height: 28
-                    radius: 14
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                    border.width: 1
+                // Launch details tray toggle
+                Switch {
+                    checked: backend.launchTrayManualMode
+                    onCheckedChanged: backend.setLaunchTrayManualMode(checked)
                     visible: backend.mode === "spacex"
+                    Layout.preferredWidth: 50
+                    Layout.preferredHeight: 28
 
-                    Text {
-                        anchors.centerIn: parent
-                        text: "🚀"
-                        color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 14
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: launchTray.visible = !launchTray.visible
+                    ToolTip {
+                        visible: parent.hovered
+                        text: parent.checked ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
+                        delay: 500
                     }
                 }
 
@@ -5736,7 +5795,7 @@ Window {
             y: 0  // Position at top of screen
             modal: false
             focus: false
-            visible: !backend.isLoading && backend.mode === "spacex"
+            visible: backend.launchTrayVisible
             closePolicy: Popup.NoAutoClose
 
             leftPadding: 15
@@ -5970,7 +6029,7 @@ Window {
                                         }
 
                                         Text {
-                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.date : "")
+                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.local_date : "")
                                             font.pixelSize: 14
                                             font.bold: true
                                             color: backend.theme === "dark" ? "white" : "black"
@@ -5980,7 +6039,7 @@ Window {
                                         }
 
                                         Text {
-                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.time : "")
+                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.local_time : "")
                                             font.pixelSize: 14
                                             font.bold: true
                                             color: backend.theme === "dark" ? "white" : "black"
