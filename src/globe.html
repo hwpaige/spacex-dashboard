@@ -80,6 +80,9 @@
                         globe = new THREE.Mesh(geometry, material);
                         scene.add(globe);
 
+                        // Set initial tilt for better orbit visibility
+                        globe.rotation.x = 0.3;
+
                         // Cloud layer
                         const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
                         textureLoader.load(
@@ -128,6 +131,9 @@
                         globe = new THREE.Mesh(geometry, material);
                         scene.add(globe);
 
+                        // Set initial tilt for better orbit visibility
+                        globe.rotation.x = 0.3;
+
                         // Lighting
                         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
                         scene.add(ambientLight);
@@ -143,7 +149,7 @@
                 // Controls
                 controls = {
                     autoRotate: true,
-                    autoRotateSpeed: 0.3,
+                    autoRotateSpeed: -0.3,
                     enableZoom: true,
                     enablePan: false,
                     enableRotate: true
@@ -169,8 +175,9 @@
 
             if (globe) {
                 if (isInMomentum) {
-                    // Apply momentum
-                    globe.rotation.y += momentumX;
+                    // Apply momentum with orientation correction
+                    const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
+                    globe.rotation.y += momentumX * yDirection;
                     globe.rotation.x += momentumY;
 
                     // Decay momentum
@@ -388,8 +395,10 @@
                 momentumY = deltaY / deltaTime * 0.1;
             }
 
-            globe.rotation.y += deltaX * 0.01;
-            globe.rotation.x += deltaY * 0.01;
+            // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
+            const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
+            globe.rotation.y += deltaX * 0.005 * yDirection;
+            globe.rotation.x += deltaY * 0.005;
 
             previousMousePosition = { x: event.clientX, y: event.clientY };
         });
@@ -429,8 +438,10 @@
                 momentumY = deltaY / deltaTime * 0.1;
             }
 
-            globe.rotation.y += deltaX * 0.01;
-            globe.rotation.x += deltaY * 0.01;
+            // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
+            const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
+            globe.rotation.y += deltaX * 0.005 * yDirection;
+            globe.rotation.x += deltaY * 0.005;
 
             previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
         }, { passive: false });

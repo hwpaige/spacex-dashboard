@@ -6108,95 +6108,226 @@ Window {
                                     spacing: 10
 
                                     ColumnLayout {
-                                        spacing: 8
+                                        spacing: 6
 
                                         Text {
-                                            text: "🚀 Mission: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches")
-                                            font.pixelSize: 16
+                                            text: "🚀 MISSION: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission.toUpperCase() : "NO UPCOMING LAUNCHES")
+                                            font.pixelSize: 18
                                             font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.letterSpacing: 1
+                                            color: "#FF6B35"
                                             wrapMode: Text.Wrap
                                             Layout.fillWidth: true
                                         }
 
-                                        Text {
-                                            text: "📅 Date: " + (launchTray.nextLaunch ? launchTray.nextLaunch.local_date : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        // Table-like layout for launch details
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📅"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LAUNCH DATE:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_date : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "⏰ Time: " + (launchTray.nextLaunch ? launchTray.nextLaunch.local_time : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "⏰"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LAUNCH TIME:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_time : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "📡 NET: " + (launchTray.nextLaunch ? launchTray.nextLaunch.net : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📡"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "NET:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "📊 Status: " + (launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📊"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "STATUS:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.status.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: launchTray.nextLaunch && launchTray.nextLaunch.status.toLowerCase().includes("go") ? "#00FF88" : "#FF4444"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "🚀 Rocket: " + (launchTray.nextLaunch ? launchTray.nextLaunch.rocket : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🚀"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "VEHICLE:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "🛰️ Orbit: " + (launchTray.nextLaunch ? launchTray.nextLaunch.orbit : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🛰️"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "ORBIT:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "🏗️ Pad: " + (launchTray.nextLaunch ? launchTray.nextLaunch.pad : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🏗️"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "PAD:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.pad.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
 
-                                        Text {
-                                            text: "🎥 Video URL: " + (launchTray.nextLaunch ? launchTray.nextLaunch.video_url : "")
-                                            font.pixelSize: 14
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                            visible: launchTray.nextLaunch
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🎥"
+                                                font.pixelSize: 14
+                                                color: "#000000"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "STREAM:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: "#FFFFFF"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.video_url : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: "#FFFFFF"
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.Wrap
+                                                visible: launchTray.nextLaunch
+                                            }
                                         }
                                     }
                                 }
@@ -6215,6 +6346,7 @@ Window {
                                 anchors.margins: 0
                                 url: globeUrl
                                 backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                zoomFactor: 1.0
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: false
 
@@ -6245,6 +6377,7 @@ Window {
                                 anchors.fill: parent
                                 anchors.margins: 5
                                 url: "https://x.com/SpaceX"
+                                zoomFactor: 0.6
                             }
                         }
                     }
