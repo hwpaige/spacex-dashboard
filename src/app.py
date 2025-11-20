@@ -3947,8 +3947,10 @@ Window {
             Image {
                 source: "file:///" + spacexLogoPath
                 Layout.alignment: Qt.AlignHCenter
-                width: 300
-                height: 300
+                width: 120
+                height: 120
+                sourceSize.width: 120
+                sourceSize.height: 120
                 fillMode: Image.PreserveAspectFit
             }
 
@@ -4013,6 +4015,7 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+                    spacing: 0
 
                     Item {
                         Layout.fillWidth: true
@@ -4021,7 +4024,7 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
+                            anchors.margins: 0
                             spacing: 5
 
                             ChartItem {
@@ -4048,95 +4051,74 @@ Window {
                                     }
                                 }
                             }
+                        }
+                    }
 
-                            // Chart control buttons
-                            RowLayout {
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 0
-                                spacing: 10
+                    // Chart control buttons container
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        color: "transparent"
+                        visible: backend.mode === "spacex"
 
-                                // Chart type buttons
-                                RowLayout {
-                                    spacing: 3
-                                    Repeater {
-                                        model: [
-                                            {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                            {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
-                                            {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"}
-                                        ]
-                                        Button {
-                                            property var chartData: modelData
-                                            Layout.preferredWidth: 35
-                                            Layout.preferredHeight: 25
-                                            font.pixelSize: 12
-                                            font.family: "Font Awesome 5 Free"
-                                            text: chartData.icon
-                                            onClicked: {
-                                                backend.chartType = chartData.type
-                                            }
-                                            background: Rectangle {
-                                                color: backend.chartType === chartData.type ? 
-                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                                border.width: 1
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.chartData.icon
-                                                font: parent.font
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            ToolTip {
-                                                text: parent.chartData.tooltip
-                                                visible: parent.hovered
-                                                delay: 500
-                                            }
-                                        }
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
+                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
+                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                           (backend.chartType === modelData.type ?
+                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")) :
+                                           (backend.chartViewMode === modelData.type ?
+                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"))
+                                    radius: 14
+                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend.chartType === modelData.type ?
+                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")) :
+                                                 (backend.chartViewMode === modelData.type ?
+                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend.chartType === modelData.type ? 2 : 1) :
+                                                 (backend.chartViewMode === modelData.type ? 2 : 1)
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
                                     }
-                                }
 
-                                // Chart view mode buttons
-                                RowLayout {
-                                    spacing: 3
-                                    Repeater {
-                                        model: [
-                                            {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
-                                            {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
-                                        ]
-                                        Button {
-                                            property var chartData: modelData
-                                            Layout.preferredWidth: 35
-                                            Layout.preferredHeight: 25
-                                            font.pixelSize: 12
-                                            font.family: "Font Awesome 5 Free"
-                                            text: chartData.icon
-                                            onClicked: {
-                                                backend.chartViewMode = chartData.type
-                                            }
-                                            background: Rectangle {
-                                       color: backend.chartViewMode === chartData.type ? 
-                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                                border.width: 1
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.chartData.icon
-                                                font: parent.font
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
-                                            ToolTip {
-                                                text: parent.chartData.tooltip
-                                                visible: parent.hovered
-                                                delay: 500
-                                            }
-                                        }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                  backend.chartType = modelData.type :
+                                                  backend.chartViewMode = modelData.type
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        visible: parent.hovered
+                                        delay: 500
                                     }
                                 }
                             }
@@ -4151,7 +4133,7 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
+                            anchors.margins: 0
                             spacing: 5
 
                             Text {
@@ -4160,7 +4142,7 @@ Window {
                                 font.bold: true
                                 color: backend.theme === "dark" ? "white" : "black"
                                 Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 5
+                                Layout.margins: 1
                             }
 
                             WebEngineView {
@@ -4193,7 +4175,7 @@ Window {
 
                                 // Chart category buttons
                                 RowLayout {
-                                    spacing: 3
+                                    spacing: 6
                                     Repeater {
                                         model: [
                                             {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
@@ -4202,33 +4184,38 @@ Window {
                                             {"type": "positions", "icon": "\uf3c5", "tooltip": "Driver Positions"},
                                             {"type": "laps", "icon": "\uf2f1", "tooltip": "Lap Times"}
                                         ]
-                                        Button {
-                                            property var chartData: modelData
-                                            Layout.preferredWidth: 35
-                                            Layout.preferredHeight: 25
-                                            font.pixelSize: 12
-                                            font.family: "Font Awesome 5 Free"
-                                            text: chartData.icon
-                                            onClicked: {
-                                                backend.f1ChartType = chartData.type
-                                            }
-                                            background: Rectangle {
-                                                color: backend.f1ChartType === chartData.type ? 
-                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                                border.width: 1
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.chartData.icon
-                                                font: parent.font
+                                        Rectangle {
+                                            Layout.preferredWidth: 40
+                                            Layout.preferredHeight: 28
+                                            color: backend.f1ChartType === modelData.type ?
+                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                            radius: 14
+                                            border.color: backend.f1ChartType === modelData.type ?
+                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                            border.width: backend.f1ChartType === modelData.type ? 2 : 1
+
+                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.icon
+                                                font.pixelSize: 14
+                                                font.family: "Font Awesome 5 Free"
                                                 color: backend.theme === "dark" ? "white" : "black"
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
                                             }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: backend.f1ChartType = modelData.type
+                                            }
+
                                             ToolTip {
-                                                text: parent.chartData.tooltip
+                                                text: modelData.tooltip
                                                 visible: parent.hovered
                                                 delay: 500
                                             }
@@ -4238,39 +4225,44 @@ Window {
 
                                 // Stat type buttons
                                 RowLayout {
-                                    spacing: 3
+                                    spacing: 6
                                     Repeater {
                                         model: [
                                             {"type": "points", "icon": "\uf091", "tooltip": "Points"},
                                             {"type": "wins", "icon": "\uf005", "tooltip": "Wins"}
                                         ]
-                                        Button {
-                                            property var statData: modelData
-                                            Layout.preferredWidth: 35
-                                            Layout.preferredHeight: 25
-                                            font.pixelSize: 12
-                                            font.family: "Font Awesome 5 Free"
-                                            text: statData.icon
-                                            onClicked: {
-                                                backend.f1ChartStat = statData.type
-                                            }
-                                            background: Rectangle {
-                                                color: backend.f1ChartStat === statData.type ? 
-                                                       (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                                       (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                                border.width: 1
-                                                radius: 3
-                                            }
-                                            contentItem: Text {
-                                                text: parent.statData.icon
-                                                font: parent.font
+                                        Rectangle {
+                                            Layout.preferredWidth: 40
+                                            Layout.preferredHeight: 28
+                                            color: backend.f1ChartStat === modelData.type ?
+                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                            radius: 14
+                                            border.color: backend.f1ChartStat === modelData.type ?
+                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                            border.width: backend.f1ChartStat === modelData.type ? 2 : 1
+
+                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.icon
+                                                font.pixelSize: 14
+                                                font.family: "Font Awesome 5 Free"
                                                 color: backend.theme === "dark" ? "white" : "black"
-                                                horizontalAlignment: Text.AlignHCenter
-                                                verticalAlignment: Text.AlignVCenter
                                             }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: backend.f1ChartStat = modelData.type
+                                            }
+
                                             ToolTip {
-                                                text: parent.statData.tooltip
+                                                text: modelData.tooltip
                                                 visible: parent.hovered
                                                 delay: 500
                                             }
@@ -4478,39 +4470,44 @@ Window {
 
                             // Standings type buttons
                             RowLayout {
-                                spacing: 3
+                                spacing: 6
                                 Repeater {
                                     model: [
                                         {"type": "drivers", "icon": "\uf1b9", "tooltip": "Driver Standings"},
                                         {"type": "constructors", "icon": "\uf085", "tooltip": "Constructor Standings"}
                                     ]
-                                    Button {
-                                        property var standingsData: modelData
-                                        Layout.preferredWidth: 35
-                                        Layout.preferredHeight: 25
-                                        font.pixelSize: 12
-                                        font.family: "Font Awesome 5 Free"
-                                        text: standingsData.icon
-                                        onClicked: {
-                                            backend.f1StandingsType = standingsData.type
-                                        }
-                                        background: Rectangle {
-                                            color: backend.f1StandingsType === standingsData.type ?
-                                                   (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
-                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                            border.width: 1
-                                            radius: 3
-                                        }
-                                        contentItem: Text {
-                                            text: parent.standingsData.icon
-                                            font: parent.font
+                                    Rectangle {
+                                        Layout.preferredWidth: 40
+                                        Layout.preferredHeight: 28
+                                        color: backend.f1StandingsType === modelData.type ?
+                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                               (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                        radius: 14
+                                        border.color: backend.f1StandingsType === modelData.type ?
+                                                     (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                     (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                        border.width: backend.f1StandingsType === modelData.type ? 2 : 1
+
+                                        Behavior on color { ColorAnimation { duration: 200 } }
+                                        Behavior on border.color { ColorAnimation { duration: 200 } }
+                                        Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.icon
+                                            font.pixelSize: 14
+                                            font.family: "Font Awesome 5 Free"
                                             color: backend.theme === "dark" ? "white" : "black"
-                                            horizontalAlignment: Text.AlignHCenter
-                                            verticalAlignment: Text.AlignVCenter
                                         }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.f1StandingsType = modelData.type
+                                        }
+
                                         ToolTip {
-                                            text: parent.standingsData.tooltip
+                                            text: modelData.tooltip
                                             visible: parent.hovered
                                             delay: 500
                                         }
@@ -4521,46 +4518,61 @@ Window {
                     }
                 }
 
-                    // Weather view buttons
-                    RowLayout {
-                        Layout.alignment: Qt.AlignTop | Qt.AlignHCenter
-                        Layout.margins: 0
+                    // Weather view buttons container
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        color: "transparent"
                         visible: backend.mode === "spacex"
-                        spacing: 3
 
-                        Repeater {
-                            model: [
-                                {"type": "radar", "icon": "\uf7c0"},
-                                {"type": "wind", "icon": "\uf72e"},
-                                {"type": "gust", "icon": "\uf72e"},
-                                {"type": "clouds", "icon": "\uf0c2"},
-                                {"type": "temp", "icon": "\uf2c7"},
-                                {"type": "pressure", "icon": "\uf6c4"}
-                            ]
-                            Button {
-                                property var weatherData: modelData
-                                Layout.preferredWidth: 35
-                                Layout.preferredHeight: 25
-                                font.pixelSize: 12
-                                font.family: "Font Awesome 5 Free"
-                                text: weatherData.icon
-                                onClicked: {
-                                    weatherSwipe.currentIndex = index
-                                }
-                                background: Rectangle {
-                                    color: weatherSwipe.currentIndex === index ? 
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
-                                    radius: 3
-                                }
-                                contentItem: Text {
-                                    text: parent.weatherData.icon
-                                    font: parent.font
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "radar", "icon": "\uf7c0", "tooltip": "Weather Radar"},
+                                    {"type": "wind", "icon": "\uf72e", "tooltip": "Wind Speed"},
+                                    {"type": "gust", "icon": "\uf72e", "tooltip": "Wind Gusts"},
+                                    {"type": "clouds", "icon": "\uf0c2", "tooltip": "Cloud Cover"},
+                                    {"type": "temp", "icon": "\uf2c7", "tooltip": "Temperature"},
+                                    {"type": "pressure", "icon": "\uf6c4", "tooltip": "Pressure"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: weatherSwipe.currentIndex === index ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 14
+                                    border.color: weatherSwipe.currentIndex === index ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: weatherSwipe.currentIndex === index ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: weatherSwipe.currentIndex = index
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        visible: parent.hovered
+                                        delay: 500
+                                    }
                                 }
                             }
                         }
@@ -4580,6 +4592,7 @@ Window {
 
                 ColumnLayout {
                     anchors.fill: parent
+                    spacing: 0
 
                     ListView {
                         Layout.fillWidth: true
@@ -4708,42 +4721,57 @@ Window {
                         }
                     }
 
-                    // Launch view buttons
-                    RowLayout {
-                        Layout.alignment: Qt.AlignBottom | Qt.AlignHCenter
-                        Layout.margins: 2
+                    // Launch view buttons container
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        color: "transparent"
                         visible: backend.mode === "spacex"
-                        spacing: 3
 
-                        Repeater {
-                            model: [
-                                {"type": "upcoming", "icon": "\uf135"},
-                                {"type": "past", "icon": "\uf1da"}
-                            ]
-                            Button {
-                                property var launchData: modelData
-                                Layout.preferredWidth: 35
-                                Layout.preferredHeight: 23
-                                font.pixelSize: 12
-                                font.family: "Font Awesome 5 Free"
-                                text: launchData.icon
-                                onClicked: {
-                                    backend.eventType = launchData.type
-                                }
-                                background: Rectangle {
-                                    color: backend.eventType === launchData.type ? 
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") : 
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
-                                    radius: 3
-                                }
-                                contentItem: Text {
-                                    text: parent.launchData.icon
-                                    font: parent.font
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    horizontalAlignment: Text.AlignHCenter
-                                    verticalAlignment: Text.AlignVCenter
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
+                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: backend.eventType === modelData.type ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 14
+                                    border.color: backend.eventType === modelData.type ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.eventType === modelData.type ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: backend.eventType = modelData.type
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        visible: parent.hovered
+                                        delay: 500
+                                    }
                                 }
                             }
                         }
@@ -4956,18 +4984,24 @@ Window {
 
                 // Mode selector - F1/SpaceX toggle
                 Row {
-                    spacing: 2
+                    spacing: 4
                     Repeater {
                         model: ["F1", "SpaceX"]
                         Rectangle {
-                            width: 40
-                            height: 28
+                            width: 50
+                            height: 32
                             color: backend.mode === modelData.toLowerCase() ?
-                                   (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
-                                   (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                            radius: 4
-                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                            border.width: 1
+                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                            radius: 16
+                            border.color: backend.mode === modelData.toLowerCase() ?
+                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                            border.width: backend.mode === modelData.toLowerCase() ? 2 : 1
+
+                            Behavior on color { ColorAnimation { duration: 200 } }
+                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                            Behavior on border.width { NumberAnimation { duration: 200 } }
 
                             Text {
                                 anchors.centerIn: parent
@@ -4979,23 +5013,53 @@ Window {
 
                             MouseArea {
                                 anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
                                 onClicked: backend.mode = modelData.toLowerCase()
+                            }
+
+                            ToolTip {
+                                visible: parent.parent.hovered
+                                text: modelData === "F1" ? "Formula 1 Dashboard" : "SpaceX Dashboard"
+                                delay: 500
                             }
                         }
                     }
                 }
 
                 // Launch details tray toggle
-                Switch {
-                    checked: backend.launchTrayManualMode
-                    onCheckedChanged: backend.setLaunchTrayManualMode(checked)
+                Rectangle {
                     visible: backend.mode === "spacex"
                     Layout.preferredWidth: 50
                     Layout.preferredHeight: 28
+                    radius: 14
+                    color: backend.launchTrayManualMode ?
+                        "#FF3838" :
+                        (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+
+                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                    Rectangle {
+                        width: 22
+                        height: 22
+                        radius: 11
+                        x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
+                        y: 3
+                        color: "white"
+                        border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
+                        border.width: 1
+
+                        Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                        cursorShape: Qt.PointingHandCursor
+                    }
 
                     ToolTip {
-                        visible: parent.hovered
-                        text: parent.checked ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
+                        visible: parent.parent.hovered
+                        text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
                         delay: 500
                     }
                 }
@@ -5027,30 +5091,44 @@ Window {
 
                         // Location selector
                         Row {
-                            spacing: 2
+                            spacing: 4
                             Repeater {
                                 model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
                                 Rectangle {
-                                    width: 45
-                                    height: 20
+                                    width: 40
+                                    height: 24
                                     color: backend.location === modelData ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    radius: 4
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 12
+                                    border.color: backend.location === modelData ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.location === modelData ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: modelData.substring(0, 4)  // Abbreviate: Star, Vand, Cape, Hawt
                                         color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 12
+                                        font.pixelSize: 11
                                         font.family: "D-DIN"
+                                        font.bold: backend.location === modelData
                                     }
 
                                     MouseArea {
                                         anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
                                         onClicked: backend.location = modelData
+                                    }
+
+                                    ToolTip {
+                                        visible: parent.parent.hovered
+                                        text: modelData
+                                        delay: 500
                                     }
                                 }
                             }
@@ -5058,18 +5136,24 @@ Window {
 
                         // Theme selector
                         Row {
-                            spacing: 2
+                            spacing: 4
                             Repeater {
                                 model: ["Light", "Dark"]
                                 Rectangle {
-                                    width: 35
-                                    height: 20
+                                    width: 45
+                                    height: 24
                                     color: backend.theme === modelData.toLowerCase() ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
-                                    radius: 4
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 12
+                                    border.color: backend.theme === modelData.toLowerCase() ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.theme === modelData.toLowerCase() ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
 
                                     Text {
                                         anchors.centerIn: parent
@@ -5081,7 +5165,14 @@ Window {
 
                                     MouseArea {
                                         anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
                                         onClicked: backend.theme = modelData.toLowerCase()
+                                    }
+
+                                    ToolTip {
+                                        visible: parent.parent.hovered
+                                        text: modelData + " Theme"
+                                        delay: 500
                                     }
                                 }
                             }
