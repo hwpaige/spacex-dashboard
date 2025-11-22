@@ -471,6 +471,26 @@ setup_repository() {
     [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
     sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
     chown -R "$USER:$USER" "$REPO_DIR"
+    
+    # Fix git permissions in case any operations were done as root
+    if [ -d "$REPO_DIR/.git" ]; then
+        chown -R "$USER:$USER" "$REPO_DIR/.git"
+        log "Fixed git repository permissions"
+    fi
+}
+    
+configure_update_permissions() {
+    log "Configuring update script permissions..."
+    
+    # Add specific sudo permissions for update script commands
+    # The user already has NOPASSWD:ALL, but let's be explicit for clarity and security
+    cat << EOF > /etc/sudoers.d/spacex-update
+# Allow the SpaceX dashboard user to run update-related commands without password
+$USER ALL=(ALL) NOPASSWD: /usr/sbin/reboot
+$USER ALL=(ALL) NOPASSWD: /usr/bin/systemctl
+EOF
+    chmod 0440 /etc/sudoers.d/spacex-update
+    log "Update script sudo permissions configured"
 }
     
 configure_plymouth() {
@@ -1169,6 +1189,7 @@ main() {
     configure_system
     configure_boot
     setup_repository
+    configure_update_permissions
     configure_plymouth
     configure_touch_rotation
     create_xinitrc
