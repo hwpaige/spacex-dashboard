@@ -781,8 +781,76 @@ def fetch_f1_data():
     return f1_data
 
 # Fetch weather data
+def parse_metar(raw_metar):
+    """
+    Parse METAR string to extract weather data
+    Returns dict with temperature_c, temperature_f, wind_speed_ms, wind_speed_kts, wind_direction, cloud_cover
+    """
+    import re
+
+    # Default values
+    temperature_c = 25
+    wind_speed_kts = 0
+    wind_direction = 0
+    cloud_cover = 0
+
+    try:
+        # Extract temperature (format: 25/20 where first is temp, second is dewpoint)
+        temp_match = re.search(r'(\d{1,3})/', raw_metar)
+        if temp_match:
+            temperature_c = int(temp_match.group(1))
+            # Convert M (minus) prefix for negative temperatures
+            if raw_metar[temp_match.start()-1] == 'M':
+                temperature_c = -temperature_c
+
+        # Extract wind (format: 12010KT or 12010G15KT)
+        wind_match = re.search(r'(\d{3})(\d{2,3})(?:G\d{2,3})?KT', raw_metar)
+        if wind_match:
+            wind_direction = int(wind_match.group(1))
+            wind_speed_kts = int(wind_match.group(2))
+
+        # Estimate cloud cover based on cloud types
+        if 'SKC' in raw_metar or 'CLR' in raw_metar:
+            cloud_cover = 0  # Clear
+        elif 'FEW' in raw_metar:
+            cloud_cover = 25  # Few clouds
+        elif 'SCT' in raw_metar:
+            cloud_cover = 50  # Scattered
+        elif 'BKN' in raw_metar:
+            cloud_cover = 75  # Broken
+        elif 'OVC' in raw_metar:
+            cloud_cover = 100  # Overcast
+        else:
+            cloud_cover = 50  # Default to partly cloudy if no cloud info
+
+    except Exception as e:
+        logger.warning(f"Error parsing METAR data '{raw_metar}': {e}")
+
+    # Convert to required format
+    temperature_f = temperature_c * 9 / 5 + 32
+    wind_speed_ms = wind_speed_kts * 0.514444  # Convert knots to m/s
+
+    return {
+        'temperature_c': temperature_c,
+        'temperature_f': temperature_f,
+        'wind_speed_ms': wind_speed_ms,
+        'wind_speed_kts': wind_speed_kts,
+        'wind_direction': wind_direction,
+        'cloud_cover': cloud_cover
+    }
+
 def fetch_weather(lat, lon, location):
-    logger.info(f"Fetching weather data for {location}")
+    logger.info(f"Fetching METAR weather data for {location}")
+
+    # METAR station mappings - closest weather stations for each location
+    metar_stations = {
+        'Starbase': 'KBRO',  # Brownsville International Airport
+        'Vandy': 'KVBG',    # Vandenberg Space Force Base
+        'Cape': 'KMLB',     # Melbourne International Airport (closest to Kennedy Space Center)
+        'Hawthorne': 'KHHR' # Hawthorne Municipal Airport
+    }
+
+    station_id = metar_stations.get(location, 'KBRO')  # Default to KBRO if not found
 
     # Check network connectivity before making API calls
     try:
@@ -802,26 +870,25 @@ def fetch_weather(lat, lon, location):
         }
 
     try:
-        url = f"https://api.open-meteo.com/v1/forecast?latitude={lat:.3f}&longitude={lon:.3f}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,cloud_cover&timezone=UTC"
-        response = requests.get(url, timeout=5)
+        # Use Aviation Weather Center METAR API
+        url = f"https://aviationweather.gov/api/data/metar?ids={station_id}&format=raw"
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
-        data = response.json()
-        now = datetime.now(pytz.UTC)
-        hourly = data['hourly']
-        times = [datetime.strptime(t, '%Y-%m-%dT%H:%M').replace(tzinfo=pytz.UTC) for t in hourly['time']]
-        closest_idx = min(range(len(times)), key=lambda i: abs((times[i] - now).total_seconds()))
-        logger.info(f"Successfully fetched weather data for {location}")
+        raw_metar = response.text.strip()
+
+        if not raw_metar:
+            raise ValueError(f"No METAR data received for station {station_id}")
+
+        logger.info(f"Successfully fetched METAR data for {location} from {station_id}: {raw_metar}")
+
+        # Parse METAR data
+        parsed_data = parse_metar(raw_metar)
+
         time.sleep(1)  # Avoid rate limiting
-        return {
-            'temperature_c': hourly['temperature_2m'][closest_idx],
-            'temperature_f': hourly['temperature_2m'][closest_idx] * 9 / 5 + 32,
-            'wind_speed_ms': hourly['wind_speed_10m'][closest_idx],
-            'wind_speed_kts': hourly['wind_speed_10m'][closest_idx] * 1.94384,
-            'wind_direction': hourly['wind_direction_10m'][closest_idx],
-            'cloud_cover': hourly['cloud_cover'][closest_idx]
-        }
+        return parsed_data
+
     except Exception as e:
-        logger.error(f"Open-Meteo API error for {location}: {e}")
+        logger.error(f"METAR API error for {location} (station {station_id}): {e}")
         return {
             'temperature_c': 25,
             'temperature_f': 77,
@@ -842,7 +909,7 @@ def rotate(xy, *, angle):
 
 # Location settings
 location_settings = {
-    'Starbase': {'lat': 25.997, 'lon': -97.155, 'timezone': 'America/Chicago'},
+    'Starbase': {'lat': 25.9975, 'lon': -97.1566, 'timezone': 'America/Chicago'},
     'Vandy': {'lat': 34.632, 'lon': -120.611, 'timezone': 'America/Los_Angeles'},
     'Cape': {'lat': 28.392, 'lon': -80.605, 'timezone': 'America/New_York'},
     'Hawthorne': {'lat': 33.916, 'lon': -118.352, 'timezone': 'America/Los_Angeles'}
@@ -850,7 +917,7 @@ location_settings = {
 
 # Radar URLs - Enable for all platforms including Raspberry Pi
 radar_locations = {
-    'Starbase': 'https://embed.windy.com/embed2.html?lat=25.997&lon=-97.155&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=25.997&detailLon=-97.155&metricWind=mph&metricTemp=%C2%B0F',
+    'Starbase': 'https://embed.windy.com/embed2.html?lat=25.9975&lon=-97.1566&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=25.9975&detailLon=-97.1566&metricWind=mph&metricTemp=%C2%B0F',
     'Vandy': 'https://embed.windy.com/embed2.html?lat=34.632&lon=-120.611&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=34.632&detailLon=-120.611&metricWind=mph&metricTemp=%C2%B0F',
     'Cape': 'https://embed.windy.com/embed2.html?lat=28.392&lon=-80.605&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=28.392&detailLon=-80.605&metricWind=mph&metricTemp=%C2%B0F',
     'Hawthorne': 'https://embed.windy.com/embed2.html?lat=33.916&lon=-118.352&zoom=8&level=surface&overlay=radar&menu=&message=&marker=&calendar=&pressure=&type=map&location=coordinates&detail=&detailLat=33.916&detailLon=-118.352&metricWind=mph&metricTemp=%C2%B0F'
@@ -985,11 +1052,7 @@ class EventModel(QAbstractListModel):
                 elif role == self.TrackMapPathRole:
                     return item.get('track_map_path', '')
                 elif role == self.LocalTimeRole:
-                    net = item.get('net', '') or item.get('date_start', '')
-                    time_str = item.get('time', '') or ''
-                    if time_str != 'TBD' and net:
-                        return parse(net).astimezone(self._tz).strftime('%Y-%m-%d %H:%M:%S')
-                    return 'TBD'
+                    return item.get('localTime', 'TBD')
             return None
 
     def roleNames(self):
@@ -1023,6 +1086,18 @@ class EventModel(QAbstractListModel):
         grouped = []
         if self._mode == 'spacex':
             launches = self._data['upcoming'] if self._event_type == 'upcoming' else self._data['previous']
+            
+            # Add local time to each launch
+            for launch in launches:
+                net = launch.get('net', '') or launch.get('date_start', '')
+                if net:
+                    try:
+                        launch['localTime'] = parse(net).astimezone(self._tz).strftime('%Y-%m-%d %H:%M:%S')
+                    except:
+                        launch['localTime'] = 'TBD'
+                else:
+                    launch['localTime'] = 'TBD'
+            
             if self._event_type == 'upcoming':
                 launches = sorted(launches, key=lambda x: parse(x['net']))
                 today_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() == today]
@@ -4635,7 +4710,7 @@ Window {
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
                                 Text { text: "Date: " + ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: backend.location + ": " + ((model && model.local_time) ? model.local_time : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { text: backend.location + ": " + ((model && model.localTime) ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
                                 Text { text: "Status: " + ((model && model.status) ? model.status : ""); font.pixelSize: 12; color: ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336" }
                             }
 
