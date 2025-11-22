@@ -1277,6 +1277,7 @@ class Backend(QObject):
     reloadWebContent = pyqtSignal()
     launchTrayVisibilityChanged = pyqtSignal()
     loadingStatusChanged = pyqtSignal()
+    updateAvailableChanged = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1298,6 +1299,7 @@ class Backend(QObject):
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
+        self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
         
         # WiFi properties - initialize with provided values
@@ -1533,6 +1535,16 @@ class Backend(QObject):
         connectivity_result = self.check_network_connectivity()
         logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
 
+        # Check for updates if we have network connectivity
+        logger.info("BOOT: Checking for app updates...")
+        try:
+            update_available = self.check_for_updates()
+            self.updateAvailable = update_available
+            logger.info(f"BOOT: Update check result: {update_available}")
+        except Exception as e:
+            logger.error(f"BOOT: Error checking for updates: {e}")
+            self.updateAvailable = False
+
         if not connectivity_result:
             logger.warning("BOOT: No network connectivity detected - deferring data loading")
             logger.info("BOOT: Setting _data_loading_deferred = True")
@@ -1595,6 +1607,20 @@ class Backend(QObject):
         self.wifi_timer = QTimer(self)
         self.wifi_timer.timeout.connect(self.update_wifi_status)
         # Don't start timer automatically - only when WiFi popup is open
+
+        # Update check timer - check every 6 hours (21600000 ms)
+        self.update_check_timer = QTimer(self)
+        self.update_check_timer.timeout.connect(self.check_for_updates_periodic)
+        self.update_check_timer.start(21600000)  # 6 hours
+
+    def check_for_updates_periodic(self):
+        """Periodic update check"""
+        try:
+            update_available = self.check_for_updates()
+            self.updateAvailable = update_available
+            logger.info(f"Periodic update check result: {update_available}")
+        except Exception as e:
+            logger.error(f"Error in periodic update check: {e}")
         
     # ...existing code...
         
@@ -2196,6 +2222,16 @@ class Backend(QObject):
             self._f1_standings_type = value
             self.f1Changed.emit()
 
+    @pyqtProperty(bool, notify=updateAvailableChanged)
+    def updateAvailable(self):
+        return self._update_available
+
+    @updateAvailable.setter
+    def updateAvailable(self, value):
+        if self._update_available != value:
+            self._update_available = value
+            self.updateAvailableChanged.emit()
+
     @pyqtProperty(list, notify=launchesChanged)
     def launchDescriptions(self):
         return [
@@ -2480,6 +2516,7 @@ class Backend(QObject):
                 }
         return weather_data
 
+    @pyqtSlot()
     def update_weather(self):
         """Update weather data in a separate thread to avoid blocking UI"""
         if hasattr(self, '_weather_updater_thread') and self._weather_updater_thread.isRunning():
@@ -2507,6 +2544,7 @@ class Backend(QObject):
     def update_time(self):
         self.timeChanged.emit()
 
+    @pyqtSlot()
     def update_countdown(self):
         self.countdownChanged.emit()
 
@@ -3552,6 +3590,75 @@ class Backend(QObject):
         
         return f"file:///{flag_path}"
 
+    @pyqtSlot()
+    def runUpdateScript(self):
+        """Run the update and reboot script"""
+        try:
+            script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'update_and_reboot.sh')
+            logger.info(f"Running update script: {script_path}")
+            
+            # Run the script in the background since it will kill this process
+            subprocess.Popen(['bash', script_path], 
+                           stdout=subprocess.DEVNULL, 
+                           stderr=subprocess.DEVNULL,
+                           cwd=os.path.dirname(script_path))
+            
+            logger.info("Update script started - app will be terminated")
+            
+        except Exception as e:
+            logger.error(f"Error running update script: {e}")
+
+    def get_current_version(self):
+        """Get the current git commit hash"""
+        try:
+            result = subprocess.run(['git', 'rev-parse', 'HEAD'], 
+                                  capture_output=True, text=True, cwd=os.path.dirname(__file__))
+            if result.returncode == 0:
+                return result.stdout.strip()
+            else:
+                logger.warning("Failed to get current git commit hash")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting current version: {e}")
+            return None
+
+    def check_for_updates(self):
+        """Check if there's a newer version available on GitHub"""
+        try:
+            # Get current commit hash
+            current_version = self.get_current_version()
+            if not current_version:
+                logger.warning("Could not determine current version")
+                return False
+            
+            # Check GitHub API for latest commit on master branch
+            repo_owner = "hwpaige"
+            repo_name = "spacex-dashboard"
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/master"
+            
+            response = requests.get(api_url, timeout=10)
+            if response.status_code == 200:
+                latest_commit = response.json()
+                latest_version = latest_commit['sha']
+                
+                logger.info(f"Current version: {current_version[:8]}")
+                logger.info(f"Latest version: {latest_version[:8]}")
+                
+                # Compare versions
+                if current_version != latest_version:
+                    logger.info("Update available!")
+                    return True
+                else:
+                    logger.info("Already up to date")
+                    return False
+            else:
+                logger.warning(f"Failed to check GitHub API: {response.status_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking for updates: {e}")
+            return False
+
     def check_network_connectivity(self):
         """Check if we have active network connectivity (beyond just WiFi connection)"""
         logger.info("BOOT: check_network_connectivity called")
@@ -3637,9 +3744,27 @@ if __name__ == '__main__':
         port = 8080
         os.chdir(os.path.dirname(__file__))  # Serve from src directory
         handler = http.server.SimpleHTTPRequestHandler
-        with socketserver.TCPServer(("", port), handler) as httpd:
-            logger.info(f"Serving HTTP on port {port}")
-            httpd.serve_forever()
+
+        # Try to start server on port 8080, then try alternative ports if busy
+        for attempt_port in [8080, 8081, 8082, 8083, 8084]:
+            try:
+                with socketserver.TCPServer(("", attempt_port), handler) as httpd:
+                    # Allow address reuse to prevent "address already in use" errors
+                    httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                    logger.info(f"Serving HTTP on port {attempt_port}")
+                    httpd.serve_forever()
+            except OSError as e:
+                if e.errno == 10048:  # WinError 10048: Address already in use
+                    logger.warning(f"Port {attempt_port} already in use, trying next port...")
+                    continue
+                else:
+                    logger.error(f"Failed to start HTTP server on port {attempt_port}: {e}")
+                    break
+            except Exception as e:
+                logger.error(f"Unexpected error starting HTTP server: {e}")
+                break
+        else:
+            logger.error("Failed to start HTTP server on any available port (8080-8084)")
     
     server_thread = threading.Thread(target=start_http_server, daemon=True)
     server_thread.start()
@@ -4012,7 +4137,7 @@ Window {
         id: loadingScreen
         anchors.fill: parent
         color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
-        visible: backend.isLoading
+        visible: !!(backend && backend.isLoading)
         z: 1
 
         ColumnLayout {
@@ -4072,7 +4197,7 @@ Window {
         anchors.topMargin: 5
         anchors.bottomMargin: 5
         spacing: 5
-        visible: !backend.isLoading
+        visible: !!(!backend || !backend.isLoading)
 
         RowLayout {
             Layout.fillWidth: true
@@ -4095,7 +4220,7 @@ Window {
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: backend.mode === "spacex"
+                        visible: !!(backend && backend.mode === "spacex")
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -4134,7 +4259,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         color: "transparent"
-                        visible: backend.mode === "spacex"
+                        visible: backend && backend.mode === "spacex"
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -4192,7 +4317,6 @@ Window {
 
                                     ToolTip {
                                         text: modelData.tooltip
-                                        visible: parent.hovered
                                         delay: 500
                                     }
                                 }
@@ -4204,7 +4328,7 @@ Window {
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: backend.mode === "f1"
+                        visible: backend && backend.mode === "f1"
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -4291,7 +4415,6 @@ Window {
 
                                             ToolTip {
                                                 text: modelData.tooltip
-                                                visible: parent.hovered
                                                 delay: 500
                                             }
                                         }
@@ -4338,7 +4461,6 @@ Window {
 
                                             ToolTip {
                                                 text: modelData.tooltip
-                                                visible: parent.hovered
                                                 delay: 500
                                             }
                                         }
@@ -4368,7 +4490,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         anchors.margins: 10
-                        visible: backend.mode === "spacex"
+                        visible: backend && backend.mode === "spacex"
                         orientation: Qt.Vertical
                         clip: true
                         interactive: true
@@ -4435,7 +4557,7 @@ Window {
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: backend.mode === "f1"
+                        visible: backend && backend.mode === "f1"
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -4583,7 +4705,6 @@ Window {
 
                                         ToolTip {
                                             text: modelData.tooltip
-                                            visible: parent.hovered
                                             delay: 500
                                         }
                                     }
@@ -4598,7 +4719,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         color: "transparent"
-                        visible: backend.mode === "spacex"
+                        visible: backend && backend.mode === "spacex"
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -4645,7 +4766,6 @@ Window {
 
                                     ToolTip {
                                         text: modelData.tooltip
-                                        visible: parent.hovered
                                         delay: 500
                                     }
                                 }
@@ -4730,12 +4850,12 @@ Window {
                                             source: model && model.countryName ? backend.getCountryFlag(model.countryName) : ""
                                             width: 24
                                             height: 18
-                                            visible: backend.mode === "f1" && source !== ""
+                                            visible: backend && backend.mode === "f1" && source !== ""
                                         }
                                         Text {
                                             text: model && model.countryName && !backend.getCountryFlag(model.countryName) ? '🏁' : ''
                                             font.pixelSize: 16
-                                            visible: backend.mode === "f1" && text !== ''
+                                            visible: backend && backend.mode === "f1" && text !== ''
                                         }
                                         Text { 
                                             text: model && model.meetingName ? model.meetingName : ''; 
@@ -4752,7 +4872,7 @@ Window {
                                     // Sessions list
                                     Column {
                                         spacing: 2
-                                        visible: backend.mode === "f1"
+                                        visible: backend && backend.mode === "f1"
                                         
                                         property var raceSessions: model ? (model.sessions || []) : []
                                         
@@ -4801,7 +4921,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         color: "transparent"
-                        visible: backend.mode === "spacex"
+                        visible: backend && backend.mode === "spacex"
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -4844,7 +4964,6 @@ Window {
 
                                     ToolTip {
                                         text: modelData.tooltip
-                                        visible: parent.hovered
                                         delay: 500
                                     }
                                 }
@@ -4951,7 +5070,7 @@ Window {
                 anchors.fill: parent
                 anchors.leftMargin: 10
                 anchors.rightMargin: 10
-                spacing: 10
+                spacing: 8
 
                 // Left pill (time and weather) - FIXED WIDTH
                 Rectangle {
@@ -4993,8 +5112,9 @@ Window {
                 // Scrolling launch ticker
                 Rectangle {
                     id: tickerRect
-                    Layout.preferredWidth: 600
-                    Layout.maximumWidth: 600
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 400
+                    Layout.maximumWidth: 1500
                     height: 28
                     radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
@@ -5026,9 +5146,10 @@ Window {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-
-                // WiFi icon - SIMPLIFIED
+                // Right side controls - consistent spacing
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
                 Rectangle {
                     width: 28
                     height: 28
@@ -5039,63 +5160,106 @@ Window {
 
                     Text {
                         anchors.centerIn: parent
-                        text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                        text: "\uf021"
                         font.family: "Font Awesome 5 Free"
                         font.pixelSize: 12
-                        color: backend.wifiConnected ? "#4CAF50" : "#F44336"
+                        color: backend.theme === "dark" ? "white" : "black"
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            console.log("WiFi clicked - opening popup")
-                            wifiPopup.open()
-                            console.log("WiFi popup opened, visible:", wifiPopup.visible)
+                            console.log("Update clicked - running update script")
+                            backend.runUpdateScript()
                         }
+                    }
+
+                    ToolTip {
+                        text: backend.updateAvailable ? "Update Available - Click to Update and Reboot" : "Update and Reboot"
+                        delay: 500
+                    }
+
+                    // Red dot indicator for available updates
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: "#FF4444"
+                        border.color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.width: 1
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -2
+                        anchors.rightMargin: -2
+                        visible: !!(backend && backend.updateAvailable)
                     }
                 }
 
-                Item { Layout.fillWidth: true }
+                    // WiFi icon
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: 14
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
 
-                // Mode selector - F1/SpaceX toggle
-                Row {
-                    spacing: 4
-                    Repeater {
-                        model: ["F1", "SpaceX"]
-                        Rectangle {
-                            width: 50
-                            height: 32
-                            color: backend.mode === modelData.toLowerCase() ?
-                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                            radius: 16
-                            border.color: backend.mode === modelData.toLowerCase() ?
-                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                            border.width: backend.mode === modelData.toLowerCase() ? 2 : 1
+                        Text {
+                            anchors.centerIn: parent
+                            text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            color: backend.wifiConnected ? "#4CAF50" : "#F44336"
+                        }
 
-                            Behavior on color { ColorAnimation { duration: 200 } }
-                            Behavior on border.color { ColorAnimation { duration: 200 } }
-                            Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData === "F1" ? "\uf1b9" : "\uf135"  // Car for F1, Rocket for SpaceX
-                                color: backend.theme === "dark" ? "white" : "black"
-                                font.pixelSize: 16
-                                font.family: "Font Awesome 5 Free"
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                console.log("WiFi clicked - opening popup")
+                                wifiPopup.open()
+                                console.log("WiFi popup opened, visible:", wifiPopup.visible)
                             }
+                        }
+                    }
+                    // Mode selector - F1/SpaceX toggle
+                    Row {
+                        spacing: 4
+                        Repeater {
+                            model: ["F1", "SpaceX"]
+                            Rectangle {
+                                width: 50
+                                height: 32
+                                color: backend.mode === modelData.toLowerCase() ?
+                                       (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                       (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                radius: 16
+                                border.color: backend.mode === modelData.toLowerCase() ?
+                                             (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                             (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                border.width: backend.mode === modelData.toLowerCase() ? 2 : 1
 
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: backend.mode = modelData.toLowerCase()
-                            }
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                            ToolTip {
-                                visible: parent.parent.hovered
-                                text: modelData === "F1" ? "Formula 1 Dashboard" : "SpaceX Dashboard"
-                                delay: 500
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData === "F1" ? "\uf1b9" : "\uf135"  // Car for F1, Rocket for SpaceX
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    font.pixelSize: 16
+                                    font.family: "Font Awesome 5 Free"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: backend.mode = modelData.toLowerCase()
+                                }
+
+                                ToolTip {
+                                    text: modelData === "F1" ? "Formula 1 Dashboard" : "SpaceX Dashboard"
+                                    delay: 500
+                                }
                             }
                         }
                     }
@@ -5133,7 +5297,6 @@ Window {
                     }
 
                     ToolTip {
-                        visible: parent.parent.hovered
                         text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
                         delay: 500
                     }
@@ -5201,7 +5364,6 @@ Window {
                                     }
 
                                     ToolTip {
-                                        visible: parent.parent.hovered
                                         text: modelData
                                         delay: 500
                                     }
@@ -5245,7 +5407,6 @@ Window {
                                     }
 
                                     ToolTip {
-                                        visible: parent.parent.hovered
                                         text: modelData + " Theme"
                                         delay: 500
                                     }
@@ -5322,7 +5483,7 @@ Window {
 
                         Button {
                             text: "Disconnect"
-                            visible: backend.wifiConnected
+                            visible: !!(backend && backend.wifiConnected)
                             Layout.preferredWidth: 60
                             Layout.preferredHeight: 20
                             onClicked: {
@@ -5457,7 +5618,6 @@ Window {
                                 }
 
                                 ToolTip {
-                                    visible: parent.hovered
                                     text: "Remove from remembered networks"
                                     delay: 500
                                 }
@@ -5961,7 +6121,7 @@ Window {
             y: 0  // Position at top of screen
             modal: false
             focus: false
-            visible: backend.launchTrayVisible
+            visible: !!(backend && backend.launchTrayVisible)
             closePolicy: Popup.NoAutoClose
 
             leftPadding: 15
