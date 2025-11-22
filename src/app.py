@@ -3591,22 +3591,42 @@ class Backend(QObject):
         return f"file:///{flag_path}"
 
     @pyqtSlot()
+    @pyqtSlot()
     def runUpdateScript(self):
         """Run the update and reboot script"""
         try:
+            import platform
             script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'update_and_reboot.sh')
             logger.info(f"Running update script: {script_path}")
-            
-            # Run the script in the background since it will kill this process
-            subprocess.Popen(['bash', script_path], 
-                           stdout=subprocess.DEVNULL, 
-                           stderr=subprocess.DEVNULL,
-                           cwd=os.path.dirname(script_path))
-            
+            logger.info(f"Platform: {platform.system()}")
+
+            if platform.system() == 'Windows':
+                logger.error("Update script is designed for Linux/Raspberry Pi, not Windows")
+                return
+
+            # Run the script and capture output for debugging
+            process = subprocess.Popen(['bash', script_path],
+                                     stdout=subprocess.PIPE,
+                                     stderr=subprocess.PIPE,
+                                     text=True,
+                                     cwd=os.path.dirname(script_path))
+
+            # Wait a bit to see if the script starts properly
+            try:
+                stdout, stderr = process.communicate(timeout=10)
+                logger.info(f"Update script stdout: {stdout}")
+                if stderr:
+                    logger.error(f"Update script stderr: {stderr}")
+                logger.info(f"Update script exit code: {process.returncode}")
+            except subprocess.TimeoutExpired:
+                logger.info("Update script is running (timeout reached, this is expected)")
+
             logger.info("Update script started - app will be terminated")
-            
+
         except Exception as e:
             logger.error(f"Error running update script: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
 
     def get_current_version(self):
         """Get the current git commit hash"""
