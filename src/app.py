@@ -1284,6 +1284,11 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, dict)
     statusUpdate = pyqtSignal(str)
 
+    def __init__(self, load_f1=True, load_weather=True):
+        super().__init__()
+        self.load_f1 = load_f1
+        self.load_weather = load_weather
+
     def run(self):
         logger.info("DataLoader: Starting parallel data loading...")
         self.statusUpdate.emit("Fetching SpaceX launch data...")
@@ -1301,6 +1306,9 @@ class DataLoader(QObject):
         
         # Function to fetch F1 data
         def fetch_f1_data_wrapper():
+            if not self.load_f1:
+                logger.info("DataLoader: Skipping F1 data loading")
+                return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
             try:
                 self.statusUpdate.emit("Loading F1 race schedule...")
                 return fetch_f1_data()
@@ -1310,6 +1318,19 @@ class DataLoader(QObject):
         
         # Function to fetch weather data
         def fetch_weather_data():
+            if not self.load_weather:
+                logger.info("DataLoader: Skipping weather data loading")
+                weather_data = {}
+                for location in location_settings.keys():
+                    weather_data[location] = {
+                        'temperature_c': 25,
+                        'temperature_f': 77,
+                        'wind_speed_ms': 5,
+                        'wind_speed_kts': 9.7,
+                        'wind_direction': 90,
+                        'cloud_cover': 50
+                    }
+                return weather_data
             self.statusUpdate.emit("Getting weather data...")
             weather_data = {}
             for location, settings in location_settings.items():
@@ -1434,6 +1455,10 @@ class Backend(QObject):
         self._current_wifi_ssid = initial_wifi_ssid
         self._remembered_networks = self.load_remembered_networks()
         self._last_connected_network = self.load_last_connected_network()
+        
+        # Network connectivity properties (separate from WiFi)
+        self._network_connected = False
+        self._last_network_check = None
 
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
@@ -1660,29 +1685,13 @@ class Backend(QObject):
         connectivity_result = self.check_network_connectivity()
         logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
 
-        # Check for updates if we have network connectivity
-        logger.info("BOOT: Checking for app updates...")
-        try:
-            update_available = self.check_for_updates()
-            self.updateAvailable = update_available
-            # Cache version info for fast dialog opening
-            self._current_version_info = self.get_current_version_info() or {}
-            self._latest_version_info = self.get_latest_version_info() or {}
-            logger.info(f"BOOT: Update check result: {update_available}")
-        except Exception as e:
-            logger.error(f"BOOT: Error checking for updates: {e}")
-            self.updateAvailable = False
-            # Still try to cache current version info even if update check fails
-            try:
-                self._current_version_info = self.get_current_version_info() or {}
-            except Exception as e2:
-                logger.error(f"BOOT: Error getting current version info: {e2}")
-                self._current_version_info = {}
+        # Skip update checking initially - defer to later
+        logger.info("BOOT: Deferring update check to improve initial load time")
 
         if not connectivity_result:
             logger.warning("BOOT: No network connectivity detected - deferring data loading")
             logger.info("BOOT: Setting _data_loading_deferred = True")
-            self.setLoadingStatus("No network connection - using cached data")
+            self.setLoadingStatus("No internet connection - using cached data")
             # Set a flag to indicate data loading is deferred
             self._data_loading_deferred = True
             # Set up a loading timeout timer to prevent indefinite loading screen
@@ -1702,9 +1711,10 @@ class Backend(QObject):
         self._data_loading_deferred = False
         self.setLoadingStatus("Loading SpaceX launch data...")
 
+        # Start with minimal data loading - launch and weather data only
         if self.loader is None:
-            logger.info("BOOT: Creating new DataLoader...")
-            self.loader = DataLoader()
+            logger.info("BOOT: Creating DataLoader with deferred F1 data...")
+            self.loader = DataLoader(load_f1=False, load_weather=True)  # Defer F1 data
             self.thread = QThread()
             self.loader.moveToThread(self.thread)
             self.loader.finished.connect(self.on_data_loaded)
@@ -1716,6 +1726,51 @@ class Backend(QObject):
             logger.info("BOOT: DataLoader already exists")
 
         self._setup_timers()
+
+        # Set up deferred loading timer for F1 data and update check
+        logger.info("BOOT: Setting up deferred loading timer (5 seconds)")
+        self._deferred_loading_timer = QTimer(self)
+        self._deferred_loading_timer.setSingleShot(True)
+        self._deferred_loading_timer.timeout.connect(self._load_deferred_data)
+        self._deferred_loading_timer.start(5000)  # Load deferred data after 5 seconds
+
+    def _load_deferred_data(self):
+        """Load deferred data (F1 data and update check) after initial app load"""
+        logger.info("Loading deferred data (F1 and update check)...")
+        
+        # Check for updates
+        logger.info("Performing deferred update check...")
+        try:
+            update_available = self.check_for_updates()
+            self.updateAvailable = update_available
+            # Cache version info for fast dialog opening
+            self._current_version_info = self.get_current_version_info() or {}
+            self._latest_version_info = self.get_latest_version_info() or {}
+            logger.info(f"Deferred update check result: {update_available}")
+        except Exception as e:
+            logger.error(f"Error in deferred update check: {e}")
+            self.updateAvailable = False
+            # Still try to cache current version info even if update check fails
+            try:
+                self._current_version_info = self.get_current_version_info() or {}
+            except Exception as e2:
+                logger.error(f"Error getting current version info: {e2}")
+                self._current_version_info = {}
+
+        # Load F1 data
+        logger.info("Loading deferred F1 data...")
+        try:
+            f1_data = fetch_f1_data()
+            self._f1_data = f1_data
+            self.f1Changed.emit()
+            logger.info(f"Deferred F1 data loaded: {len(f1_data.get('schedule', []))} races, {len(f1_data.get('driver_standings', []))} drivers")
+        except Exception as e:
+            logger.error(f"Error loading deferred F1 data: {e}")
+            # Keep existing cached data if available
+            if not hasattr(self, '_f1_data') or not self._f1_data:
+                self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+
+        logger.info("Deferred data loading complete")
 
     def _setup_timers(self):
         """Set up all the periodic timers"""
@@ -1740,7 +1795,7 @@ class Backend(QObject):
         # WiFi timer for status updates
         self.wifi_timer = QTimer(self)
         self.wifi_timer.timeout.connect(self.update_wifi_status)
-        # Don't start timer automatically - only when WiFi popup is open
+        self.wifi_timer.start(10000)  # Check every 10 seconds
 
         # Update check timer - check every 6 hours (21600000 ms)
         self.update_check_timer = QTimer(self)
@@ -1906,6 +1961,10 @@ class Backend(QObject):
     @pyqtProperty(list, notify=rememberedNetworksChanged)
     def rememberedNetworks(self):
         return self._remembered_networks
+
+    @pyqtProperty(bool, notify=wifiConnectedChanged)
+    def networkConnected(self):
+        return self._network_connected
 
     @pyqtProperty(str, notify=timeChanged)
     def currentTime(self):
@@ -3444,18 +3503,15 @@ class Backend(QObject):
 
     @pyqtSlot()
     def startWifiTimer(self):
-        """Perform one-time WiFi status check when popup opens (no periodic checking)"""
-        # Only update status once when popup opens - no periodic timer
-        logger.info("Performing one-time WiFi status check on popup open")
-        self.update_wifi_status()
+        """WiFi timer now runs continuously - this method is kept for compatibility"""
+        # Timer runs continuously now, no need to start/stop it
+        logger.debug("WiFi timer is running continuously")
 
     @pyqtSlot()
     def stopWifiTimer(self):
-        """Stop WiFi status checking timer (no longer used - timer not started)"""
-        # Timer is no longer started, but keep method for compatibility
-        if self.wifi_timer.isActive():
-            self.wifi_timer.stop()
-            logger.info("WiFi status timer stopped")
+        """WiFi timer now runs continuously - this method is kept for compatibility"""
+        # Timer runs continuously now, no need to start/stop it
+        logger.debug("WiFi timer is running continuously")
 
     def update_wifi_status(self):
         """Update WiFi connection status with enhanced fallback methods"""
@@ -3646,6 +3702,26 @@ class Backend(QObject):
                             self.thread.start()
                         else:
                             logger.info("Backend: Deferred DataLoader already exists")
+            
+            # Check network connectivity if WiFi is connected
+            if connected:
+                # Only check network connectivity if it's been more than 30 seconds since last check
+                current_time = time.time()
+                if (self._last_network_check is None or 
+                    current_time - self._last_network_check > 30):
+                    logger.debug("Checking network connectivity...")
+                    network_connected = self.check_network_connectivity()
+                    if network_connected != self._network_connected:
+                        self._network_connected = network_connected
+                        logger.info(f"Network connectivity status changed: {network_connected}")
+                        self.wifiConnectedChanged.emit()  # Reuse the same signal for network status
+                    self._last_network_check = current_time
+            else:
+                # If WiFi is not connected, network is also not connected
+                if self._network_connected:
+                    self._network_connected = False
+                    logger.info("Network connectivity lost due to WiFi disconnection")
+                    self.wifiConnectedChanged.emit()
                 
         except Exception as e:
             logger.error(f"Error updating WiFi status: {e}")
@@ -4045,17 +4121,36 @@ class Backend(QObject):
                 logger.warning("BOOT: Network connectivity check failed: WiFi not connected")
                 return False
 
-            # Try to reach a reliable external host to verify internet connectivity
-            # Test with a simple HTTP request to a reliable service
-            logger.info("BOOT: Testing internet connectivity with HTTP request to google.com...")
+            # Try to reach multiple reliable external hosts for better reliability
+            # Test with multiple services in case one is down
+            test_urls = [
+                'http://www.google.com',
+                'http://www.cloudflare.com',
+                'http://1.1.1.1'  # Cloudflare DNS
+            ]
+
+            logger.info("BOOT: Testing internet connectivity with multiple HTTP requests...")
+            for url in test_urls:
+                try:
+                    # Use a shorter timeout for faster checking
+                    urllib.request.urlopen(url, timeout=3)
+                    logger.info(f"BOOT: Network connectivity check passed: Internet accessible via {url}")
+                    return True
+                except (urllib.error.URLError, socket.timeout, OSError) as e:
+                    logger.debug(f"BOOT: {url} failed: {e}")
+                    continue
+
+            # If all HTTP tests failed, try a DNS lookup as fallback
             try:
-                # Use a timeout to avoid hanging
-                urllib.request.urlopen('http://www.google.com', timeout=5)
-                logger.info("BOOT: Network connectivity check passed: Internet accessible")
+                logger.info("BOOT: HTTP tests failed, trying DNS lookup...")
+                socket.gethostbyname('google.com')
+                logger.info("BOOT: DNS lookup successful - network connectivity available")
                 return True
-            except (urllib.error.URLError, socket.timeout, OSError) as e:
-                logger.warning(f"BOOT: Network connectivity check failed: Cannot reach internet ({e})")
-                return False
+            except socket.gaierror as e:
+                logger.warning(f"BOOT: DNS lookup also failed: {e}")
+
+            logger.warning("BOOT: All network connectivity tests failed")
+            return False
 
         except Exception as e:
             logger.error(f"BOOT: Error checking network connectivity: {e}")
@@ -5657,10 +5752,10 @@ Window {
 
                         Text {
                             anchors.centerIn: parent
-                            text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                            text: backend.networkConnected ? "\uf1eb" : "\uf6ab"
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
-                            color: backend.wifiConnected ? "#4CAF50" : "#F44336"
+                            color: backend.networkConnected ? "#4CAF50" : "#F44336"
                         }
 
                         MouseArea {
