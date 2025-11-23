@@ -6253,7 +6253,7 @@ Window {
         // Virtual Keyboard for password entry
         Popup {
             id: virtualKeyboard
-            width: 360
+            width: 480
             height: 180
             x: passwordDialog.x + passwordDialog.width / 2 - width / 2
             y: passwordDialog.y + passwordDialog.height + 5
@@ -6285,13 +6285,13 @@ Window {
                 RowLayout {
                     spacing: 3
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: 340
+                    Layout.maximumWidth: 460
 
                     Repeater {
                         model: virtualKeyboard.numberMode ? ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] : (virtualKeyboard.shiftPressed ? ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"] : ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"])
                         Button {
                             text: modelData
-                            Layout.preferredWidth: 25
+                            Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
                             onClicked: passwordField.text += text
 
@@ -6315,13 +6315,13 @@ Window {
                 RowLayout {
                     spacing: 3
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: 340
+                    Layout.maximumWidth: 460
 
                     Repeater {
                         model: virtualKeyboard.numberMode ? ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"] : (virtualKeyboard.shiftPressed ? ["A", "S", "D", "F", "G", "H", "J", "K", "L"] : ["a", "s", "d", "f", "g", "h", "j", "k", "l"])
                         Button {
                             text: modelData
-                            Layout.preferredWidth: 25
+                            Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
                             onClicked: passwordField.text += text
 
@@ -6345,11 +6345,11 @@ Window {
                 RowLayout {
                     spacing: 3
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: 340
+                    Layout.maximumWidth: 460
 
                     Button {
                         text: "⇧"
-                        Layout.preferredWidth: 35
+                        Layout.preferredWidth: 46
                         Layout.preferredHeight: 30
                         enabled: !virtualKeyboard.numberMode
                         onClicked: {
@@ -6375,7 +6375,7 @@ Window {
                         model: virtualKeyboard.numberMode ? ["-", "_", "+", "=", "{", "}", "[", "]", "|"] : (virtualKeyboard.shiftPressed ? ["Z", "X", "C", "V", "B", "N", "M"] : ["z", "x", "c", "v", "b", "n", "m"])
                         Button {
                             text: modelData
-                            Layout.preferredWidth: 25
+                            Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
                             onClicked: passwordField.text += text
 
@@ -6397,7 +6397,7 @@ Window {
 
                     Button {
                         text: "⌫"
-                        Layout.preferredWidth: 35
+                        Layout.preferredWidth: 46
                         Layout.preferredHeight: 30
                         onClicked: passwordField.text = passwordField.text.slice(0, -1)
 
@@ -6420,11 +6420,11 @@ Window {
                 RowLayout {
                     spacing: 3
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: 340
+                    Layout.maximumWidth: 460
 
                     Button {
                         text: virtualKeyboard.numberMode ? "ABC" : "123"
-                        Layout.preferredWidth: 40
+                        Layout.preferredWidth: 53
                         Layout.preferredHeight: 30
                         onClicked: {
                             virtualKeyboard.numberMode = !virtualKeyboard.numberMode
@@ -6448,7 +6448,7 @@ Window {
 
                     Button {
                         text: "Space"
-                        Layout.preferredWidth: 200
+                        Layout.preferredWidth: 267
                         Layout.preferredHeight: 30
                         onClicked: passwordField.text += " "
 
@@ -6468,7 +6468,7 @@ Window {
 
                     Button {
                         text: "Done"
-                        Layout.preferredWidth: 50
+                        Layout.preferredWidth: 67
                         Layout.preferredHeight: 30
                         onClicked: virtualKeyboard.visible = false
 
