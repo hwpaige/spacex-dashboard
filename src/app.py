@@ -731,8 +731,85 @@ def fetch_f1_data():
                         'code': standing['driver']['shortName']
                     }
                 if 'team' in standing and 'Constructor' not in standing:
+                    # Normalize team name to standard format
+                    api_team_name = standing['team']['teamName'].lower()
+                    normalized_team_name = api_team_name
+                    
+                    # Map API team names to standard names
+                    team_name_mapping = {
+                        'mercedes-amg petronas f1 team': 'Mercedes',
+                        'oracle red bull racing': 'Red Bull',
+                        'scuderia ferrari hp': 'Ferrari', 
+                        'mclaren f1 team': 'McLaren',
+                        'bwt alpine f1 team': 'Alpine',
+                        'aston martin aramco cognizant f1 team': 'Aston Martin',
+                        'williams racing': 'Williams',
+                        'alfa romeo f1 team stake': 'Alfa Romeo',
+                        'moneygram haas f1 team': 'Haas F1 Team',
+                        'visa cash app rb f1 team': 'AlphaTauri',
+                        # Fallback mappings for shorter names
+                        'mercedes': 'Mercedes',
+                        'red bull': 'Red Bull',
+                        'ferrari': 'Ferrari',
+                        'mclaren': 'McLaren',
+                        'alpine': 'Alpine',
+                        'aston martin': 'Aston Martin',
+                        'williams': 'Williams',
+                        'alfa romeo': 'Alfa Romeo',
+                        'haas': 'Haas F1 Team',
+                        'rb': 'AlphaTauri',
+                        'alphatauri': 'AlphaTauri'
+                    }
+                if 'team' in standing and 'Constructor' not in standing:
+                    # Normalize team name to standard format
+                    api_team_name = standing['team']['teamName']
+                    api_team_name_lower = api_team_name.lower()
+                    normalized_team_name = api_team_name  # Default to original if no mapping found
+                    
+                    # Map API team names to standard names
+                    team_name_mapping = {
+                        'mclaren formula 1 team': 'McLaren',
+                        'red bull racing': 'Red Bull',
+                        'mercedes formula 1 team': 'Mercedes',
+                        'scuderia ferrari': 'Ferrari',
+                        'williams racing': 'Williams',
+                        'rb f1 team': 'AlphaTauri',
+                        'sauber f1 team': 'Alfa Romeo',
+                        'haas f1 team': 'Haas F1 Team',
+                        'aston martin f1 team': 'Aston Martin',
+                        'alpine f1 team': 'Alpine',
+                        # Keep old mappings as fallbacks
+                        'mercedes-amg petronas f1 team': 'Mercedes',
+                        'oracle red bull racing': 'Red Bull',
+                        'scuderia ferrari hp': 'Ferrari', 
+                        'mclaren f1 team': 'McLaren',
+                        'bwt alpine f1 team': 'Alpine',
+                        'aston martin aramco cognizant f1 team': 'Aston Martin',
+                        'alfa romeo f1 team stake': 'Alfa Romeo',
+                        'moneygram haas f1 team': 'Haas F1 Team',
+                        'visa cash app rb f1 team': 'AlphaTauri',
+                        # Fallback mappings for shorter names
+                        'mercedes': 'Mercedes',
+                        'red bull': 'Red Bull',
+                        'ferrari': 'Ferrari',
+                        'mclaren': 'McLaren',
+                        'alpine': 'Alpine',
+                        'aston martin': 'Aston Martin',
+                        'williams': 'Williams',
+                        'alfa romeo': 'Alfa Romeo',
+                        'haas': 'Haas F1 Team',
+                        'rb': 'AlphaTauri',
+                        'alphatauri': 'AlphaTauri'
+                    }
+                    
+                    if api_team_name_lower in team_name_mapping:
+                        normalized_team_name = team_name_mapping[api_team_name_lower]
+                        logger.info(f"Mapped '{api_team_name}' -> '{normalized_team_name}'")
+                    else:
+                        logger.warning(f"No mapping found for team: '{api_team_name}'")
+                    
                     standing['Constructor'] = {
-                        'name': standing['team']['teamName'],
+                        'name': normalized_team_name,
                         'constructorId': standing['teamId'],
                         'nationality': standing['team']['country']
                     }
@@ -762,8 +839,51 @@ def fetch_f1_data():
             # Normalize
             for standing in constructor_standings:
                 if 'team' in standing and 'Constructor' not in standing:
+                    # Normalize team name to standard format
+                    api_team_name = standing['team']['teamName'].lower()
+                    normalized_team_name = api_team_name
+                    
+                    # Map API team names to standard names
+                    team_name_mapping = {
+                        'mclaren formula 1 team': 'McLaren',
+                        'red bull racing': 'Red Bull',
+                        'mercedes formula 1 team': 'Mercedes',
+                        'scuderia ferrari': 'Ferrari',
+                        'williams racing': 'Williams',
+                        'rb f1 team': 'AlphaTauri',
+                        'sauber f1 team': 'Alfa Romeo',
+                        'haas f1 team': 'Haas F1 Team',
+                        'aston martin f1 team': 'Aston Martin',
+                        'alpine f1 team': 'Alpine',
+                        # Keep old mappings as fallbacks
+                        'mercedes-amg petronas f1 team': 'Mercedes',
+                        'oracle red bull racing': 'Red Bull',
+                        'scuderia ferrari hp': 'Ferrari', 
+                        'mclaren f1 team': 'McLaren',
+                        'bwt alpine f1 team': 'Alpine',
+                        'aston martin aramco cognizant f1 team': 'Aston Martin',
+                        'alfa romeo f1 team stake': 'Alfa Romeo',
+                        'moneygram haas f1 team': 'Haas F1 Team',
+                        'visa cash app rb f1 team': 'AlphaTauri',
+                        # Fallback mappings for shorter names
+                        'mercedes': 'Mercedes',
+                        'red bull': 'Red Bull',
+                        'ferrari': 'Ferrari',
+                        'mclaren': 'McLaren',
+                        'alpine': 'Alpine',
+                        'aston martin': 'Aston Martin',
+                        'williams': 'Williams',
+                        'alfa romeo': 'Alfa Romeo',
+                        'haas': 'Haas F1 Team',
+                        'rb': 'AlphaTauri',
+                        'alphatauri': 'AlphaTauri'
+                    }
+                    
+                    if api_team_name in team_name_mapping:
+                        normalized_team_name = team_name_mapping[api_team_name]
+                    
                     standing['Constructor'] = {
-                        'name': standing['team']['teamName'],
+                        'name': normalized_team_name,
                         'constructorId': standing['teamId'],
                         'nationality': standing['team']['country']
                     }
@@ -2625,7 +2745,64 @@ class Backend(QObject):
             driver_standings = drivers_cache['data'] if drivers_cache else []
             constructor_standings = constructors_cache['data'] if constructors_cache else []
             
-            logger.info("Backend: Loaded cached F1 data for offline mode")
+            # Apply team name normalization to cached data
+            def normalize_team_name(api_team_name):
+                api_team_name_lower = api_team_name.lower()
+                team_name_mapping = {
+                    'mclaren formula 1 team': 'McLaren',
+                    'red bull racing': 'Red Bull',
+                    'mercedes formula 1 team': 'Mercedes',
+                    'scuderia ferrari': 'Ferrari',
+                    'williams racing': 'Williams',
+                    'rb f1 team': 'AlphaTauri',
+                    'sauber f1 team': 'Alfa Romeo',
+                    'haas f1 team': 'Haas F1 Team',
+                    'aston martin f1 team': 'Aston Martin',
+                    'alpine f1 team': 'Alpine',
+                    # Keep old mappings as fallbacks
+                    'mercedes-amg petronas f1 team': 'Mercedes',
+                    'oracle red bull racing': 'Red Bull',
+                    'scuderia ferrari hp': 'Ferrari', 
+                    'mclaren f1 team': 'McLaren',
+                    'bwt alpine f1 team': 'Alpine',
+                    'aston martin aramco cognizant f1 team': 'Aston Martin',
+                    'alfa romeo f1 team stake': 'Alfa Romeo',
+                    'moneygram haas f1 team': 'Haas F1 Team',
+                    'visa cash app rb f1 team': 'AlphaTauri',
+                    # Fallback mappings for shorter names
+                    'mercedes': 'Mercedes',
+                    'red bull': 'Red Bull',
+                    'ferrari': 'Ferrari',
+                    'mclaren': 'McLaren',
+                    'alpine': 'Alpine',
+                    'aston martin': 'Aston Martin',
+                    'williams': 'Williams',
+                    'alfa romeo': 'Alfa Romeo',
+                    'haas': 'Haas F1 Team',
+                    'rb': 'AlphaTauri',
+                    'alphatauri': 'AlphaTauri'
+                }
+                return team_name_mapping.get(api_team_name_lower, api_team_name)
+            
+            # Normalize driver standings
+            for standing in driver_standings:
+                if 'Constructor' in standing and 'name' in standing['Constructor']:
+                    original_name = standing['Constructor']['name']
+                    normalized_name = normalize_team_name(original_name)
+                    standing['Constructor']['name'] = normalized_name
+                    if original_name != normalized_name:
+                        pass
+            
+            # Normalize constructor standings  
+            for standing in constructor_standings:
+                if 'Constructor' in standing and 'name' in standing['Constructor']:
+                    original_name = standing['Constructor']['name']
+                    normalized_name = normalize_team_name(original_name)
+                    standing['Constructor']['name'] = normalized_name
+                    if original_name != normalized_name:
+                        pass
+            
+            logger.info("Backend: Loaded and normalized cached F1 data for offline mode")
             return {
                 'schedule': schedule,
                 'driver_standings': driver_standings,
@@ -4051,6 +4228,7 @@ context.setContextProperty("radarLocations", radar_locations)
 context.setContextProperty("circuitCoords", circuit_coords)
 context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
 context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1-logo.png').replace('\\', '/'))
+context.setContextProperty("f1TeamsPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1_teams').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
 
 globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
@@ -4260,6 +4438,8 @@ Window {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
+                        Layout.maximumHeight: 30
+                        Layout.alignment: Qt.AlignTop
                         color: "transparent"
                         visible: backend && backend.mode === "spacex"
 
@@ -4335,7 +4515,7 @@ Window {
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 0
-                            spacing: 5
+                            spacing: 0
 
                             Text {
                                 text: "F1 Driver Standings Over Time"
@@ -4350,6 +4530,7 @@ Window {
                                 id: f1ChartView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                Layout.margins: 5
 
                                 // Bind url to chart file URL that updates reactively
                                 url: backend.f1ChartUrl
@@ -4368,15 +4549,20 @@ Window {
                                 }
                             }
 
-                            // F1 Stat selector buttons
-                            RowLayout {
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 0
-                                spacing: 10
+                            // F1 Stat selector buttons container
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                Layout.maximumHeight: 30
+                                Layout.alignment: Qt.AlignTop
+                                color: "transparent"
+                                visible: backend && backend.mode === "f1"
 
-                                // Chart category buttons
                                 RowLayout {
+                                    anchors.centerIn: parent
                                     spacing: 6
+
+                                    // Chart category buttons
                                     Repeater {
                                         model: [
                                             {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
@@ -4421,11 +4607,8 @@ Window {
                                             }
                                         }
                                     }
-                                }
 
-                                // Stat type buttons
-                                RowLayout {
-                                    spacing: 6
+                                    // Stat type buttons
                                     Repeater {
                                         model: [
                                             {"type": "points", "icon": "\uf091", "tooltip": "Points"},
@@ -4563,113 +4746,175 @@ Window {
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 5
-
-                        Text {
-                            text: backend.f1StandingsType === "drivers" ? "Driver Standings" : "Constructor Standings"
-                            font.pixelSize: 14
-                            font.bold: true
-                            color: backend.theme === "dark" ? "white" : "black"
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.margins: 5
-                        }
+                            anchors.margins: 0
+                            spacing: 0
 
                         // Standings List
                         Rectangle {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                            radius: 6
+                            Layout.margins: 5
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                            radius: 8
+                            border.color: backend.theme === "dark" ? "#404040" : "#e0e0e0"
+                            border.width: 1
 
-                            ListView {
+                            GridView {
+                                id: standingsGrid
                                 anchors.fill: parent
-                                anchors.margins: 10
+                                anchors.margins: 5
                                 model: backend.f1StandingsType === "drivers" ?
-                                       backend.driverStandings.slice(0, 10) :
+                                       backend.driverStandings.slice(0, 20) :
                                        backend.constructorStandings.slice(0, 10)
                                 clip: true
+                                cellWidth: (width - 10) / 2  // 2 columns accounting for margins
+                                cellHeight: 22  // Slightly more compact
+                                flow: GridView.TopToBottom  // Fill columns top to bottom
+
                                 delegate: Rectangle {
-                                    width: ListView.view.width
-                                    height: 35
+                                    width: standingsGrid.cellWidth - 2
+                                    height: 18  // Match cell height minus margins
                                     color: "transparent"
 
-                                    Row {
-                                        spacing: 10
-                                        anchors.verticalCenter: parent.verticalCenter
-                                        anchors.left: parent.left
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        color: index % 2 === 0 ?
+                                               (backend.theme === "dark" ? "#404040" : "#f8f8f8") :
+                                               (backend.theme === "dark" ? "#353535" : "#ffffff")
+                                        radius: 4
+                                        border.color: backend.theme === "dark" ? "#555555" : "#e8e8e8"
+                                        border.width: 1
 
+                                        // Position number - always same color
                                         Text {
-                                            text: modelData.position;
-                                            font.pixelSize: 12;
-                                            color: backend.theme === "dark" ? "white" : "black";
-                                            width: 20
-                                        }
-
-                                        // Team logo/color indicator
-                                        Rectangle {
                                             width: 16
-                                            height: 16
-                                            radius: 8
-                                            color: {
-                                                var teamName = backend.f1StandingsType === "drivers" ?
-                                                              (modelData.Constructors && modelData.Constructors.length > 0 ?
-                                                               modelData.Constructors[0].name : "Unknown") :
-                                                              modelData.Constructor.name;
+                                            height: parent.height - 1
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                            horizontalAlignment: Text.AlignCenter
+                                            text: modelData.position
+                                            font.pixelSize: 7
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "#ffffff" : "#333333"
+                                        }
 
-                                                // Team color mapping
-                                                var teamColors = {
-                                                    "Mercedes": "#00D2BE",
-                                                    "Red Bull": "#0600EF",
-                                                    "Ferrari": "#DC0000",
-                                                    "McLaren": "#FF8700",
-                                                    "Alpine": "#0090FF",
-                                                    "Aston Martin": "#006F62",
-                                                    "Williams": "#005AFF",
-                                                    "Alfa Romeo": "#900000",
-                                                    "Haas F1 Team": "#FFFFFF",
-                                                    "AlphaTauri": "#2B4562"
-                                                };
-                                                return teamColors[teamName] || "#666666";
+                                        Row {
+                                            spacing: 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 18  // Leave space for position number
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 40  // Leave space for points
+
+                                            // Team logo
+                                            Image {
+                                                width: 14
+                                                height: 14
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                source: {
+                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
+
+                                                    // Normalize team name for lookup
+                                                    var normalizedTeamName = teamName.toLowerCase();
+                                                    var lookupName = normalizedTeamName;
+                                                    
+                                                    // Map raw API names to standard names
+                                                    var nameMapping = {
+                                                        "mclaren formula 1 team": "McLaren",
+                                                        "red bull racing": "Red Bull",
+                                                        "mercedes formula 1 team": "Mercedes",
+                                                        "scuderia ferrari": "Ferrari",
+                                                        "williams racing": "Williams",
+                                                        "rb f1 team": "AlphaTauri",
+                                                        "sauber f1 team": "Alfa Romeo",
+                                                        "haas f1 team": "Haas F1 Team",
+                                                        "aston martin f1 team": "Aston Martin",
+                                                        "alpine f1 team": "Alpine"
+                                                    };
+                                                    
+                                                    if (nameMapping[normalizedTeamName]) {
+                                                        lookupName = nameMapping[normalizedTeamName];
+                                                    }
+
+                                                    var teamLogos = {
+                                                        "Mercedes": "file:///" + f1TeamsPath + "/mercedes.svg",
+                                                        "Red Bull": "file:///" + f1TeamsPath + "/red_bull.svg",
+                                                        "Ferrari": "file:///" + f1TeamsPath + "/ferrari.svg",
+                                                        "McLaren": "file:///" + f1TeamsPath + "/mclaren.svg",
+                                                        "Alpine": "file:///" + f1TeamsPath + "/alpine.svg",
+                                                        "Aston Martin": "file:///" + f1TeamsPath + "/aston_martin.svg",
+                                                        "Williams": "file:///" + f1TeamsPath + "/williams.svg",
+                                                        "Alfa Romeo": "file:///" + f1TeamsPath + "/alfa_romeo.svg",
+                                                        "Haas F1 Team": "file:///" + f1TeamsPath + "/haas.svg",
+                                                        "AlphaTauri": "file:///" + f1TeamsPath + "/alpha_tauri.svg"
+                                                    };
+                                                    var logo = teamLogos[lookupName];
+                                                    return logo || "";
+                                                }
+                                                fillMode: Image.PreserveAspectFit
+                                                visible: source !== ""
                                             }
-                                            border.color: backend.theme === "dark" ? "#ffffff" : "#000000"
-                                            border.width: {
-                                                var teamName = backend.f1StandingsType === "drivers" ?
-                                                              (modelData.Constructors && modelData.Constructors.length > 0 ?
-                                                               modelData.Constructors[0].name : "Unknown") :
-                                                              modelData.Constructor.name;
-                                                return teamName === "Haas F1 Team" ? 1 : 0;  // Border for white Haas logo
+
+                                            // Driver/Constructor name
+                                            Text {
+                                                text: backend.f1StandingsType === "drivers" ?
+                                                      (modelData.Driver.givenName + " " + modelData.Driver.familyName) :
+                                                      modelData.Constructor.name
+                                                font.pixelSize: 8
+                                                font.bold: true
+                                                color: backend.theme === "dark" ? "#ffffff" : "#333333"
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            // Team color indicator
+                                            Rectangle {
+                                                width: 12
+                                                height: 12
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                color: {
+                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
+                                                    return color || "#FF0000";
+                                                }
+                                                radius: 2
+                                                border.color: backend.theme === "dark" ? "#666666" : "#cccccc"
+                                                border.width: 1
                                             }
                                         }
 
+                                        // Points - positioned at far right
                                         Text {
-                                            text: backend.f1StandingsType === "drivers" ?
-                                                  (modelData.Driver.givenName + " " + modelData.Driver.familyName) :
-                                                  modelData.Constructor.name;
-                                            font.pixelSize: 12;
-                                            color: backend.theme === "dark" ? "white" : "black";
-                                            width: 120
-                                        }
-                                        Text {
-                                            text: modelData.points;
-                                            font.pixelSize: 12;
-                                            color: backend.theme === "dark" ? "white" : "black";
-                                            width: 40
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.points + " pts"
+                                            font.pixelSize: 7
+                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                            font.bold: true
+                                            width: 35
+                                            horizontalAlignment: Text.AlignRight
                                         }
                                     }
                                 }
                             }
                         }
 
-                        // Standings type selector buttons
-                        RowLayout {
-                            Layout.alignment: Qt.AlignHCenter
-                            Layout.margins: 0
-                            spacing: 10
+                        // Standings type selector buttons container
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            Layout.maximumHeight: 30
+                            Layout.alignment: Qt.AlignTop
+                            color: "transparent"
+                            visible: backend && backend.mode === "f1"
 
-                            // Standings type buttons
                             RowLayout {
+                                anchors.centerIn: parent
                                 spacing: 6
+
+                                // Standings type buttons
                                 Repeater {
                                     model: [
                                         {"type": "drivers", "icon": "\uf1b9", "tooltip": "Driver Standings"},
@@ -4720,6 +4965,8 @@ Window {
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
+                        Layout.maximumHeight: 30
+                        Layout.alignment: Qt.AlignTop
                         color: "transparent"
                         visible: backend && backend.mode === "spacex"
 
@@ -4918,21 +5165,26 @@ Window {
                         }
                     }
 
-                    // Launch view buttons container
+                    // Launch/Race view buttons container
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
+                        Layout.maximumHeight: 30
+                        Layout.alignment: Qt.AlignTop
                         color: "transparent"
-                        visible: backend && backend.mode === "spacex"
+                        visible: backend && (backend.mode === "spacex" || backend.mode === "f1")
 
                         RowLayout {
                             anchors.centerIn: parent
                             spacing: 6
 
                             Repeater {
-                                model: [
+                                model: backend.mode === "spacex" ? [
                                     {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
                                     {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"}
+                                ] : [
+                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Races"},
+                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Races"}
                                 ]
                                 Rectangle {
                                     Layout.preferredWidth: 40
