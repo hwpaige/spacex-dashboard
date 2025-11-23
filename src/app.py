@@ -6163,8 +6163,7 @@ Window {
                     0.7 + launchTray.colorFactor * 0.3  // Fade from 70% to 100% opacity
                 )
                 radius: 12
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                border.width: 1
+                border.width: 0
 
                 Behavior on color {
                     ColorAnimation { duration: 300 }
