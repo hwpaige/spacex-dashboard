@@ -12,7 +12,7 @@ import concurrent.futures
 import urllib.request
 import urllib.error
 import socket
-from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene
+from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
@@ -1398,6 +1398,7 @@ class Backend(QObject):
     launchTrayVisibilityChanged = pyqtSignal()
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
+    updateDialogRequested = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1421,6 +1422,10 @@ class Backend(QObject):
         self._launch_trends_cache = {}  # Cache for launch trends series
         self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
+        self._last_update_check = None  # Track when updates were last checked
+        self._current_version_info = None  # Cached current version info
+        self._latest_version_info = None  # Cached latest version info
+        self._update_checking = False  # Track if update check is in progress
         
         # WiFi properties - initialize with provided values
         self._wifi_networks = []
@@ -1660,10 +1665,19 @@ class Backend(QObject):
         try:
             update_available = self.check_for_updates()
             self.updateAvailable = update_available
+            # Cache version info for fast dialog opening
+            self._current_version_info = self.get_current_version_info() or {}
+            self._latest_version_info = self.get_latest_version_info() or {}
             logger.info(f"BOOT: Update check result: {update_available}")
         except Exception as e:
             logger.error(f"BOOT: Error checking for updates: {e}")
             self.updateAvailable = False
+            # Still try to cache current version info even if update check fails
+            try:
+                self._current_version_info = self.get_current_version_info() or {}
+            except Exception as e2:
+                logger.error(f"BOOT: Error getting current version info: {e2}")
+                self._current_version_info = {}
 
         if not connectivity_result:
             logger.warning("BOOT: No network connectivity detected - deferring data loading")
@@ -2351,6 +2365,28 @@ class Backend(QObject):
         if self._update_available != value:
             self._update_available = value
             self.updateAvailableChanged.emit()
+
+    @pyqtProperty('QVariantMap', notify=updateDialogRequested)
+    def currentVersionInfo(self):
+        if self._current_version_info is None:
+            self._current_version_info = self.get_current_version_info() or {}
+        return self._current_version_info
+
+    @pyqtProperty('QVariantMap', notify=updateDialogRequested)
+    def latestVersionInfo(self):
+        if self._latest_version_info is None:
+            self._latest_version_info = self.get_latest_version_info() or {}
+        return self._latest_version_info
+
+    @pyqtProperty(str, notify=updateDialogRequested)
+    def lastUpdateCheckTime(self):
+        if hasattr(self, '_last_update_check') and self._last_update_check:
+            return self._last_update_check.strftime("%H:%M:%S")
+        return "Never"
+
+    @pyqtProperty(bool, notify=updateDialogRequested)
+    def updateChecking(self):
+        return self._update_checking
 
     @pyqtProperty(list, notify=launchesChanged)
     def launchDescriptions(self):
@@ -3801,9 +3837,99 @@ class Backend(QObject):
             logger.error(f"Error getting current version: {e}")
             return None
 
+    def get_current_version_info(self):
+        """Get current version info including commit hash and message"""
+        try:
+            # Get current commit hash
+            result = subprocess.run(['git', 'rev-parse', 'HEAD'],
+                                  capture_output=True, text=True, cwd=os.path.dirname(__file__))
+            if result.returncode != 0:
+                logger.warning("Failed to get current git commit hash")
+                return None
+
+            commit_hash = result.stdout.strip()
+
+            # Get commit message
+            result = subprocess.run(['git', 'log', '-1', '--pretty=format:%s', commit_hash],
+                                  capture_output=True, text=True, cwd=os.path.dirname(__file__))
+            if result.returncode != 0:
+                logger.warning("Failed to get current git commit message")
+                commit_message = "Unknown"
+            else:
+                commit_message = result.stdout.strip()
+
+            return {
+                'hash': commit_hash,
+                'short_hash': commit_hash[:8],
+                'message': commit_message
+            }
+        except Exception as e:
+            logger.error(f"Error getting current version info: {e}")
+            return None
+
+    def get_latest_version_info(self):
+        """Get latest version info from GitHub including commit hash and message"""
+        try:
+            repo_owner = "hwpaige"
+            repo_name = "spacex-dashboard"
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/master"
+
+            response = requests.get(api_url, timeout=10)
+            if response.status_code == 200:
+                latest_commit = response.json()
+                return {
+                    'hash': latest_commit['sha'],
+                    'short_hash': latest_commit['sha'][:8],
+                    'message': latest_commit['commit']['message'],
+                    'author': latest_commit['commit']['author']['name'],
+                    'date': latest_commit['commit']['author']['date']
+                }
+            else:
+                logger.warning(f"Failed to get latest version from GitHub API: {response.status_code}")
+                return None
+        except Exception as e:
+            logger.error(f"Error getting latest version info: {e}")
+            return None
+
+    @pyqtSlot()
+    def checkForUpdatesNow(self):
+        """Start an asynchronous check for updates"""
+        if self._update_checking:
+            return  # Already checking, ignore
+
+        self._update_checking = True
+        self.updateDialogRequested.emit()  # Update UI to show checking state
+
+        # Use QTimer.singleShot to defer the actual checking work
+        QTimer.singleShot(0, self._perform_update_check)
+
+    def _perform_update_check(self):
+        """Perform the actual update check (called asynchronously)"""
+        try:
+            from datetime import datetime
+            update_available = self.check_for_updates()
+            self._last_update_check = datetime.now()
+            # Refresh cached version info
+            self._current_version_info = self.get_current_version_info() or {}
+            self._latest_version_info = self.get_latest_version_info() or {}
+            self.updateAvailable = update_available
+        except Exception as e:
+            logger.error(f"Error during update check: {e}")
+        finally:
+            self._update_checking = False
+            self.updateDialogRequested.emit()  # Refresh the dialog with results
+
+    @pyqtSlot()
+    def show_update_dialog(self):
+        """Show the update dialog"""
+        self.updateDialogRequested.emit()
+
     def check_for_updates(self):
         """Check if there's a newer version available on GitHub"""
+        from datetime import datetime
         try:
+            # Update last checked time
+            self._last_update_check = datetime.now()
             # Get current commit hash
             current_version = self.get_current_version()
             if not current_version:
@@ -5423,8 +5549,8 @@ Window {
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
-                            console.log("Update clicked - running update script")
-                            backend.runUpdateScript()
+                            console.log("Update clicked - showing update dialog")
+                            backend.show_update_dialog()
                         }
                     }
 
@@ -6289,6 +6415,248 @@ Window {
                         }
                     }
                 }
+            }
+        }
+
+        // Update popup
+        Popup {
+            id: updatePopup
+            width: 450
+            height: 280
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 15
+                spacing: 10
+
+                // Title and last checked
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 10
+
+                    Text {
+                        text: "Update Available"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: backend.theme === "dark" ? "white" : "black"
+                    }
+
+                    Text {
+                        text: "• Last checked: " + backend.lastUpdateCheckTime
+                        font.pixelSize: 10
+                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+
+                // Current version - compact single line
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 45
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+
+                        Text {
+                            text: "\uf126"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 14
+                            color: "#2196F3"
+                            Layout.preferredWidth: 20
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Current: " + (backend.currentVersionInfo.short_hash || "Unknown")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                            }
+
+                            Text {
+                                text: backend.currentVersionInfo.message || "Unable to retrieve current version"
+                                font.pixelSize: 9
+                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+
+                // Latest version - compact single line
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 45
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+
+                        Text {
+                            text: "\uf062"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 14
+                            color: "#4CAF50"
+                            Layout.preferredWidth: 20
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Latest: " + (backend.latestVersionInfo.short_hash || "Unknown")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                            }
+
+                            Text {
+                                text: backend.latestVersionInfo.message || "Unable to retrieve latest version"
+                                font.pixelSize: 9
+                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+
+                // Status message - compact
+                Text {
+                    text: {
+                        var current = backend.currentVersionInfo.hash
+                        var latest = backend.latestVersionInfo.hash
+                        if (!current || !latest) {
+                            return "Unable to check for updates"
+                        } else if (current === latest) {
+                            return "✓ You are up to date!"
+                        } else {
+                            return "⬆ New version available!"
+                        }
+                    }
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: {
+                        var current = backend.currentVersionInfo.hash
+                        var latest = backend.latestVersionInfo.hash
+                        if (!current || !latest) {
+                            return "#F44336"
+                        } else if (current === latest) {
+                            return "#4CAF50"
+                        } else {
+                            return "#FF9800"
+                        }
+                    }
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Buttons - compact horizontal layout
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 12
+
+                    Button {
+                        text: backend.updateChecking ? "Checking..." : "Check Now"
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 28
+                        enabled: !backend.updateChecking
+                        onClicked: backend.checkForUpdatesNow()
+
+                        background: Rectangle {
+                            color: backend.updateChecking ?
+                                (backend.theme === "dark" ? "#666" : "#ccc") :
+                                (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0")
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Cancel"
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 28
+                        onClicked: updatePopup.close()
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Update Now"
+                        Layout.preferredWidth: 90
+                        Layout.preferredHeight: 28
+                        visible: {
+                            var current = backend.currentVersionInfo.hash
+                            var latest = backend.latestVersionInfo.hash
+                            return current && latest && current !== latest
+                        }
+                        onClicked: {
+                            backend.runUpdateScript()
+                            updatePopup.close()
+                        }
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        Connections {
+            target: backend
+            function onUpdateDialogRequested() {
+                updatePopup.open()
             }
         }
 
