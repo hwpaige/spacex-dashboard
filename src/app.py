@@ -2895,7 +2895,7 @@ class Backend(QObject):
             self._weather_updater_thread.quit()
             self._weather_updater_thread.wait()
 
-    def _auto_reconnect_to_last_network(self):
+    def _auto_reconnect_to_last_network(self, boot_time=False):
         """Auto-reconnect to the last connected network if not currently connected"""
         try:
             # Only attempt reconnection if we're not already connected and not currently connecting
@@ -2919,27 +2919,34 @@ class Backend(QObject):
                 return
 
             self._last_reconnect_attempt = current_time
-            logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
 
-            # Find the network in remembered networks
-            remembered_network = None
-            for network in self._remembered_networks:
-                if network['ssid'] == last_ssid:
-                    remembered_network = network
-                    break
+            if boot_time:
+                # For boot-time reconnection, scan for available networks and try the most recent remembered one
+                logger.info("BOOT: Scanning for available networks for auto-reconnection...")
+                self._scan_and_reconnect_to_best_network()
+            else:
+                # For regular auto-reconnection, try the last connected network
+                logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
 
-            if not remembered_network or not remembered_network.get('password'):
-                logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
-                return
+                # Find the network in remembered networks
+                remembered_network = None
+                for network in self._remembered_networks:
+                    if network['ssid'] == last_ssid:
+                        remembered_network = network
+                        break
 
-            # Check if the network is currently available before attempting connection
-            available_networks = [net['ssid'] for net in self._wifi_networks]
-            if last_ssid not in available_networks:
-                logger.info(f"Last connected network '{last_ssid}' not currently available, skipping auto-reconnection")
-                return
+                if not remembered_network or not remembered_network.get('password'):
+                    logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
+                    return
 
-            # Add a small delay before attempting reconnection to avoid race conditions
-            QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(last_ssid, remembered_network['password']))
+                # Check if the network is currently available before attempting connection
+                available_networks = [net['ssid'] for net in self._wifi_networks]
+                if last_ssid not in available_networks:
+                    logger.info(f"Last connected network '{last_ssid}' not currently available, skipping auto-reconnection")
+                    return
+
+                # Add a small delay before attempting reconnection to avoid race conditions
+                QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(last_ssid, remembered_network['password']))
 
         except Exception as e:
             logger.error(f"Error during auto-reconnection setup: {e}")
@@ -3283,6 +3290,8 @@ class Backend(QObject):
                                     self.add_remembered_network(ssid, password)
                                     # Save as last connected network
                                     self.save_last_connected_network(ssid)
+                                    # Manage NetworkManager autoconnect settings
+                                    self._manage_networkmanager_autoconnect(ssid)
                                 else:
                                     logger.error(f"Failed to select network: {select_result.stderr}")
                                     # Clean up
@@ -3303,6 +3312,8 @@ class Backend(QObject):
                         if self._try_nmcli_connection(ssid, password, self.get_wifi_interface()):
                             self.add_remembered_network(ssid, password)
                             self.save_last_connected_network(ssid)
+                            # Manage NetworkManager autoconnect settings
+                            self._manage_networkmanager_autoconnect(ssid)
                     except Exception as e2:
                         logger.error(f"nmcli fallback also failed: {e2}")
                     
@@ -3370,6 +3381,66 @@ class Backend(QObject):
             self.wifiConnectedChanged.emit()
         except Exception as e:
             logger.error(f"Error disconnecting WiFi: {e}")
+
+    def _manage_networkmanager_autoconnect(self, current_ssid):
+            """Manage NetworkManager autoconnect settings to prioritize the current network"""
+            try:
+                # Only manage autoconnect on Linux systems
+                if platform.system() != 'Linux':
+                    return
+    
+                logger.info(f"Managing NetworkManager autoconnect settings for network: {current_ssid}")
+    
+                # Check if nmcli is available
+                nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
+                if nmcli_check.returncode != 0:
+                    logger.debug("nmcli not available, skipping autoconnect management")
+                    return
+    
+                # Get all NetworkManager connections
+                result = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE,AUTOCONNECT', 'connection', 'show'],
+                                      capture_output=True, text=True, timeout=10)
+    
+                if result.returncode != 0:
+                    logger.warning(f"Failed to get NetworkManager connections: {result.stderr}")
+                    return
+    
+                connections = []
+                for line in result.stdout.strip().split('\n'):
+                    if line.strip():
+                        parts = line.split(':')
+                        if len(parts) >= 3:
+                            name = parts[0]
+                            conn_type = parts[1]
+                            autoconnect = parts[2].lower() == 'yes'
+                            if conn_type.lower() == 'wifi':
+                                connections.append({'name': name, 'autoconnect': autoconnect})
+    
+                logger.debug(f"Found WiFi connections: {connections}")
+    
+                # Disable autoconnect for all WiFi connections except the current one
+                for conn in connections:
+                    if conn['name'] == current_ssid:
+                        # Enable autoconnect for the current network
+                        if not conn['autoconnect']:
+                            logger.info(f"Enabling autoconnect for current network: {current_ssid}")
+                            enable_result = subprocess.run(['nmcli', 'connection', 'modify', current_ssid, 'autoconnect', 'yes'],
+                                                         capture_output=True, text=True, timeout=5)
+                            if enable_result.returncode != 0:
+                                logger.warning(f"Failed to enable autoconnect for {current_ssid}: {enable_result.stderr}")
+                    else:
+                        # Disable autoconnect for other networks
+                        if conn['autoconnect']:
+                            logger.info(f"Disabling autoconnect for network: {conn['name']}")
+                            disable_result = subprocess.run(['nmcli', 'connection', 'modify', conn['name'], 'autoconnect', 'no'],
+                                                          capture_output=True, text=True, timeout=5)
+                            if disable_result.returncode != 0:
+                                logger.warning(f"Failed to disable autoconnect for {conn['name']}: {disable_result.stderr}")
+    
+                logger.info("NetworkManager autoconnect settings updated successfully")
+    
+            except Exception as e:
+                logger.error(f"Error managing NetworkManager autoconnect settings: {e}")
 
     @pyqtSlot()
     def startWifiTimer(self):
