@@ -1284,11 +1284,6 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, dict)
     statusUpdate = pyqtSignal(str)
 
-    def __init__(self, load_f1=True, load_weather=True):
-        super().__init__()
-        self.load_f1 = load_f1
-        self.load_weather = load_weather
-
     def run(self):
         logger.info("DataLoader: Starting parallel data loading...")
         self.statusUpdate.emit("Fetching SpaceX launch data...")
@@ -1306,9 +1301,6 @@ class DataLoader(QObject):
         
         # Function to fetch F1 data
         def fetch_f1_data_wrapper():
-            if not self.load_f1:
-                logger.info("DataLoader: Skipping F1 data loading")
-                return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
             try:
                 self.statusUpdate.emit("Loading F1 race schedule...")
                 return fetch_f1_data()
@@ -1318,19 +1310,6 @@ class DataLoader(QObject):
         
         # Function to fetch weather data
         def fetch_weather_data():
-            if not self.load_weather:
-                logger.info("DataLoader: Skipping weather data loading")
-                weather_data = {}
-                for location in location_settings.keys():
-                    weather_data[location] = {
-                        'temperature_c': 25,
-                        'temperature_f': 77,
-                        'wind_speed_ms': 5,
-                        'wind_speed_kts': 9.7,
-                        'wind_direction': 90,
-                        'cloud_cover': 50
-                    }
-                return weather_data
             self.statusUpdate.emit("Getting weather data...")
             weather_data = {}
             for location, settings in location_settings.items():
@@ -1413,6 +1392,7 @@ class Backend(QObject):
     wifiConnectedChanged = pyqtSignal()
     wifiConnectingChanged = pyqtSignal()
     rememberedNetworksChanged = pyqtSignal()
+    networkConnectedChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
@@ -1685,8 +1665,24 @@ class Backend(QObject):
         connectivity_result = self.check_network_connectivity()
         logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
 
-        # Skip update checking initially - defer to later
-        logger.info("BOOT: Deferring update check to improve initial load time")
+        # Check for updates if we have network connectivity
+        logger.info("BOOT: Checking for app updates...")
+        try:
+            update_available = self.check_for_updates()
+            self.updateAvailable = update_available
+            # Cache version info for fast dialog opening
+            self._current_version_info = self.get_current_version_info() or {}
+            self._latest_version_info = self.get_latest_version_info() or {}
+            logger.info(f"BOOT: Update check result: {update_available}")
+        except Exception as e:
+            logger.error(f"BOOT: Error checking for updates: {e}")
+            self.updateAvailable = False
+            # Still try to cache current version info even if update check fails
+            try:
+                self._current_version_info = self.get_current_version_info() or {}
+            except Exception as e2:
+                logger.error(f"BOOT: Error getting current version info: {e2}")
+                self._current_version_info = {}
 
         if not connectivity_result:
             logger.warning("BOOT: No network connectivity detected - deferring data loading")
@@ -1711,10 +1707,9 @@ class Backend(QObject):
         self._data_loading_deferred = False
         self.setLoadingStatus("Loading SpaceX launch data...")
 
-        # Start with minimal data loading - launch and weather data only
         if self.loader is None:
-            logger.info("BOOT: Creating DataLoader with deferred F1 data...")
-            self.loader = DataLoader(load_f1=False, load_weather=True)  # Defer F1 data
+            logger.info("BOOT: Creating new DataLoader...")
+            self.loader = DataLoader()
             self.thread = QThread()
             self.loader.moveToThread(self.thread)
             self.loader.finished.connect(self.on_data_loaded)
@@ -1726,51 +1721,6 @@ class Backend(QObject):
             logger.info("BOOT: DataLoader already exists")
 
         self._setup_timers()
-
-        # Set up deferred loading timer for F1 data and update check
-        logger.info("BOOT: Setting up deferred loading timer (5 seconds)")
-        self._deferred_loading_timer = QTimer(self)
-        self._deferred_loading_timer.setSingleShot(True)
-        self._deferred_loading_timer.timeout.connect(self._load_deferred_data)
-        self._deferred_loading_timer.start(5000)  # Load deferred data after 5 seconds
-
-    def _load_deferred_data(self):
-        """Load deferred data (F1 data and update check) after initial app load"""
-        logger.info("Loading deferred data (F1 and update check)...")
-        
-        # Check for updates
-        logger.info("Performing deferred update check...")
-        try:
-            update_available = self.check_for_updates()
-            self.updateAvailable = update_available
-            # Cache version info for fast dialog opening
-            self._current_version_info = self.get_current_version_info() or {}
-            self._latest_version_info = self.get_latest_version_info() or {}
-            logger.info(f"Deferred update check result: {update_available}")
-        except Exception as e:
-            logger.error(f"Error in deferred update check: {e}")
-            self.updateAvailable = False
-            # Still try to cache current version info even if update check fails
-            try:
-                self._current_version_info = self.get_current_version_info() or {}
-            except Exception as e2:
-                logger.error(f"Error getting current version info: {e2}")
-                self._current_version_info = {}
-
-        # Load F1 data
-        logger.info("Loading deferred F1 data...")
-        try:
-            f1_data = fetch_f1_data()
-            self._f1_data = f1_data
-            self.f1Changed.emit()
-            logger.info(f"Deferred F1 data loaded: {len(f1_data.get('schedule', []))} races, {len(f1_data.get('driver_standings', []))} drivers")
-        except Exception as e:
-            logger.error(f"Error loading deferred F1 data: {e}")
-            # Keep existing cached data if available
-            if not hasattr(self, '_f1_data') or not self._f1_data:
-                self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
-
-        logger.info("Deferred data loading complete")
 
     def _setup_timers(self):
         """Set up all the periodic timers"""
@@ -1947,8 +1897,8 @@ class Backend(QObject):
         return self._wifi_networks
 
     @pyqtProperty(bool, notify=wifiConnectedChanged)
-    def wifiConnected(self):
-        return self._wifi_connected
+    def networkConnected(self):
+        return self._network_connected
 
     @pyqtProperty(bool, notify=wifiConnectingChanged)
     def wifiConnecting(self):
@@ -1961,10 +1911,6 @@ class Backend(QObject):
     @pyqtProperty(list, notify=rememberedNetworksChanged)
     def rememberedNetworks(self):
         return self._remembered_networks
-
-    @pyqtProperty(bool, notify=wifiConnectedChanged)
-    def networkConnected(self):
-        return self._network_connected
 
     @pyqtProperty(str, notify=timeChanged)
     def currentTime(self):
