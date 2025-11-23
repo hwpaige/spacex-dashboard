@@ -6191,7 +6191,7 @@ Window {
                     text: launchTray.tMinus || "T-0"
                     font.pixelSize: 14
                     font.bold: true
-                    color: backend.theme === "dark" ? "white" : "black"
+                    color: "white"
                     anchors.left: parent.left
                     anchors.leftMargin: 0
                     anchors.right: parent.horizontalCenter
@@ -6205,7 +6205,7 @@ Window {
                     text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
                     font.pixelSize: 14
                     font.bold: true
-                    color: backend.theme === "dark" ? "white" : "black"
+                    color: "white"
                     elide: Text.ElideRight
                     anchors.right: parent.right
                     anchors.rightMargin: 0
