@@ -6191,7 +6191,7 @@ Window {
                     text: launchTray.tMinus || "T-0"
                     font.pixelSize: 14
                     font.bold: true
-                    color: "white"
+                    color: backend.theme === "dark" ? "white" : "black"
                     anchors.left: parent.left
                     anchors.leftMargin: 0
                     anchors.right: parent.horizontalCenter
@@ -6205,7 +6205,7 @@ Window {
                     text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
                     font.pixelSize: 14
                     font.bold: true
-                    color: "white"
+                    color: backend.theme === "dark" ? "white" : "black"
                     elide: Text.ElideRight
                     anchors.right: parent.right
                     anchors.rightMargin: 0
@@ -6349,7 +6349,7 @@ Window {
                                             Text {
                                                 text: "📅"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6357,14 +6357,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.local_date : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6375,7 +6375,7 @@ Window {
                                             Text {
                                                 text: "⏰"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6383,14 +6383,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.local_time : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6401,7 +6401,7 @@ Window {
                                             Text {
                                                 text: "📡"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6409,14 +6409,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6427,7 +6427,7 @@ Window {
                                             Text {
                                                 text: "📊"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6435,7 +6435,7 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
@@ -6453,7 +6453,7 @@ Window {
                                             Text {
                                                 text: "🚀"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6461,14 +6461,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket.toUpperCase() : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6479,7 +6479,7 @@ Window {
                                             Text {
                                                 text: "🛰️"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6487,14 +6487,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit.toUpperCase() : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6505,7 +6505,7 @@ Window {
                                             Text {
                                                 text: "🏗️"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6513,14 +6513,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.pad.toUpperCase() : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: launchTray.nextLaunch
                                             }
@@ -6531,7 +6531,7 @@ Window {
                                             Text {
                                                 text: "🎥"
                                                 font.pixelSize: 14
-                                                color: "#000000"
+                                                color: backend.theme === "dark" ? "black" : "white"
                                                 Layout.preferredWidth: 20
                                             }
                                             Text {
@@ -6539,14 +6539,14 @@ Window {
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
                                                 font.letterSpacing: 0.5
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.preferredWidth: 120
                                             }
                                             Text {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.video_url : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: "#FFFFFF"
+                                                color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.Wrap
                                                 visible: launchTray.nextLaunch
