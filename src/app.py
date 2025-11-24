@@ -4345,10 +4345,23 @@ class ChartItem(QQuickPaintedItem):
                 month_name = calendar.month_abbr[month_num]
                 painter.drawText(int(x - 10), int(height - 5), month_name)
 
-        # Draw legend
-        legend_x = width - margin - 100
-        legend_y = margin + 10
-        legend_spacing = 20
+        # Draw legend - horizontal line just above the plot
+        legend_y = margin - 20  # Position higher with increased gap to plot
+        legend_spacing = 10  # Tight horizontal spacing
+        
+        # Calculate total width needed for legend items
+        total_legend_width = 0
+        font_metrics = painter.fontMetrics()
+        for series_data in self._series:
+            text_width = font_metrics.horizontalAdvance(series_data['label'])
+            item_width = 12 + 16 + text_width
+            total_legend_width += item_width
+        total_legend_width += (len(self._series) - 1) * legend_spacing if self._series else 0
+        
+        # Center the legend horizontally
+        legend_x_start = (width - total_legend_width) / 2
+        
+        current_x = legend_x_start
         for s, series_data in enumerate(self._series):
             # Use custom color from series data if available, otherwise use default
             if 'color' in series_data:
@@ -4357,9 +4370,13 @@ class ChartItem(QQuickPaintedItem):
                 color = colors[s % len(colors)]
             painter.setBrush(QBrush(color))
             painter.setPen(QPen(color))
-            painter.drawRect(int(legend_x), int(legend_y + s * legend_spacing), 12, 12)
+            painter.drawRect(int(current_x), int(legend_y), 12, 12)
             painter.setPen(QPen(text_color))
-            painter.drawText(int(legend_x + 16), int(legend_y + s * legend_spacing + 10), series_data['label'])
+            painter.drawText(int(current_x + 16), int(legend_y + 10), series_data['label'])
+            
+            # Move to next item position
+            text_width = font_metrics.horizontalAdvance(series_data['label'])
+            current_x += 12 + 16 + text_width + legend_spacing
 
         # Draw chart
         if self._chart_type == "bar":
@@ -4376,16 +4393,39 @@ class ChartItem(QQuickPaintedItem):
         for s, series_data in enumerate(self._series):
             # Use custom color from series data if available, otherwise use default
             if 'color' in series_data:
-                color = QColor(series_data['color'])
+                base_color = QColor(series_data['color'])
             else:
-                color = colors[s % len(colors)]
-            painter.setBrush(QBrush(color))
-            painter.setPen(QPen(color, 1))
-            for i, value in enumerate(series_data['values']):
-                x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
-                bar_height = (height - 2 * margin) * value / self._max_value if self._max_value > 0 else 0
-                y = height - margin - bar_height
-                painter.drawRect(QRectF(x, y, bar_width, bar_height))
+                base_color = colors[s % len(colors)]
+            if self._view_mode == 'cumulative':
+                # Cumulative plot: split bars into base and increment
+                for i, value in enumerate(series_data['values']):
+                    prev_value = series_data['values'][i-1] if i > 0 else 0
+                    increment = value - prev_value
+                    x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
+                    
+                    # Draw base (previous cumulative)
+                    base_height = (height - 2 * margin) * prev_value / self._max_value if self._max_value > 0 else 0
+                    y_base = height - margin - base_height
+                    painter.setBrush(QBrush(base_color))
+                    painter.setPen(QPen(base_color, 1))
+                    painter.drawRect(QRectF(x, y_base, bar_width, base_height))
+                    
+                    # Draw increment in lighter shade of base color
+                    increment_height = (height - 2 * margin) * increment / self._max_value if self._max_value > 0 else 0
+                    y_increment = y_base - increment_height
+                    increment_color = base_color.lighter(120)
+                    painter.setBrush(QBrush(increment_color))
+                    painter.setPen(QPen(increment_color, 1))
+                    painter.drawRect(QRectF(x, y_increment, bar_width, increment_height))
+            else:
+                # Non-cumulative plot: draw full bars
+                painter.setBrush(QBrush(base_color))
+                painter.setPen(QPen(base_color, 1))
+                for i, value in enumerate(series_data['values']):
+                    x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
+                    bar_height = (height - 2 * margin) * value / self._max_value if self._max_value > 0 else 0
+                    y = height - margin - bar_height
+                    painter.drawRect(QRectF(x, y, bar_width, bar_height))
 
     def _draw_line_chart(self, painter, width, height, margin, colors):
         for s, series_data in enumerate(self._series):
@@ -4409,7 +4449,7 @@ class ChartItem(QQuickPaintedItem):
             # Draw points
             painter.setBrush(QBrush(color))
             for point in points:
-                painter.drawEllipse(point, 4, 4)
+                painter.drawEllipse(point, 3, 3)
 
     def _draw_area_chart(self, painter, width, height, margin, colors):
         for s, series_data in enumerate(self._series):
