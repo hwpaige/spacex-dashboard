@@ -14,7 +14,7 @@ import urllib.error
 import socket
 from PyQt6.QtWidgets import QApplication, QStyleFactory, QGraphicsScene, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QGroupBox, QPushButton
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
-from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor
+from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor, QFont, QLinearGradient
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
@@ -1312,21 +1312,33 @@ class DataLoader(QObject):
         def fetch_weather_data():
             self.statusUpdate.emit("Getting weather data...")
             weather_data = {}
-            for location, settings in location_settings.items():
-                try:
-                    weather = fetch_weather(settings['lat'], settings['lon'], location)
-                    weather_data[location] = weather
-                    logger.info(f"DataLoader: Fetched weather for {location}")
-                except Exception as e:
-                    logger.warning(f"DataLoader: Failed to fetch weather for {location}: {e}")
-                    weather_data[location] = {
-                        'temperature_c': 25,
-                        'temperature_f': 77,
-                        'wind_speed_ms': 5,
-                        'wind_speed_kts': 9.7,
-                        'wind_direction': 90,
-                        'cloud_cover': 50
-                    }
+            
+            # Fetch weather for all locations in parallel
+            with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+                # Submit all weather fetch tasks
+                future_to_location = {
+                    executor.submit(fetch_weather, settings['lat'], settings['lon'], location): location 
+                    for location, settings in location_settings.items()
+                }
+                
+                # Collect results as they complete
+                for future in concurrent.futures.as_completed(future_to_location):
+                    location = future_to_location[future]
+                    try:
+                        weather = future.result()
+                        weather_data[location] = weather
+                        logger.info(f"DataLoader: Fetched weather for {location}")
+                    except Exception as e:
+                        logger.warning(f"DataLoader: Failed to fetch weather for {location}: {e}")
+                        weather_data[location] = {
+                            'temperature_c': 25,
+                            'temperature_f': 77,
+                            'wind_speed_ms': 5,
+                            'wind_speed_kts': 9.7,
+                            'wind_direction': 90,
+                            'cloud_cover': 50
+                        }
+            
             return weather_data
         
         # Run all API calls in parallel
@@ -1343,6 +1355,9 @@ class DataLoader(QObject):
         
         self.statusUpdate.emit("Data loading complete")
         logger.info("DataLoader: Finished loading all data in parallel")
+        logger.info(f"DataLoader: Launch data keys: {list(launch_data.keys()) if isinstance(launch_data, dict) else 'not dict'}")
+        logger.info(f"DataLoader: F1 data keys: {list(f1_data.keys()) if isinstance(f1_data, dict) else 'not dict'}")
+        logger.info(f"DataLoader: Weather data keys: {list(weather_data.keys()) if isinstance(weather_data, dict) else 'not dict'}")
         self.finished.emit(launch_data, f1_data, weather_data)
 
 class LaunchUpdater(QObject):
@@ -1873,6 +1888,7 @@ class Backend(QObject):
     def setLoadingStatus(self, status):
         if self._loading_status != status:
             self._loading_status = status
+            logger.info(f"BOOT: Loading status changed to: {status}")
             self.loadingStatusChanged.emit()
 
     @pyqtProperty(str, notify=locationChanged)
@@ -2725,6 +2741,8 @@ class Backend(QObject):
         # Update the EventModel's data reference
         self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
         self._event_model.update_data()
+        # Exit loading state after data is loaded and processed
+        self.setLoadingStatus("Application loaded...")
         self._isLoading = False
         self.loadingFinished.emit()
         self.launchesChanged.emit()
@@ -2753,8 +2771,8 @@ class Backend(QObject):
         self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
         self._event_model.update_data()
 
-        # Exit loading state
-        logger.info("BOOT: Exiting loading state and emitting loadingFinished signal")
+        # Exit loading state after offline data is loaded
+        self.setLoadingStatus("Application loaded...")
         self._isLoading = False
         self.loadingFinished.emit()
         logger.info("BOOT: Offline mode activated - app should now show cached data")
@@ -4312,28 +4330,85 @@ class ChartItem(QQuickPaintedItem):
 
         painter.fillRect(0, 0, int(width), int(height), bg_color)
 
-        # Draw Tesla-style grid lines (subtle white solid lines with transparency)
-        grid_pen = QPen(grid_color, 1, Qt.PenStyle.SolidLine)
-        grid_pen.setColor(QColor(grid_color.red(), grid_color.green(), grid_color.blue(), 60))  # 60/255 alpha for subtlety
+        # Calculate dynamic y-axis intervals based on data range
+        def calculate_dynamic_interval(max_value):
+            if max_value <= 0:
+                return 1
+
+            # Target 6-8 labels for good readability
+            target_labels = 7
+            rough_interval = max_value / target_labels
+
+            # Round to nice numbers: 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, etc.
+            nice_intervals = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+
+            # Find the smallest nice interval that's >= rough_interval
+            for interval in nice_intervals:
+                if interval >= rough_interval:
+                    return interval
+
+            # If we get here, rough_interval is very large, return the largest nice interval
+            return nice_intervals[-1]
+
+        # Draw Tesla-style grid lines (ultra-thin white lines with subtle glow)
+        # Main grid lines - very thin with slight glow
+        grid_pen = QPen(grid_color, 0.5, Qt.PenStyle.SolidLine)
+        grid_pen.setColor(QColor(grid_color.red(), grid_color.green(), grid_color.blue(), 80))  # Higher opacity for main lines
         painter.setPen(grid_pen)
-        for i in range(0, 11):
-            y = margin + (height - 2 * margin) * i / 10
+
+        interval = calculate_dynamic_interval(self._max_value)
+        max_intervals = int(self._max_value / interval) + 1
+        actual_max = max_intervals * interval
+
+        # Draw horizontal grid lines with subtle glow effect
+        for i in range(max_intervals + 1):
+            value = actual_max - (i * interval)
+            y = margin + (height - 2 * margin) * (actual_max - value) / actual_max if actual_max > 0 else margin
+
+            # Subtle glow behind main line
+            glow_pen = QPen(QColor(grid_color.red(), grid_color.green(), grid_color.blue(), 30), 2, Qt.PenStyle.SolidLine)
+            painter.setPen(glow_pen)
             painter.drawLine(int(margin), int(y), int(width - margin), int(y))
 
-        # Draw vertical grid lines for x-axis
+            # Main grid line
+            painter.setPen(grid_pen)
+            painter.drawLine(int(margin), int(y), int(width - margin), int(y))
+
+        # Draw vertical grid lines for x-axis with same styling
         if self._months:
             for i in range(len(self._months)):
                 x = margin + (width - 2 * margin) * i / (len(self._months) - 1) if len(self._months) > 1 else margin
+
+                # Subtle glow behind main line
+                glow_pen = QPen(QColor(grid_color.red(), grid_color.green(), grid_color.blue(), 30), 2, Qt.PenStyle.SolidLine)
+                painter.setPen(glow_pen)
                 painter.drawLine(int(x), int(margin), int(x), int(height - margin))
 
-        # Draw y-axis labels
-        painter.setPen(QPen(text_color))
-        font = painter.font()
-        font.setPixelSize(10)
-        painter.setFont(font)
-        for i in range(0, 11):
-            value = self._max_value * (10 - i) / 10
-            y = margin + (height - 2 * margin) * i / 10
+                # Main grid line
+                painter.setPen(grid_pen)
+                painter.drawLine(int(x), int(margin), int(x), int(height - margin))
+
+        # Draw y-axis labels with modern Tesla styling
+        label_font = painter.font()
+        label_font.setPixelSize(11)
+        label_font.setWeight(QFont.Weight.Medium)  # Slightly bolder for better readability
+        painter.setFont(label_font)
+
+        for i in range(max_intervals + 1):
+            value = actual_max - (i * interval)
+            y = margin + (height - 2 * margin) * (actual_max - value) / actual_max if actual_max > 0 else margin
+
+            # Draw label with subtle shadow for depth
+            label_text = f"{int(value)}"
+
+            # Shadow
+            painter.setPen(QPen(QColor(0, 0, 0, 120), 1))
+            painter.drawText(int(margin - 45), int(y + 4), label_text)
+
+            # Main label
+            painter.setPen(QPen(text_color))
+            painter.drawText(int(margin - 45), int(y + 3), label_text)
+            y = margin + (height - 2 * margin) * (actual_max - value) / actual_max if actual_max > 0 else margin
             painter.drawText(int(5), int(y + 4), f"{int(value)}")
 
         # Draw x-axis labels
@@ -4380,13 +4455,13 @@ class ChartItem(QQuickPaintedItem):
 
         # Draw chart
         if self._chart_type == "bar":
-            self._draw_bar_chart(painter, width, height, margin, colors)
+            self._draw_bar_chart(painter, width, height, margin, colors, actual_max)
         elif self._chart_type == "line":
-            self._draw_line_chart(painter, width, height, margin, colors)
+            self._draw_line_chart(painter, width, height, margin, colors, actual_max)
         elif self._chart_type == "area":
-            self._draw_area_chart(painter, width, height, margin, colors)
+            self._draw_area_chart(painter, width, height, margin, colors, actual_max)
 
-    def _draw_bar_chart(self, painter, width, height, margin, colors):
+    def _draw_bar_chart(self, painter, width, height, margin, colors, actual_max):
         if not self._months:
             return
         bar_width = (width - 2 * margin) / len(self._months) / len(self._series)
@@ -4403,69 +4478,165 @@ class ChartItem(QQuickPaintedItem):
                     increment = value - prev_value
                     x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
                     
-                    # Draw base (previous cumulative)
-                    base_height = (height - 2 * margin) * prev_value / self._max_value if self._max_value > 0 else 0
+                    # Draw base (previous cumulative) with clean Tesla styling
+                    base_height = (height - 2 * margin) * prev_value / actual_max if actual_max > 0 else 0
                     y_base = height - margin - base_height
+
+                    # Subtle single-layer glow for depth
+                    glow_color = QColor(base_color.red(), base_color.green(), base_color.blue(), 40)
+                    painter.setBrush(QBrush(glow_color))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    glow_width = bar_width * 1.1
+                    glow_height = base_height * 1.05
+                    glow_x = x - (glow_width - bar_width) / 2
+                    glow_y = y_base - (glow_height - base_height) / 2
+                    painter.drawRoundedRect(QRectF(glow_x, glow_y, glow_width, glow_height), 0.5, 0.5)
+
+                    # Clean solid bar with minimal border
                     painter.setBrush(QBrush(base_color))
-                    painter.setPen(QPen(base_color, 1))
-                    painter.drawRect(QRectF(x, y_base, bar_width, base_height))
+                    painter.setPen(QPen(QColor(base_color.red(), base_color.green(), base_color.blue(), 150), 0.5))
+                    painter.drawRoundedRect(QRectF(x, y_base, bar_width, base_height), 0.5, 0.5)
                     
-                    # Draw increment in lighter shade of base color
-                    increment_height = (height - 2 * margin) * increment / self._max_value if self._max_value > 0 else 0
+                    # Draw increment with clean Tesla styling
+                    increment_height = (height - 2 * margin) * increment / actual_max if actual_max > 0 else 0
                     y_increment = y_base - increment_height
-                    increment_color = base_color.lighter(120)
+                    increment_color = base_color.lighter(125)
+
+                    # Subtle increment glow
+                    increment_glow_color = QColor(increment_color.red(), increment_color.green(), increment_color.blue(), 40)
+                    painter.setBrush(QBrush(increment_glow_color))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    increment_glow_width = bar_width * 1.1
+                    increment_glow_height = increment_height * 1.05
+                    increment_glow_x = x - (increment_glow_width - bar_width) / 2
+                    increment_glow_y = y_increment - (increment_glow_height - increment_height) / 2
+                    painter.drawRoundedRect(QRectF(increment_glow_x, increment_glow_y, increment_glow_width, increment_glow_height), 0.5, 0.5)
+
+                    # Clean increment bar
                     painter.setBrush(QBrush(increment_color))
-                    painter.setPen(QPen(increment_color, 1))
-                    painter.drawRect(QRectF(x, y_increment, bar_width, increment_height))
+                    painter.setPen(QPen(QColor(increment_color.red(), increment_color.green(), increment_color.blue(), 150), 0.5))
+                    painter.drawRoundedRect(QRectF(x, y_increment, bar_width, increment_height), 0.5, 0.5)
             else:
-                # Non-cumulative plot: draw full bars
-                painter.setBrush(QBrush(base_color))
-                painter.setPen(QPen(base_color, 1))
+                # Non-cumulative plot: draw bars with clean Tesla styling
                 for i, value in enumerate(series_data['values']):
                     x = margin + i * (width - 2 * margin) / len(self._months) + s * bar_width
-                    bar_height = (height - 2 * margin) * value / self._max_value if self._max_value > 0 else 0
+                    bar_height = (height - 2 * margin) * value / actual_max if actual_max > 0 else 0
                     y = height - margin - bar_height
-                    painter.drawRect(QRectF(x, y, bar_width, bar_height))
 
-    def _draw_line_chart(self, painter, width, height, margin, colors):
+                    # Subtle single-layer glow
+                    glow_color = QColor(base_color.red(), base_color.green(), base_color.blue(), 40)
+                    painter.setBrush(QBrush(glow_color))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    glow_width = bar_width * 1.1
+                    glow_height = bar_height * 1.05
+                    glow_x = x - (glow_width - bar_width) / 2
+                    glow_y = y - (glow_height - bar_height) / 2
+                    painter.drawRoundedRect(QRectF(glow_x, glow_y, glow_width, glow_height), 0.5, 0.5)
+
+                    # Clean solid bar
+                    painter.setBrush(QBrush(base_color))
+                    painter.setPen(QPen(QColor(base_color.red(), base_color.green(), base_color.blue(), 150), 0.5))
+                    painter.drawRoundedRect(QRectF(x, y, bar_width, bar_height), 0.5, 0.5)
+
+    def _draw_line_chart(self, painter, width, height, margin, colors, actual_max):
         for s, series_data in enumerate(self._series):
             # Use custom color from series data if available, otherwise use default
             if 'color' in series_data:
                 color = QColor(series_data['color'])
             else:
                 color = colors[s % len(colors)]
-            painter.setPen(QPen(color, 3))
+
             points = []
             for i, value in enumerate(series_data['values']):
                 x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
-                y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
+                y = height - margin - (height - 2 * margin) * value / actual_max if actual_max > 0 else height - margin
                 points.append(QPoint(int(x), int(y)))
-            
-            # Draw lines if multiple points
+
+            # Draw sophisticated multi-layer glow lines
+            for glow_layer in range(3):
+                glow_alpha = 60 - (glow_layer * 20)
+                glow_width = 8 - (glow_layer * 2)
+                glow_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
+                painter.setPen(QPen(glow_color, glow_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                if len(points) > 1:
+                    for i in range(len(points) - 1):
+                        painter.drawLine(points[i], points[i + 1])
+
+            # Draw main line with smooth caps and joins
+            painter.setPen(QPen(color, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             if len(points) > 1:
                 for i in range(len(points) - 1):
                     painter.drawLine(points[i], points[i + 1])
-            
-            # Draw points
-            painter.setBrush(QBrush(color))
-            for point in points:
-                painter.drawEllipse(point, 3, 3)
 
-    def _draw_area_chart(self, painter, width, height, margin, colors):
+            # Draw sophisticated point markers with glow
+            for point in points:
+                # Multi-layer glow effect for points
+                for glow_layer in range(4):
+                    glow_alpha = 80 - (glow_layer * 20)
+                    glow_radius = 6 - glow_layer
+                    glow_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
+                    painter.setBrush(QBrush(glow_color))
+                    painter.setPen(Qt.PenStyle.NoPen)
+                    painter.drawEllipse(point, glow_radius, glow_radius)
+
+                # Main point with subtle border
+                painter.setBrush(QBrush(color))
+                painter.setPen(QPen(QColor(color.red(), color.green(), color.blue(), 150), 0.5))
+                painter.drawEllipse(point, 2, 2)
+
+    def _draw_area_chart(self, painter, width, height, margin, colors, actual_max):
         for s, series_data in enumerate(self._series):
             # Use custom color from series data if available, otherwise use default
             if 'color' in series_data:
                 color = QColor(series_data['color'])
             else:
                 color = colors[s % len(colors)]
-            painter.setPen(QPen(color, 3))
-            painter.setBrush(QBrush(color.lighter(150)))
+
             points = [QPoint(int(margin), int(height - margin))]
             for i, value in enumerate(series_data['values']):
                 x = margin + (width - 2 * margin) * i / max(1, len(series_data['values']) - 1)
-                y = height - margin - (height - 2 * margin) * value / self._max_value if self._max_value > 0 else height - margin
+                y = height - margin - (height - 2 * margin) * value / actual_max if actual_max > 0 else height - margin
                 points.append(QPoint(int(x), int(y)))
             points.append(QPoint(int(width - margin), int(height - margin)))
+
+            # Draw sophisticated multi-layer glow fill
+            for glow_layer in range(3):
+                glow_alpha = 35 - (glow_layer * 10)
+                glow_offset = glow_layer * 1.5
+
+                glow_fill_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QBrush(glow_fill_color))
+
+                # Create offset glow points for depth
+                glow_points = []
+                for point in points:
+                    if point.y() < height - margin:  # Not the bottom points
+                        glow_points.append(QPoint(int(point.x()), int(point.y() - glow_offset)))
+                    else:
+                        glow_points.append(point)
+                painter.drawPolygon(glow_points)
+
+            # Draw main area fill with sophisticated gradient
+            gradient = QLinearGradient(0, margin, 0, height - margin)
+            gradient.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 180))  # Top - more transparent
+            gradient.setColorAt(0.7, QColor(color.red(), color.green(), color.blue(), 140))  # Middle
+            gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 100))  # Bottom - most transparent
+
+            painter.setBrush(QBrush(gradient))
+            painter.drawPolygon(points)
+
+            # Draw sophisticated outline with multi-layer glow
+            for outline_layer in range(3):
+                outline_alpha = 120 - (outline_layer * 30)
+                outline_width = 4 - outline_layer
+                outline_color = QColor(color.red(), color.green(), color.blue(), outline_alpha)
+                painter.setPen(QPen(outline_color, outline_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.drawPolygon(points)
+
+            # Draw final sharp outline
+            painter.setPen(QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPolygon(points)
 
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
@@ -4480,6 +4651,7 @@ backend = Backend(initial_wifi_connected=wifi_connected, initial_wifi_ssid=wifi_
 # Now start the data loader after WiFi is stable
 logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
+backend.setLoadingStatus("Backend initialized...")
 
 engine = QQmlApplicationEngine()
 # Connect QML warnings signal (list of QQmlError objects)
@@ -4948,16 +5120,16 @@ Window {
                     anchors.fill: parent
                     spacing: 0
 
-                    SwipeView {
-                        id: weatherSwipe
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        anchors.margins: 10
-                        visible: backend && backend.mode === "spacex"
-                        orientation: Qt.Vertical
-                        clip: true
-                        interactive: true
-                        currentIndex: 0
+                        SwipeView {
+                            id: weatherSwipe
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            anchors.margins: 10
+                            visible: backend && backend.mode === "spacex"
+                            orientation: Qt.Vertical
+                            clip: true
+                            interactive: true
+                            currentIndex: 1
 
                         Component.onCompleted: {
                             console.log("SwipeView completed, count:", count);
@@ -5738,7 +5910,7 @@ Window {
 
                         Text {
                             anchors.centerIn: parent
-                            text: backend.networkConnected ? "\uf1eb" : "\uf6ab"
+                            text: backend.networkConnected ? "\uf1eb" : "\uf071"
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
                             color: backend.networkConnected ? "#4CAF50" : "#F44336"
