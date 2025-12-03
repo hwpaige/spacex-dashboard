@@ -5523,7 +5523,7 @@ Window {
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
 
-                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 12; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
                                 Row { spacing: 5
                                     Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
