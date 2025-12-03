@@ -4721,6 +4721,8 @@ Window {
     color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
     Behavior on color { ColorAnimation { duration: 300 } }
 
+    property bool isWindyFullscreen: false
+
     Component.onCompleted: {
         console.log("Window created - bottom bar should be visible")
         // Connect web content reload signal
@@ -4848,6 +4850,7 @@ Window {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: false
+                visible: !isWindyFullscreen
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5159,6 +5162,7 @@ Window {
                                     }
                                     onFullScreenRequested: function(request) {
                                         request.accept();
+                                        root.visibility = Window.FullScreen
                                     }
                                     onLoadingChanged: function(loadRequest) {
                                         if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -5189,23 +5193,30 @@ Window {
                                     style: Text.Outline
                                     styleColor: "#000000"
                                 }
-                            }
-                        }
-                    }
 
-                    Button {
-                        anchors.top: parent.top
-                        anchors.right: parent.right
-                        anchors.margins: 10
-                        width: 30
-                        height: 30
-                        text: "\uf065"
-                        font.family: "Font Awesome 5 Free"
-                        font.pixelSize: 16
-                        onClicked: {
-                            var currentItem = weatherSwipe.currentItem;
-                            if (currentItem && currentItem.children[0]) {
-                                currentItem.children[0].runJavaScript("document.documentElement.requestFullscreen();");
+                                // Fullscreen button for weather views
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.topMargin: 90
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 5
+                                    width: 30
+                                    height: 30
+                                    color: "transparent"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
+                                        font.family: "Font Awesome 5 Free"
+                                        font.pixelSize: 16
+                                        color: "white"
+                                        style: Text.Outline
+                                        styleColor: "black"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: isWindyFullscreen = !isWindyFullscreen
+                                    }
+                                }
                             }
                         }
                     }
@@ -5505,6 +5516,7 @@ Window {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: true
+                visible: !isWindyFullscreen
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5726,6 +5738,7 @@ Window {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: true
+                visible: !isWindyFullscreen
 
                 ColumnLayout {
                     anchors.fill: parent
