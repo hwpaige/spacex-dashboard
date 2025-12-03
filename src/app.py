@@ -5159,7 +5159,6 @@ Window {
                                     }
                                     onFullScreenRequested: function(request) {
                                         request.accept();
-                                        root.visibility = Window.FullScreen
                                     }
                                     onLoadingChanged: function(loadRequest) {
                                         if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -5167,29 +5166,6 @@ Window {
                                         } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                             console.log("WebEngineView loaded successfully for", modelData);
                                         }
-                                    }
-                                }
-
-                                Button {
-                                    anchors.top: parent.top
-                                    anchors.right: parent.right
-                                    anchors.margins: 10
-                                    width: 40
-                                    height: 40
-                                    background: Rectangle {
-                                        color: "#80000000"
-                                        radius: 5
-                                    }
-                                    contentItem: Text {
-                                        text: "\uf065"
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 16
-                                        color: "white"
-                                        horizontalAlignment: Text.AlignHCenter
-                                        verticalAlignment: Text.AlignVCenter
-                                    }
-                                    onClicked: {
-                                        webView.runJavaScript("if (document.fullscreenElement) { document.exitFullscreen(); } else { document.documentElement.requestFullscreen(); }");
                                     }
                                 }
 
@@ -5213,6 +5189,23 @@ Window {
                                     style: Text.Outline
                                     styleColor: "#000000"
                                 }
+                            }
+                        }
+                    }
+
+                    Button {
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.margins: 10
+                        width: 30
+                        height: 30
+                        text: "\uf065"
+                        font.family: "Font Awesome 5 Free"
+                        font.pixelSize: 16
+                        onClicked: {
+                            var currentItem = weatherSwipe.currentItem;
+                            if (currentItem && currentItem.children[0]) {
+                                currentItem.children[0].runJavaScript("document.documentElement.requestFullscreen();");
                             }
                         }
                     }
@@ -5546,7 +5539,7 @@ Window {
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
 
-                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 12; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
                                 Row { spacing: 5
                                     Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
