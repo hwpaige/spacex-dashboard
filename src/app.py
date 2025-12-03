@@ -1936,6 +1936,15 @@ class Backend(QObject):
     def currentTime(self):
         return datetime.now(self._tz).strftime('%H:%M:%S')
 
+    def format_short_date(self, date_str):
+        dt = datetime.strptime(date_str, '%Y-%m-%d')
+        day = dt.day
+        if 11 <= day <= 13:
+            suffix = 'th'
+        else:
+            suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+        return dt.strftime(f'%a., %B {day}{suffix}, %Y')
+
     @pyqtProperty(QVariant, notify=weatherChanged)
     def weather(self):
         return self._weather_data.get(self._location, {})
@@ -2460,6 +2469,8 @@ class Backend(QObject):
             launch_datetime = parse(next_l['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
             launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
             launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            launch['formatted_date'] = self.format_short_date(next_l['date'])
+            launch['formatted_local_date'] = self.format_short_date(launch_datetime.date().isoformat())
             return launch
         return None
 
@@ -2473,6 +2484,8 @@ class Backend(QObject):
             launch_datetime = parse(l['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
             launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
             launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            launch['formatted_date'] = self.format_short_date(l['date'])
+            launch['formatted_local_date'] = self.format_short_date(launch_datetime.date().isoformat())
             launches.append(launch)
         return launches
 
@@ -5520,6 +5533,7 @@ Window {
                                 anchors.top: parent.top; anchors.topMargin: 5
                                 anchors.left: parent.left; anchors.leftMargin: 10
                                 anchors.right: parent.right; anchors.rightMargin: 10
+                                anchors.bottom: parent.bottom; anchors.bottomMargin: 5
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
 
@@ -5536,8 +5550,8 @@ Window {
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-                                Text { text: ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { text: ((model && model.formatted_date) ? model.formatted_date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                Text { text: ((model && model.formatted_local_date) ? model.formatted_local_date + " " : "") + ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
                             }
 
                             Rectangle {
