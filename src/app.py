@@ -1904,6 +1904,10 @@ class Backend(QObject):
             self.weatherChanged.emit()
             self.update_event_model()
 
+    @pyqtProperty(str, notify=locationChanged)
+    def timezoneAbbrev(self):
+        return datetime.now(self._tz).strftime('%Z')
+
     @pyqtProperty(EventModel, notify=eventModelChanged)
     def eventModel(self):
         return self._event_model
@@ -1944,8 +1948,6 @@ class Backend(QObject):
                 return "No upcoming launches"
             launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
             current_time = datetime.now(self._tz)
-            if launch_time <= current_time:
-                return "Launch in progress"
             delta = launch_time - current_time
             days = delta.days
             hours, remainder = divmod(delta.seconds, 3600)
@@ -1957,8 +1959,6 @@ class Backend(QObject):
                 return "No upcoming races"
             race_time = parse(next_race['date_start']).replace(tzinfo=pytz.UTC)
             current_time = datetime.now(pytz.UTC)
-            if race_time <= current_time:
-                return "Race in progress"
             delta = race_time - current_time
             days = delta.days
             hours, remainder = divmod(delta.seconds, 3600)
@@ -2450,11 +2450,17 @@ class Backend(QObject):
             "9/18 0930: Falcon 9 from SLC-40 flings 28 Starlinks to LEO; delta-v spotless, booster recovery monotonous."
         ]
 
+    @pyqtSlot(result=QVariant)
     def get_next_launch(self):
         current_time = datetime.now(pytz.UTC)
         valid_launches = [l for l in self._launch_data['upcoming'] if l['time'] != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
         if valid_launches:
-            return min(valid_launches, key=lambda x: parse(x['net']))
+            next_l = min(valid_launches, key=lambda x: parse(x['net']))
+            launch = next_l.copy()
+            launch_datetime = parse(next_l['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
+            launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
+            launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            return launch
         return None
 
     @pyqtSlot(result=QVariant)
@@ -5511,11 +5517,13 @@ Window {
 
                             Column {
                                 id: launchColumn
-                                anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 10
+                                anchors.top: parent.top; anchors.topMargin: 5
+                                anchors.left: parent.left; anchors.leftMargin: 10
+                                anchors.right: parent.right; anchors.rightMargin: 10
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
 
-                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; color: backend.theme === "dark" ? "white" : "black" }
+                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 14; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
                                 Row { spacing: 5
                                     Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
@@ -5528,9 +5536,27 @@ Window {
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-                                Text { text: "Date: " + ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: backend.location + ": " + ((model && model.localTime) ? model.localTime : "TBD"); font.pixelSize: 12; color: "#999999" }
-                                Text { text: "Status: " + ((model && model.status) ? model.status : ""); font.pixelSize: 12; color: ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "TBD" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336" }
+                                Text { text: ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                Text { text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
+                            }
+
+                            Rectangle {
+                                width: statusText.implicitWidth + 16
+                                height: 18
+                                color: (model && model.status === "TBD") ? "#FF9800" : ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336"
+                                radius: 10
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: 5
+                                visible: !!(model && !model.isGroup)
+                                Text {
+                                    id: statusText
+                                    text: ((model && model.status) ? model.status : "")
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    color: "white"
+                                    anchors.centerIn: parent
+                                }
                             }
 
                             Row {
@@ -7092,8 +7118,8 @@ Window {
                 running: true
                 repeat: true
                 onTriggered: {
-                    var arr = backend.get_upcoming_launches();
-                    launchTray.nextLaunch = arr && arr[0] ? arr[0] : null;
+                    var next = backend.get_next_launch();
+                    launchTray.nextLaunch = next;
                     // Use the backend's countdown calculation for consistency
                     launchTray.tMinus = backend.countdown;
                 }
