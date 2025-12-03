@@ -4451,7 +4451,7 @@ class ChartItem(QQuickPaintedItem):
                 color = colors[s % len(colors)]
             painter.setBrush(QBrush(color))
             painter.setPen(QPen(color))
-            painter.drawRect(int(current_x), int(legend_y), 12, 12)
+            painter.drawEllipse(int(current_x), int(legend_y), 12, 12)
             painter.setPen(QPen(text_color))
             painter.drawText(int(current_x + 16), int(legend_y + 10), series_data['label'])
             
