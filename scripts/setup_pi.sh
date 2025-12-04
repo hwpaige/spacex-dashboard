@@ -450,6 +450,7 @@ hdmi_timings=1480 0 80 16 32 320 0 16 4 12 0 0 0 60 0 42000000 3
 dtoverlay=vc4-kms-v3d
 dtoverlay=vc4-kms-v3d,cma-128
 dtoverlay=vc4-kms-v3d-pi5
+disable_splash=1
 EOF
     fi
     
