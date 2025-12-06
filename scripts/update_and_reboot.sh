@@ -54,22 +54,53 @@ else
 fi
 
 # Optional: Install any new Python dependencies if requirements.txt changed
-if git diff HEAD~1 --name-only | grep -q "requirements.txt"; then
-    echo "requirements.txt changed. Installing dependencies..."
-    if command -v pip3 &> /dev/null; then
-        pip3 install -r requirements.txt
-    elif command -v pip &> /dev/null; then
-        pip install -r requirements.txt
-    else
-        echo "Warning: pip not found, skipping dependency installation."
+if git diff HEAD~1 --name-only | grep -q "^requirements.txt$"; then
+    echo "requirements.txt changed. Installing dependencies in virtual environment..."
+
+    # Resolve project directory for absolute paths
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+
+    # Find a Python interpreter
+    PYTHON_BIN="$(command -v python3 || command -v python)"
+    if [ -z "$PYTHON_BIN" ]; then
+        echo "Error: Python is not installed. Cannot create virtual environment."
+        exit 1
     fi
+
+    VENV_DIR="$PROJECT_DIR/.venv"
+    if [ ! -d "$VENV_DIR" ]; then
+        echo "Creating virtual environment at $VENV_DIR..."
+        "$PYTHON_BIN" -m venv "$VENV_DIR" || {
+            echo "Error: Failed to create virtual environment."; exit 1; }
+    fi
+
+    # Use the venv's python/pip to avoid PEP 668 issues on Debian/Ubuntu/Raspberry Pi
+    VENV_PY="$VENV_DIR/bin/python"
+    VENV_PIP="$VENV_DIR/bin/pip"
+
+    if [ ! -x "$VENV_PY" ]; then
+        echo "Error: Virtual environment python not found at $VENV_PY"
+        exit 1
+    fi
+
+    echo "Upgrading pip, setuptools, and wheel in venv..."
+    "$VENV_PY" -m pip install --upgrade pip setuptools wheel || {
+        echo "Warning: Failed to upgrade pip tooling in venv"; }
+
+    echo "Installing requirements from $PROJECT_DIR/requirements.txt ..."
+    "$VENV_PIP" install -r "$PROJECT_DIR/requirements.txt" || {
+        echo "Error: Failed to install Python dependencies in venv."; exit 1; }
 fi
 
 # Clear the cache to ensure fresh data after update
 echo "Clearing cache..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-rm -rf "$PROJECT_DIR/cache/*"
+# Remove contents safely even if directory is empty
+if [ -d "$PROJECT_DIR/cache" ]; then
+    find "$PROJECT_DIR/cache" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+fi
 
 echo "Update complete. Rebooting system in 5 seconds..."
 echo "Press Ctrl+C to cancel reboot."

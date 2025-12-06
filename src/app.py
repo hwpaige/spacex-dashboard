@@ -4929,7 +4929,8 @@ Window {
     width: 1480
     height: 320
     title: "SpaceX/F1 Dashboard"
-    color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
+    // Use the same background color as the globe view for visual consistency
+    color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
@@ -4985,7 +4986,8 @@ Window {
     Rectangle {
         id: loadingScreen
         anchors.fill: parent
-        color: backend.theme === "dark" ? "#1c2526" : "#ffffff"
+        // Match app background to the globe background
+        color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
         visible: !!(backend && backend.isLoading)
         z: 1
 
@@ -5033,8 +5035,13 @@ Window {
         function onUpdateGlobeTrajectory() {
             // Update trajectory when data loads
             var trajectoryData = backend.get_launch_trajectory();
-            if (trajectoryData && globeView && globeView.runJavaScript) {
-                globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+            if (trajectoryData) {
+                if (globeView && globeView.runJavaScript) {
+                    globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
+                if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
+                    plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
             }
         }
     }
@@ -5055,6 +5062,7 @@ Window {
 
             // Column 1: Launch Trends or Driver Standings
             Rectangle {
+                id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -5062,6 +5070,19 @@ Window {
                 radius: 8
                 clip: false
                 visible: !isWindyFullscreen
+                // Toggle to switch between plot and globe within this card
+                property bool plotCardShowsGlobe: false
+                // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
+                property real toggleAbsX: 0
+                property real toggleAbsY: 0
+                function cacheToggleAbsPos() {
+                    if (globeToggle) {
+                        var pt = globeToggle.mapToItem(plotCard, 0, 0)
+                        toggleAbsX = pt.x
+                        toggleAbsY = pt.y
+                    }
+                }
+                Component.onCompleted: cacheToggleAbsPos()
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5075,11 +5096,14 @@ Window {
                         ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 0
-                            spacing: 5
+                            // Remove spacing in globe mode so no background strip remains
+                            spacing: plotCard.plotCardShowsGlobe ? 0 : 5
 
+                            // Plot view (default)
                             ChartItem {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
+                                visible: !plotCard.plotCardShowsGlobe
 
                                 chartType: backend.chartType
                                 viewMode: backend.chartViewMode
@@ -5101,17 +5125,42 @@ Window {
                                     }
                                 }
                             }
+
+                            // Globe view (reuses the upcoming launch tray globe)
+                            WebEngineView {
+                                id: plotGlobeView
+                                // Ensure the globe view fills all available space in the layout
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                anchors.fill: parent
+                                anchors.margins: 0
+                                visible: plotCard.plotCardShowsGlobe
+                                url: globeUrl
+                                backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                zoomFactor: 1.0
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: false
+
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        var trajectoryData = backend.get_launch_trajectory();
+                                        if (trajectoryData) {
+                                            plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
 
-                    // Chart control buttons container
+                    // Chart control buttons container (hidden in globe view)
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        Layout.maximumHeight: 30
+                        Layout.preferredHeight: plotCard.plotCardShowsGlobe ? 0 : 30
+                        Layout.maximumHeight: plotCard.plotCardShowsGlobe ? 0 : 30
                         Layout.alignment: Qt.AlignTop
                         color: "transparent"
-                        visible: backend && backend.mode === "spacex"
+                        visible: backend && backend.mode === "spacex" && !plotCard.plotCardShowsGlobe
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -5173,7 +5222,96 @@ Window {
                                     }
                                 }
                             }
+
+                            // Toggle between Plot and Globe (compact, no labels or surrounding pill)
+                            Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
+                            Rectangle {
+                                id: globeToggle
+                                Layout.preferredWidth: 46
+                                Layout.preferredHeight: 24
+                                width: 46
+                                height: 24
+                                radius: 12
+                                color: plotCard.plotCardShowsGlobe ?
+                                    "#FF3838" :
+                                    (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+
+                                Behavior on color { ColorAnimation { duration: 200 } }
+
+                                // Knob
+                                Rectangle {
+                                    width: 20
+                                    height: 20
+                                    radius: 10
+                                    x: plotCard.plotCardShowsGlobe ? parent.width - width - 2 : 2
+                                    y: 2
+                                    color: "white"
+                                    border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
+                                    border.width: 1
+
+                                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        // Cache absolute position before switching modes so overlay toggle can match position
+                                        plotCard.cacheToggleAbsPos()
+                                        plotCard.plotCardShowsGlobe = !plotCard.plotCardShowsGlobe
+                                    }
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+
+                                ToolTip { text: plotCard.plotCardShowsGlobe ? "Show Plot" : "Show Globe"; delay: 500 }
+                                // Keep cached position updated when layout changes while visible
+                                onXChanged: plotCard.cacheToggleAbsPos()
+                                onYChanged: plotCard.cacheToggleAbsPos()
+                                onWidthChanged: plotCard.cacheToggleAbsPos()
+                                onHeightChanged: plotCard.cacheToggleAbsPos()
+                                onVisibleChanged: if (visible) plotCard.cacheToggleAbsPos()
+                            }
                         }
+                    }
+
+                    // Overlay toggle: visually parented to plotCard so it does not participate in Layout
+                    Rectangle {
+                        id: globeOverlayToggle
+                        parent: plotCard
+                        visible: backend && backend.mode === "spacex" && plotCard.plotCardShowsGlobe
+                        x: plotCard.toggleAbsX
+                        y: plotCard.toggleAbsY
+                        width: 46
+                        height: 24
+                        radius: 12
+                        color: plotCard.plotCardShowsGlobe ? "#FF3838" : (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+                        z: 1000
+
+                        Behavior on color { ColorAnimation { duration: 200 } }
+
+                        Rectangle {
+                            width: 20
+                            height: 20
+                            radius: 10
+                            x: plotCard.plotCardShowsGlobe ? parent.width - width - 2 : 2
+                            y: 2
+                            color: "white"
+                            border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
+                            border.width: 1
+
+                            Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                // Restore bar; cache position in case layout shifts back
+                                plotCard.plotCardShowsGlobe = false
+                                plotCard.cacheToggleAbsPos()
+                            }
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        ToolTip { text: plotCard.plotCardShowsGlobe ? "Show Plot" : "Show Globe"; delay: 500 }
                     }
 
                     // F1 Driver Points Chart
