@@ -243,9 +243,9 @@
 
             if (globe) {
                 if (isInMomentum) {
-                    // Apply momentum with orientation correction
-                    const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
-                    globe.rotation.y += momentumX * yDirection;
+                    // Apply momentum directly in the same frame of reference it was recorded
+                    // (we bake orientation into momentum at capture time to avoid post-release flips)
+                    globe.rotation.y += momentumX;
                     globe.rotation.x += momentumY;
 
                     // Decay momentum
@@ -433,14 +433,15 @@
             const deltaX = event.clientX - previousMousePosition.x;
             const deltaY = event.clientY - previousMousePosition.y;
 
-            // Track velocity for momentum
-            if (deltaTime > 0) {
-                momentumX = deltaX / deltaTime * 0.1; // Scale for smooth momentum
-                momentumY = deltaY / deltaTime * 0.1;
-            }
-
             // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
             const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
+
+            // Track velocity for momentum (bake in current orientation)
+            if (deltaTime > 0) {
+                momentumX = (deltaX * yDirection) / deltaTime * 0.1; // Scale for smooth momentum
+                momentumY = (deltaY) / deltaTime * 0.1;
+            }
+
             globe.rotation.y += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
 
@@ -476,14 +477,15 @@
             const deltaX = event.touches[0].clientX - previousMousePosition.x;
             const deltaY = event.touches[0].clientY - previousMousePosition.y;
 
-            // Track velocity for momentum
-            if (deltaTime > 0) {
-                momentumX = deltaX / deltaTime * 0.1;
-                momentumY = deltaY / deltaTime * 0.1;
-            }
-
             // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
             const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
+
+            // Track velocity for momentum (bake in current orientation)
+            if (deltaTime > 0) {
+                momentumX = (deltaX * yDirection) / deltaTime * 0.1;
+                momentumY = (deltaY) / deltaTime * 0.1;
+            }
+
             globe.rotation.y += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
 

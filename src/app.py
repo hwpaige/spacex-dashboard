@@ -5071,18 +5071,53 @@ Window {
                 clip: false
                 visible: !isWindyFullscreen
                 // Toggle to switch between plot and globe within this card
-                property bool plotCardShowsGlobe: false
+                // Default to globe view on app load
+                property bool plotCardShowsGlobe: true
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
                 property real toggleAbsX: 0
                 property real toggleAbsY: 0
                 function cacheToggleAbsPos() {
-                    if (globeToggle) {
+                    // If the bar toggle is visible, use its real position
+                    if (globeToggle && globeToggle.visible) {
                         var pt = globeToggle.mapToItem(plotCard, 0, 0)
                         toggleAbsX = pt.x
                         toggleAbsY = pt.y
+                    } else {
+                        // Fallback for initial globe mode (bar hidden): compute exact position
+                        // to match where the toggle would be inside the centered RowLayout.
+                        // Row composition (as currently defined):
+                        // - 5 chart buttons @ 40px each
+                        // - RowLayout spacing: 6px between items (6 gaps before toggle)
+                        // - spacer Item: 8px
+                        // - toggle (this pill): 46px
+                        var btnCount = 5;
+                        var btnW = 40;
+                        var spacerW = 8;
+                        var toggleW = 46;
+                        var spacing = 6;
+                        var gapsBeforeToggle = btnCount /*buttons*/ + 1 /*spacer*/; // number of items before toggle
+                        var spacingBeforeToggle = gapsBeforeToggle * spacing; // gaps before toggle
+                        var widthBeforeToggle = (btnCount * btnW) + spacerW + spacingBeforeToggle;
+                        var totalRowWidth = widthBeforeToggle + toggleW + spacing; // include last spacing after toggle for symmetry (harmless)
+
+                        // The RowLayout is centered in the bar, so compute its left edge
+                        var rowLeftX = Math.max(0, (plotCard.width - totalRowWidth) / 2);
+                        // Toggle's left X inside the card
+                        toggleAbsX = rowLeftX + widthBeforeToggle;
+
+                        // Vertically align within the (hidden) bar area at the bottom of the card
+                        var pillH = 24;
+                        var barH = 30;
+                        toggleAbsY = Math.max(2, plotCard.height - barH + (barH - pillH) / 2);
                     }
                 }
-                Component.onCompleted: cacheToggleAbsPos()
+                Component.onCompleted: {
+                    cacheToggleAbsPos()
+                    // Defer once more to ensure layout metrics are finalized
+                    Qt.callLater(cacheToggleAbsPos)
+                }
+                onWidthChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
+                onHeightChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5132,8 +5167,6 @@ Window {
                                 // Ensure the globe view fills all available space in the layout
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                anchors.fill: parent
-                                anchors.margins: 0
                                 visible: plotCard.plotCardShowsGlobe
                                 url: globeUrl
                                 backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
