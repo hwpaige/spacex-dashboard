@@ -45,6 +45,14 @@
         let lastTime = Date.now();
         let isAutoRotatePaused = false;
 
+        // Zoom parameters
+        const DEFAULT_CAMERA_Z = 1.8;      // Existing default distance (keep as farthest zoom-out)
+        const CAMERA_MIN_Z = 1.1;          // How close you can zoom in (tweak if needed)
+        const CAMERA_MAX_Z = DEFAULT_CAMERA_Z; // Clamp max to current default
+        const ZOOM_STEP = 0.1;             // Base step for wheel zoom adjustments
+        let pinchStartDistance = null;
+        let pinchStartZ = null;
+
         function init() {
             try {
                 // Scene
@@ -52,13 +60,15 @@
 
                 // Camera
                 camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.z = 1.8; // Closer to make globe larger
+                camera.position.z = DEFAULT_CAMERA_Z; // Closer to make globe larger
 
                 // Renderer
                 renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setClearColor(0x000000, 0); // Transparent background
                 document.body.appendChild(renderer.domElement);
+                // Allow us to prevent default touch gestures for custom pinch zoom
+                renderer.domElement.style.touchAction = 'none';
 
                 // Globe geometry
                 const geometry = new THREE.SphereGeometry(1, 64, 64);
@@ -157,6 +167,12 @@
 
                 // Handle window resize
                 window.addEventListener('resize', onWindowResize, false);
+                // Mouse wheel zoom (clamped so you can't zoom out past default)
+                renderer.domElement.addEventListener('wheel', onWheelZoom, { passive: false });
+                // Touch pinch zoom support
+                renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+                renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+                renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
                 console.log("Event listeners added");
 
             } catch (error) {
@@ -168,6 +184,58 @@
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function clampCameraZ(z) {
+            return Math.max(CAMERA_MIN_Z, Math.min(CAMERA_MAX_Z, z));
+        }
+
+        function onWheelZoom(event) {
+            // Prevent page/system scrolling
+            event.preventDefault();
+            if (!camera) return;
+            // Normalize wheel delta: negative => zoom in; positive => zoom out
+            const delta = Math.sign(event.deltaY);
+            let newZ = camera.position.z + (delta * ZOOM_STEP);
+            newZ = clampCameraZ(newZ);
+            camera.position.z = newZ;
+        }
+
+        function distanceBetweenTouches(t1, t2) {
+            const dx = t1.clientX - t2.clientX;
+            const dy = t1.clientY - t2.clientY;
+            return Math.hypot(dx, dy);
+        }
+
+        function onTouchStart(event) {
+            if (event.touches && event.touches.length === 2) {
+                event.preventDefault();
+                pinchStartDistance = distanceBetweenTouches(event.touches[0], event.touches[1]);
+                pinchStartZ = camera ? camera.position.z : null;
+            }
+        }
+
+        function onTouchMove(event) {
+            if (event.touches && event.touches.length === 2 && pinchStartDistance && pinchStartZ != null) {
+                event.preventDefault();
+                const currentDistance = distanceBetweenTouches(event.touches[0], event.touches[1]);
+                if (currentDistance > 0) {
+                    // Ratio > 1 means fingers moved apart (zoom in)
+                    const ratio = pinchStartDistance / currentDistance;
+                    // Map ratio to z change around the start z
+                    let targetZ = pinchStartZ * ratio;
+                    // Ease the effect to avoid too aggressive zooming
+                    targetZ = pinchStartZ + (targetZ - pinchStartZ) * 0.5;
+                    camera.position.z = clampCameraZ(targetZ);
+                }
+            }
+        }
+
+        function onTouchEnd(event) {
+            if (!event.touches || event.touches.length < 2) {
+                pinchStartDistance = null;
+                pinchStartZ = null;
+            }
         }
 
         function animate() {
@@ -244,7 +312,7 @@
 
                     // Add subtle height variation for visual effect
                     const progress = index / (trajectoryData.trajectory.length - 1);
-                    const baseRadius = 1.01; // Slightly above surface
+                    const baseRadius = 1.01; // Slightly above surface for visual separation
                     const arcHeight = 0.03 * Math.sin(progress * Math.PI); // Very subtle arc
                     const radius = baseRadius + arcHeight;
 
@@ -278,31 +346,7 @@
                     console.log("Trajectory line added to scene (globe not available)");
                 }
 
-                // Add launch site marker
-                if (trajectoryData.launch_site) {
-                    const launchPoint = trajectoryData.trajectory[0];
-                    const phi = (90 - launchPoint.lat) * (Math.PI / 180);
-                    const theta = (launchPoint.lon + 180) * (Math.PI / 180);
-                    const radius = 1.02;
-
-                    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-                    const z = radius * Math.sin(phi) * Math.sin(theta);
-                    const y = radius * Math.cos(phi);
-
-                    const markerGeometry = new THREE.SphereGeometry(0.01, 8, 8);
-                    const markerMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-                    launchMarker = new THREE.Mesh(markerGeometry, markerMaterial);
-                    launchMarker.position.set(x, y, z);
-
-                    // Add marker as child of globe too
-                    if (globe) {
-                        globe.add(launchMarker);
-                        console.log("Launch site marker added as child of globe");
-                    } else {
-                        scene.add(launchMarker);
-                        console.log("Launch site marker added to scene");
-                    }
-                }
+                // Removed launch site red dot marker per request; keep only the trajectory line
 
                 // Remove previous orbit line if it exists
                 if (window.currentOrbitLine) {

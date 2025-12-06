@@ -2,6 +2,52 @@
 
 A launch monitoring and F1 racing companion application built with PyQt6 and QML, featuring real-time data visualization, interactive 3D globe rendering, and optimized touchscreen deployment for mission control environments.
 
+## Windows setup notes
+
+This app uses PyQt6 add-on modules for WebEngine and Charts. On Windows, these are published on PyPI as separate wheels:
+
+- PyQt6 provides the core Qt bindings
+- PyQt6-WebEngine provides `PyQt6.QtWebEngineQuick`
+- PyQt6-Charts provides `PyQt6.QtCharts`
+
+Install all dependencies (inside your virtual environment):
+
+```powershell
+python -m pip install -r requirements.txt
+```
+
+If you only need the Qt packages:
+
+```powershell
+python -m pip install PyQt6==6.7.1 PyQt6-WebEngine==6.7.0 PyQt6-Charts==6.7.0
+```
+
+Troubleshooting tips:
+
+- Ensure you are using a 64-bit Python that matches your OS. PyQt6 wheels are 64-bit only.
+- If behind a corporate proxy, set `HTTPS_PROXY` before installing.
+- After installation, you should be able to import:
+  - `from PyQt6.QtWebEngineQuick import QtWebEngineQuick`
+  - `from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis`
+
 
 
      
+
+
+
+
+## Trajectory and orbit visualization
+
+The dashboard shows an illustrative ascent trajectory and an orbital ground track for upcoming launches. It is not a physically precise orbital propagator. Key assumptions:
+
+- Ascent path is rendered as a smooth Bézier arc from the launch site toward a representative azimuth based on orbit type and site.
+- Orbital path now reflects an inclination approximation:
+  - LEO-Equatorial: ~site latitude (e.g., ~28.6° from Cape Canaveral)
+  - LEO-Polar (Vandenberg): ~97°
+  - ISS references: 51.6°
+  - GTO: near site latitude
+  - Suborbital: short arc without full orbit
+- The ground track is generated to pass near the ascent end point and advances longitude at a rate scaled by cos(inclination). This creates a visually inclined orbit with polar vs. low-inclination differences.
+
+Caching: Generated trajectory/orbit points are cached in cache/trajectory_cache.json with a versioned key that includes launch site, orbit class, and assumed inclination. Delete this file if you want to force regeneration after changing logic.

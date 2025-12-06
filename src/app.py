@@ -30,7 +30,13 @@ import re
 import calendar
 from cryptography.fernet import Fernet
 from track_generator import generate_track_map
-from plotly_charts import generate_f1_standings_chart
+from plotly_charts import (
+    generate_f1_standings_chart,
+    generate_f1_telemetry_chart,
+    generate_f1_weather_chart,
+    generate_f1_positions_chart,
+    generate_f1_laps_chart,
+)
 import http.server
 import socketserver
 import threading
@@ -206,6 +212,7 @@ except Exception as _e:  # Fallback (should not normally occur)
 CACHE_REFRESH_INTERVAL_PREVIOUS = 86400  # 24 hours for historical data
 CACHE_REFRESH_INTERVAL_UPCOMING = 3600   # 1 hour for upcoming launches
 CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
+TRAJECTORY_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'trajectory_cache.json')
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
 CACHE_FILE_PREVIOUS_BACKUP = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache_backup.json')
 CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), '..', 'cache', 'upcoming_launches_cache.json')
@@ -2533,20 +2540,95 @@ class Backend(QObject):
 
         # Find launch site coordinates
         launch_site = None
+        matched_site_key = None
         for site_key, site_data in launch_sites.items():
             if site_key in pad:
                 launch_site = site_data
+                matched_site_key = site_key
                 break
 
         if not launch_site:
             # Default to Cape Canaveral if pad not recognized
             launch_site = launch_sites['LC-39A']
+            matched_site_key = 'LC-39A'
             logger.info(f"Using default launch site: {launch_site}")
 
         logger.info(f"Launch site: {launch_site}")
 
-        def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default'):
-            """Generate a smooth rocket launch trajectory with continuous curvature"""
+        # Normalize orbit type for caching
+        def _normalize_orbit(orbit_label: str, site_name: str) -> str:
+            try:
+                label = (orbit_label or '').lower()
+                if 'gto' in label or 'geostationary' in label:
+                    return 'GTO'
+                if 'suborbital' in label:
+                    return 'Suborbital'
+                if 'leo' in label or 'low earth orbit' in label:
+                    # Distinguish by site for better path reuse
+                    if 'Vandenberg' in site_name:
+                        return 'LEO-Polar'
+                    return 'LEO-Equatorial'
+                # Fallback
+                return 'Default'
+            except Exception:
+                return 'Default'
+
+        normalized_orbit = _normalize_orbit(orbit, launch_site.get('name', ''))
+
+        # Try cache first
+        cache_loaded = load_cache_from_file(TRAJECTORY_CACHE_FILE)
+        traj_cache = cache_loaded['data'] if cache_loaded and isinstance(cache_loaded.get('data'), dict) else {}
+        # Resolve an inclination assumption based on orbit and site for cache versioning and path generation
+        def _resolve_inclination_deg(norm_orbit: str, site_name: str, site_lat: float) -> float:
+            try:
+                # ISS-like if explicitly referenced
+                if 'iss' in (orbit or '').lower():
+                    return 51.6
+                if norm_orbit == 'LEO-Polar':
+                    return 97.0
+                if norm_orbit == 'LEO-Equatorial':
+                    # Approx. site latitude with small bias
+                    base = abs(site_lat)
+                    return max(20.0, min(60.0, base + 0.5))
+                if norm_orbit == 'GTO':
+                    # Typical GTO insertion near site latitude
+                    return max(20.0, min(35.0, abs(site_lat)))
+                if norm_orbit == 'Suborbital':
+                    return max(10.0, min(45.0, abs(site_lat)))
+            except Exception:
+                pass
+            return 30.0
+
+        assumed_incl = _resolve_inclination_deg(
+            normalized_orbit,
+            launch_site.get('name', ''),
+            launch_site.get('lat', 0.0)
+        )
+
+        ORBIT_CACHE_VERSION = 'v4'  # bump when tangent-matched ascent join to orbit path is introduced
+        cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}"
+        if cache_key in traj_cache:
+            cached = traj_cache[cache_key]
+            logger.info(f"Trajectory cache hit for {cache_key}")
+            # Ensure mission/pad updated in return payload
+            cached_result = {
+                'launch_site': cached.get('launch_site', launch_site),
+                'trajectory': cached.get('trajectory', []),
+                'orbit_path': cached.get('orbit_path', []),
+                'orbit': orbit or cached.get('orbit', normalized_orbit),
+                'mission': next_launch.get('mission', ''),
+                'pad': pad
+            }
+            logger.info(f"Returning cached trajectory with {len(cached_result['trajectory'])} points and orbit path with {len(cached_result.get('orbit_path', []))} points")
+            return cached_result
+        else:
+            logger.info(f"Trajectory cache miss for {cache_key}; generating new trajectory")
+
+        def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default', end_bearing_deg=None):
+            """Generate a smooth rocket launch trajectory with continuous curvature.
+            If end_bearing_deg is provided, enforce C1 continuity at the end by aligning
+            the tangent to the given bearing (degrees from north, eastward positive).
+            """
             points = []
 
             start_lat = start_point['lat']
@@ -2559,26 +2641,46 @@ class Backend(QObject):
             lon_diff = (end_lon - start_lon + 180) % 360 - 180  # Handle longitude wraparound
 
             # Create control point for quadratic Bézier curve
-            # Control point is positioned above and between start and end
-            mid_lat = (start_lat + end_lat) / 2
-            mid_lon = (start_lon + end_lon) / 2
+            # If a target end bearing is specified, compute control to match tangent at end.
+            if end_bearing_deg is not None:
+                # Estimate angular separation (degrees) using haversine on unit sphere
+                lat1 = math.radians(start_lat); lon1 = math.radians(start_lon)
+                lat2 = math.radians(end_lat);   lon2 = math.radians(end_lon)
+                dlat = lat2 - lat1
+                dlon = lon2 - lon1
+                a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(max(1e-12, 1-a)))
+                ang_deg = math.degrees(c)
+                # Choose control length as a fraction of separation for smoothness
+                L = min(20.0, max(5.0, ang_deg / 3.0))
+                br = math.radians(end_bearing_deg)
+                cos_lat = max(1e-6, math.cos(math.radians(end_lat)))
+                dlat_deg = L * math.cos(br)
+                dlon_deg = (L * math.sin(br)) / cos_lat
+                control_lat = end_lat - dlat_deg
+                control_lon = end_lon - dlon_deg
+                control_lon = (control_lon + 180.0) % 360.0 - 180.0
+            else:
+                # Control point is positioned above and between start and end (heuristic)
+                mid_lat = (start_lat + end_lat) / 2
+                mid_lon = (start_lon + end_lon) / 2
 
-            # Lift the control point upward for the arc effect
-            if orbit_type == 'polar':
-                control_lat = max(-85.0, mid_lat - 20)  # South arc for polar orbits from Vandenberg
-                control_lon = mid_lon - 20  # Slight westward curve
-            elif orbit_type == 'equatorial':
-                control_lat = mid_lat + 15  # Moderate arc
-                control_lon = mid_lon + 30  # Curve eastward
-            elif orbit_type == 'gto':
-                control_lat = mid_lat + 25  # Higher arc for GTO
-                control_lon = mid_lon + 60  # Longer eastward curve
-            elif orbit_type == 'suborbital':
-                control_lat = mid_lat + 10  # Lower arc for suborbital
-                control_lon = mid_lon + 15  # Shorter curve
-            else:  # default
-                control_lat = mid_lat + 20  # Standard arc
-                control_lon = mid_lon + 45  # Standard curve
+                # Lift the control point upward for the arc effect
+                if orbit_type == 'polar':
+                    control_lat = max(-85.0, mid_lat - 20)  # South arc for polar orbits from Vandenberg
+                    control_lon = mid_lon - 20  # Slight westward curve
+                elif orbit_type == 'equatorial':
+                    control_lat = mid_lat + 15  # Moderate arc
+                    control_lon = mid_lon + 30  # Curve eastward
+                elif orbit_type == 'gto':
+                    control_lat = mid_lat + 25  # Higher arc for GTO
+                    control_lon = mid_lon + 60  # Longer eastward curve
+                elif orbit_type == 'suborbital':
+                    control_lat = mid_lat + 10  # Lower arc for suborbital
+                    control_lon = mid_lon + 15  # Shorter curve
+                else:  # default
+                    control_lat = mid_lat + 20  # Standard arc
+                    control_lon = mid_lon + 45  # Standard curve
 
             # Generate points along quadratic Bézier curve
             for i in range(num_points + 1):
@@ -2628,46 +2730,132 @@ class Backend(QObject):
             'pad': pad
         }
 
-        # --- Add orbital path as a circular or elliptical arc ---
-        def generate_orbit_path(trajectory, orbit_type='LEO', num_points=60):
-            # Use the last point of the ascent as the starting point of the orbit
+        # --- New: generate orbital ground track as a great-circle in 3D, avoiding cusps at poles ---
+        def generate_orbit_path_inclined(trajectory, orbit_label: str, inclination_deg: float, num_points: int = 180):
+            """
+            Generate a smooth ground track for a circular orbit by constructing a great-circle
+            path inclined by `inclination_deg` and choosing RAAN/phase to pass through the
+            ascent end point. Uses 3D rotation and atan2 for lon to avoid hard corners.
+            """
             if not trajectory:
                 return []
             start = trajectory[-1]
-            # For LEO, use a circular path at the same latitude as the end of ascent
-            # For GTO, use a more elliptical path (simulate higher apogee)
-            # For polar, sweep longitude, keep latitude near end point
+            lat0 = float(start['lat'])
+            lon0 = float(start['lon'])
+
+            # Effective inclination within [0, 90] to represent max latitude reached by ground track
+            i_in = float(inclination_deg)
+            if i_in < 0:
+                i_in = -i_in
+            if i_in > 180:
+                i_in = i_in % 180.0
+            eff_i_deg = i_in if i_in <= 90.0 else 180.0 - i_in
+            eff_i_deg = max(0.1, min(89.9, eff_i_deg))  # avoid singularities
+            i_rad = math.radians(eff_i_deg)
+
+            # Convert start point to Cartesian on unit sphere
+            lat0_rad = math.radians(lat0)
+            lon0_rad = math.radians(lon0)
+            x0 = math.cos(lat0_rad) * math.cos(lon0_rad)
+            y0 = math.cos(lat0_rad) * math.sin(lon0_rad)
+            z0 = math.sin(lat0_rad)
+
+            # Solve for phase u0 using z = sin(u0) * sin(i)
+            sin_i = math.sin(i_rad)
+            if abs(sin_i) < 1e-6:
+                sin_i = 1e-6
+            sin_arg = max(-1.0, min(1.0, z0 / sin_i))
+            u0 = math.asin(sin_arg)
+
+            # Precompute A, B for solving RAAN (Ω)
+            A = math.cos(u0)
+            B = math.sin(u0) * math.cos(i_rad)
+
+            # alpha = atan2(y0, x0), beta = atan2(B, A); Ω = alpha - beta
+            alpha = math.atan2(y0, x0)
+            beta = math.atan2(B, A)
+            Omega = alpha - beta
+
+            cosO = math.cos(Omega)
+            sinO = math.sin(Omega)
+            cosi = math.cos(i_rad)
+            sili = math.sin(i_rad)
+
             points = []
-            if orbit_type in ['LEO', 'Low Earth Orbit', 'polar', 'equatorial']:
-                # Circular orbit in the plane of the end point
-                lat = start['lat']
-                for i in range(num_points):
-                    theta = (i / num_points) * 360.0
-                    lon = (start['lon'] + theta) % 360 - 180
-                    points.append({'lat': lat, 'lon': lon})
-            elif orbit_type in ['GTO', 'Geostationary']:
-                # Elliptical: latitude oscillates, longitude sweeps
-                for i in range(num_points):
-                    theta = (i / num_points) * 360.0
-                    lon = (start['lon'] + theta) % 360 - 180
-                    # Simulate elliptical inclination
-                    lat = start['lat'] + 10 * math.sin(math.radians(theta))
-                    points.append({'lat': lat, 'lon': lon})
-            else:
-                # Default: circular at end latitude
-                lat = start['lat']
-                for i in range(num_points):
-                    theta = (i / num_points) * 360.0
-                    lon = (start['lon'] + theta) % 360 - 180
-                    points.append({'lat': lat, 'lon': lon})
+            for k in range(num_points):
+                u = u0 + (2.0 * math.pi * k) / num_points
+                cu = math.cos(u)
+                su = math.sin(u)
+
+                # Orbit frame point rotated by inclination and RAAN
+                x = cosO * cu - sinO * (su * cosi)
+                y = sinO * cu + cosO * (su * cosi)
+                z = su * sili
+
+                # Convert to geodetic lat/lon on unit sphere
+                lat_rad = math.atan2(z, max(1e-12, math.hypot(x, y)))
+                lon_rad = math.atan2(y, x)
+                lat_deg = math.degrees(lat_rad)
+                lon_deg = math.degrees(lon_rad)
+
+                # Normalize lon to [-180, 180]
+                lon_deg = (lon_deg + 180.0) % 360.0 - 180.0
+                points.append({'lat': lat_deg, 'lon': lon_deg})
             return points
 
-        result['orbit_path'] = generate_orbit_path(trajectory, orbit, 90)
-        logger.info(f"Generated orbit path with {len(result['orbit_path'])} points for orbit type: '{orbit}'")
+        result['orbit_path'] = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 360)
+        # Log extrema to validate behavior
+        if result['orbit_path']:
+            lats = [p['lat'] for p in result['orbit_path']]
+            logger.info(f"Generated orbit path with {len(result['orbit_path'])} points for orbit type: '{orbit}', inclination ~{assumed_incl}°. Lat range: {min(lats):.2f}..{max(lats):.2f}")
+            # Tangent-match the ascent to the orbit to avoid a visible hook at the join
+            try:
+                if len(trajectory) >= 2 and len(result['orbit_path']) >= 2:
+                    p0 = result['orbit_path'][0]
+                    p1 = result['orbit_path'][1]
+
+                    def _bearing_deg(lat1, lon1, lat2, lon2):
+                        phi1 = math.radians(lat1); phi2 = math.radians(lat2)
+                        dlon = math.radians((lon2 - lon1))
+                        y = math.sin(dlon) * math.cos(phi2)
+                        x = math.cos(phi1)*math.sin(phi2) - math.sin(phi1)*math.cos(phi2)*math.cos(dlon)
+                        br = math.degrees(math.atan2(y, x))
+                        return (br + 360.0) % 360.0
+
+                    end_bearing = _bearing_deg(p0['lat'], p0['lon'], p1['lat'], p1['lon'])
+                    # Rebuild trajectory maintaining same endpoints but matching end tangent
+                    new_traj = generate_curved_trajectory(
+                        trajectory[0], trajectory[-1], max(25, len(trajectory)),
+                        orbit_type=('polar' if normalized_orbit == 'LEO-Polar' else ('equatorial' if normalized_orbit == 'LEO-Equatorial' else ('gto' if normalized_orbit == 'GTO' else 'default'))),
+                        end_bearing_deg=end_bearing
+                    )
+                    if len(new_traj) >= 2:
+                        t_prev = new_traj[-2]; t_end = new_traj[-1]
+                        traj_bearing = _bearing_deg(t_prev['lat'], t_prev['lon'], t_end['lat'], t_end['lon'])
+                        diff = abs((traj_bearing - end_bearing + 180.0) % 360.0 - 180.0)
+                        logger.info(f"Ascent/orbit join: orbit bearing={end_bearing:.1f}°, trajectory bearing={traj_bearing:.1f}°, diff={diff:.1f}°")
+                    trajectory = new_traj
+                    result['trajectory'] = trajectory
+            except Exception as e:
+                logger.warning(f"Tangent-match of ascent to orbit failed: {e}")
         logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Generated orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Returning trajectory with {len(trajectory)} points")
+        # Persist to cache
+        try:
+            traj_cache[cache_key] = {
+                'launch_site': result['launch_site'],
+                'trajectory': result['trajectory'],
+                'orbit_path': result.get('orbit_path', []),
+                'orbit': normalized_orbit,
+                'inclination_deg': assumed_incl,
+                'model': 'v4-tangent-join'
+            }
+            save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
+            logger.info(f"Saved trajectory to cache under key {cache_key}")
+        except Exception as e:
+            logger.warning(f"Failed to save trajectory cache: {e}")
         return result
 
     @pyqtSlot(result=QVariant)
@@ -4184,7 +4372,30 @@ if __name__ == '__main__':
     def start_http_server():
         port = 8080
         os.chdir(os.path.dirname(__file__))  # Serve from src directory
-        handler = http.server.SimpleHTTPRequestHandler
+
+        class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+            def do_GET(self):
+                # Handle favicon requests to avoid noisy 404s
+                if self.path in ("/favicon.ico", "/_favicon.ico"):
+                    try:
+                        # Try to serve project favicon if present
+                        icon_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'favicon.ico')
+                        if os.path.exists(icon_path):
+                            self.send_response(200)
+                            self.send_header("Content-Type", "image/x-icon")
+                            self.end_headers()
+                            with open(icon_path, 'rb') as f:
+                                self.wfile.write(f.read())
+                            return
+                    except Exception:
+                        pass
+                    # Otherwise reply 204 No Content
+                    self.send_response(204)
+                    self.end_headers()
+                    return
+                return super().do_GET()
+
+        handler = CustomHTTPRequestHandler
 
         # Try to start server on port 8080, then try alternative ports if busy
         for attempt_port in [8080, 8081, 8082, 8083, 8084]:
@@ -5173,26 +5384,7 @@ Window {
                                     }
                                 }
 
-                                Text {
-                                    anchors.top: parent.top
-                                    anchors.horizontalCenter: parent.horizontalCenter
-                                    text: {
-                                        var icons = {
-                                            "radar": "\uf7c0",
-                                            "wind": "\uf72e", 
-                                            "gust": "\uf72e",
-                                            "clouds": "\uf0c2",
-                                            "temp": "\uf2c7",
-                                            "pressure": "\uf6c4"
-                                        };
-                                        return icons[modelData] || modelData.charAt(0).toUpperCase() + modelData.slice(1);
-                                    }
-                                    font.pixelSize: 14
-                                    font.family: "Font Awesome 5 Free"
-                                    color: "#ffffff"
-                                    style: Text.Outline
-                                    styleColor: "#000000"
-                                }
+                                // Removed top-center icon overlay for Windy views as requested
 
                                 // Fullscreen button for weather views
                                 Rectangle {
@@ -7364,7 +7556,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7390,7 +7582,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7416,7 +7608,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7442,7 +7634,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: launchTray.nextLaunch && launchTray.nextLaunch.status.toLowerCase().includes("go") ? "#00FF88" : "#FF4444"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7468,7 +7660,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7494,7 +7686,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7520,7 +7712,7 @@ Window {
                                                 font.weight: Font.Medium
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
 
@@ -7547,7 +7739,7 @@ Window {
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 wrapMode: Text.Wrap
-                                                visible: launchTray.nextLaunch
+                                                visible: !!launchTray.nextLaunch
                                             }
                                         }
                                     }
