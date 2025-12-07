@@ -5568,9 +5568,10 @@ Window {
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                radius: 8
-                clip: true
-                // Ensure child scene graph textures (like WebEngineView) are clipped to rounded corners
+                // Remove rounded corners/clipping for Windy card to restore animations
+                radius: 0
+                clip: false
+                // Layers can remain enabled; no clipping applied
                 layer.enabled: true
                 layer.smooth: true
 
@@ -5585,8 +5586,9 @@ Window {
                             anchors.margins: 10
                             visible: backend && backend.mode === "spacex"
                             orientation: Qt.Vertical
-                            clip: true
-                            // Make SwipeView a separate layer so its children respect clipping properly
+                            // Do not clip; allow Windy WebGL to render freely
+                            clip: false
+                            // Keep layer enabled for performance but without clipping
                             layer.enabled: true
                             layer.smooth: true
                             interactive: true
@@ -5600,13 +5602,13 @@ Window {
                             model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
 
                             Item {
-                                // Rounded-corner container to ensure Windy views are clipped properly
+                                // Container without rounded corners or clipping for Windy views
                                 Rectangle {
                                     anchors.fill: parent
-                                    radius: 8
+                                    radius: 0
                                     color: "transparent"
-                                    clip: true
-                                    // Enable layer to ensure proper clipping of WebEngineView textures
+                                    clip: false
+                                    // Layer can remain enabled
                                     layer.enabled: true
                                     layer.smooth: true
 
@@ -5638,27 +5640,7 @@ Window {
                                                 console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
                                             } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                                 console.log("WebEngineView loaded successfully for", modelData);
-                                                // Apply internal page rounding to ensure corners clip
-                                                root._injectRoundedCorners(webView, 8)
-                                                // Re-apply a few times to catch late DOM mutations from Windy
-                                                roundTries = 0
-                                                roundTimer.restart()
-                                            }
-                                        }
-
-                                        // Re-apply rounding a few times post-load for Windy dynamic DOM
-                                        property int roundTries: 0
-                                        Timer {
-                                            id: roundTimer
-                                            interval: 500
-                                            repeat: true
-                                            running: false
-                                            onTriggered: {
-                                                root._injectRoundedCorners(webView, 8)
-                                                webView.roundTries += 1
-                                                if (webView.roundTries > 10) {
-                                                    stop()
-                                                }
+                                                // No rounding injection for Windy to preserve animations
                                             }
                                         }
                                     }
