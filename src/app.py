@@ -5111,7 +5111,11 @@ Window {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                // When showing the globe inside this card, match the app background
+                // so the globe appears to sit directly on the window background.
+                color: plotCard.plotCardShowsGlobe
+                       ? (backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8")
+                       : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                 radius: 8
                 clip: false
                 visible: !isWindyFullscreen
@@ -8047,7 +8051,8 @@ Window {
                             Layout.preferredWidth: launchTray.width / 3
                             Layout.fillHeight: true
                             radius: 0
-                            color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                            // Match the app background so the globe appears to sit on the background
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
 
                             WebEngineView {
                                 id: globeView
