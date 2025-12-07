@@ -1293,7 +1293,23 @@ class DataLoader(QObject):
 
     def run(self):
         logger.info("DataLoader: Starting parallel data loading...")
-        self.statusUpdate.emit("Fetching SpaceX launch data...")
+        # Robustly emit status updates; guard against rare race where the QObject
+        # might be deleted during thread teardown on some platforms.
+        def _safe_emit_status(message: str):
+            try:
+                self.statusUpdate.emit(message)
+            except RuntimeError as e:
+                # If the C++ object has already been deleted, skip emitting.
+                # This avoids a hard crash while the app is shutting down or swapping loaders.
+                logger.warning(f"DataLoader: Skipping statusUpdate emit ('{message}'): {e}")
+
+        def _safe_emit_finished(launch_data, f1_data, weather_data):
+            try:
+                self.finished.emit(launch_data, f1_data, weather_data)
+            except RuntimeError as e:
+                logger.warning(f"DataLoader: Skipping finished emit: {e}")
+
+        _safe_emit_status("Fetching SpaceX launch data...")
         
         # Function to fetch launch data
         def fetch_launch_data():
@@ -1360,12 +1376,13 @@ class DataLoader(QObject):
             f1_data = f1_future.result()
             weather_data = weather_future.result()
         
-        self.statusUpdate.emit("Data loading complete")
+        # Final status update; guard against race conditions during shutdown
+        _safe_emit_status("Data loading complete")
         logger.info("DataLoader: Finished loading all data in parallel")
         logger.info(f"DataLoader: Launch data keys: {list(launch_data.keys()) if isinstance(launch_data, dict) else 'not dict'}")
         logger.info(f"DataLoader: F1 data keys: {list(f1_data.keys()) if isinstance(f1_data, dict) else 'not dict'}")
         logger.info(f"DataLoader: Weather data keys: {list(weather_data.keys()) if isinstance(weather_data, dict) else 'not dict'}")
-        self.finished.emit(launch_data, f1_data, weather_data)
+        _safe_emit_finished(launch_data, f1_data, weather_data)
 
 class LaunchUpdater(QObject):
     finished = pyqtSignal(dict)
@@ -4422,6 +4439,14 @@ if __name__ == '__main__':
     server_thread.start()
     
     app = QApplication(sys.argv)
+
+    # Ensure Qt WebEngine QML types are initialized before loading QML
+    # This prevents runtime errors where WebEngineView is unknown in QML on some setups
+    try:
+        QtWebEngineQuick.initialize()
+    except Exception as e:
+        # If initialization is redundant or already done via QML import, ignore
+        print(f"QtWebEngineQuick.initialize() notice: {e}")
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
@@ -4922,6 +4947,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Charts 1.0
 import QtWebEngine
+// Qt5Compat.GraphicalEffects (OpacityMask) removed to avoid hard dependency
 
 Window {
     id: root
@@ -4934,6 +4960,25 @@ Window {
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
+
+    // Helper to enforce rounded corners inside WebEngine pages themselves.
+    // This injects CSS into the page to round and clip at the document level,
+    // which works even when the scene-graph clipping is ignored by Chromium.
+    function _injectRoundedCorners(webView, radiusPx) {
+        if (!webView || !webView.runJavaScript)
+            return;
+        var r = Math.max(0, radiusPx|0);
+        var js = "(function(){try{" +
+                 "var r=" + r + ";" +
+                 "var apply=function(){var h=document.documentElement, b=document.body;" +
+                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.background='transparent'; h.style.clipPath='inset(0 round '+r+'px)';}" +
+                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.background='transparent'; b.style.clipPath='inset(0 round '+r+'px)';}" +
+                 "};" +
+                 "apply();" +
+                 "var i=0; var timer=setInterval(function(){try{apply(); if(++i>10) clearInterval(timer);}catch(e){clearInterval(timer);}}, 500);" +
+                 "}catch(e){}})();";
+        webView.runJavaScript(js);
+    }
 
     Component.onCompleted: {
         console.log("Window created - bottom bar should be visible")
@@ -5089,11 +5134,11 @@ Window {
                         // - 5 chart buttons @ 40px each
                         // - RowLayout spacing: 6px between items (6 gaps before toggle)
                         // - spacer Item: 8px
-                        // - toggle (this pill): 46px
+                        // - toggle button: 40px (matches other buttons)
                         var btnCount = 5;
                         var btnW = 40;
                         var spacerW = 8;
-                        var toggleW = 46;
+                        var toggleW = 40;
                         var spacing = 6;
                         var gapsBeforeToggle = btnCount /*buttons*/ + 1 /*spacer*/; // number of items before toggle
                         var spacingBeforeToggle = gapsBeforeToggle * spacing; // gaps before toggle
@@ -5106,7 +5151,7 @@ Window {
                         toggleAbsX = rowLeftX + widthBeforeToggle;
 
                         // Vertically align within the (hidden) bar area at the bottom of the card
-                        var pillH = 24;
+                        var pillH = 28; // match button height
                         var barH = 30;
                         toggleAbsY = Math.max(2, plotCard.height - barH + (barH - pillH) / 2);
                     }
@@ -5162,6 +5207,8 @@ Window {
                             }
 
                             // Globe view (reuses the upcoming launch tray globe)
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
                             WebEngineView {
                                 id: plotGlobeView
                                 // Ensure the globe view fills all available space in the layout
@@ -5169,8 +5216,11 @@ Window {
                                 Layout.fillHeight: true
                                 visible: plotCard.plotCardShowsGlobe
                                 url: globeUrl
-                                backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                // Transparent so the card's color shows through rounded edges after DOM rounding
+                                backgroundColor: "transparent"
                                 zoomFactor: 1.0
+                                layer.enabled: true
+                                layer.smooth: true
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: false
 
@@ -5180,6 +5230,8 @@ Window {
                                         if (trajectoryData) {
                                             plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                         }
+                                        // Enforce rounded corners inside the page itself
+                                        root._injectRoundedCorners(plotGlobeView, 8)
                                     }
                                 }
                             }
@@ -5256,46 +5308,43 @@ Window {
                                 }
                             }
 
-                            // Toggle between Plot and Globe (compact, no labels or surrounding pill)
+                            // Toggle button between Plot and Globe (matches bar button style)
                             Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
                             Rectangle {
                                 id: globeToggle
-                                Layout.preferredWidth: 46
-                                Layout.preferredHeight: 24
-                                width: 46
-                                height: 24
-                                radius: 12
-                                color: plotCard.plotCardShowsGlobe ?
-                                    "#FF3838" :
-                                    (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                width: 40
+                                height: 28
+                                radius: 14
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
 
                                 Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                                // Knob
-                                Rectangle {
-                                    width: 20
-                                    height: 20
-                                    radius: 10
-                                    x: plotCard.plotCardShowsGlobe ? parent.width - width - 2 : 2
-                                    y: 2
-                                    color: "white"
-                                    border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
-                                    border.width: 1
-
-                                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                Text {
+                                    anchors.centerIn: parent
+                                    // In plot view (globe hidden), show globe icon; if ever visible otherwise, show plot icon
+                                    text: plotCard.plotCardShowsGlobe ? "\uf201" : "\uf0ac"
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "white" : "black"
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
-                                        // Cache absolute position before switching modes so overlay toggle can match position
+                                        // Cache absolute position before switching modes so overlay button can match position
                                         plotCard.cacheToggleAbsPos()
-                                        plotCard.plotCardShowsGlobe = !plotCard.plotCardShowsGlobe
+                                        plotCard.plotCardShowsGlobe = true
                                     }
                                     cursorShape: Qt.PointingHandCursor
                                 }
 
-                                ToolTip { text: plotCard.plotCardShowsGlobe ? "Show Plot" : "Show Globe"; delay: 500 }
+                                ToolTip { text: "Show Globe"; delay: 500 }
                                 // Keep cached position updated when layout changes while visible
                                 onXChanged: plotCard.cacheToggleAbsPos()
                                 onYChanged: plotCard.cacheToggleAbsPos()
@@ -5306,32 +5355,32 @@ Window {
                         }
                     }
 
-                    // Overlay toggle: visually parented to plotCard so it does not participate in Layout
+                    // Overlay toggle button (same style as bar buttons), positioned absolutely using cached coordinates
                     Rectangle {
                         id: globeOverlayToggle
                         parent: plotCard
                         visible: backend && backend.mode === "spacex" && plotCard.plotCardShowsGlobe
                         x: plotCard.toggleAbsX
                         y: plotCard.toggleAbsY
-                        width: 46
-                        height: 24
-                        radius: 12
-                        color: plotCard.plotCardShowsGlobe ? "#FF3838" : (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+                        width: 40
+                        height: 28
+                        radius: 14
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
                         z: 1000
 
                         Behavior on color { ColorAnimation { duration: 200 } }
+                        Behavior on border.color { ColorAnimation { duration: 200 } }
+                        Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                        Rectangle {
-                            width: 20
-                            height: 20
-                            radius: 10
-                            x: plotCard.plotCardShowsGlobe ? parent.width - width - 2 : 2
-                            y: 2
-                            color: "white"
-                            border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
-                            border.width: 1
-
-                            Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                        Text {
+                            anchors.centerIn: parent
+                            // In globe view (overlay visible), show plot icon to switch back
+                            text: "\uf201"
+                            font.pixelSize: 14
+                            font.family: "Font Awesome 5 Free"
+                            color: backend.theme === "dark" ? "white" : "black"
                         }
 
                         MouseArea {
@@ -5344,7 +5393,7 @@ Window {
                             cursorShape: Qt.PointingHandCursor
                         }
 
-                        ToolTip { text: plotCard.plotCardShowsGlobe ? "Show Plot" : "Show Globe"; delay: 500 }
+                        ToolTip { text: "Show Plot"; delay: 500 }
                     }
 
                     // F1 Driver Points Chart
@@ -5367,11 +5416,16 @@ Window {
                                 Layout.margins: 1
                             }
 
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
                             WebEngineView {
                                 id: f1ChartView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 Layout.margins: 5
+                                layer.enabled: true
+                                layer.smooth: true
+                                backgroundColor: "transparent"
 
                                 // Bind url to chart file URL that updates reactively
                                 url: backend.f1ChartUrl
@@ -5386,6 +5440,12 @@ Window {
                                     NumberAnimation {
                                         duration: 500
                                         easing.type: Easing.InOutQuad
+                                    }
+                                }
+
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        root._injectRoundedCorners(f1ChartView, 8)
                                     }
                                 }
                             }
@@ -5506,6 +5566,9 @@ Window {
                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                 radius: 8
                 clip: true
+                // Ensure child scene graph textures (like WebEngineView) are clipped to rounded corners
+                layer.enabled: true
+                layer.smooth: true
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -5519,6 +5582,9 @@ Window {
                             visible: backend && backend.mode === "spacex"
                             orientation: Qt.Vertical
                             clip: true
+                            // Make SwipeView a separate layer so its children respect clipping properly
+                            layer.enabled: true
+                            layer.smooth: true
                             interactive: true
                             currentIndex: 1
 
@@ -5530,29 +5596,70 @@ Window {
                             model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
 
                             Item {
-                                WebEngineView {
-                                    id: webView
-                                    objectName: "webView"
+                                // Rounded-corner container to ensure Windy views are clipped properly
+                                Rectangle {
                                     anchors.fill: parent
-                                    url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
-                                    settings {
-                                        webGLEnabled: true
-                                        accelerated2dCanvasEnabled: true
-                                        allowRunningInsecureContent: true
-                                        javascriptEnabled: true
-                                        localContentCanAccessRemoteUrls: true
-                                    }
-                                    onFullScreenRequested: function(request) {
-                                        request.accept();
-                                        root.visibility = Window.FullScreen
-                                    }
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                            console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
-                                        } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            console.log("WebEngineView loaded successfully for", modelData);
+                                    radius: 8
+                                    color: "transparent"
+                                    clip: true
+                                    // Enable layer to ensure proper clipping of WebEngineView textures
+                                    layer.enabled: true
+                                    layer.smooth: true
+
+                                    // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                                    WebEngineView {
+                                        id: webView
+                                        objectName: "webView"
+                                        anchors.fill: parent
+                                        // Make the view itself a layer to cooperate with ancestor clipping
+                                        layer.enabled: true
+                                        layer.smooth: true
+                                        // Avoid white square corners by letting parent background show through
+                                        backgroundColor: "transparent"
+                                        url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
+                                        settings {
+                                            webGLEnabled: true
+                                            accelerated2dCanvasEnabled: true
+                                            allowRunningInsecureContent: true
+                                            javascriptEnabled: true
+                                            localContentCanAccessRemoteUrls: true
+                                        }
+                                        onFullScreenRequested: function(request) {
+                                            request.accept();
+                                            root.visibility = Window.FullScreen
+                                        }
+                                        onLoadingChanged: function(loadRequest) {
+                                            if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                                console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
+                                            } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                                console.log("WebEngineView loaded successfully for", modelData);
+                                                // Apply internal page rounding to ensure corners clip
+                                                root._injectRoundedCorners(webView, 8)
+                                                // Re-apply a few times to catch late DOM mutations from Windy
+                                                roundTries = 0
+                                                roundTimer.restart()
+                                            }
+                                        }
+
+                                        // Re-apply rounding a few times post-load for Windy dynamic DOM
+                                        property int roundTries: 0
+                                        Timer {
+                                            id: roundTimer
+                                            interval: 500
+                                            repeat: true
+                                            running: false
+                                            onTriggered: {
+                                                root._injectRoundedCorners(webView, 8)
+                                                webView.roundTries += 1
+                                                if (webView.roundTries > 10) {
+                                                    stop()
+                                                }
+                                            }
                                         }
                                     }
+
+                                    // overlay mask removed
                                 }
 
                                 // Removed top-center icon overlay for Windy views as requested
@@ -6117,64 +6224,82 @@ Window {
                         httpCacheType: WebEngineProfile.DiskHttpCache
                     }
 
-                    WebEngineView {
-                        id: youtubeView
-                        profile: youtubeProfile
+                    // Rounded-corner container to ensure YouTube/map view corners are clipped
+                    Rectangle {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
-                        settings {
-                            webGLEnabled: true
-                            accelerated2dCanvasEnabled: true
-                            allowRunningInsecureContent: true
-                            javascriptEnabled: true
-                            localContentCanAccessRemoteUrls: true
-                            playbackRequiresUserGesture: false  // Allow autoplay
-                            pluginsEnabled: true
-                            javascriptCanOpenWindows: false
-                            javascriptCanAccessClipboard: false
-                            allowWindowActivationFromJavaScript: false
-                        }
-                        onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
-                        onLoadingChanged: function(loadRequest) {
-                            if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
-                                console.log("Error code:", loadRequest.errorCode);
-                                console.log("Error domain:", loadRequest.errorDomain);
+                        radius: 8
+                        color: "transparent"
+                        clip: true
+                        layer.enabled: true
+                        layer.smooth: true
 
-                                // Handle specific error codes
-                                if (loadRequest.errorCode === 153) {
-                                    console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
-                                    console.log("This is a new YouTube policy requiring API client identification");
-                                    console.log("Attempting to reload with proper headers...");
+                        // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                                    // Auto-retry for Referer header errors
-                                    reloadTimer.restart();
-                                } else if (loadRequest.errorCode === 2) {
-                                    console.log("ERR_FAILED - Network or server error. Check your internet connection.");
-                                } else if (loadRequest.errorCode === 3) {
-                                    console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
-                                } else if (loadRequest.errorCode === 6) {
-                                    console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
-                                } else if (loadRequest.errorCode === -3) {
-                                    console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
-                                } else {
-                                    console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
-                                }
-                            } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                console.log("YouTube/Map WebEngineView loaded successfully");
-                                reloadTimer.stop(); // Stop any pending retries
+                        WebEngineView {
+                            id: youtubeView
+                            profile: youtubeProfile
+                            anchors.fill: parent
+                            // Ensure proper rounded clipping and avoid white corners
+                            layer.enabled: true
+                            layer.smooth: true
+                            backgroundColor: "transparent"
+                            url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
+                            settings {
+                                webGLEnabled: true
+                                accelerated2dCanvasEnabled: true
+                                allowRunningInsecureContent: true
+                                javascriptEnabled: true
+                                localContentCanAccessRemoteUrls: true
+                                playbackRequiresUserGesture: false  // Allow autoplay
+                                pluginsEnabled: true
+                                javascriptCanOpenWindows: false
+                                javascriptCanAccessClipboard: false
+                                allowWindowActivationFromJavaScript: false
                             }
-                        }
+                            onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
+                            onLoadingChanged: function(loadRequest) {
+                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                    console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                                    console.log("Error code:", loadRequest.errorCode);
+                                    console.log("Error domain:", loadRequest.errorDomain);
 
-                        // Auto-retry timer for content length mismatch
-                        Timer {
-                            id: reloadTimer
-                            interval: 3000 // 3 seconds
-                            repeat: false
-                            onTriggered: {
-                                console.log("Attempting to reload YouTube video after error 153...");
-                                youtubeView.reload();
+                                    // Handle specific error codes
+                                    if (loadRequest.errorCode === 153) {
+                                        console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                        console.log("This is a new YouTube policy requiring API client identification");
+                                        console.log("Attempting to reload with proper headers...");
+
+                                        // Auto-retry for Referer header errors
+                                        reloadTimer.restart();
+                                    } else if (loadRequest.errorCode === 2) {
+                                        console.log("ERR_FAILED - Network or server error. Check your internet connection.");
+                                    } else if (loadRequest.errorCode === 3) {
+                                        console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
+                                    } else if (loadRequest.errorCode === 6) {
+                                        console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
+                                    } else if (loadRequest.errorCode === -3) {
+                                        console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
+                                    } else {
+                                        console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
+                                    }
+                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                    console.log("YouTube/Map WebEngineView loaded successfully");
+                                    // Apply internal page rounding to ensure corners clip
+                                    root._injectRoundedCorners(youtubeView, 8)
+                                    reloadTimer.stop(); // Stop any pending retries
+                                }
+                            }
+
+                            // Auto-retry timer for content length mismatch
+                            Timer {
+                                id: reloadTimer
+                                interval: 3000 // 3 seconds
+                                repeat: false
+                                onTriggered: {
+                                    console.log("Attempting to reload YouTube video after error 153...");
+                                    youtubeView.reload();
+                                }
                             }
                         }
                     }
@@ -7955,13 +8080,26 @@ Window {
                             Layout.fillHeight: true
                             radius: 12
                             color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                            clip: true
+                            layer.enabled: true
+                            layer.smooth: true
+
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
                             WebEngineView {
                                 id: xComView
                                 anchors.fill: parent
                                 anchors.margins: 5
+                                layer.enabled: true
+                                layer.smooth: true
+                                backgroundColor: "transparent"
                                 url: "https://x.com/SpaceX"
                                 zoomFactor: 0.6
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        root._injectRoundedCorners(xComView, 12)
+                                    }
+                                }
                             }
                         }
                     }
