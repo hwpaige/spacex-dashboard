@@ -1872,21 +1872,39 @@ class Backend(QObject):
         if self._launch_tray_manual_override is not None:
             return self._launch_tray_manual_override
         
-        # Auto mode: show if there's a launch within 1 hour
+        # Auto mode logic:
+        # - Show if there's a launch within 1 hour (pre‑launch)
+        # - Keep showing after T0 (T+) until that launch status becomes 'Success'
         if self._mode != 'spacex' or not self._launch_data.get('upcoming'):
             return False
             
         current_time = datetime.now(pytz.UTC)
-        for launch in self._launch_data['upcoming']:
-            if launch.get('time') == 'TBD':
-                continue
+        ongoing_launch = None
+        try:
+            # Prefer the nearest launch in time order
+            upcoming_sorted = sorted(
+                [l for l in self._launch_data['upcoming'] if l.get('time') != 'TBD' and l.get('net')],
+                key=lambda x: parse(x['net'])
+            )
+        except Exception:
+            upcoming_sorted = self._launch_data.get('upcoming', [])
+
+        for launch in upcoming_sorted:
             try:
                 launch_time = parse(launch['net']).replace(tzinfo=pytz.UTC)
-                if current_time <= launch_time <= current_time + timedelta(hours=1):
-                    return True
-            except:
+            except Exception:
                 continue
-        return False
+
+            # Pre‑launch window: within next hour
+            if current_time <= launch_time <= current_time + timedelta(hours=1):
+                return True
+
+            # Ongoing/post‑T0: keep tray visible while status != Success
+            if launch_time <= current_time and (launch.get('status') or '').lower() != 'success':
+                ongoing_launch = launch
+                break
+
+        return ongoing_launch is not None
 
     @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
     def launchTrayManualMode(self):
@@ -1967,15 +1985,45 @@ class Backend(QObject):
     @pyqtProperty(str, notify=countdownChanged)
     def countdown(self):
         if self._mode == 'spacex':
+            # Determine if there is a just-launched/ongoing launch to show T+
+            try:
+                upcoming_sorted = sorted(
+                    [l for l in self._launch_data.get('upcoming', []) if l.get('time') != 'TBD' and l.get('net')],
+                    key=lambda x: parse(x['net'])
+                )
+            except Exception:
+                upcoming_sorted = self._launch_data.get('upcoming', [])
+
+            now_utc = datetime.now(pytz.UTC)
+            # Find the earliest launch whose NET <= now and not yet marked Success
+            for l in upcoming_sorted:
+                try:
+                    lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+                except Exception:
+                    continue
+                status = (l.get('status') or '').lower()
+                if lt_utc <= now_utc and status != 'success':
+                    # Show T+
+                    delta = datetime.now(self._tz) - lt_utc.astimezone(self._tz)
+                    # Normalize delta to positive
+                    total_seconds = int(max(delta.total_seconds(), 0))
+                    days, rem = divmod(total_seconds, 86400)
+                    hours, rem = divmod(rem, 3600)
+                    minutes, seconds = divmod(rem, 60)
+                    return f"T+ {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+
+            # Otherwise fall back to the next future launch (T-)
             next_launch = self.get_next_launch()
             if not next_launch:
                 return "No upcoming launches"
             launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC).astimezone(self._tz)
             current_time = datetime.now(self._tz)
             delta = launch_time - current_time
-            days = delta.days
-            hours, remainder = divmod(delta.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
+            # Ensure positive components for T-
+            total_seconds = int(max(delta.total_seconds(), 0))
+            days, rem = divmod(total_seconds, 86400)
+            hours, rem = divmod(rem, 3600)
+            minutes, seconds = divmod(rem, 60)
             return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
         else:
             next_race = self.get_next_race()
@@ -2934,7 +2982,9 @@ class Backend(QObject):
 
     @pyqtSlot()
     def update_countdown(self):
+        # Update countdown every second and re-evaluate tray visibility
         self.countdownChanged.emit()
+        self.launchTrayVisibilityChanged.emit()
 
     def update_event_model(self):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
@@ -3111,6 +3161,8 @@ class Backend(QObject):
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()
         self.update_event_model()
+        # Update globe trajectory in case current/next launch changed (e.g., after Success)
+        self.updateGlobeTrajectory.emit()
         # Clean up thread
         if hasattr(self, '_launch_updater_thread'):
             self._launch_updater_thread.quit()
@@ -4960,6 +5012,9 @@ Window {
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
+    // Track the currently selected YouTube URL for the video card.
+    // Initialized to the default playlist URL provided by the backend context property.
+    property url currentVideoUrl: videoUrl
 
     // Helper to enforce rounded corners inside WebEngine pages themselves.
     // This injects CSS into the page to round and clip at the document level,
@@ -6230,7 +6285,7 @@ Window {
                             layer.enabled: true
                             layer.smooth: true
                             backgroundColor: "transparent"
-                            url: parent.visible ? (backend.mode === "spacex" ? videoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
+                            url: parent.visible ? (backend.mode === "spacex" ? root.currentVideoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
                             settings {
                                 webGLEnabled: true
                                 accelerated2dCanvasEnabled: true
@@ -6285,6 +6340,116 @@ Window {
                                 onTriggered: {
                                     console.log("Attempting to reload YouTube video after error 153...");
                                     youtubeView.reload();
+                                }
+                            }
+                        }
+                    }
+
+                    // Bottom bar for YouTube quick actions
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        color: "transparent"
+                        visible: backend && backend.mode === "spacex" && !isWindyFullscreen
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 8
+
+                            // Starship playlist (current YouTube URL)
+                            Rectangle {
+                                Layout.preferredWidth: 160
+                                Layout.maximumWidth: 200
+                                height: 28
+                                radius: 14
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text {
+                                        text: "Starship Playlist"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        font.pixelSize: 13
+                                        font.family: "D-DIN"
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        // Use the current configured YouTube URL
+                                        if (typeof videoUrl !== 'undefined' && videoUrl) {
+                                            root.currentVideoUrl = videoUrl
+                                            youtubeView.reload()
+                                        } else {
+                                            console.log("videoUrl is not defined or empty")
+                                        }
+                                    }
+                                }
+                            }
+
+                            // NSF Starbase Live stream
+                            Rectangle {
+                                Layout.preferredWidth: 170
+                                Layout.maximumWidth: 220
+                                height: 28
+                                radius: 14
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
+
+                                // Load via local wrapper page to match existing youtube_embed.html approach
+                                property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text {
+                                        text: "NSF Starbase Live"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        font.pixelSize: 13
+                                        font.family: "D-DIN"
+                                    }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        root.currentVideoUrl = parent.nsfStarbaseUrl
+                                        youtubeView.reload()
+                                    }
+                                }
+                            }
+
+                            // Placeholder for current launch livestream
+                            Rectangle {
+                                Layout.preferredWidth: 190
+                                Layout.maximumWidth: 240
+                                height: 28
+                                radius: 14
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
+
+                                Row {
+                                    anchors.centerIn: parent
+                                    spacing: 8
+                                    Text {
+                                        text: "Launch Livestream (soon)"
+                                        color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
+                                        font.pixelSize: 13
+                                        font.family: "D-DIN"
+                                    }
+                                }
+                                // Placeholder: disabled click, tooltip only
+                                MouseArea {
+                                    anchors.fill: parent
+                                    enabled: false
+                                }
+                                ToolTip {
+                                    text: "Placeholder – will switch to the current launch livestream"
+                                    delay: 400
                                 }
                             }
                         }
