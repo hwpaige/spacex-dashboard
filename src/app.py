@@ -57,6 +57,8 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+# test
+
 # Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
@@ -5591,7 +5593,8 @@ Window {
                                 loops: Animation.Infinite
                                 NumberAnimation { from: 0.2; to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
                                 NumberAnimation { from: 1.0; to: 0.2; duration: 600; easing.type: Easing.InOutQuad }
-                                pause: index * 120
+                                // Use a dedicated PauseAnimation element; 'pause' is not a valid property
+                                PauseAnimation { duration: index * 120 }
                             }
                         }
                     }
