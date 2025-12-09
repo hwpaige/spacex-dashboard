@@ -330,19 +330,57 @@
             console.log("Orbit path present:", !!trajectoryData.orbit_path, "with", trajectoryData.orbit_path ? trajectoryData.orbit_path.length : 0, "points");
 
             try {
+                // Determine a physically sensible visual radius for the orbit based on orbit type.
+                // We cannot draw true scale (e.g., GEO ~ 6.6x Earth radius), so we compress with a cap.
+                const EARTH_RADIUS_KM = 6371.0;
+                function chooseOrbitAltKm(orbitLabel) {
+                    const o = (orbitLabel || '').toString().toLowerCase();
+                    if (o.includes('suborbital')) return 100;            // ~Kármán line
+                    if (o.includes('sso') || o.includes('sun-synchronous')) return 550; // common SSO band
+                    if (o.includes('polar')) return 600;                 // typical polar LEO
+                    if (o.includes('leo')) return 400;                   // ISS-like LEO
+                    if (o.includes('gto') || o.includes('geostationary transfer')) return 20000; // representative altitude
+                    if (o.includes('geo') || o.includes('geostationary')) return 35786; // GEO altitude
+                    if (o.includes('meo') || o.includes('gps')) return 20200; // MEO/GNSS
+                    if (o.includes('heeo') || o.includes('molniya')) return 40000; // highly elliptical apogee representative
+                    return 800; // default LEO-ish
+                }
+                function computeOrbitRadius(orbitLabel) {
+                    const altKm = chooseOrbitAltKm(orbitLabel);
+                    // Visual compression: add relative altitude, capped to +8%
+                    let r = 1.0 + Math.min(altKm / EARTH_RADIUS_KM, 0.08);
+                    // Keep above clouds layer (1.01) with a small margin
+                    if (r < 1.012) r = 1.012;
+                    // Hard safety clamp to avoid drawing too far from globe
+                    if (r > 1.08) r = 1.08;
+                    return r;
+                }
+
+                const orbitLabel = trajectoryData && trajectoryData.orbit ? trajectoryData.orbit : '';
+                const ORBIT_RADIUS = computeOrbitRadius(orbitLabel);
+                const TAIL_ZFIGHT_EPS = 0.0006; // keep trajectory just below orbit line to avoid z-fighting
+                console.log(`Orbit label: '${orbitLabel}' -> visual radius ${ORBIT_RADIUS.toFixed(4)}`);
                 // Create trajectory points from the curved lat/lon data
                 const points = [];
+
+                // Constants to keep visual logic centralized
+                const TRAJ_START_RADIUS = 1.01; // Trajectory slightly above surface at liftoff
+                const TRAJ_BULGE_MAX = 0.02;    // Max additional bulge at mid-arc (will be clamped)
 
                 trajectoryData.trajectory.forEach((point, index) => {
                     // Convert lat/lon to 3D coordinates on sphere with subtle arc height
                     const phi = (90 - point.lat) * (Math.PI / 180);
                     const theta = (point.lon + 180) * (Math.PI / 180);
 
-                    // Add subtle height variation for visual effect
+                    // Ensure the tail of the trajectory meets the orbit radius visually.
+                    // We interpolate the base trajectory radius from liftoff to orbit radius,
+                    // and add a small mid-arc bulge that goes to zero at both ends.
                     const progress = index / (trajectoryData.trajectory.length - 1);
-                    const baseRadius = 1.01; // Slightly above surface for visual separation
-                    const arcHeight = 0.03 * Math.sin(progress * Math.PI); // Very subtle arc
-                    const radius = baseRadius + arcHeight;
+                    const baseInterp = TRAJ_START_RADIUS + (ORBIT_RADIUS - TRAJ_START_RADIUS) * progress;
+                    const bulge = TRAJ_BULGE_MAX * Math.sin(progress * Math.PI); // 0 at ends, max at middle
+                    let radius = baseInterp + bulge;
+                    // Do not exceed the orbit radius to avoid separation; keep a tiny epsilon below to prevent z-fighting
+                    if (radius > ORBIT_RADIUS - TAIL_ZFIGHT_EPS) radius = ORBIT_RADIUS - TAIL_ZFIGHT_EPS;
 
                     const x = -(radius * Math.sin(phi) * Math.cos(theta));
                     const z = radius * Math.sin(phi) * Math.sin(theta);
@@ -394,8 +432,8 @@
                     trajectoryData.orbit_path.forEach((point, index) => {
                         const phi = (90 - point.lat) * (Math.PI / 180);
                         const theta = (point.lon + 180) * (Math.PI / 180);
-                        // Keep orbit at a slightly higher radius for visibility
-                        const radius = 1.04;
+                        // Keep orbit at the computed visual radius for this orbit type
+                        const radius = ORBIT_RADIUS;
                         const x = -(radius * Math.sin(phi) * Math.cos(theta));
                         const z = radius * Math.sin(phi) * Math.sin(theta);
                         const y = radius * Math.cos(phi);

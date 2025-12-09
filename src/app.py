@@ -2797,7 +2797,8 @@ class Backend(QObject):
             launch_site.get('lat', 0.0)
         )
 
-        ORBIT_CACHE_VERSION = 'v4'  # bump when tangent-matched ascent join to orbit path is introduced
+        # Cache version for trajectory/orbit generation. Bump when algorithm changes.
+        ORBIT_CACHE_VERSION = 'v5'  # v5: tail projection onto orbit path for physical join
         cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}"
         if cache_key in traj_cache:
             cached = traj_cache[cache_key]
@@ -3000,11 +3001,18 @@ class Backend(QObject):
         if result['orbit_path']:
             lats = [p['lat'] for p in result['orbit_path']]
             logger.info(f"Generated orbit path with {len(result['orbit_path'])} points for orbit type: '{orbit}', inclination ~{assumed_incl}°. Lat range: {min(lats):.2f}..{max(lats):.2f}")
-            # Tangent-match the ascent to the orbit to avoid a visible hook at the join
+            # Tangent- and position-match the ascent to the orbit to avoid a visible gap/hook at the join
             try:
                 if len(trajectory) >= 2 and len(result['orbit_path']) >= 2:
-                    p0 = result['orbit_path'][0]
-                    p1 = result['orbit_path'][1]
+                    # Helper: great-circle angular distance in degrees
+                    def _ang_dist_deg(a, b):
+                        lat1 = math.radians(a['lat']); lon1 = math.radians(a['lon'])
+                        lat2 = math.radians(b['lat']); lon2 = math.radians(b['lon'])
+                        dlat = lat2 - lat1
+                        dlon = lon2 - lon1
+                        h = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+                        c = 2 * math.atan2(math.sqrt(h), math.sqrt(max(1e-12, 1-h)))
+                        return math.degrees(c)
 
                     def _bearing_deg(lat1, lon1, lat2, lon2):
                         phi1 = math.radians(lat1); phi2 = math.radians(lat2)
@@ -3014,22 +3022,67 @@ class Backend(QObject):
                         br = math.degrees(math.atan2(y, x))
                         return (br + 360.0) % 360.0
 
-                    end_bearing = _bearing_deg(p0['lat'], p0['lon'], p1['lat'], p1['lon'])
-                    # Rebuild trajectory maintaining same endpoints but matching end tangent
+                    # Find closest point on orbit_path to the current ascent end
+                    current_end = trajectory[-1]
+                    orbit_idx = 0
+                    min_d = _ang_dist_deg(current_end, result['orbit_path'][0])
+                    for i in range(1, len(result['orbit_path'])):
+                        d = _ang_dist_deg(current_end, result['orbit_path'][i])
+                        if d < min_d:
+                            min_d = d
+                            orbit_idx = i
+
+                    snapped_end = result['orbit_path'][orbit_idx]
+                    # Compute end bearing using a forward neighbor on orbit (wrap-safe)
+                    next_idx = (orbit_idx + 1) % len(result['orbit_path'])
+                    end_bearing = _bearing_deg(snapped_end['lat'], snapped_end['lon'],
+                                               result['orbit_path'][next_idx]['lat'], result['orbit_path'][next_idx]['lon'])
+
+                    # Rebuild trajectory with the snapped end point and matched tangent
+                    densified_n = max(40, int(len(trajectory) * 1.25))
                     new_traj = generate_curved_trajectory(
-                        trajectory[0], trajectory[-1], max(25, len(trajectory)),
-                        orbit_type=('polar' if normalized_orbit == 'LEO-Polar' else ('equatorial' if normalized_orbit == 'LEO-Equatorial' else ('gto' if normalized_orbit == 'GTO' else 'default'))),
+                        trajectory[0], snapped_end, densified_n,
+                        orbit_type=(
+                            'polar' if normalized_orbit == 'LEO-Polar' else (
+                                'equatorial' if normalized_orbit == 'LEO-Equatorial' else (
+                                    'gto' if normalized_orbit == 'GTO' else 'default'
+                                )
+                            )
+                        ),
                         end_bearing_deg=end_bearing
                     )
+
+                    # Optionally project the final portion of the ascent onto the orbit path so
+                    # the tail runs along the actual orbit ground track (visually and physically).
+                    # This eliminates any lingering lateral gap approaching the join.
+                    tail_len = max(6, int(0.15 * len(new_traj)))
+                    # Build contiguous sequence on orbit ending at orbit_idx
+                    orbit_tail = []
+                    for j in range(tail_len):
+                        oi = (orbit_idx - (tail_len - 1 - j)) % len(result['orbit_path'])
+                        orbit_tail.append({
+                            'lat': result['orbit_path'][oi]['lat'],
+                            'lon': result['orbit_path'][oi]['lon']
+                        })
+
+                    # Replace the last tail_len points in new_traj with the orbit tail points
+                    new_traj[:-tail_len] = new_traj[:-tail_len]
+                    new_traj[-tail_len:] = orbit_tail
+
+                    # Log join diagnostics
                     if len(new_traj) >= 2:
                         t_prev = new_traj[-2]; t_end = new_traj[-1]
                         traj_bearing = _bearing_deg(t_prev['lat'], t_prev['lon'], t_end['lat'], t_end['lon'])
-                        diff = abs((traj_bearing - end_bearing + 180.0) % 360.0 - 180.0)
-                        logger.info(f"Ascent/orbit join: orbit bearing={end_bearing:.1f}°, trajectory bearing={traj_bearing:.1f}°, diff={diff:.1f}°")
+                        diff_bearing = abs((traj_bearing - end_bearing + 180.0) % 360.0 - 180.0)
+                        gap_after = _ang_dist_deg(t_end, snapped_end)
+                        logger.info(
+                            f"Ascent/orbit join: orbit bearing={end_bearing:.1f}°, traj bearing={traj_bearing:.1f}° (Δ={diff_bearing:.1f}°), end gap={gap_after:.3f}° (pre-snap gap={min_d:.3f}°)"
+                        )
+
                     trajectory = new_traj
                     result['trajectory'] = trajectory
             except Exception as e:
-                logger.warning(f"Tangent-match of ascent to orbit failed: {e}")
+                logger.warning(f"Tangent/position match of ascent to orbit failed: {e}")
         logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Generated orbit path with {len(result['orbit_path'])} points")
         logger.info(f"Returning trajectory with {len(trajectory)} points and orbit path with {len(result['orbit_path'])} points")
@@ -3042,7 +3095,7 @@ class Backend(QObject):
                 'orbit_path': result.get('orbit_path', []),
                 'orbit': normalized_orbit,
                 'inclination_deg': assumed_incl,
-                'model': 'v4-tangent-join'
+                'model': 'v6-tail-on-orbit'
             }
             save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
             logger.info(f"Saved trajectory to cache under key {cache_key}")
@@ -6578,7 +6631,7 @@ Window {
                         }
                     }
 
-                    // Bottom bar for YouTube quick actions
+                    // Bottom bar for YouTube quick actions (match pill buttons style)
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
@@ -6587,103 +6640,105 @@ Window {
 
                         RowLayout {
                             anchors.centerIn: parent
-                            spacing: 8
+                            spacing: 6
 
                             // Starship playlist (current YouTube URL)
                             Rectangle {
-                                Layout.preferredWidth: 160
-                                Layout.maximumWidth: 200
-                                height: 28
+                                id: starshipBtn
+                                // Match highlight logic used by Windy/plot pills: compare as strings to avoid url vs string type mismatch
+                                property bool selected: (typeof videoUrl !== 'undefined' && videoUrl) ? (String(root.currentVideoUrl) === String(videoUrl)) : false
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
                                 radius: 14
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                border.width: 1
+                                color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                border.width: selected ? 2 : 1
 
-                                Row {
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                Text {
                                     anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        text: "Starship Playlist"
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 13
-                                        font.family: "D-DIN"
-                                    }
+                                    text: "\uf167"   // FontAwesome YouTube icon
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "white" : "black"
                                 }
+
                                 MouseArea {
                                     anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        // Use the current configured YouTube URL
                                         if (typeof videoUrl !== 'undefined' && videoUrl) {
-                                            // Just change the bound URL; WebEngineView will navigate automatically
-                                            root.currentVideoUrl = videoUrl
+                                            // Ensure currentVideoUrl updates as a string URL to keep comparison consistent
+                                            root.currentVideoUrl = String(videoUrl)
                                         } else {
                                             console.log("videoUrl is not defined or empty")
                                         }
                                     }
                                 }
+
+                                ToolTip { text: "Starship Playlist"; delay: 500 }
                             }
 
                             // NSF Starbase Live stream
                             Rectangle {
-                                Layout.preferredWidth: 170
-                                Layout.maximumWidth: 220
-                                height: 28
-                                radius: 14
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                border.width: 1
-
+                                id: nsfBtn
                                 // Load via local wrapper page to match existing youtube_embed.html approach
                                 property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
+                                // Compare as strings to match Windy/plot highlight logic reliably
+                                property bool selected: String(root.currentVideoUrl) === nsfStarbaseUrl
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                radius: 14
+                                color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                border.width: selected ? 2 : 1
 
-                                Row {
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                Text {
                                     anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        text: "NSF Starbase Live"
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 13
-                                        font.family: "D-DIN"
-                                    }
+                                    text: "\uf519"  // FontAwesome broadcast-tower
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "white" : "black"
                                 }
+
                                 MouseArea {
                                     anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
                                     onClicked: {
-                                        // Switch to local NSF wrapper; WebEngineView will navigate automatically
-                                        root.currentVideoUrl = parent.nsfStarbaseUrl
+                                        // Assign as string for consistent comparisons/updates
+                                        root.currentVideoUrl = nsfBtn.nsfStarbaseUrl
                                     }
                                 }
+
+                                ToolTip { text: "NSF Starbase Live"; delay: 500 }
                             }
 
-                            // Placeholder for current launch livestream
+                            // Placeholder for current launch livestream (disabled)
                             Rectangle {
-                                Layout.preferredWidth: 190
-                                Layout.maximumWidth: 240
-                                height: 28
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
                                 radius: 14
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                                 border.width: 1
+                                opacity: 0.6
 
-                                Row {
+                                Text {
                                     anchors.centerIn: parent
-                                    spacing: 8
-                                    Text {
-                                        text: "Launch Livestream (soon)"
-                                        color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
-                                        font.pixelSize: 13
-                                        font.family: "D-DIN"
-                                    }
+                                    text: "\uf135"  // FontAwesome rocket
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
                                 }
-                                // Placeholder: disabled click, tooltip only
-                                MouseArea {
-                                    anchors.fill: parent
-                                    enabled: false
-                                }
-                                ToolTip {
-                                    text: "Placeholder – will switch to the current launch livestream"
-                                    delay: 400
-                                }
+                                MouseArea { anchors.fill: parent; enabled: false }
+                                ToolTip { text: "Placeholder – will switch to the current launch livestream"; delay: 400 }
                             }
                         }
                     }
