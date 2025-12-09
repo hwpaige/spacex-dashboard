@@ -1,12 +1,3 @@
-#!/bin/bash
-
-# SpaceX Dashboard Update and Reboot Script for Raspberry Pi
-# This script pulls the latest changes from the git repository and reboots the device
-
-set -e  # Exit on any error
-
-echo "=== SpaceX Dashboard Update Script ==="
-echo "Starting update process..."
 
 # Stop any running instances of the app
 echo "Checking for running app instances..."
@@ -29,49 +20,120 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# Ensure repository is safe and writable; drop local changes instead of stashing
 echo "Preparing repository for clean update (dropping local changes)…"
 
 # Mark repo as safe (handles cases where ownership changed previously)
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
-# If .git seems to have permission issues (common if previous runs used sudo), try to fix
-if [ ! -w .git/objects ] || [ ! -w .git/refs ]; then
-    echo "Attempting to repair .git permissions (may require sudo)…"
-    if command -v sudo >/dev/null 2>&1; then
-        # Try to change ownership to the current user
-        sudo chown -R "$(id -u):$(id -g)" .git 2>/dev/null || true
-    fi
+# Function: attempt to make .git writable without interactive sudo
+ensure_git_writable() {
+  if [ -w .git/objects ] && [ -w .git/refs ]; then
+    return 0
+  fi
+  echo "Repairing .git permissions (sudo -n if available)…"
+  if command -v sudo >/dev/null 2>&1; then
+    # Non-interactive sudo attempts; if these fail they will exit non-zero without prompting
+    sudo -n chown -R "$(id -u):$(id -g)" .git 2>/dev/null || true
+    sudo -n chmod -R u+rwX,g+rX .git 2>/dev/null || true
+  else
     chmod -R u+rwX,g+rX .git 2>/dev/null || true
-fi
+  fi
+  # Re-check
+  if [ -w .git/objects ] && [ -w .git/refs ]; then
+    echo ".git now appears writable."
+    return 0
+  fi
+  echo "Warning: .git still not writable by current user. Git operations may fail."
+  return 1
+}
 
-# Force drop any local changes/untracked files so update is deterministic
-git reset --hard HEAD || true
-git clean -fd || true
+# Function: perform update via git (returns 0 on success)
+update_via_git() {
+  # Drop any local work so deployment is deterministic
+  git reset --hard HEAD || true
+  git clean -fd || true
+  echo "Fetching latest changes from repository..."
+  if ! git fetch origin 2>&1; then
+    echo "git fetch failed."
+    return 1
+  fi
+  echo "Resetting to latest remote version..."
+  if ! git reset --hard origin/master 2>&1; then
+    echo "git reset --hard origin/master failed."
+    return 1
+  fi
+  echo "Successfully updated repository via git."
+  return 0
+}
 
-# Fetch and pull the latest changes
-echo "Fetching latest changes from repository..."
-git fetch origin
+# Function: fallback update by downloading GitHub archive and copying over files
+update_via_archive() {
+  echo "Falling back to archive-based update (read-only .git or git failure)."
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+  TMP_DIR="/tmp/spacex-dashboard-update-$$"
+  mkdir -p "$TMP_DIR"
+  # Try to detect the repo slug from git remote; else default to hwpaige/spacex-dashboard
+  REPO_SLUG="hwpaige/spacex-dashboard"
+  if git remote get-url origin >/dev/null 2>&1; then
+    ORIGIN_URL="$(git remote get-url origin)"
+    case "$ORIGIN_URL" in
+      *github.com/*)
+        SLUG_PART="${ORIGIN_URL##*github.com/}"
+        SLUG_PART="${SLUG_PART%.git}"
+        if [ -n "$SLUG_PART" ]; then REPO_SLUG="$SLUG_PART"; fi
+        ;;
+    esac
+  fi
+  ARCHIVE_URL="https://github.com/${REPO_SLUG}/archive/refs/heads/master.zip"
+  echo "Downloading latest code archive from $ARCHIVE_URL ..."
+  if command -v curl >/dev/null 2>&1; then
+    curl -L "$ARCHIVE_URL" -o "$TMP_DIR/src.zip"
+  elif command -v wget >/dev/null 2>&1; then
+    wget -O "$TMP_DIR/src.zip" "$ARCHIVE_URL"
+  else
+    echo "Error: Neither curl nor wget is available to download archive."
+    return 1
+  fi
+  echo "Unpacking archive..."
+  if ! unzip -q "$TMP_DIR/src.zip" -d "$TMP_DIR"; then
+    echo "Error: Failed to unzip downloaded archive."
+    return 1
+  fi
+  # The zip unpacks to repo-branch directory
+  SRC_DIR="$(find "$TMP_DIR" -maxdepth 1 -type d -name '*-master' -print -quit)"
+  if [ -z "$SRC_DIR" ]; then
+    echo "Error: Could not locate unpacked source directory."
+    return 1
+  fi
+  echo "Synchronizing files into project directory (preserving caches and local data)..."
+  # Exclusions: do not overwrite .git, cache historical files, remembered networks, last connected network, and local venv
+  if command -v rsync >/dev/null 2>&1; then
+    rsync -av --delete \
+      --exclude '.git/' \
+      --exclude 'cache/previous_launches_cache.json' \
+      --exclude 'cache/previous_launches_cache_backup.json' \
+      --exclude 'cache/remembered_networks.json' \
+      --exclude 'cache/last_connected_network.json' \
+      --exclude '.venv/' \
+      "$SRC_DIR"/ "$PROJECT_DIR"/
+  else
+    echo "rsync not found; using cp -a fallback (no delete of removed files)."
+    (cd "$SRC_DIR" && tar cf - .) | (cd "$PROJECT_DIR" && tar xf -)
+  fi
+  echo "Archive-based update applied."
+  return 0
+}
 
-# Always reset to ensure clean deployment (safest for production)
-echo "Resetting to latest remote version..."
-git reset --hard origin/master
-
-# Alternative: Try pull with merge, fallback to reset
-# echo "Attempting to pull latest changes..."
-# if git pull origin master 2>/dev/null; then
-#     echo "Successfully pulled changes."
-# else
-#     echo "Pull failed, resetting to remote version..."
-#     git reset --hard origin/master
-# fi
-
-# Check if the pull was successful
-if [ $? -eq 0 ]; then
-    echo "Successfully updated repository."
+# Try to ensure .git is writable, then try git update; if it fails, use archive fallback
+if ensure_git_writable && update_via_git; then
+  :
 else
-    echo "Error: Failed to update repository."
+  echo "Git-based update failed or not possible due to permissions."
+  if ! update_via_archive; then
+    echo "Error: Archive-based update also failed. Aborting."
     exit 1
+  fi
 fi
 
 # Optional: Install any new Python dependencies if requirements.txt changed
@@ -133,10 +195,24 @@ echo "Update complete. Rebooting system in 5 seconds..."
 echo "Press Ctrl+C to cancel reboot."
 
 # Countdown before reboot
-for i in {5..1}; do
+for i in 5 4 3 2 1; do
     echo "Rebooting in $i..."
     sleep 1
 done
 
 echo "Rebooting now..."
-sudo reboot
+# Try non-interactive sudo first, then fall back to common reboot commands
+if command -v sudo >/dev/null 2>&1; then
+  sudo -n reboot >/dev/null 2>&1 || true
+fi
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl reboot >/dev/null 2>&1 || true
+fi
+if command -v shutdown >/dev/null 2>&1; then
+  shutdown -r now >/dev/null 2>&1 || true
+fi
+if [ -x /sbin/reboot ]; then
+  /sbin/reboot >/dev/null 2>&1 || true
+fi
+
+echo "Reboot command may require sudo privileges. If the device does not reboot, please reboot manually."
