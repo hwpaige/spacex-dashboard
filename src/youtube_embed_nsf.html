@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="referrer" content="origin-when-cross-origin">
     <title>NSF Starbase Live</title>
     <style>
         body, html {
@@ -22,12 +23,15 @@
 </head>
 <body>
     <iframe
-        src="https://www.youtube.com/embed/mhJRzQsLZGg?autoplay=1&mute=1&rel=0&controls=0&enablejsapi=1"
+        id="nsfPlayer"
+        src="https://www.youtube.com/embed/mhJRzQsLZGg?autoplay=0&controls=1&rel=0&playsinline=1"
         title="NSF Starbase Live"
         frameborder="0"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        referrerpolicy="strict-origin-when-cross-origin"
         allowfullscreen>
     </iframe>
+    <div style="position:absolute; bottom:6px; right:8px; font:12px/1.2 sans-serif; opacity:0.8;">
+        <a href="https://www.youtube.com/watch?v=mhJRzQsLZGg" target="_blank" rel="noopener noreferrer" style="color:#888; text-decoration:none;">Open on YouTube</a>
+    </div>
 </body>
 </html>

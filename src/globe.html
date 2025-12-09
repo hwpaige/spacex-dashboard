@@ -34,7 +34,35 @@
             background: rgba(0, 0, 0, 0.9);
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Lightweight loader that ensures THREE is available even if we started offline.
+        // We avoid hard-failing when there's no network at boot and retry when it comes back.
+        (function(){
+            function injectThree(onReady){
+                if (window.THREE) { onReady && onReady(); return; }
+                try {
+                    var s = document.createElement('script');
+                    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+                    s.async = true;
+                    s.onload = function(){ onReady && onReady(); };
+                    s.onerror = function(){
+                        // Retry shortly; also wait for online event
+                        setTimeout(function(){ injectThree(onReady); }, 4000);
+                    };
+                    document.head.appendChild(s);
+                } catch(e){
+                    setTimeout(function(){ injectThree(onReady); }, 4000);
+                }
+            }
+            // Expose a boot function used at the bottom of the file
+            window.__ensureThreeAndBoot = function(cb){
+                if (window.THREE) { cb && cb(); return; }
+                injectThree(cb);
+                // Also try again when network comes online
+                window.addEventListener('online', function(){ injectThree(cb); }, { once: true });
+            };
+        })();
+    </script>
 </head>
 <body>
     <button id="playPauseBtn"><i class="fas fa-pause"></i></button>
@@ -403,12 +431,47 @@
             }
         }
 
-        // Initialize and start animation
-        console.log("Starting initialization...");
-        init();
+        // Initialize and start animation, but ensure THREE is available first
+        console.log("Starting initialization (waiting for THREE if offline)...");
+        if (window.__ensureThreeAndBoot) {
+            window.__ensureThreeAndBoot(function(){
+                try { init(); } catch(e) { console.error('Init failed, will retry shortly:', e); setTimeout(function(){ window.__ensureThreeAndBoot(init); }, 4000); }
+            });
+        } else {
+            // Fallback: try to init directly
+            try { init(); } catch(e) { console.error('Init failed before loader available:', e); }
+        }
 
         // Expose functions to Qt
         window.updateTrajectory = updateTrajectory;
+
+        // If we were offline at start, try to add clouds when we come online
+        window.addEventListener('online', function(){
+            try {
+                if (!globe) return;
+                if (globe.getObjectByName && !globe.getObjectByName('clouds')) {
+                    const textureLoader = new THREE.TextureLoader();
+                    const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
+                    textureLoader.load(
+                        'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
+                        function(cloudTexture) {
+                            const cloudMaterial = new THREE.MeshLambertMaterial({
+                                map: cloudTexture,
+                                transparent: true,
+                                opacity: 0.8,
+                                alphaMap: cloudTexture
+                            });
+                            const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                            clouds.name = 'clouds';
+                            globe.add(clouds);
+                            console.log('Cloud layer added after going online');
+                        }
+                    );
+                }
+            } catch(e) {
+                console.warn('Failed to add clouds after going online:', e);
+            }
+        });
 
         // Make globe interactive
         let isMouseDown = false;

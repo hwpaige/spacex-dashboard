@@ -63,7 +63,9 @@ if platform.system() == 'Windows':
         "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
         "--disable-gpu-sandbox --disable-software-rasterizer "
-        "--disable-gpu-driver-bug-workarounds --no-sandbox"
+        "--disable-gpu-driver-bug-workarounds --no-sandbox "
+        "--autoplay-policy=no-user-gesture-required "
+        "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
     )
 elif platform.system() == 'Linux':
     # Hardware acceleration for Raspberry Pi with WebGL support for radar
@@ -72,13 +74,17 @@ elif platform.system() == 'Linux':
         "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
         "--disable-web-security --allow-running-insecure-content "
         "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
-        "--disable-gpu-driver-bug-workarounds"
+        "--disable-gpu-driver-bug-workarounds "
+        "--autoplay-policy=no-user-gesture-required "
+        "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
     )
 else:
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
         "--disable-web-security --allow-running-insecure-content "
-        "--disable-gpu-sandbox"
+        "--disable-gpu-sandbox "
+        "--autoplay-policy=no-user-gesture-required "
+        "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
     )
 os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext=true;qt5ct.debug=false"  # Logs OpenGL context creation
 os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"  # Fallback for ARM sandbox crashes
@@ -1439,6 +1445,8 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    # Emitted by background boot worker to deliver results to main thread
+    initialChecksReady = pyqtSignal(bool, bool, dict, dict)
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1478,6 +1486,7 @@ class Backend(QObject):
         # Network connectivity properties (separate from WiFi)
         self._network_connected = False
         self._last_network_check = None
+        self._network_check_in_progress = False
 
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
@@ -1486,6 +1495,13 @@ class Backend(QObject):
 
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
+        # Route background boot results back to the main thread
+        try:
+            self.initialChecksReady.connect(self._apply_initial_checks_results)
+        except Exception as _e:
+            logger.debug(f"Could not connect initialChecksReady signal: {_e}")
+        # Boot guard timer placeholder
+        self._initial_checks_guard_timer = None
 
     def get_encryption_key(self):
         """Get or create encryption key for WiFi passwords"""
@@ -1698,68 +1714,126 @@ class Backend(QObject):
         """Start the data loading thread after WiFi check completes"""
         logger.info("BOOT: startDataLoader called")
         self.setLoadingStatus("Checking network connectivity...")
+        # Run potentially blocking checks in background to avoid UI freeze
+        logger.info("BOOT: Scheduling background connectivity and update checks...")
 
-        # Check network connectivity before starting data loading
-        logger.info("BOOT: Checking network connectivity before starting data loading...")
-        connectivity_result = self.check_network_connectivity()
-        logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
-
-        # Check for updates if we have network connectivity
-        logger.info("BOOT: Checking for app updates...")
-        try:
-            update_available = self.check_for_updates()
-            self.updateAvailable = update_available
-            # Cache version info for fast dialog opening
-            self._current_version_info = self.get_current_version_info() or {}
-            self._latest_version_info = self.get_latest_version_info() or {}
-            logger.info(f"BOOT: Update check result: {update_available}")
-        except Exception as e:
-            logger.error(f"BOOT: Error checking for updates: {e}")
-            self.updateAvailable = False
-            # Still try to cache current version info even if update check fails
+        def _initial_checks_worker():
+            connectivity_result = False
+            update_available = False
+            current_info = {}
+            latest_info = {}
             try:
-                self._current_version_info = self.get_current_version_info() or {}
-            except Exception as e2:
-                logger.error(f"BOOT: Error getting current version info: {e2}")
-                self._current_version_info = {}
+                logger.info("BOOT: Checking network connectivity before starting data loading (background)...")
+                connectivity_result = self.check_network_connectivity()
+                logger.info(f"BOOT: Network connectivity check result: {connectivity_result}")
+            except Exception as e:
+                logger.error(f"BOOT: Background network connectivity check failed: {e}")
 
-        if not connectivity_result:
-            logger.warning("BOOT: No network connectivity detected - deferring data loading")
-            logger.info("BOOT: Setting _data_loading_deferred = True")
-            self.setLoadingStatus("No internet connection - using cached data")
-            # Set a flag to indicate data loading is deferred
-            self._data_loading_deferred = True
-            # Set up a loading timeout timer to prevent indefinite loading screen
-            logger.info("BOOT: Creating loading timeout timer (15 seconds)")
-            self._loading_timeout_timer = QTimer(self)
-            self._loading_timeout_timer.setSingleShot(True)
-            self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
-            self._loading_timeout_timer.start(15000)  # 15 second timeout
-            logger.info("BOOT: Loading timeout timer started (15 seconds)")
-            # Set up timers anyway (they will check connectivity when they run)
+            # Only attempt update checks if we have connectivity
+            if connectivity_result:
+                logger.info("BOOT: Checking for app updates (background)...")
+                try:
+                    update_available = self.check_for_updates()
+                    current_info = self.get_current_version_info() or {}
+                    latest_info = self.get_latest_version_info() or {}
+                    logger.info(f"BOOT: Update check result: {update_available}")
+                except Exception as e:
+                    logger.error(f"BOOT: Error checking for updates in background: {e}")
+
+            # Emit results; connected slot will run on the main thread
+            try:
+                self.initialChecksReady.emit(connectivity_result, update_available, current_info, latest_info)
+            except Exception as e:
+                logger.error(f"BOOT: Failed to emit initialChecksReady: {e}")
+
+        threading.Thread(target=_initial_checks_worker, daemon=True).start()
+        # Return immediately; UI remains responsive while checks run
+        # Start a guard timer to avoid being stuck on "Checking network connectivity..."
+        try:
+            if self._initial_checks_guard_timer is None:
+                self._initial_checks_guard_timer = QTimer(self)
+                self._initial_checks_guard_timer.setSingleShot(True)
+                self._initial_checks_guard_timer.timeout.connect(self._on_initial_checks_guard_timeout)
+            # 12s guard in case background checks hang early in boot
+            self._initial_checks_guard_timer.start(12000)
+            logger.info("BOOT: Initial checks guard timer started (12 seconds)")
+        except Exception as _e:
+            logger.debug(f"Failed to start initial checks guard timer: {_e}")
+
+    @pyqtSlot(bool, bool, dict, dict)
+    def _apply_initial_checks_results(self, connectivity_result, update_available, current_info, latest_info):
+        """Apply initial check results on the main (Qt) thread."""
+        try:
+            # Cancel guard timer if active
+            try:
+                if self._initial_checks_guard_timer and self._initial_checks_guard_timer.isActive():
+                    self._initial_checks_guard_timer.stop()
+                    logger.info("BOOT: Initial checks guard timer stopped (results received)")
+            except Exception:
+                pass
+            self.updateAvailable = update_available
+            self._current_version_info = current_info
+            self._latest_version_info = latest_info
+
+            if not connectivity_result:
+                logger.warning("BOOT: No network connectivity detected - deferring data loading")
+                logger.info("BOOT: Setting _data_loading_deferred = True")
+                self.setLoadingStatus("No internet connection - using cached data")
+                # Set a flag to indicate data loading is deferred
+                self._data_loading_deferred = True
+                # Set up a loading timeout timer to prevent indefinite loading screen
+                logger.info("BOOT: Creating loading timeout timer (15 seconds)")
+                self._loading_timeout_timer = QTimer(self)
+                self._loading_timeout_timer.setSingleShot(True)
+                self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
+                self._loading_timeout_timer.start(15000)  # 15 second timeout
+                logger.info("BOOT: Loading timeout timer started (15 seconds)")
+                # Set up timers anyway (they will check connectivity when they run)
+                self._setup_timers()
+                logger.info("BOOT: Data loading deferred - app will show cached data after timeout")
+                return
+
+            # Clear deferred flag if we have connectivity
+            logger.info("BOOT: Network connectivity available - clearing deferred flag")
+            self._data_loading_deferred = False
+            self.setLoadingStatus("Loading SpaceX launch data...")
+
+            if self.loader is None:
+                logger.info("BOOT: Creating new DataLoader...")
+                self.loader = DataLoader()
+                self.thread = QThread()
+                self.loader.moveToThread(self.thread)
+                self.loader.finished.connect(self.on_data_loaded)
+                self.loader.statusUpdate.connect(self.setLoadingStatus)
+                self.thread.started.connect(self.loader.run)
+                logger.info("BOOT: Starting DataLoader thread...")
+                self.thread.start()
+            else:
+                logger.info("BOOT: DataLoader already exists")
+
             self._setup_timers()
-            logger.info("BOOT: Data loading deferred - app will show cached data after timeout")
-            return
+        except Exception as e:
+            logger.error(f"BOOT: Failed to apply initial checks results on main thread: {e}")
 
-        # Clear deferred flag if we have connectivity
-        logger.info("BOOT: Network connectivity available - clearing deferred flag")
-        self._data_loading_deferred = False
-        self.setLoadingStatus("Loading SpaceX launch data...")
-
-        if self.loader is None:
-            logger.info("BOOT: Creating new DataLoader...")
-            self.loader = DataLoader()
-            self.thread = QThread()
-            self.loader.moveToThread(self.thread)
-            self.loader.finished.connect(self.on_data_loaded)
-            self.loader.statusUpdate.connect(self.setLoadingStatus)
-            self.thread.started.connect(self.loader.run)
-            logger.info("BOOT: Starting DataLoader thread...")
-            self.thread.start()
-        else:
-            logger.info("BOOT: DataLoader already exists")
-
-        self._setup_timers()
+    @pyqtSlot()
+    def _on_initial_checks_guard_timeout(self):
+        """Safety net to advance UI if background initial checks didn't report back."""
+        try:
+            if self._loading_status == "Checking network connectivity..." and self._isLoading:
+                logger.warning("BOOT: Guard timeout hit - assuming no connectivity and deferring data load")
+                self.setLoadingStatus("No internet connection - using cached data")
+                self._data_loading_deferred = True
+                # Start the offline loading timeout if not already running
+                if not hasattr(self, '_loading_timeout_timer') or not self._loading_timeout_timer.isActive():
+                    self._loading_timeout_timer = QTimer(self)
+                    self._loading_timeout_timer.setSingleShot(True)
+                    self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
+                    self._loading_timeout_timer.start(15000)
+                    logger.info("BOOT: Loading timeout timer started by guard (15 seconds)")
+                # Ensure periodic timers are running so connectivity can be rechecked
+                self._setup_timers()
+        except Exception as e:
+            logger.debug(f"Guard timeout handling failed: {e}")
 
     def _setup_timers(self):
         """Set up all the periodic timers"""
@@ -3934,15 +4008,14 @@ class Backend(QObject):
             if connected:
                 # Only check network connectivity if it's been more than 30 seconds since last check
                 current_time = time.time()
-                if (self._last_network_check is None or 
-                    current_time - self._last_network_check > 30):
-                    logger.debug("Checking network connectivity...")
-                    network_connected = self.check_network_connectivity()
-                    if network_connected != self._network_connected:
-                        self._network_connected = network_connected
-                        logger.info(f"Network connectivity status changed: {network_connected}")
-                        self.wifiConnectedChanged.emit()  # Reuse the same signal for network status
+                if (
+                    self._last_network_check is None
+                    or current_time - self._last_network_check > 30
+                ):
                     self._last_network_check = current_time
+                    # Start non-blocking background check to avoid UI stutter
+                    logger.debug("Scheduling background network connectivity check...")
+                    self._start_network_connectivity_check_async()
             else:
                 # If WiFi is not connected, network is also not connected
                 if self._network_connected:
@@ -4382,6 +4455,58 @@ class Backend(QObject):
         except Exception as e:
             logger.error(f"BOOT: Error checking network connectivity: {e}")
             return False
+
+    # --- Non-blocking network connectivity check helpers ---
+    def _start_network_connectivity_check_async(self):
+        """Run the network connectivity check in a background thread to avoid blocking UI."""
+        try:
+            if self._network_check_in_progress:
+                logger.debug("Network connectivity check already in progress; skipping new request")
+                return
+
+            self._network_check_in_progress = True
+
+            def _worker(expected_wifi_connected):
+                try:
+                    # Perform the potentially blocking check off the UI thread
+                    result = self.check_network_connectivity() if expected_wifi_connected else False
+                except Exception as e:
+                    logger.debug(f"Background network check error: {e}")
+                    result = False
+
+                # Marshal result back to the main thread
+                def _apply():
+                    try:
+                        previous = self._network_connected
+                        if result != previous:
+                            self._network_connected = result
+                            logger.info(f"Network connectivity status changed: {result}")
+                            # Emit signals; keep compatibility by reusing wifiConnectedChanged
+                            try:
+                                self.wifiConnectedChanged.emit()
+                            except Exception as _e:
+                                logger.debug(f"Emit wifiConnectedChanged failed: {_e}")
+                            try:
+                                self.networkConnectedChanged.emit()
+                            except Exception as _e:
+                                logger.debug(f"Emit networkConnectedChanged failed: {_e}")
+                    finally:
+                        self._network_check_in_progress = False
+
+                # Use QTimer.singleShot(0, ...) to ensure execution on the Qt main thread
+                try:
+                    QTimer.singleShot(0, _apply)
+                except Exception as e:
+                    logger.debug(f"Failed to schedule result application on main thread: {e}; applying directly")
+                    _apply()
+
+            # Snapshot wifi connected state to avoid race in worker
+            expected_wifi_connected = self._wifi_connected
+
+            threading.Thread(target=_worker, args=(expected_wifi_connected,), daemon=True).start()
+        except Exception as e:
+            logger.debug(f"Failed to start background network check: {e}")
+            self._network_check_in_progress = False
 
 if __name__ == '__main__':
     # Set console encoding to UTF-8 to handle Unicode characters properly
@@ -4945,7 +5070,10 @@ backend = Backend(initial_wifi_connected=wifi_connected, initial_wifi_ssid=wifi_
 # Now start the data loader after WiFi is stable
 logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
-backend.setLoadingStatus("Backend initialized...")
+# Do not override the status here; startDataLoader already set a meaningful
+# initial message (e.g., "Checking network connectivity..."). Leaving this
+# call in place could cause the UI to appear stuck on "Backend initialized..."
+# if the background thread hasn't applied subsequent statuses yet.
 
 engine = QQmlApplicationEngine()
 # Connect QML warnings signal (list of QQmlError objects)
@@ -5044,6 +5172,11 @@ Window {
             if (typeof globeView !== 'undefined' && globeView.reload) {
                 globeView.reload()
                 console.log("Globe view reloaded")
+            }
+            // Reload plot card globe view (left-most card)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.reload) {
+                plotGlobeView.reload()
+                console.log("Plot globe view reloaded")
             }
             // Reload F1 chart view
             if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
@@ -6381,8 +6514,8 @@ Window {
                                     onClicked: {
                                         // Use the current configured YouTube URL
                                         if (typeof videoUrl !== 'undefined' && videoUrl) {
+                                            // Just change the bound URL; WebEngineView will navigate automatically
                                             root.currentVideoUrl = videoUrl
-                                            youtubeView.reload()
                                         } else {
                                             console.log("videoUrl is not defined or empty")
                                         }
@@ -6416,8 +6549,8 @@ Window {
                                 MouseArea {
                                     anchors.fill: parent
                                     onClicked: {
+                                        // Switch to local NSF wrapper; WebEngineView will navigate automatically
                                         root.currentVideoUrl = parent.nsfStarbaseUrl
-                                        youtubeView.reload()
                                     }
                                 }
                             }
