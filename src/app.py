@@ -1447,6 +1447,9 @@ class Backend(QObject):
     updateDialogRequested = pyqtSignal()
     # Emitted by background boot worker to deliver results to main thread
     initialChecksReady = pyqtSignal(bool, bool, dict, dict)
+    # Update progress UI signals
+    updatingInProgressChanged = pyqtSignal()
+    updatingStatusChanged = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1490,6 +1493,12 @@ class Backend(QObject):
         self._network_connected = bool(initial_wifi_connected)
         self._last_network_check = None
         self._network_check_in_progress = False
+
+        # Update progress UI state
+        self._updating_in_progress = False
+        self._updating_status = ""
+        self._update_log_timer = None
+        self._update_log_path = '/tmp/spacex-dashboard-update.log' if platform.system() == 'Linux' else None
 
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
@@ -2054,6 +2063,83 @@ class Backend(QObject):
             self._loading_status = status
             logger.info(f"BOOT: Loading status changed to: {status}")
             self.loadingStatusChanged.emit()
+
+    # --- Update progress UI properties ---
+    @pyqtProperty(bool, notify=updatingInProgressChanged)
+    def updatingInProgress(self):
+        return self._updating_in_progress
+
+    @pyqtProperty(str, notify=updatingStatusChanged)
+    def updatingStatus(self):
+        return self._updating_status
+
+    def _set_updating_in_progress(self, val: bool):
+        if self._updating_in_progress != bool(val):
+            self._updating_in_progress = bool(val)
+            try:
+                self.updatingInProgressChanged.emit()
+            except Exception:
+                pass
+
+    def _set_updating_status(self, text: str):
+        text = str(text) if text is not None else ""
+        if self._updating_status != text:
+            self._updating_status = text
+            try:
+                self.updatingStatusChanged.emit()
+            except Exception:
+                pass
+
+    def _start_update_progress_ui(self):
+        """Show an in-app updating overlay and begin polling the updater log for progress."""
+        try:
+            self._set_updating_status("Starting updater…")
+            self._set_updating_in_progress(True)
+            # Start (or restart) a timer to poll the log
+            if self._update_log_timer is None:
+                self._update_log_timer = QTimer(self)
+                self._update_log_timer.timeout.connect(self._poll_update_log)
+            # Poll quickly at first to catch early messages
+            self._update_log_timer.start(750)
+        except Exception as e:
+            logger.warning(f"Failed to start update progress UI: {e}")
+
+    def _poll_update_log(self):
+        """Read the last lines from the update log and reflect them into the UI."""
+        try:
+            if not self._updating_in_progress:
+                if self._update_log_timer and self._update_log_timer.isActive():
+                    self._update_log_timer.stop()
+                return
+            path = self._update_log_path
+            if not path:
+                # Non-Linux fallback
+                self._set_updating_status("Updating…")
+                return
+            if not os.path.exists(path):
+                # Log not created yet; keep simple status and continue polling
+                self._set_updating_status("Preparing update…")
+                return
+            # Read tail of the file
+            tail_lines = []
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
+                try:
+                    lines = f.readlines()
+                except Exception:
+                    lines = f.read().splitlines()
+            if lines:
+                tail_lines = lines[-15:]
+            # Simplify and strip
+            tail = "\n".join([ln.rstrip() for ln in tail_lines]).strip()
+            if not tail:
+                tail = "Updating…"
+            self._set_updating_status(tail)
+
+            # If the script has reached the reboot step, keep showing status
+            # The system will reboot shortly and the app will close.
+        except Exception as e:
+            logger.debug(f"Update log polling failed: {e}")
+            # Keep previous status; try again later
 
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
@@ -4436,6 +4522,8 @@ class Backend(QObject):
                         stderr=subprocess.DEVNULL,
                         cwd=os.path.dirname(script_path)
                     )
+                # Show in-app updating overlay and begin polling progress
+                self._start_update_progress_ui()
             else:
                 # Other platforms: best-effort background start
                 subprocess.Popen(
@@ -4444,8 +4532,8 @@ class Backend(QObject):
                     stderr=subprocess.DEVNULL,
                     cwd=os.path.dirname(script_path)
                 )
-
-            logger.info("Update script launch requested; proceeding to terminate app as part of update flow.")
+            # Keep the app running and show progress
+            logger.info("Update script launch requested; showing in-app update progress overlay.")
 
         except Exception as e:
             logger.error(f"Error running update script: {e}")
@@ -5425,6 +5513,89 @@ Window {
                 font.pixelSize: 16
                 font.family: "D-DIN"
                 horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        // Update progress overlay (shown during in-app update)
+        Rectangle {
+            id: updateOverlay
+            anchors.fill: parent
+            visible: backend && backend.updatingInProgress
+            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+            opacity: 0.98
+            z: 9999
+
+            // Block all mouse/keyboard input to underlying UI while updating
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 16
+                width: Math.min(parent.width * 0.8, 700)
+
+                // Logo
+                Image {
+                    source: spacexLogoPath
+                    width: 240
+                    height: 48
+                    fillMode: Image.PreserveAspectFit
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                // Progress text area showing tail of updater log
+                Rectangle {
+                    width: parent.width
+                    height: 140
+                    radius: 8
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+
+                    ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        clip: true
+                        ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+                        TextArea {
+                            readOnly: true
+                            text: backend && backend.updatingStatus ? backend.updatingStatus : "Preparing update…"
+                            color: backend.theme === "dark" ? "#E0E0E0" : "#202020"
+                            selectionColor: "transparent"
+                            wrapMode: TextArea.Wrap
+                            background: null
+                        }
+                    }
+                }
+
+                // Subtext
+                Text {
+                    text: "Updating application… the device will reboot automatically when complete."
+                    color: backend.theme === "dark" ? "#C0C0C0" : "#404040"
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    width: parent.width
+                }
+
+                // Minimal spinner imitation (animated dots)
+                Row {
+                    spacing: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Repeater {
+                        model: 3
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: backend.theme === "dark" ? "#9ad1d4" : "#2a2e2e"
+                            SequentialAnimation on opacity {
+                                running: updateOverlay.visible
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 0.2; to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                                NumberAnimation { from: 1.0; to: 0.2; duration: 600; easing.type: Easing.InOutQuad }
+                                pause: index * 120
+                            }
+                        }
+                    }
+                }
             }
         }
     }
