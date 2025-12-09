@@ -57,7 +57,7 @@ if hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
-# test update 4
+# test update 5
 
 # Environment variables for Qt and Chromium - Force Hardware Acceleration
 if platform.system() == 'Windows':
