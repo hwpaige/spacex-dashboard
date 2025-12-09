@@ -4500,18 +4500,38 @@ class Backend(QObject):
             script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'update_and_reboot.sh')      
             logger.info(f"Running update script: {script_path}")
 
+            # Proactively show the in‑app progress UI so the user gets immediate feedback
+            try:
+                self._set_updating_status("Starting updater…")
+                self._set_updating_in_progress(True)
+            except Exception as _e_ui:
+                logger.debug(f"Unable to set initial updating UI state: {_e_ui}")
+
+            # Validate script path exists before attempting launch
+            if not os.path.exists(script_path):
+                err = f"Update script not found at {script_path}"
+                logger.error(err)
+                self._set_updating_status(err)
+                return
+
             # On Linux (Pi), ensure the updater survives after this GUI process exits or the session closes.
             # We launch it detached (new session) and redirect output to a log so no TTY/SIGHUP issues occur.
             if platform.system() == 'Linux':
                 try:
                     log_path = '/tmp/spacex-dashboard-update.log'
                     # Open log file for append; keep handle open only for the child
-                    log_file = open(log_path, 'ab', buffering=0)
+                    try:
+                        log_file = open(log_path, 'ab', buffering=0)
+                    except Exception as e_open:
+                        # Fall back to DEVNULL but keep UI visible with a warning
+                        logger.warning(f"Failed to open update log file {log_path}: {e_open}. Falling back to DEVNULL.")
+                        log_file = subprocess.DEVNULL
                     # Ensure the updater keeps the GUI alive to show progress
                     child_env = os.environ.copy()
                     child_env['KEEP_APP_RUNNING'] = '1'
-                    subprocess.Popen(
-                        ['bash', script_path],
+                    # Use /bin/bash explicitly for predictable behavior on Pi
+                    proc = subprocess.Popen(
+                        ['/bin/bash', script_path],
                         stdout=log_file,
                         stderr=subprocess.STDOUT,
                         cwd=os.path.dirname(script_path),
@@ -4519,30 +4539,58 @@ class Backend(QObject):
                         start_new_session=True,   # detach from this controlling terminal/session
                         close_fds=True
                     )
-                    logger.info(f"Update script started (detached). Logs: {log_path}. App will exit shortly.")
+                    logger.info(f"Update script started (detached, pid={proc.pid}). Logs: {log_path}.")
+                    # Start/ensure log polling now that we know the path
+                    self._update_log_path = log_path
+                    self._start_update_progress_ui()
                 except Exception as e_detach:
                     logger.warning(f"Detached start failed ({e_detach}); falling back to normal background start.")
                     subprocess.Popen(
-                        ['bash', script_path],
+                        ['/bin/bash', script_path],
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                         cwd=os.path.dirname(script_path)
                     )
-                # Show in-app updating overlay and begin polling progress
-                self._start_update_progress_ui()
+                    # Keep UI visible even without log
+                    self._set_updating_status("Updater started (no log). Waiting for reboot…")
+                    self._start_update_progress_ui()
             else:
                 # Other platforms: best-effort background start
-                subprocess.Popen(
-                    ['bash', script_path],
+                try:
+                    subprocess.Popen(
+                    ['/bin/bash' if os.path.exists('/bin/bash') else 'bash', script_path],
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     cwd=os.path.dirname(script_path)
-                )
-            # Keep the app running and show progress
-            logger.info("Update script launch requested; showing in-app update progress overlay.")
+                    )
+                    logger.info("Updater started (non-Linux platform). Showing generic update status…")
+                except Exception as e_nonlinux:
+                    logger.error(f"Failed to start updater on this platform: {e_nonlinux}")
+                    self._set_updating_status(f"Failed to start updater: {e_nonlinux}")
+                # Show in-app progress even on non-Linux so the user sees feedback
+                self._start_update_progress_ui()
+
+            # As a safety net, if on Linux and the log file doesn't appear shortly, inform the user
+            try:
+                if platform.system() == 'Linux':
+                    def _check_log_appeared():
+                        path = self._update_log_path
+                        if path and os.path.exists(path):
+                            return
+                        # Update status hinting at permissions if still missing
+                        self._set_updating_status("Updater running… (log not yet available). If this persists, check script permissions and sudo rights.")
+                    QTimer.singleShot(2000, _check_log_appeared)
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"Error running update script: {e}")
+            # Keep overlay visible and show error so the user can report/log
+            try:
+                self._set_updating_in_progress(True)
+                self._set_updating_status(f"Failed to start updater: {e}")
+            except Exception:
+                pass
 
     def get_current_version(self):
         """Get the current git commit hash"""
