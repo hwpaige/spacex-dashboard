@@ -1,3 +1,32 @@
+#!/usr/bin/env bash
+
+# ========================= spacex-dashboard updater =========================
+# Version: 2.2 (git-only, no ZIP fallback)
+# This script updates the repository using git only and reboots the device.
+# It is hardened against being invoked with sudo by ensuring git writes as the
+# real desktop user. All output is intended to be tailed by the app overlay.
+# ============================================================================
+
+set -o pipefail
+
+echo "== BEGIN UPDATE (git-only) v2.2 =="
+
+# Discover effective, non-root user for git operations
+EFFECTIVE_USER="${SUDO_USER:-$(whoami)}"
+if [ -n "$SUDO_USER" ] && [ "$EFFECTIVE_USER" = "root" ]; then
+  # Sometimes SUDO_USER can be root when invoked from root shell; try logname
+  EFFECTIVE_USER=$(logname 2>/dev/null || echo "$(whoami)")
+fi
+
+# Resolve home directory for EFFECTIVE_USER (used by git config)
+if command -v getent >/dev/null 2>&1; then
+  EFFECTIVE_HOME="$(getent passwd "$EFFECTIVE_USER" | cut -d: -f6)"
+fi
+EFFECTIVE_HOME="${EFFECTIVE_HOME:-$HOME}"
+echo "Updater running as: $(whoami); git user: ${EFFECTIVE_USER}; HOME=${EFFECTIVE_HOME}"
+
+# Ensure HOME points to the effective user when we run git as them
+export HOME="$EFFECTIVE_HOME"
 
 # Stop any running instances of the app
 echo "Checking for running app instances..."
@@ -25,7 +54,7 @@ echo "Preparing repository for clean update (dropping local changes)…"
 # Mark repo as safe (handles cases where ownership changed previously)
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
-CURRENT_UID="$(id -u)"; CURRENT_GID="$(id -g)"
+CURRENT_UID="$(id -u "$EFFECTIVE_USER" 2>/dev/null || id -u)"; CURRENT_GID="$(id -g "$EFFECTIVE_USER" 2>/dev/null || id -g)"
 
 # Function: attempt to make repo (including .git) writable without interactive sudo
 ensure_repo_writable() {
@@ -57,19 +86,19 @@ ensure_repo_writable() {
 # Function: perform update via git (returns 0 on success)
 update_via_git() {
   # Drop any local work so deployment is deterministic
-  git reset --hard HEAD || true
-  git clean -fd || true
-  echo "Fetching latest changes from repository..."
-  if ! git fetch origin 2>&1; then
+  sudo -u "$EFFECTIVE_USER" git reset --hard HEAD || true
+  sudo -u "$EFFECTIVE_USER" git clean -fd || true
+  echo "Fetching latest changes from repository as ${EFFECTIVE_USER}..."
+  if ! sudo -u "$EFFECTIVE_USER" git fetch origin 2>&1; then
     echo "git fetch failed."
     return 1
   fi
-  echo "Resetting to latest remote version..."
-  if ! git reset --hard origin/master 2>&1; then
+  echo "Resetting to latest remote version as ${EFFECTIVE_USER}..."
+  if ! sudo -u "$EFFECTIVE_USER" git reset --hard origin/master 2>&1; then
     echo "git reset --hard origin/master failed."
     return 1
   fi
-  echo "Successfully updated repository via git."
+  echo "Successfully updated repository via git as ${EFFECTIVE_USER}."
   return 0
 }
 
@@ -84,13 +113,13 @@ update_via_sudo_git() {
     return 1
   fi
   echo "Attempting git update with sudo (root-owned repo)…"
-  sudo -n git reset --hard HEAD || true
-  sudo -n git clean -fd || true
-  if ! sudo -n git fetch origin 2>&1; then
+  sudo -n -u "$EFFECTIVE_USER" git reset --hard HEAD || true
+  sudo -n -u "$EFFECTIVE_USER" git clean -fd || true
+  if ! sudo -n -u "$EFFECTIVE_USER" git fetch origin 2>&1; then
     echo "sudo git fetch failed."
     return 1
   fi
-  if ! sudo -n git reset --hard origin/master 2>&1; then
+  if ! sudo -n -u "$EFFECTIVE_USER" git reset --hard origin/master 2>&1; then
     echo "sudo git reset --hard origin/master failed."
     return 1
   fi
@@ -196,3 +225,4 @@ if [ -x /sbin/reboot ]; then
 fi
 
 echo "Reboot command may require sudo privileges. If the device does not reboot, please reboot manually."
+echo "== END UPDATE =="
