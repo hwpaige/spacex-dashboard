@@ -4507,11 +4507,15 @@ class Backend(QObject):
                     log_path = '/tmp/spacex-dashboard-update.log'
                     # Open log file for append; keep handle open only for the child
                     log_file = open(log_path, 'ab', buffering=0)
+                    # Ensure the updater keeps the GUI alive to show progress
+                    child_env = os.environ.copy()
+                    child_env['KEEP_APP_RUNNING'] = '1'
                     subprocess.Popen(
                         ['bash', script_path],
                         stdout=log_file,
                         stderr=subprocess.STDOUT,
                         cwd=os.path.dirname(script_path),
+                        env=child_env,
                         start_new_session=True,   # detach from this controlling terminal/session
                         close_fds=True
                     )

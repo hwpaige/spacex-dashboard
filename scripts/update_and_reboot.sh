@@ -10,10 +10,17 @@ echo "Starting update process..."
 
 # Stop any running instances of the app
 echo "Checking for running app instances..."
-if pgrep -f "python.*app.py" > /dev/null; then
-    echo "Stopping running app instances..."
-    pkill -f "python.*app.py"
-    sleep 2  # Wait for processes to terminate
+# Allow the GUI to remain open showing the in-app update overlay when requested.
+# The launcher (app.py) sets KEEP_APP_RUNNING=1 to keep the UI alive so users don't
+# see the greeter. If not set, fall back to the old behavior and stop the app.
+if [ "${KEEP_APP_RUNNING}" = "1" ]; then
+    echo "KEEP_APP_RUNNING=1 detected; not killing running app. Proceeding with update while UI shows progress."
+else
+    if pgrep -f "python.*app.py" > /dev/null; then
+        echo "Stopping running app instances..."
+        pkill -f "python.*app.py"
+        sleep 2  # Wait for processes to terminate
+    fi
 fi
 
 # Check if we're in a git repository
