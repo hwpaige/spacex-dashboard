@@ -1,34 +1,8 @@
-#!/usr/bin/env bash
 
-# ========================= spacex-dashboard updater =========================
-# Version: 2.2 (git-only, no ZIP fallback)
-# This script updates the repository using git only and reboots the device.
-# It is hardened against being invoked with sudo by ensuring git writes as the
-# real desktop user. All output is intended to be tailed by the app overlay.
-# ============================================================================
+# Hardened git-only updater (no ZIP fallback)
+# Writes progress to stdout (app redirects to /tmp/spacex-dashboard-update.log)
 
-set -o pipefail
-
-echo "== BEGIN UPDATE (git-only) v2.2 =="
-
-# Discover effective, non-root user for git operations
-EFFECTIVE_USER="${SUDO_USER:-$(whoami)}"
-if [ -n "$SUDO_USER" ] && [ "$EFFECTIVE_USER" = "root" ]; then
-  # Sometimes SUDO_USER can be root when invoked from root shell; try logname
-  EFFECTIVE_USER=$(logname 2>/dev/null || echo "$(whoami)")
-fi
-
-# Resolve home directory for EFFECTIVE_USER (used by git config)
-if command -v getent >/dev/null 2>&1; then
-  EFFECTIVE_HOME="$(getent passwd "$EFFECTIVE_USER" | cut -d: -f6)"
-fi
-EFFECTIVE_HOME="${EFFECTIVE_HOME:-$HOME}"
-echo "Updater running as: $(whoami); git user: ${EFFECTIVE_USER}; HOME=${EFFECTIVE_HOME}"
-
-# Ensure HOME points to the effective user when we run git as them
-export HOME="$EFFECTIVE_HOME"
-
-# Stop any running instances of the app
+echo "== BEGIN UPDATE (git-only) v2.3 =="
 echo "Checking for running app instances..."
 # Allow the GUI to remain open showing the in-app update overlay when requested.
 # The launcher (app.py) sets KEEP_APP_RUNNING=1 to keep the UI alive so users don't
@@ -43,7 +17,7 @@ else
     fi
 fi
 
-# Check if we're in a git repository
+# Check if we're in a git repository (any subdirectory of the repo is fine)
 if ! git rev-parse --git-dir > /dev/null 2>&1; then
     echo "Error: Not in a git repository. Please run this script from the spacex-dashboard directory."
     exit 1
@@ -51,8 +25,33 @@ fi
 
 echo "Preparing repository for clean update (dropping local changes)…"
 
-# Mark repo as safe (handles cases where ownership changed previously)
-git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
+# Resolve the repository root and operate from there so running this script from scripts/ works
+REPO_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$REPO_DIR" ] || [ ! -d "$REPO_DIR/.git" ]; then
+  echo "Error: Failed to resolve repository root (.git not found)."; exit 1
+fi
+echo "Repository root resolved to: $REPO_DIR"
+cd "$REPO_DIR" || { echo "Error: Unable to cd to $REPO_DIR"; exit 1; }
+
+# Determine the desktop/effective user (so git writes to .git as the right user)
+EFFECTIVE_USER="${SUDO_USER:-$(whoami)}"
+EFFECTIVE_HOME=$(getent passwd "$EFFECTIVE_USER" 2>/dev/null | cut -d: -f6)
+[ -z "$EFFECTIVE_HOME" ] && EFFECTIVE_HOME="/home/$EFFECTIVE_USER"
+
+# Helper to run git consistently as the effective (non-root) user
+run_git() {
+  if [ "$(whoami)" = "root" ] || [ -n "${SUDO_USER}" ]; then
+    sudo -u "$EFFECTIVE_USER" -H git "$@"
+  else
+    git "$@"
+  fi
+}
+
+# Mark repo as safe for BOTH current user (may be root) and the effective desktop user
+git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+if [ "$(whoami)" = "root" ] || [ -n "${SUDO_USER}" ]; then
+  sudo -u "$EFFECTIVE_USER" -H git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+fi
 
 CURRENT_UID="$(id -u "$EFFECTIVE_USER" 2>/dev/null || id -u)"; CURRENT_GID="$(id -g "$EFFECTIVE_USER" 2>/dev/null || id -g)"
 
@@ -83,66 +82,39 @@ ensure_repo_writable() {
   return 1
 }
 
-# Function: perform update via git (returns 0 on success)
+# Function: perform update via git as EFFECTIVE_USER (returns 0 on success)
 update_via_git() {
   # Drop any local work so deployment is deterministic
-  sudo -u "$EFFECTIVE_USER" git reset --hard HEAD || true
-  sudo -u "$EFFECTIVE_USER" git clean -fd || true
-  echo "Fetching latest changes from repository as ${EFFECTIVE_USER}..."
-  if ! sudo -u "$EFFECTIVE_USER" git fetch origin 2>&1; then
+  run_git reset --hard HEAD || true
+  run_git clean -fd || true
+  echo "Fetching latest changes from repository..."
+  if ! run_git fetch origin 2>&1; then
     echo "git fetch failed."
     return 1
   fi
-  echo "Resetting to latest remote version as ${EFFECTIVE_USER}..."
-  if ! sudo -u "$EFFECTIVE_USER" git reset --hard origin/master 2>&1; then
+  echo "Resetting to latest remote version..."
+  if ! run_git reset --hard origin/master 2>&1; then
     echo "git reset --hard origin/master failed."
     return 1
   fi
-  echo "Successfully updated repository via git as ${EFFECTIVE_USER}."
+  echo "Successfully updated repository via git."
   return 0
 }
 
-# Function: perform update by elevating git commands with sudo when repo is root-owned
-update_via_sudo_git() {
-  if ! command -v sudo >/dev/null 2>&1; then
-    echo "sudo not available; cannot elevate git operations."
-    return 1
-  fi
-  if ! sudo -n true 2>/dev/null; then
-    echo "sudo requires a password; cannot elevate git operations non-interactively."
-    return 1
-  fi
-  echo "Attempting git update with sudo (root-owned repo)…"
-  sudo -n -u "$EFFECTIVE_USER" git reset --hard HEAD || true
-  sudo -n -u "$EFFECTIVE_USER" git clean -fd || true
-  if ! sudo -n -u "$EFFECTIVE_USER" git fetch origin 2>&1; then
-    echo "sudo git fetch failed."
-    return 1
-  fi
-  if ! sudo -n -u "$EFFECTIVE_USER" git reset --hard origin/master 2>&1; then
-    echo "sudo git reset --hard origin/master failed."
-    return 1
-  fi
-  # After updating as root, restore ownership to current user to avoid future permission drift
-  sudo -n chown -R "${CURRENT_UID}:${CURRENT_GID}" . 2>/dev/null || true
-  echo "Successfully updated repository via sudo git, ownership restored."
-  return 0
-}
+# Note: We intentionally avoid running git as root to sidestep "dubious ownership" and .git write issues.
+# If update_via_git fails after a permission repair attempt, we abort with guidance.
 
 # Try to ensure repo is writable, then try git update; if it fails, try sudo-elevated git; otherwise stop with guidance
 if ensure_repo_writable && update_via_git; then
   :
 else
-  echo "Git update as current user failed. Checking for sudo-elevated git path…"
-  if update_via_sudo_git; then
-    :
-  else
-    echo "ERROR: Unable to update repository due to permissions."
-    echo "To fix permanently, run once on the Pi:"
-    echo "  sudo chown -R $(whoami):$(whoami) $(pwd)"
-    echo "Or configure passwordless sudo for chown and reboot operations."
-    exit 1
-  fi
+  echo "ERROR: Unable to update repository via git due to permissions."
+  echo "To fix permanently, run once on the Pi (inside the repo):"
+  echo "  sudo chown -R $EFFECTIVE_USER:$EFFECTIVE_USER $REPO_DIR"
+  echo "  sudo chmod -R u+rwX,g+rX .git"
+  echo "Then try the update again from the app."
+  echo "== END UPDATE (FAILED) =="
+  exit 1
 fi
 
 # Optional: Install any new Python dependencies if requirements.txt changed
@@ -225,4 +197,4 @@ if [ -x /sbin/reboot ]; then
 fi
 
 echo "Reboot command may require sudo privileges. If the device does not reboot, please reboot manually."
-echo "== END UPDATE =="
+echo "== END UPDATE (REBOOT ISSUED) =="

@@ -20,7 +20,7 @@ log() {
 }
 
 error_exit() {
-    echo "ERROR: $@" | tee -a "$LOG_FILE"
+    echo "ERROR: $*" | tee -a "$LOG_FILE"
     exit 1
 }
 
@@ -475,8 +475,16 @@ setup_repository() {
     
     # Fix git permissions in case any operations were done as root
     if [ -d "$REPO_DIR/.git" ]; then
+        # Ensure .git is owned by the desktop user and is writable
         chown -R "$USER:$USER" "$REPO_DIR/.git"
-        log "Fixed git repository permissions"
+        chmod -R u+rwX,g+rX "$REPO_DIR/.git" || true
+
+        # Mark the repo as safe for both root and the desktop user to avoid
+        # "detected dubious ownership" when scripts are invoked with sudo.
+        git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+        sudo -u "$USER" -H git config --global --add safe.directory "$REPO_DIR" 2>/dev/null || true
+
+        log "Git repository permissions and safe.directory configured"
     fi
 }
     
@@ -569,10 +577,18 @@ EOF
         log "✓ Initramfs rebuilt successfully with Plymouth support"
     fi
 
-    # Copy initramfs to Raspberry Pi firmware directory
-    if [ -f /boot/initrd.img-*-raspi ]; then
-        cp /boot/initrd.img-*-raspi /boot/firmware/
+    # Copy initramfs to Raspberry Pi firmware directory (handle globs safely)
+    copied_any=false
+    for f in /boot/initrd.img-*-raspi; do
+        if [ -f "$f" ]; then
+            cp "$f" /boot/firmware/
+            copied_any=true
+        fi
+    done
+    if [ "$copied_any" = true ]; then
         log "✓ Initramfs copied to /boot/firmware/"
+    else
+        log "No matching initramfs images found to copy to /boot/firmware/"
     fi
 
     # Configure kernel command line for Plymouth
