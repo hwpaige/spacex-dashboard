@@ -5543,7 +5543,8 @@ Window {
         anchors.fill: parent
         // Match app background to the globe background
         color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
-        visible: !!(backend && backend.isLoading)
+    // Keep this container visible during initial load OR while an update is in progress
+    visible: !!(backend && (backend.isLoading || backend.updatingInProgress))
         z: 1
 
         ColumnLayout {
