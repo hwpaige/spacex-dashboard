@@ -1484,7 +1484,10 @@ class Backend(QObject):
         self._last_connected_network = self.load_last_connected_network()
         
         # Network connectivity properties (separate from WiFi)
-        self._network_connected = False
+        # Optimistically mirror Wi‑Fi state so the header icon doesn't show
+        # a red disconnected badge during splash when we're actually online.
+        # A background check will correct this within seconds if wrong.
+        self._network_connected = bool(initial_wifi_connected)
         self._last_network_check = None
         self._network_check_in_progress = False
 
@@ -1502,6 +1505,51 @@ class Backend(QObject):
             logger.debug(f"Could not connect initialChecksReady signal: {_e}")
         # Boot guard timer placeholder
         self._initial_checks_guard_timer = None
+
+        # Emit initial states on the next Qt tick so QML bindings are already connected
+        try:
+            def _emit_initial_connectivity():
+                try:
+                    logger.debug("Splash: emitting initial wifiConnectedChanged + networkConnectedChanged")
+                    self.wifiConnectedChanged.emit()
+                except Exception as _e1:
+                    logger.debug(f"Failed to emit initial wifiConnectedChanged: {_e1}")
+                try:
+                    self.networkConnectedChanged.emit()
+                except Exception as _e2:
+                    logger.debug(f"Failed to emit initial networkConnectedChanged: {_e2}")
+
+            QTimer.singleShot(0, _emit_initial_connectivity)
+        except Exception as _e:
+            logger.debug(f"Failed to schedule initial connectivity emits: {_e}")
+
+        # Kick off an async network connectivity check right away to validate
+        # the optimistic value without blocking the UI.
+        try:
+            QTimer.singleShot(0, self._start_network_connectivity_check_async)
+        except Exception as _e:
+            logger.debug(f"Failed to schedule initial async connectivity check: {_e}")
+
+        # Attempt boot-time Wi‑Fi auto-reconnect to the most recently used network (non-blocking)
+        try:
+            def _boot_autoreconnect():
+                try:
+                    if platform.system() != 'Linux':
+                        return  # Boot-time auto-reconnect logic targets Linux (Pi)
+                    if self._wifi_connected or self._wifi_connecting:
+                        return
+                    if not self._last_connected_network or not self._last_connected_network.get('ssid'):
+                        return
+                    logger.info("BOOT: Scheduling auto-reconnect to last WiFi network…")
+                    # Run the scanning/connection in a background thread to avoid UI stalls
+                    threading.Thread(target=lambda: self._auto_reconnect_to_last_network(boot_time=True), daemon=True).start()
+                except Exception as _e:
+                    logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
+
+            # Wait a moment so system services (wpa_supplicant/NetworkManager) are ready
+            QTimer.singleShot(1500, _boot_autoreconnect)
+        except Exception as _e:
+            logger.debug(f"Failed to set boot-time auto-reconnect timer: {_e}")
 
     def get_encryption_key(self):
         """Get or create encryption key for WiFi passwords"""
@@ -2033,6 +2081,11 @@ class Backend(QObject):
         return self._wifi_networks
 
     @pyqtProperty(bool, notify=wifiConnectedChanged)
+    def wifiConnected(self):
+        """Expose WiFi connected state to QML (used by status icon and labels)."""
+        return self._wifi_connected
+
+    @pyqtProperty(bool, notify=networkConnectedChanged)
     def networkConnected(self):
         return self._network_connected
 
@@ -3311,6 +3364,63 @@ class Backend(QObject):
         except Exception as e:
             logger.error(f"Error during auto-reconnection setup: {e}")
 
+    def _scan_and_reconnect_to_best_network(self):
+        """Scan for Wi‑Fi and try to reconnect to the last used/remembered network reliably.
+        This runs on a background thread when called from boot path."""
+        try:
+            is_linux = platform.system() == 'Linux'
+            if not is_linux:
+                logger.debug("Auto-reconnect scan skipped (non-Linux platform)")
+                return
+
+            # Resolve last SSID and its stored password (if any)
+            last_ssid = (self._last_connected_network or {}).get('ssid')
+            if not last_ssid:
+                logger.debug("No last SSID available for auto-reconnect")
+                return
+            remembered = next((n for n in self._remembered_networks if n.get('ssid') == last_ssid), None)
+            password = remembered.get('password') if remembered else None
+
+            # If NetworkManager has a connection profile, prefer bringing it up by name (fast, uses stored creds)
+            try:
+                nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
+                if nmcli_check.returncode == 0:
+                    list_conns = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show'],
+                                                capture_output=True, text=True, timeout=8)
+                    if list_conns.returncode == 0:
+                        names = []
+                        for line in list_conns.stdout.strip().split('\n'):
+                            if not line:
+                                continue
+                            parts = line.split(':')
+                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
+                                names.append(parts[0])
+                        # Try exact name match first, then a case-insensitive match fallback
+                        candidate = last_ssid if last_ssid in names else next((n for n in names if n.lower() == last_ssid.lower()), None)
+                        if candidate:
+                            logger.info(f"BOOT: Bringing up stored NetworkManager connection: {candidate}")
+                            up = subprocess.run(['nmcli', 'connection', 'up', 'id', candidate], capture_output=True, text=True, timeout=15)
+                            if up.returncode == 0:
+                                logger.info(f"BOOT: nmcli brought up connection '{candidate}' successfully")
+                                # Update status on the Qt thread
+                                QTimer.singleShot(0, self.update_wifi_status)
+                                return
+                            else:
+                                logger.warning(f"BOOT: nmcli up failed for '{candidate}': {up.stderr}")
+                else:
+                    logger.debug("nmcli not available; will try wpa_cli or connectToWifi fallback")
+            except Exception as e:
+                logger.debug(f"BOOT: Error while attempting nmcli profile bring-up: {e}")
+
+            # If no profile was found or bringing it up failed, fall back to direct connect using stored password
+            if password is not None:
+                logger.info(f"BOOT: Falling back to direct connect to last SSID '{last_ssid}'")
+                QTimer.singleShot(0, lambda: self.connectToWifi(last_ssid, password))
+            else:
+                logger.info(f"BOOT: No stored password for '{last_ssid}'. Skipping direct auto-connect.")
+        except Exception as e:
+            logger.error(f"Error during boot-time scan/reconnect: {e}")
+
     def _perform_auto_reconnection(self, ssid, password):
         """Perform the actual auto-reconnection attempt"""
         try:
@@ -3777,27 +3887,17 @@ class Backend(QObject):
                                 connections.append({'name': name, 'autoconnect': autoconnect})
     
                 logger.debug(f"Found WiFi connections: {connections}")
-    
-                # Disable autoconnect for all WiFi connections except the current one
+
+                # Only ensure the current network has autoconnect enabled; do not disable others
                 for conn in connections:
-                    if conn['name'] == current_ssid:
-                        # Enable autoconnect for the current network
-                        if not conn['autoconnect']:
-                            logger.info(f"Enabling autoconnect for current network: {current_ssid}")
-                            enable_result = subprocess.run(['nmcli', 'connection', 'modify', current_ssid, 'autoconnect', 'yes'],
-                                                         capture_output=True, text=True, timeout=5)
-                            if enable_result.returncode != 0:
-                                logger.warning(f"Failed to enable autoconnect for {current_ssid}: {enable_result.stderr}")
-                    else:
-                        # Disable autoconnect for other networks
-                        if conn['autoconnect']:
-                            logger.info(f"Disabling autoconnect for network: {conn['name']}")
-                            disable_result = subprocess.run(['nmcli', 'connection', 'modify', conn['name'], 'autoconnect', 'no'],
-                                                          capture_output=True, text=True, timeout=5)
-                            if disable_result.returncode != 0:
-                                logger.warning(f"Failed to disable autoconnect for {conn['name']}: {disable_result.stderr}")
-    
-                logger.info("NetworkManager autoconnect settings updated successfully")
+                    if conn['name'] == current_ssid and not conn['autoconnect']:
+                        logger.info(f"Enabling autoconnect for current network: {current_ssid}")
+                        enable_result = subprocess.run(['nmcli', 'connection', 'modify', current_ssid, 'autoconnect', 'yes'],
+                                                     capture_output=True, text=True, timeout=5)
+                        if enable_result.returncode != 0:
+                            logger.warning(f"Failed to enable autoconnect for {current_ssid}: {enable_result.stderr}")
+
+                logger.info("NetworkManager autoconnect ensured for current network")
     
             except Exception as e:
                 logger.error(f"Error managing NetworkManager autoconnect settings: {e}")

@@ -93,13 +93,19 @@ if git diff HEAD~1 --name-only | grep -q "^requirements.txt$"; then
         echo "Error: Failed to install Python dependencies in venv."; exit 1; }
 fi
 
-# Clear the cache to ensure fresh data after update
-echo "Clearing cache..."
+# Clear the cache to ensure fresh data after update, but keep relatively static caches
+echo "Clearing cache (preserving previous launches and race caches)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Remove contents safely even if directory is empty
 if [ -d "$PROJECT_DIR/cache" ]; then
-    find "$PROJECT_DIR/cache" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
+    # Preserve previous launch caches which are relatively static
+    # Note: F1/race caches are stored under ~/.cache/spacex-dashboard and are not touched here
+    find "$PROJECT_DIR/cache" \
+        -mindepth 1 -maxdepth 1 \
+        -not -name 'previous_launches_cache.json' \
+        -not -name 'previous_launches_cache_backup.json' \
+        -exec rm -rf {} + 2>/dev/null || true
 fi
 
 echo "Update complete. Rebooting system in 5 seconds..."
