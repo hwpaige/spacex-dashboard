@@ -4412,13 +4412,40 @@ class Backend(QObject):
             script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'update_and_reboot.sh')      
             logger.info(f"Running update script: {script_path}")
 
-            # Run the script in the background since it will kill this process
-            subprocess.Popen(['bash', script_path],
-                           stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL,
-                           cwd=os.path.dirname(script_path))
+            # On Linux (Pi), ensure the updater survives after this GUI process exits or the session closes.
+            # We launch it detached (new session) and redirect output to a log so no TTY/SIGHUP issues occur.
+            if platform.system() == 'Linux':
+                try:
+                    log_path = '/tmp/spacex-dashboard-update.log'
+                    # Open log file for append; keep handle open only for the child
+                    log_file = open(log_path, 'ab', buffering=0)
+                    subprocess.Popen(
+                        ['bash', script_path],
+                        stdout=log_file,
+                        stderr=subprocess.STDOUT,
+                        cwd=os.path.dirname(script_path),
+                        start_new_session=True,   # detach from this controlling terminal/session
+                        close_fds=True
+                    )
+                    logger.info(f"Update script started (detached). Logs: {log_path}. App will exit shortly.")
+                except Exception as e_detach:
+                    logger.warning(f"Detached start failed ({e_detach}); falling back to normal background start.")
+                    subprocess.Popen(
+                        ['bash', script_path],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        cwd=os.path.dirname(script_path)
+                    )
+            else:
+                # Other platforms: best-effort background start
+                subprocess.Popen(
+                    ['bash', script_path],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    cwd=os.path.dirname(script_path)
+                )
 
-            logger.info("Update script started - app will be terminated")
+            logger.info("Update script launch requested; proceeding to terminate app as part of update flow.")
 
         except Exception as e:
             logger.error(f"Error running update script: {e}")
