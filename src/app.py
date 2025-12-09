@@ -26,6 +26,7 @@ import pytz
 import pandas as pd
 import time
 import subprocess
+import signal
 import re
 import calendar
 from cryptography.fernet import Fernet
@@ -1501,6 +1502,7 @@ class Backend(QObject):
         self._updating_status = ""
         self._update_log_timer = None
         self._update_log_path = '/tmp/spacex-dashboard-update.log' if platform.system() == 'Linux' else None
+        self._updater_pid = None  # PID of detached update script for cancellation on Linux
 
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
@@ -4540,6 +4542,11 @@ class Backend(QObject):
                         close_fds=True
                     )
                     logger.info(f"Update script started (detached, pid={proc.pid}). Logs: {log_path}.")
+                    # Track PID for potential cancellation
+                    try:
+                        self._updater_pid = int(proc.pid)
+                    except Exception:
+                        self._updater_pid = None
                     # Start/ensure log polling now that we know the path
                     self._update_log_path = log_path
                     self._start_update_progress_ui()
@@ -4591,6 +4598,46 @@ class Backend(QObject):
                 self._set_updating_status(f"Failed to start updater: {e}")
             except Exception:
                 pass
+
+    @pyqtSlot()
+    def cancelUpdate(self):
+        """Attempt to cancel a running update: terminate detached updater and hide overlay."""
+        try:
+            if platform.system() == 'Linux' and self._updater_pid:
+                self._set_updating_status("Canceling update…")
+                try:
+                    # Send SIGTERM to the process group created by start_new_session
+                    os.killpg(self._updater_pid, signal.SIGTERM)
+                    logger.info(f"Sent SIGTERM to update process group (pgid={self._updater_pid})")
+                except Exception as e1:
+                    logger.warning(f"Failed to SIGTERM updater group: {e1}")
+                # As a safety, escalate to SIGKILL after a short delay
+                def _force_kill():
+                    try:
+                        os.killpg(self._updater_pid, signal.SIGKILL)
+                        logger.info(f"Sent SIGKILL to update process group (pgid={self._updater_pid})")
+                    except Exception:
+                        pass
+                    self._finalize_cancel_ui()
+                QTimer.singleShot(1500, _force_kill)
+            else:
+                # Non-Linux or no PID: just update UI state
+                self._finalize_cancel_ui()
+        except Exception as e:
+            logger.warning(f"Cancel update failed: {e}")
+            self._finalize_cancel_ui()
+
+    def _finalize_cancel_ui(self):
+        try:
+            if self._update_log_timer and self._update_log_timer.isActive():
+                self._update_log_timer.stop()
+        except Exception:
+            pass
+        self._set_updating_status("Update canceled.")
+        # Hide overlay shortly after message so the user sees confirmation
+        def _hide():
+            self._set_updating_in_progress(False)
+        QTimer.singleShot(800, _hide)
 
     def get_current_version(self):
         """Get the current git commit hash"""
@@ -5648,6 +5695,43 @@ Window {
                                 NumberAnimation { from: 1.0; to: 0.2; duration: 600; easing.type: Easing.InOutQuad }
                                 // Use a dedicated PauseAnimation element; 'pause' is not a valid property
                                 PauseAnimation { duration: index * 120 }
+                            }
+                        }
+                    }
+                }
+
+                // Cancel button row
+                Row {
+                    spacing: 8
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    // Keep some top margin from the log area
+                    anchors.topMargin: 6
+
+                    Rectangle {
+                        id: cancelUpdateBtn
+                        width: 140
+                        height: 28
+                        radius: 14
+                        color: "#F44336"   // Red to match dropdown switch/error accent
+                        border.color: backend.theme === "dark" ? "#b93b30" : "#d13c32"
+                        border.width: 1
+                        visible: backend && backend.updatingInProgress
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Cancel Update"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: "white"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (backend && backend.cancelUpdate) {
+                                    backend.cancelUpdate()
+                                }
                             }
                         }
                     }

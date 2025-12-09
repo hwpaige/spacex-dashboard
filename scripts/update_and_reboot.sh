@@ -29,11 +29,25 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-# Check if there are any uncommitted changes
-if ! git diff --quiet || ! git diff --staged --quiet; then
-    echo "Warning: You have uncommitted changes. Stashing them..."
-    git stash
+# Ensure repository is safe and writable; drop local changes instead of stashing
+echo "Preparing repository for clean update (dropping local changes)…"
+
+# Mark repo as safe (handles cases where ownership changed previously)
+git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
+
+# If .git seems to have permission issues (common if previous runs used sudo), try to fix
+if [ ! -w .git/objects ] || [ ! -w .git/refs ]; then
+    echo "Attempting to repair .git permissions (may require sudo)…"
+    if command -v sudo >/dev/null 2>&1; then
+        # Try to change ownership to the current user
+        sudo chown -R "$(id -u):$(id -g)" .git 2>/dev/null || true
+    fi
+    chmod -R u+rwX,g+rX .git 2>/dev/null || true
 fi
+
+# Force drop any local changes/untracked files so update is deterministic
+git reset --hard HEAD || true
+git clean -fd || true
 
 # Fetch and pull the latest changes
 echo "Fetching latest changes from repository..."
