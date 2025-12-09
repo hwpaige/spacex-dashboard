@@ -25,25 +25,32 @@ echo "Preparing repository for clean update (dropping local changes)…"
 # Mark repo as safe (handles cases where ownership changed previously)
 git config --global --add safe.directory "$(pwd)" 2>/dev/null || true
 
-# Function: attempt to make .git writable without interactive sudo
-ensure_git_writable() {
-  if [ -w .git/objects ] && [ -w .git/refs ]; then
+CURRENT_UID="$(id -u)"; CURRENT_GID="$(id -g)"
+
+# Function: attempt to make repo (including .git) writable without interactive sudo
+ensure_repo_writable() {
+  if [ -w .git/objects ] && [ -w .git/refs ] && [ -w . ]; then
     return 0
   fi
-  echo "Repairing .git permissions (sudo -n if available)…"
+  echo "Attempting repo permission repair (sudo -n if available)…"
   if command -v sudo >/dev/null 2>&1; then
-    # Non-interactive sudo attempts; if these fail they will exit non-zero without prompting
-    sudo -n chown -R "$(id -u):$(id -g)" .git 2>/dev/null || true
-    sudo -n chmod -R u+rwX,g+rX .git 2>/dev/null || true
+    # Validate that sudo can run non-interactively
+    if sudo -n true 2>/dev/null; then
+      sudo -n chown -R "${CURRENT_UID}:${CURRENT_GID}" . 2>/dev/null || true
+      sudo -n chmod -R u+rwX,g+rX .git 2>/dev/null || true
+    else
+      echo "Note: sudo exists but requires a password; cannot change ownership automatically."
+      chmod -R u+rwX,g+rX .git 2>/dev/null || true
+    fi
   else
     chmod -R u+rwX,g+rX .git 2>/dev/null || true
   fi
   # Re-check
-  if [ -w .git/objects ] && [ -w .git/refs ]; then
-    echo ".git now appears writable."
+  if [ -w .git/objects ] && [ -w .git/refs ] && [ -w . ]; then
+    echo "Repository now appears writable."
     return 0
   fi
-  echo "Warning: .git still not writable by current user. Git operations may fail."
+  echo "Warning: Repository is still not writable by the current user."
   return 1
 }
 
@@ -66,72 +73,45 @@ update_via_git() {
   return 0
 }
 
-# Function: fallback update by downloading GitHub archive and copying over files
-update_via_archive() {
-  echo "Falling back to archive-based update (read-only .git or git failure)."
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-  TMP_DIR="/tmp/spacex-dashboard-update-$$"
-  mkdir -p "$TMP_DIR"
-  # Try to detect the repo slug from git remote; else default to hwpaige/spacex-dashboard
-  REPO_SLUG="hwpaige/spacex-dashboard"
-  if git remote get-url origin >/dev/null 2>&1; then
-    ORIGIN_URL="$(git remote get-url origin)"
-    case "$ORIGIN_URL" in
-      *github.com/*)
-        SLUG_PART="${ORIGIN_URL##*github.com/}"
-        SLUG_PART="${SLUG_PART%.git}"
-        if [ -n "$SLUG_PART" ]; then REPO_SLUG="$SLUG_PART"; fi
-        ;;
-    esac
-  fi
-  ARCHIVE_URL="https://github.com/${REPO_SLUG}/archive/refs/heads/master.zip"
-  echo "Downloading latest code archive from $ARCHIVE_URL ..."
-  if command -v curl >/dev/null 2>&1; then
-    curl -L "$ARCHIVE_URL" -o "$TMP_DIR/src.zip"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -O "$TMP_DIR/src.zip" "$ARCHIVE_URL"
-  else
-    echo "Error: Neither curl nor wget is available to download archive."
+# Function: perform update by elevating git commands with sudo when repo is root-owned
+update_via_sudo_git() {
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "sudo not available; cannot elevate git operations."
     return 1
   fi
-  echo "Unpacking archive..."
-  if ! unzip -q "$TMP_DIR/src.zip" -d "$TMP_DIR"; then
-    echo "Error: Failed to unzip downloaded archive."
+  if ! sudo -n true 2>/dev/null; then
+    echo "sudo requires a password; cannot elevate git operations non-interactively."
     return 1
   fi
-  # The zip unpacks to repo-branch directory
-  SRC_DIR="$(find "$TMP_DIR" -maxdepth 1 -type d -name '*-master' -print -quit)"
-  if [ -z "$SRC_DIR" ]; then
-    echo "Error: Could not locate unpacked source directory."
+  echo "Attempting git update with sudo (root-owned repo)…"
+  sudo -n git reset --hard HEAD || true
+  sudo -n git clean -fd || true
+  if ! sudo -n git fetch origin 2>&1; then
+    echo "sudo git fetch failed."
     return 1
   fi
-  echo "Synchronizing files into project directory (preserving caches and local data)..."
-  # Exclusions: do not overwrite .git, cache historical files, remembered networks, last connected network, and local venv
-  if command -v rsync >/dev/null 2>&1; then
-    rsync -av --delete \
-      --exclude '.git/' \
-      --exclude 'cache/previous_launches_cache.json' \
-      --exclude 'cache/previous_launches_cache_backup.json' \
-      --exclude 'cache/remembered_networks.json' \
-      --exclude 'cache/last_connected_network.json' \
-      --exclude '.venv/' \
-      "$SRC_DIR"/ "$PROJECT_DIR"/
-  else
-    echo "rsync not found; using cp -a fallback (no delete of removed files)."
-    (cd "$SRC_DIR" && tar cf - .) | (cd "$PROJECT_DIR" && tar xf -)
+  if ! sudo -n git reset --hard origin/master 2>&1; then
+    echo "sudo git reset --hard origin/master failed."
+    return 1
   fi
-  echo "Archive-based update applied."
+  # After updating as root, restore ownership to current user to avoid future permission drift
+  sudo -n chown -R "${CURRENT_UID}:${CURRENT_GID}" . 2>/dev/null || true
+  echo "Successfully updated repository via sudo git, ownership restored."
   return 0
 }
 
-# Try to ensure .git is writable, then try git update; if it fails, use archive fallback
-if ensure_git_writable && update_via_git; then
+# Try to ensure repo is writable, then try git update; if it fails, try sudo-elevated git; otherwise stop with guidance
+if ensure_repo_writable && update_via_git; then
   :
 else
-  echo "Git-based update failed or not possible due to permissions."
-  if ! update_via_archive; then
-    echo "Error: Archive-based update also failed. Aborting."
+  echo "Git update as current user failed. Checking for sudo-elevated git path…"
+  if update_via_sudo_git; then
+    :
+  else
+    echo "ERROR: Unable to update repository due to permissions."
+    echo "To fix permanently, run once on the Pi:"
+    echo "  sudo chown -R $(whoami):$(whoami) $(pwd)"
+    echo "Or configure passwordless sudo for chown and reboot operations."
     exit 1
   fi
 fi
