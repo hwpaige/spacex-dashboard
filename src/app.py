@@ -1766,6 +1766,46 @@ class Backend(QObject):
 
         if result.returncode == 0:
             logger.info(f"Successfully connected to {ssid} using nmcli")
+
+            # Ensure the created/used connection is set to autoconnect and prioritized
+            try:
+                # Find the connection profile that matches this SSID by actual 802-11-wireless.ssid
+                show_result = subprocess.run(
+                    ['nmcli', '-t', '-f', 'NAME,TYPE,802-11-wireless.ssid', 'connection', 'show'],
+                    capture_output=True, text=True, timeout=10
+                )
+                if show_result.returncode == 0:
+                    target_conn_name = None
+                    for line in show_result.stdout.strip().split('\n'):
+                        if not line.strip():
+                            continue
+                        parts = line.split(':')
+                        if len(parts) >= 3:
+                            name, ctype, ssid_field = parts[0], parts[1], parts[2]
+                            if ctype.lower() == 'wifi' and ssid_field == ssid:
+                                target_conn_name = name
+                                break
+
+                    if target_conn_name:
+                        # Apply autoconnect settings
+                        subprocess.run(['nmcli', 'connection', 'modify', target_conn_name,
+                                        'connection.autoconnect', 'yes'], capture_output=True, text=True, timeout=5)
+                        subprocess.run(['nmcli', 'connection', 'modify', target_conn_name,
+                                        'connection.autoconnect-priority', '100'], capture_output=True, text=True, timeout=5)
+                        # Unlimited retries to keep trying on boot
+                        subprocess.run(['nmcli', 'connection', 'modify', target_conn_name,
+                                        'connection.autoconnect-retries', '-1'], capture_output=True, text=True, timeout=5)
+                        # Ensure no user-specific restriction
+                        subprocess.run(['nmcli', 'connection', 'modify', target_conn_name,
+                                        'connection.permissions', ''], capture_output=True, text=True, timeout=5)
+                        logger.info(f"Ensured autoconnect for connection '{target_conn_name}' (SSID '{ssid}')")
+                    else:
+                        logger.debug("Could not find a matching NetworkManager connection profile by SSID to set autoconnect")
+                else:
+                    logger.debug(f"Failed to list NM connections for autoconnect setup: {show_result.stderr}")
+            except Exception as e:
+                logger.warning(f"Error ensuring nmcli autoconnect settings: {e}")
+
             return True
         else:
             logger.error(f"nmcli connection failed: {result.stderr}")
@@ -3826,13 +3866,32 @@ class Backend(QObject):
                 except:
                     pass
             else:
-                # Try wpa_cli first (more reliable), then nmcli as fallback
+                # Prefer NetworkManager (nmcli) when available to ensure proper autoconnect at boot
                 try:
                     # Get the WiFi interface
                     wifi_interface = self.get_wifi_interface()
                     logger.debug(f"Using WiFi interface: {wifi_interface}")
 
-                    # Check if wpa_cli is available
+                    # Check if nmcli is available first
+                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
+                    if nmcli_check.returncode == 0:
+                        logger.info(f"Trying nmcli connection to: {ssid}")
+                        if self._try_nmcli_connection(ssid, password, wifi_interface):
+                            self.add_remembered_network(ssid, password)
+                            self.save_last_connected_network(ssid)
+                            # Ensure autoconnect and priority
+                            self._manage_networkmanager_autoconnect(ssid)
+                        else:
+                            logger.warning("nmcli connection failed, attempting wpa_cli fallback")
+                            # Fallback to wpa_cli if available
+                            wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                            if wpa_check.returncode == 0:
+                                logger.info(f"Trying wpa_cli connection to: {ssid}")
+                                # Use wpa_cli path below
+                            else:
+                                raise RuntimeError("Neither nmcli (failed) nor wpa_cli available")
+
+                    # If nmcli isn't available, try wpa_cli directly
                     wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
                     if wpa_check.returncode == 0:
                         logger.info(f"Trying wpa_cli connection to: {ssid}")
@@ -3912,11 +3971,7 @@ class Backend(QObject):
                         else:
                             logger.error(f"Failed to add network: {add_result.stderr}")
                     else:
-                        logger.warning("wpa_cli not available, trying nmcli fallback")
-                        # Fallback to nmcli
-                        if self._try_nmcli_connection(ssid, password, wifi_interface):
-                            self.add_remembered_network(ssid, password)
-                            self.save_last_connected_network(ssid)
+                        logger.warning("wpa_cli not available and nmcli either unavailable or failed")
                         
                 except Exception as e:
                     logger.error(f"wpa_cli connection failed: {e}")
@@ -3999,49 +4054,55 @@ class Backend(QObject):
             """Manage NetworkManager autoconnect settings to prioritize the current network"""
             try:
                 # Only manage autoconnect on Linux systems
-                if platform.system() != 'Linux':
+                if platform.system() != 'Linux' or not current_ssid:
                     return
-    
+
                 logger.info(f"Managing NetworkManager autoconnect settings for network: {current_ssid}")
-    
+
                 # Check if nmcli is available
                 nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
                 if nmcli_check.returncode != 0:
                     logger.debug("nmcli not available, skipping autoconnect management")
                     return
-    
-                # Get all NetworkManager connections
-                result = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE,AUTOCONNECT', 'connection', 'show'],
-                                      capture_output=True, text=True, timeout=10)
-    
+
+                # Query NM connections including the actual SSID field
+                result = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE,802-11-wireless.ssid,AUTOCONNECT', 'connection', 'show'],
+                                        capture_output=True, text=True, timeout=10)
                 if result.returncode != 0:
                     logger.warning(f"Failed to get NetworkManager connections: {result.stderr}")
                     return
-    
-                connections = []
-                for line in result.stdout.strip().split('\n'):
-                    if line.strip():
-                        parts = line.split(':')
-                        if len(parts) >= 3:
-                            name = parts[0]
-                            conn_type = parts[1]
-                            autoconnect = parts[2].lower() == 'yes'
-                            if conn_type.lower() == 'wifi':
-                                connections.append({'name': name, 'autoconnect': autoconnect})
-    
-                logger.debug(f"Found WiFi connections: {connections}")
 
-                # Only ensure the current network has autoconnect enabled; do not disable others
-                for conn in connections:
-                    if conn['name'] == current_ssid and not conn['autoconnect']:
-                        logger.info(f"Enabling autoconnect for current network: {current_ssid}")
-                        enable_result = subprocess.run(['nmcli', 'connection', 'modify', current_ssid, 'autoconnect', 'yes'],
-                                                     capture_output=True, text=True, timeout=5)
-                        if enable_result.returncode != 0:
-                            logger.warning(f"Failed to enable autoconnect for {current_ssid}: {enable_result.stderr}")
+                target_names = []
+                for line in result.stdout.strip().split('\n'):
+                    if not line.strip():
+                        continue
+                    parts = line.split(':')
+                    if len(parts) >= 4:
+                        name, ctype, ssid_field, autoconnect = parts[0], parts[1], parts[2], parts[3]
+                        if ctype.lower() == 'wifi' and ssid_field == current_ssid:
+                            target_names.append((name, autoconnect.lower() == 'yes'))
+
+                if not target_names:
+                    logger.debug("No NM connection matched by SSID; attempting by name as a fallback")
+                    # Fallback: try by name equal to SSID
+                    target_names.append((current_ssid, False))
+
+                # Ensure autoconnect and priority for matched connections
+                for name, is_auto in target_names:
+                    if not is_auto:
+                        logger.info(f"Enabling autoconnect for connection '{name}' (SSID '{current_ssid}')")
+                        subprocess.run(['nmcli', 'connection', 'modify', name,
+                                        'connection.autoconnect', 'yes'], capture_output=True, text=True, timeout=5)
+                    # Always set priority and retries
+                    subprocess.run(['nmcli', 'connection', 'modify', name,
+                                    'connection.autoconnect-priority', '100'], capture_output=True, text=True, timeout=5)
+                    subprocess.run(['nmcli', 'connection', 'modify', name,
+                                    'connection.autoconnect-retries', '-1'], capture_output=True, text=True, timeout=5)
+                    subprocess.run(['nmcli', 'connection', 'modify', name,
+                                    'connection.permissions', ''], capture_output=True, text=True, timeout=5)
 
                 logger.info("NetworkManager autoconnect ensured for current network")
-    
+
             except Exception as e:
                 logger.error(f"Error managing NetworkManager autoconnect settings: {e}")
 
@@ -6967,116 +7028,119 @@ Window {
                                 }
                             }
                         }
-                    }
 
-                    // Bottom bar for YouTube quick actions (match pill buttons style)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        color: "transparent"
-                        visible: backend && backend.mode === "spacex" && !isWindyFullscreen
+                        // Overlay for quick-action buttons floating on top of the video
+                        Item {
+                            id: youtubeOverlay
+                            anchors.fill: parent
+                            z: 2
+                            visible: backend && backend.mode === "spacex" && !isWindyFullscreen
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
+                            RowLayout {
+                                id: youtubePills
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 6
+                                spacing: 6
 
-                            // Starship playlist (current YouTube URL)
-                            Rectangle {
-                                id: starshipBtn
-                                // Match highlight logic used by Windy/plot pills: compare as strings to avoid url vs string type mismatch
-                                property bool selected: (typeof videoUrl !== 'undefined' && videoUrl) ? (String(root.currentVideoUrl) === String(videoUrl)) : false
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 28
-                                radius: 14
-                                color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                border.width: selected ? 2 : 1
+                                // Starship playlist (current YouTube URL)
+                                Rectangle {
+                                    id: starshipBtn
+                                    // Match highlight logic used by Windy/plot pills: compare as strings to avoid url vs string type mismatch
+                                    property bool selected: (typeof videoUrl !== 'undefined' && videoUrl) ? (String(root.currentVideoUrl) === String(videoUrl)) : false
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: selected ? 2 : 1
 
-                                Behavior on color { ColorAnimation { duration: 200 } }
-                                Behavior on border.color { ColorAnimation { duration: 200 } }
-                                Behavior on border.width { NumberAnimation { duration: 200 } }
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "\uf167"   // FontAwesome YouTube icon
-                                    font.pixelSize: 14
-                                    font.family: "Font Awesome 5 Free"
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                }
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf167"   // FontAwesome YouTube icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
 
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (typeof videoUrl !== 'undefined' && videoUrl) {
-                                            // Ensure currentVideoUrl updates as a string URL to keep comparison consistent
-                                            root.currentVideoUrl = String(videoUrl)
-                                        } else {
-                                            console.log("videoUrl is not defined or empty")
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (typeof videoUrl !== 'undefined' && videoUrl) {
+                                                // Ensure currentVideoUrl updates as a string URL to keep comparison consistent
+                                                root.currentVideoUrl = String(videoUrl)
+                                            } else {
+                                                console.log("videoUrl is not defined or empty")
+                                            }
                                         }
                                     }
+
+                                    ToolTip { text: "Starship Playlist"; delay: 500 }
                                 }
 
-                                ToolTip { text: "Starship Playlist"; delay: 500 }
-                            }
+                                // NSF Starbase Live stream
+                                Rectangle {
+                                    id: nsfBtn
+                                    // Load via local wrapper page to match existing youtube_embed.html approach
+                                    property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
+                                    // Compare as strings to match Windy/plot highlight logic reliably
+                                    property bool selected: String(root.currentVideoUrl) === nsfStarbaseUrl
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: selected ? 2 : 1
 
-                            // NSF Starbase Live stream
-                            Rectangle {
-                                id: nsfBtn
-                                // Load via local wrapper page to match existing youtube_embed.html approach
-                                property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
-                                // Compare as strings to match Windy/plot highlight logic reliably
-                                property bool selected: String(root.currentVideoUrl) === nsfStarbaseUrl
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 28
-                                radius: 14
-                                color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                border.width: selected ? 2 : 1
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                                Behavior on color { ColorAnimation { duration: 200 } }
-                                Behavior on border.color { ColorAnimation { duration: 200 } }
-                                Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "\uf519"  // FontAwesome broadcast-tower
-                                    font.pixelSize: 14
-                                    font.family: "Font Awesome 5 Free"
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        // Assign as string for consistent comparisons/updates
-                                        root.currentVideoUrl = nsfBtn.nsfStarbaseUrl
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf519"  // FontAwesome broadcast-tower
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
                                     }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            // Assign as string for consistent comparisons/updates
+                                            root.currentVideoUrl = nsfBtn.nsfStarbaseUrl
+                                        }
+                                    }
+
+                                    ToolTip { text: "NSF Starbase Live"; delay: 500 }
                                 }
 
-                                ToolTip { text: "NSF Starbase Live"; delay: 500 }
-                            }
+                                // Placeholder for current launch livestream (disabled)
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.width: 1
+                                    opacity: 0.6
 
-                            // Placeholder for current launch livestream (disabled)
-                            Rectangle {
-                                Layout.preferredWidth: 40
-                                Layout.preferredHeight: 28
-                                radius: 14
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                border.width: 1
-                                opacity: 0.6
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "\uf135"  // FontAwesome rocket
-                                    font.pixelSize: 14
-                                    font.family: "Font Awesome 5 Free"
-                                    color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf135"  // FontAwesome rocket
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
+                                    }
+                                    MouseArea { anchors.fill: parent; enabled: false }
+                                    ToolTip { text: "Placeholder – will switch to the current launch livestream"; delay: 400 }
                                 }
-                                MouseArea { anchors.fill: parent; enabled: false }
-                                ToolTip { text: "Placeholder – will switch to the current launch livestream"; delay: 400 }
                             }
                         }
                     }
