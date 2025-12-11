@@ -46,6 +46,26 @@ import threading
 # import dbus.mainloop.glib
 # from gi.repository import GLib
 
+# --- Lightweight loader status hook so non-Qt functions can report splash updates ---
+_loader_status_cb = None  # set by DataLoader during run()
+
+def set_loader_status_callback(cb):
+    """Set a callable that receives status text for splash/loader updates.
+    The DataLoader installs a callback; helpers in this module can emit with emit_loader_status().
+    """
+    global _loader_status_cb
+    _loader_status_cb = cb
+
+def emit_loader_status(message: str):
+    """Emit a loader status message if a callback has been registered."""
+    try:
+        cb = _loader_status_cb
+        if cb:
+            cb(str(message))
+    except Exception as _e:
+        # Avoid crashing during startup due to UI disposal races
+        logging.getLogger(__name__).debug(f"emit_loader_status skipped: {_e}")
+
 # Set console encoding to UTF-8 to handle Unicode characters properly
 if hasattr(sys.stdout, 'reconfigure'):
     try:
@@ -488,10 +508,15 @@ def fetch_launches():
     current_year = current_time.year
 
     # Load previous launches cache (source of truth - only add new launches)
+    prev_cache_existed_before = os.path.exists(CACHE_FILE_PREVIOUS)
     previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
     if previous_cache:
         previous_launches = previous_cache['data']
         logger.info(f"Loaded {len(previous_launches)} previous launches from cache")
+        try:
+            emit_loader_status("Loading SpaceX launch history from cache…")
+        except Exception:
+            pass
         
         # Check for new launches to add (only recent ones)
         try:
@@ -546,6 +571,12 @@ def fetch_launches():
                 previous_launches = new_launches + previous_launches
                 save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
                 logger.info(f"Added {len(new_launches)} new launches to cache")
+                # Status reflecting first-time cache creation
+                try:
+                    suffix = " for the first time" if not prev_cache_existed_before else ""
+                    emit_loader_status(f"Updating SpaceX launch history cache{suffix}…")
+                except Exception:
+                    pass
             else:
                 logger.info("No new launches to add")
                 
@@ -569,13 +600,22 @@ def fetch_launches():
             ]
 
     # Load upcoming launches cache
+    up_cache_existed_before = os.path.exists(CACHE_FILE_UPCOMING)
     upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
     if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING:
         upcoming_launches = upcoming_cache['data']
         logger.info("Using persistent cached upcoming launches")
+        try:
+            emit_loader_status("Loading upcoming launches from cache…")
+        except Exception:
+            pass
     else:
         try:
             logger.info("Fetching fresh upcoming launches from API")
+            try:
+                emit_loader_status("Fetching upcoming SpaceX launches…")
+            except Exception:
+                pass
             url = 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=50'
             logger.info(f"API URL: {url}")
             try:
@@ -601,6 +641,11 @@ def fetch_launches():
             ]
             save_cache_to_file(CACHE_FILE_UPCOMING, upcoming_launches, current_time)
             logger.info(f"Successfully fetched and saved {len(upcoming_launches)} upcoming launches")
+            try:
+                suffix = " for the first time" if not up_cache_existed_before else ""
+                emit_loader_status(f"Saving upcoming launches to cache{suffix}…")
+            except Exception:
+                pass
         except Exception as e:
             logger.error(f"LL2 API error for upcoming launches: {e}")
             logger.error(f"Exception type: {type(e)}")
@@ -643,12 +688,21 @@ def fetch_f1_data():
     f1_data = {}
 
     # Fetch race schedule (infrequently changing)
+    schedule_cache_exists = os.path.exists(CACHE_FILE_F1_SCHEDULE)
     schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
     if schedule_cache and (current_time - schedule_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_SCHEDULE:
         f1_data['schedule'] = schedule_cache['data']
         logger.info("Using cached F1 schedule data")
+        try:
+            emit_loader_status("Loading F1 schedule from cache…")
+        except Exception:
+            pass
     else:
         logger.info("Fetching fresh F1 schedule data")
+        try:
+            emit_loader_status("Fetching F1 race schedule…")
+        except Exception:
+            pass
         try:
             url = f"https://f1api.dev/api/current"
             response = requests.get(url, timeout=10)
@@ -699,10 +753,20 @@ def fetch_f1_data():
 
                 meeting['sessions'] = sorted(sessions, key=lambda x: parse(x['date_start']))
 
-                # Generate track map
-                track_map_path = generate_track_map(race['circuit']['circuitName'])
+                # Generate track map (notify splash; add "for the first time" on first render)
+                circuit_name = race['circuit']['circuitName']
+                tracks_dir = os.path.join(os.path.dirname(__file__), '..', 'cache', 'tracks')
+                safe_circuit_name = circuit_name.replace('|', '-').replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', '-').replace('<', '-').replace('>', '-')
+                png_expected = os.path.join(tracks_dir, f"{safe_circuit_name}_track.png")
+                try:
+                    if os.path.exists(png_expected):
+                        emit_loader_status(f"Loading track map for {circuit_name}…")
+                    else:
+                        emit_loader_status(f"Generating track map for {circuit_name} for the first time…")
+                except Exception:
+                    pass
+                track_map_path = generate_track_map(circuit_name)
                 # Sanitize circuit name for filename (same as in track_generator.py)
-                safe_circuit_name = race['circuit']['circuitName'].replace('|', '-').replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', '-').replace('<', '-').replace('>', '-')
                 meeting['track_map_path'] = f'file:///{os.path.join(os.path.dirname(__file__), "..", "cache", "tracks", f"{safe_circuit_name}_track.png")}' if track_map_path else ''
 
                 if sessions:
@@ -717,18 +781,32 @@ def fetch_f1_data():
             f1_data['schedule'] = meetings
             save_cache_to_file(CACHE_FILE_F1_SCHEDULE, meetings, current_time)
             logger.info(f"Cached F1 schedule with {len(meetings)} races")
+            try:
+                suffix = " for the first time" if not schedule_cache_exists else ""
+                emit_loader_status(f"Saving F1 schedule to cache{suffix}…")
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"Failed to fetch F1 schedule: {e}")
             f1_data['schedule'] = []
 
     # Fetch driver standings (frequently changing)
+    drivers_cache_existed = os.path.exists(CACHE_FILE_F1_DRIVERS)
     drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
     if drivers_cache and (current_time - drivers_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
         f1_data['driver_standings'] = drivers_cache['data']
         logger.info("Using cached F1 driver standings")
+        try:
+            emit_loader_status("Loading F1 driver standings from cache…")
+        except Exception:
+            pass
     else:
         logger.info("Fetching fresh F1 driver standings")
+        try:
+            emit_loader_status("Fetching F1 driver standings…")
+        except Exception:
+            pass
         try:
             url = "https://f1api.dev/api/current/drivers-championship"
             response = requests.get(url, timeout=10)
@@ -833,18 +911,32 @@ def fetch_f1_data():
             f1_data['driver_standings'] = driver_standings
             save_cache_to_file(CACHE_FILE_F1_DRIVERS, driver_standings, current_time)
             logger.info(f"Cached F1 driver standings with {len(driver_standings)} drivers")
+            try:
+                suffix = " for the first time" if not drivers_cache_existed else ""
+                emit_loader_status(f"Saving driver standings to cache{suffix}…")
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"Failed to fetch F1 driver standings: {e}")
             f1_data['driver_standings'] = []
 
     # Fetch constructor standings (frequently changing)
+    constructors_cache_existed = os.path.exists(CACHE_FILE_F1_CONSTRUCTORS)
     constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
     if constructors_cache and (current_time - constructors_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
         f1_data['constructor_standings'] = constructors_cache['data']
         logger.info("Using cached F1 constructor standings")
+        try:
+            emit_loader_status("Loading F1 constructor standings from cache…")
+        except Exception:
+            pass
     else:
         logger.info("Fetching fresh F1 constructor standings")
+        try:
+            emit_loader_status("Fetching F1 constructor standings…")
+        except Exception:
+            pass
         try:
             url = "https://f1api.dev/api/current/constructors-championship"
             response = requests.get(url, timeout=10)
@@ -907,6 +999,11 @@ def fetch_f1_data():
             f1_data['constructor_standings'] = constructor_standings
             save_cache_to_file(CACHE_FILE_F1_CONSTRUCTORS, constructor_standings, current_time)
             logger.info(f"Cached F1 constructor standings with {len(constructor_standings)} teams")
+            try:
+                suffix = " for the first time" if not constructors_cache_existed else ""
+                emit_loader_status(f"Saving constructor standings to cache{suffix}…")
+            except Exception:
+                pass
 
         except Exception as e:
             logger.error(f"Failed to fetch F1 constructor standings: {e}")
@@ -1318,7 +1415,13 @@ class DataLoader(QObject):
             except RuntimeError as e:
                 logger.warning(f"DataLoader: Skipping finished emit: {e}")
 
-        _safe_emit_status("Fetching SpaceX launch data...")
+        # Install module-level status callback so helpers can report progress to splash
+        try:
+            set_loader_status_callback(self.statusUpdate.emit)
+        except Exception:
+            pass
+
+        _safe_emit_status("Checking launch cache and fetching SpaceX data…")
         
         # Function to fetch launch data
         def fetch_launch_data():
@@ -1334,7 +1437,7 @@ class DataLoader(QObject):
         # Function to fetch F1 data
         def fetch_f1_data_wrapper():
             try:
-                self.statusUpdate.emit("Loading F1 race schedule...")
+                self.statusUpdate.emit("Checking F1 caches and schedule…")
                 return fetch_f1_data()
             except Exception as e:
                 logger.error(f"DataLoader: fetch_f1_data failed: {e}")
@@ -1342,7 +1445,7 @@ class DataLoader(QObject):
         
         # Function to fetch weather data
         def fetch_weather_data():
-            self.statusUpdate.emit("Getting weather data...")
+            self.statusUpdate.emit("Getting live weather for locations…")
             weather_data = {}
             
             # Fetch weather for all locations in parallel
@@ -1392,6 +1495,11 @@ class DataLoader(QObject):
         logger.info(f"DataLoader: F1 data keys: {list(f1_data.keys()) if isinstance(f1_data, dict) else 'not dict'}")
         logger.info(f"DataLoader: Weather data keys: {list(weather_data.keys()) if isinstance(weather_data, dict) else 'not dict'}")
         _safe_emit_finished(launch_data, f1_data, weather_data)
+        # Remove status callback
+        try:
+            set_loader_status_callback(None)
+        except Exception:
+            pass
 
 class LaunchUpdater(QObject):
     finished = pyqtSignal(dict)

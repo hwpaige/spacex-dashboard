@@ -158,17 +158,24 @@ if git diff HEAD~1 --name-only | grep -q "^requirements.txt$"; then
 fi
 
 # Clear the cache to ensure fresh data after update, but keep relatively static caches
-echo "Clearing cache (preserving previous launches and race caches)..."
+# Preserve F1 caches and other durable assets (e.g., generated track maps)
+echo "Clearing cache (preserving previous launches, F1 track maps, and durable caches)..."
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 # Remove contents safely even if directory is empty
 if [ -d "$PROJECT_DIR/cache" ]; then
     # Preserve previous launch caches which are relatively static
-    # Note: F1/race caches are stored under ~/.cache/spacex-dashboard and are not touched here
+    # Preserve F1 track map images under cache/tracks (they are expensive to regenerate)
+    # Note: F1 schedule/standings JSON caches are stored under ~/.cache/spacex-dashboard and are not touched here
     find "$PROJECT_DIR/cache" \
         -mindepth 1 -maxdepth 1 \
         -not -name 'previous_launches_cache.json' \
         -not -name 'previous_launches_cache_backup.json' \
+        -not -name 'upcoming_launches_cache.json' \
+        -not -name 'trajectory_cache.json' \
+        -not -name 'remembered_networks.json' \
+        -not -name 'last_connected_network.json' \
+        -not -name 'tracks' \
         -exec rm -rf {} + 2>/dev/null || true
 fi
 
