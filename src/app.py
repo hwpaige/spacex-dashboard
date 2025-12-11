@@ -5961,19 +5961,28 @@ Window {
         }
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        anchors.leftMargin: 5
-        // Add dynamic right margin so content doesn't get cut off on displays
-        // where the visible area ends before the reported window edge.
-        // When the alignment guide touches the edge at 6px, keep content a bit inside it.
-        anchors.rightMargin: Math.max(5, alignmentGuideMargin + 2)
-        anchors.topMargin: 5
-        anchors.bottomMargin: 5
-        spacing: 5
-        visible: !!(!backend || !backend.isLoading)
+    // Safe area: pretend the right edge is closer by shrinking the usable width
+    // This ensures all content is laid out as if the screen were narrower,
+    // shifting everything left by alignmentGuideMargin (+ small buffer).
+    Item {
+        id: safeArea
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        // Treat the screen as narrower by the measured cutoff plus an extra 6px safety inset
+        anchors.rightMargin: Math.max(0, alignmentGuideMargin + 6)
 
-        RowLayout {
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 5
+            // No rightMargin here — safeArea already reduces width on the right
+            anchors.topMargin: 5
+            anchors.bottomMargin: 5
+            spacing: 5
+            visible: !!(!backend || !backend.isLoading)
+
+            RowLayout {
             Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 5
@@ -6497,13 +6506,11 @@ Window {
                                         // Avoid white square corners by letting parent background show through
                                         backgroundColor: "transparent"
                                         url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
-                                        settings {
-                                            webGLEnabled: true
-                                            accelerated2dCanvasEnabled: true
-                                            allowRunningInsecureContent: true
-                                            javascriptEnabled: true
-                                            localContentCanAccessRemoteUrls: true
-                                        }
+                                        settings.webGLEnabled: true
+                                        settings.accelerated2dCanvasEnabled: true
+                                        settings.allowRunningInsecureContent: true
+                                        settings.javascriptEnabled: true
+                                        settings.localContentCanAccessRemoteUrls: true
                                         onFullScreenRequested: function(request) {
                                             request.accept();
                                             root.visibility = Window.FullScreen
@@ -7104,18 +7111,16 @@ Window {
                             layer.smooth: true
                             backgroundColor: "transparent"
                             url: parent.visible ? (backend.mode === "spacex" ? root.currentVideoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
-                            settings {
-                                webGLEnabled: true
-                                accelerated2dCanvasEnabled: true
-                                allowRunningInsecureContent: true
-                                javascriptEnabled: true
-                                localContentCanAccessRemoteUrls: true
-                                playbackRequiresUserGesture: false  // Allow autoplay
-                                pluginsEnabled: true
-                                javascriptCanOpenWindows: false
-                                javascriptCanAccessClipboard: false
-                                allowWindowActivationFromJavaScript: false
-                            }
+                            settings.webGLEnabled: true
+                            settings.accelerated2dCanvasEnabled: true
+                            settings.allowRunningInsecureContent: true
+                            settings.javascriptEnabled: true
+                            settings.localContentCanAccessRemoteUrls: true
+                            settings.playbackRequiresUserGesture: false  // Allow autoplay
+                            settings.pluginsEnabled: true
+                            settings.javascriptCanOpenWindows: false
+                            settings.javascriptCanAccessClipboard: false
+                            settings.allowWindowActivationFromJavaScript: false
                             onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                             onLoadingChanged: function(loadRequest) {
                                 if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -7290,8 +7295,8 @@ Window {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10
-                // Respect the right-edge alignment guide; ensure at least 10px padding
-                anchors.rightMargin: Math.max(10, alignmentGuideMargin + 2)
+                // Respect the right-edge alignment guide; add the measured margin to the existing 10px padding
+                anchors.rightMargin: 10 + alignmentGuideMargin
                 spacing: 8
 
                 // Left pill (time and weather) - FIXED WIDTH
@@ -9083,6 +9088,7 @@ Window {
             }
         }
     }
+}
 }
 """
 engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
