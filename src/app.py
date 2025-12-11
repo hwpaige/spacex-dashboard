@@ -5682,6 +5682,11 @@ Window {
     // Initialized to the default playlist URL provided by the backend context property.
     property url currentVideoUrl: videoUrl
 
+    // Alignment guide to help detect right-edge cutoff on certain displays
+    // Toggle visibility and adjust margin to tune screen coverage.
+    property bool alignmentGuideVisible: true
+    property int alignmentGuideMargin: 8
+
     // Helper to enforce rounded corners inside WebEngine pages themselves.
     // This injects CSS into the page to round and clip at the document level,
     // which works even when the scene-graph clipping is ignored by Chromium.
@@ -5907,6 +5912,23 @@ Window {
                 }
             }
         }
+    }
+
+    // Thin vertical alignment guide near the right edge to diagnose cutoff
+    Rectangle {
+        id: rightEdgeAlignmentGuide
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.rightMargin: alignmentGuideMargin
+        width: 2
+        radius: 1
+        color: backend.theme === "dark" ? "#FF6B6B" : "#CC0000"
+        opacity: 0.7
+        visible: alignmentGuideVisible
+        z: 9999
+        // Ensure it never interferes with input
+        enabled: false
     }
 
     // Cache expensive / repeated lookups
