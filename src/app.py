@@ -5964,7 +5964,10 @@ Window {
     ColumnLayout {
         anchors.fill: parent
         anchors.leftMargin: 5
-        anchors.rightMargin: 5
+        // Add dynamic right margin so content doesn't get cut off on displays
+        // where the visible area ends before the reported window edge.
+        // When the alignment guide touches the edge at 6px, keep content a bit inside it.
+        anchors.rightMargin: Math.max(5, alignmentGuideMargin + 2)
         anchors.topMargin: 5
         anchors.bottomMargin: 5
         spacing: 5
@@ -7287,7 +7290,8 @@ Window {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10
-                anchors.rightMargin: 10
+                // Respect the right-edge alignment guide; ensure at least 10px padding
+                anchors.rightMargin: Math.max(10, alignmentGuideMargin + 2)
                 spacing: 8
 
                 // Left pill (time and weather) - FIXED WIDTH
