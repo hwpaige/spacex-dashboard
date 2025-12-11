@@ -78,6 +78,12 @@
         // Track last deltas to decide whether to start momentum on release
         let lastDeltaX = 0, lastDeltaY = 0;
         let lastMoveTimeMs = 0;
+        // Drag deadzone and pinch tracking
+        const DRAG_DEADZONE_PX = 8;           // ignore tiny movements
+        const RECENT_MS_THRESHOLD = 110;      // last movement must be recent
+        const MIN_RELEASE_VELOCITY = 0.002;   // minimum velocity to start inertia
+        let cumulativeDragDistance = 0;       // reset per-drag
+        let hadPinchSinceLastDrag = false;    // cancels inertia if pinch occurred
 
         // Zoom parameters
         const DEFAULT_CAMERA_Z = 1.8;      // Existing default distance (keep as farthest zoom-out)
@@ -302,8 +308,9 @@
                     clampRotationX();
 
                     // Decay momentum
-                    momentumX *= 0.95; // Friction/damping
-                    momentumY *= 0.95;
+                    // Slightly stronger damping to reduce perceived recoil
+                    momentumX *= 0.93; // Friction/damping
+                    momentumY *= 0.93;
 
                     // Check if momentum is low enough to return to auto-rotation
                     if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
@@ -547,6 +554,9 @@
             momentumY = 0;
             lastTime = Date.now();
             previousMousePosition = { x: event.clientX, y: event.clientY };
+            touchMode = 'drag';
+            cumulativeDragDistance = 0;
+            hadPinchSinceLastDrag = false;
         });
 
         document.addEventListener('mousemove', (event) => {
@@ -558,6 +568,7 @@
 
             const deltaX = event.clientX - previousMousePosition.x;
             const deltaY = event.clientY - previousMousePosition.y;
+            cumulativeDragDistance += Math.hypot(deltaX, deltaY);
 
             // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
             const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
@@ -576,9 +587,25 @@
             previousMousePosition = { x: event.clientX, y: event.clientY };
         });
 
+        function shouldStartMomentum() {
+            const now = Date.now();
+            const recent = (now - lastMoveTimeMs) < RECENT_MS_THRESHOLD;
+            const movedEnough = cumulativeDragDistance > DRAG_DEADZONE_PX;
+            const velocityMag = Math.abs(momentumX) + Math.abs(momentumY);
+            return (
+                touchMode === 'drag' &&
+                !hadPinchSinceLastDrag &&
+                recent &&
+                movedEnough &&
+                velocityMag > MIN_RELEASE_VELOCITY
+            );
+        }
+
         document.addEventListener('mouseup', () => {
             isMouseDown = false;
-            isInMomentum = true; // Start momentum mode
+            isInMomentum = shouldStartMomentum();
+            if (!isInMomentum) { momentumX = 0; momentumY = 0; }
+            touchMode = 'none';
         });
 
         // Touch support for mobile
@@ -591,12 +618,15 @@
                 lastTime = Date.now();
                 previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
                 touchMode = 'drag';
+                cumulativeDragDistance = 0;
+                // Do not reset hadPinchSinceLastDrag here (pinch may have preceded)
             } else if (event.touches.length >= 2) {
                 // Transition into pinch mode
                 touchMode = 'pinch';
                 isMouseDown = false;
                 isInMomentum = false;
                 momentumX = 0; momentumY = 0;
+                hadPinchSinceLastDrag = true; // ensure no inertia on release after any pinch
             }
         });
 
@@ -611,6 +641,7 @@
 
             const deltaX = event.touches[0].clientX - previousMousePosition.x;
             const deltaY = event.touches[0].clientY - previousMousePosition.y;
+            cumulativeDragDistance += Math.hypot(deltaX, deltaY);
 
             // Adjust y-rotation direction based on globe orientation to prevent reversal when upside down
             const yDirection = Math.cos(globe.rotation.x) > 0 ? 1 : -1;
@@ -631,18 +662,12 @@
 
         function endTouchCommon() {
             // Only start momentum if we were dragging, not pinching, and had a recent move
-            const now = Date.now();
-            const recent = (now - lastMoveTimeMs) < 120; // within 120ms
-            const movedEnough = Math.abs(lastDeltaX) + Math.abs(lastDeltaY) > 0.5;
             isMouseDown = false;
-            if (touchMode === 'drag' && recent && movedEnough) {
-                isInMomentum = true;
-            } else {
-                isInMomentum = false;
-                momentumX = 0; momentumY = 0;
-            }
+            isInMomentum = shouldStartMomentum();
+            if (!isInMomentum) { momentumX = 0; momentumY = 0; }
             // Reset mode when all touches are gone
             touchMode = 'none';
+            hadPinchSinceLastDrag = false; // reset after gesture fully ends
         }
 
         document.addEventListener('touchend', (e) => {
