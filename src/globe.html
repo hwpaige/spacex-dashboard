@@ -72,6 +72,12 @@
         let isInMomentum = false;
         let lastTime = Date.now();
         let isAutoRotatePaused = false;
+        // Track gesture mode to avoid mixing pinch and drag states
+        // Values: 'none' | 'drag' | 'pinch'
+        let touchMode = 'none';
+        // Track last deltas to decide whether to start momentum on release
+        let lastDeltaX = 0, lastDeltaY = 0;
+        let lastMoveTimeMs = 0;
 
         // Zoom parameters
         const DEFAULT_CAMERA_Z = 1.8;      // Existing default distance (keep as farthest zoom-out)
@@ -229,6 +235,14 @@
             camera.position.z = newZ;
         }
 
+        function clampRotationX() {
+            // Avoid flipping the globe which can invert drag directions
+            const maxTilt = Math.PI / 2 - 0.05; // small margin from 90°
+            if (!globe) return;
+            if (globe.rotation.x > maxTilt) globe.rotation.x = maxTilt;
+            if (globe.rotation.x < -maxTilt) globe.rotation.x = -maxTilt;
+        }
+
         function distanceBetweenTouches(t1, t2) {
             const dx = t1.clientX - t2.clientX;
             const dy = t1.clientY - t2.clientY;
@@ -240,6 +254,12 @@
                 event.preventDefault();
                 pinchStartDistance = distanceBetweenTouches(event.touches[0], event.touches[1]);
                 pinchStartZ = camera ? camera.position.z : null;
+                // Enter pinch mode and cancel any drag momentum state
+                touchMode = 'pinch';
+                isInMomentum = false;
+                momentumX = 0; momentumY = 0;
+                // Ensure drag state is not considered active
+                isMouseDown = false;
             }
         }
 
@@ -263,6 +283,10 @@
             if (!event.touches || event.touches.length < 2) {
                 pinchStartDistance = null;
                 pinchStartZ = null;
+                // Leave pinch mode; do not start momentum here (handled in document touchend for drag)
+                if (touchMode === 'pinch' && (!event.touches || event.touches.length === 0)) {
+                    touchMode = 'none';
+                }
             }
         }
 
@@ -275,6 +299,7 @@
                     // (we bake orientation into momentum at capture time to avoid post-release flips)
                     globe.rotation.y += momentumX;
                     globe.rotation.x += momentumY;
+                    clampRotationX();
 
                     // Decay momentum
                     momentumX *= 0.95; // Friction/damping
@@ -541,10 +566,12 @@
             if (deltaTime > 0) {
                 momentumX = (deltaX * yDirection) / deltaTime * 0.1; // Scale for smooth momentum
                 momentumY = (deltaY) / deltaTime * 0.1;
+                lastDeltaX = deltaX; lastDeltaY = deltaY; lastMoveTimeMs = currentTime;
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
+            clampRotationX();
 
             previousMousePosition = { x: event.clientX, y: event.clientY };
         });
@@ -563,6 +590,13 @@
                 momentumY = 0;
                 lastTime = Date.now();
                 previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
+                touchMode = 'drag';
+            } else if (event.touches.length >= 2) {
+                // Transition into pinch mode
+                touchMode = 'pinch';
+                isMouseDown = false;
+                isInMomentum = false;
+                momentumX = 0; momentumY = 0;
             }
         });
 
@@ -585,17 +619,40 @@
             if (deltaTime > 0) {
                 momentumX = (deltaX * yDirection) / deltaTime * 0.1;
                 momentumY = (deltaY) / deltaTime * 0.1;
+                lastDeltaX = deltaX; lastDeltaY = deltaY; lastMoveTimeMs = currentTime;
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
+            clampRotationX();
 
             previousMousePosition = { x: event.touches[0].clientX, y: event.touches[0].clientY };
         }, { passive: false });
 
-        document.addEventListener('touchend', () => {
+        function endTouchCommon() {
+            // Only start momentum if we were dragging, not pinching, and had a recent move
+            const now = Date.now();
+            const recent = (now - lastMoveTimeMs) < 120; // within 120ms
+            const movedEnough = Math.abs(lastDeltaX) + Math.abs(lastDeltaY) > 0.5;
             isMouseDown = false;
-            isInMomentum = true; // Start momentum mode
+            if (touchMode === 'drag' && recent && movedEnough) {
+                isInMomentum = true;
+            } else {
+                isInMomentum = false;
+                momentumX = 0; momentumY = 0;
+            }
+            // Reset mode when all touches are gone
+            touchMode = 'none';
+        }
+
+        document.addEventListener('touchend', (e) => {
+            // If there are still touches, don't finalize drag end here (multi-touch transition)
+            if (e.touches && e.touches.length > 0) return;
+            endTouchCommon();
+        });
+
+        document.addEventListener('touchcancel', () => {
+            endTouchCommon();
         });
 
         // Play/Pause button functionality
