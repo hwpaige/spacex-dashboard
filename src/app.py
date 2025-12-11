@@ -5685,7 +5685,7 @@ Window {
     // Alignment guide to help detect right-edge cutoff on certain displays
     // Toggle visibility and adjust margin to tune screen coverage.
     property bool alignmentGuideVisible: true
-    property int alignmentGuideMargin: 8
+    property int alignmentGuideMargin: 6
 
     // Helper to enforce rounded corners inside WebEngine pages themselves.
     // This injects CSS into the page to round and clip at the document level,
