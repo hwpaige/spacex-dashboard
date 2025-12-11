@@ -5682,10 +5682,7 @@ Window {
     // Initialized to the default playlist URL provided by the backend context property.
     property url currentVideoUrl: videoUrl
 
-    // Alignment guide to help detect right-edge cutoff on certain displays
-    // Toggle visibility and adjust margin to tune screen coverage.
-    property bool alignmentGuideVisible: true
-    property int alignmentGuideMargin: 6
+    // Alignment guide removed after calibration; margins are now fixed below.
 
     // Helper to enforce rounded corners inside WebEngine pages themselves.
     // This injects CSS into the page to round and clip at the document level,
@@ -5914,22 +5911,7 @@ Window {
         }
     }
 
-    // Thin vertical alignment guide near the right edge to diagnose cutoff
-    Rectangle {
-        id: rightEdgeAlignmentGuide
-        anchors.top: parent.top
-        anchors.bottom: parent.bottom
-        anchors.right: parent.right
-        anchors.rightMargin: alignmentGuideMargin
-        width: 2
-        radius: 1
-        color: backend.theme === "dark" ? "#FF6B6B" : "#CC0000"
-        opacity: 0.7
-        visible: alignmentGuideVisible
-        z: 9999
-        // Ensure it never interferes with input
-        enabled: false
-    }
+    // Alignment guide rectangle removed
 
     // Cache expensive / repeated lookups
     property var nextRace: backend.get_next_race()
@@ -5962,16 +5944,15 @@ Window {
     }
 
     // Safe area: pretend the right edge is closer by shrinking the usable width
-    // This ensures all content is laid out as if the screen were narrower,
-    // shifting everything left by alignmentGuideMargin (+ small buffer).
+    // This ensures all content is laid out as if the screen were narrower.
     Item {
         id: safeArea
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        // Treat the screen as narrower by the measured cutoff plus an extra 6px safety inset
-        anchors.rightMargin: Math.max(0, alignmentGuideMargin + 6)
+        // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
+        anchors.rightMargin: 12
 
         ColumnLayout {
             anchors.fill: parent
@@ -7295,8 +7276,8 @@ Window {
             RowLayout {
                 anchors.fill: parent
                 anchors.leftMargin: 10
-                // Respect the right-edge alignment guide; add the measured margin to the existing 10px padding
-                anchors.rightMargin: 10 + alignmentGuideMargin
+                // Fixed padding to reflect calibrated right-edge inset (10 base + 6 measured = 16)
+                anchors.rightMargin: 16
                 spacing: 8
 
                 // Left pill (time and weather) - FIXED WIDTH
