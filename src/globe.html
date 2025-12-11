@@ -85,6 +85,44 @@
         let cumulativeDragDistance = 0;       // reset per-drag
         let hadPinchSinceLastDrag = false;    // cancels inertia if pinch occurred
 
+        // Short-window velocity averaging to avoid "opposite recoil"
+        const VELOCITY_WINDOW_MS = 140;       // average last ~140 ms of motion
+        let recentMoves = [];                 // entries: { t, dt, dxAdj, dy }
+
+        function resetRecentMoves(){ recentMoves = []; }
+        function pushRecentMove(dx, dy, yDirection, dt, now){
+            if (!isFinite(dt) || dt <= 0) return;
+            const entry = {
+                t: now,
+                dt: dt,
+                dxAdj: dx * yDirection,
+                dy: dy
+            };
+            recentMoves.push(entry);
+            // Trim old entries beyond window
+            const cutoff = now - VELOCITY_WINDOW_MS;
+            while (recentMoves.length && recentMoves[0].t < cutoff) {
+                recentMoves.shift();
+            }
+            // Keep list reasonably small (safety cap)
+            if (recentMoves.length > 20) recentMoves.splice(0, recentMoves.length - 20);
+        }
+        function getAveragedVelocity(){
+            if (!recentMoves.length) return { vx: 0, vy: 0, mag: 0 };
+            let sumDx = 0, sumDy = 0, sumDt = 0;
+            for (const m of recentMoves){
+                sumDx += m.dxAdj;
+                sumDy += m.dy;
+                sumDt += m.dt;
+            }
+            if (sumDt <= 0) return { vx: 0, vy: 0, mag: 0 };
+            // Scale to match previous tuning (0.1 factor used before)
+            const vx = (sumDx / sumDt) * 0.1;
+            const vy = (sumDy / sumDt) * 0.1;
+            const mag = Math.abs(vx) + Math.abs(vy);
+            return { vx, vy, mag };
+        }
+
         // Zoom parameters
         const DEFAULT_CAMERA_Z = 1.8;      // Existing default distance (keep as farthest zoom-out)
         const CAMERA_MIN_Z = 1.1;          // How close you can zoom in (tweak if needed)
@@ -557,6 +595,7 @@
             touchMode = 'drag';
             cumulativeDragDistance = 0;
             hadPinchSinceLastDrag = false;
+            resetRecentMoves();
         });
 
         document.addEventListener('mousemove', (event) => {
@@ -578,6 +617,7 @@
                 momentumX = (deltaX * yDirection) / deltaTime * 0.1; // Scale for smooth momentum
                 momentumY = (deltaY) / deltaTime * 0.1;
                 lastDeltaX = deltaX; lastDeltaY = deltaY; lastMoveTimeMs = currentTime;
+                pushRecentMove(deltaX, deltaY, yDirection, deltaTime, currentTime);
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
@@ -591,21 +631,27 @@
             const now = Date.now();
             const recent = (now - lastMoveTimeMs) < RECENT_MS_THRESHOLD;
             const movedEnough = cumulativeDragDistance > DRAG_DEADZONE_PX;
-            const velocityMag = Math.abs(momentumX) + Math.abs(momentumY);
+            const { vx, vy, mag } = getAveragedVelocity();
             return (
                 touchMode === 'drag' &&
                 !hadPinchSinceLastDrag &&
                 recent &&
                 movedEnough &&
-                velocityMag > MIN_RELEASE_VELOCITY
+                mag > MIN_RELEASE_VELOCITY
             );
         }
 
         document.addEventListener('mouseup', () => {
             isMouseDown = false;
-            isInMomentum = shouldStartMomentum();
+            const start = shouldStartMomentum();
+            if (start) {
+                const v = getAveragedVelocity();
+                momentumX = v.vx; momentumY = v.vy;
+            }
+            isInMomentum = start;
             if (!isInMomentum) { momentumX = 0; momentumY = 0; }
             touchMode = 'none';
+            resetRecentMoves();
         });
 
         // Touch support for mobile
@@ -620,6 +666,7 @@
                 touchMode = 'drag';
                 cumulativeDragDistance = 0;
                 // Do not reset hadPinchSinceLastDrag here (pinch may have preceded)
+                resetRecentMoves();
             } else if (event.touches.length >= 2) {
                 // Transition into pinch mode
                 touchMode = 'pinch';
@@ -627,6 +674,7 @@
                 isInMomentum = false;
                 momentumX = 0; momentumY = 0;
                 hadPinchSinceLastDrag = true; // ensure no inertia on release after any pinch
+                resetRecentMoves();
             }
         });
 
@@ -651,6 +699,7 @@
                 momentumX = (deltaX * yDirection) / deltaTime * 0.1;
                 momentumY = (deltaY) / deltaTime * 0.1;
                 lastDeltaX = deltaX; lastDeltaY = deltaY; lastMoveTimeMs = currentTime;
+                pushRecentMove(deltaX, deltaY, yDirection, deltaTime, currentTime);
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
@@ -663,11 +712,17 @@
         function endTouchCommon() {
             // Only start momentum if we were dragging, not pinching, and had a recent move
             isMouseDown = false;
-            isInMomentum = shouldStartMomentum();
+            const start = shouldStartMomentum();
+            if (start) {
+                const v = getAveragedVelocity();
+                momentumX = v.vx; momentumY = v.vy;
+            }
+            isInMomentum = start;
             if (!isInMomentum) { momentumX = 0; momentumY = 0; }
             // Reset mode when all touches are gone
             touchMode = 'none';
             hadPinchSinceLastDrag = false; // reset after gesture fully ends
+            resetRecentMoves();
         }
 
         document.addEventListener('touchend', (e) => {
