@@ -7169,7 +7169,7 @@ Window {
 
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "\uf167"   // FontAwesome YouTube icon
+                                        text: "\uf135"   // FontAwesome rocket icon to match launch list
                                         font.pixelSize: 14
                                         font.family: "Font Awesome 5 Free"
                                         color: backend.theme === "dark" ? "white" : "black"
@@ -7241,9 +7241,9 @@ Window {
 
                                     Text {
                                         anchors.centerIn: parent
-                                        text: "\uf135"  // FontAwesome rocket
+                                        text: "LIVE"
                                         font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
+                                        font.bold: true
                                         color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
                                     }
                                     MouseArea { anchors.fill: parent; enabled: false }
