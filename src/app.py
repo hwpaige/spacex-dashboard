@@ -1685,7 +1685,20 @@ class Backend(QObject):
                         return
                     logger.info("BOOT: Scheduling auto-reconnect to last WiFi network…")
                     # Run the scanning/connection in a background thread to avoid UI stalls
-                    threading.Thread(target=lambda: self._auto_reconnect_to_last_network(boot_time=True), daemon=True).start()
+                    try:
+                        self._boot_auto_reconnect_in_progress = True
+                    except Exception:
+                        pass
+                    def _worker():
+                        try:
+                            self._auto_reconnect_to_last_network(boot_time=True)
+                        finally:
+                            # Clear the in-progress flag regardless of outcome
+                            try:
+                                self._boot_auto_reconnect_in_progress = False
+                            except Exception:
+                                pass
+                    threading.Thread(target=_worker, daemon=True).start()
                 except Exception as _e:
                     logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
 
@@ -3743,6 +3756,22 @@ class Backend(QObject):
             if not is_linux:
                 logger.debug("Auto-reconnect scan skipped (non-Linux platform)")
                 return
+
+            # If a scan is already running (e.g., boot scan), wait briefly for it to complete so we have a fuller list
+            wait_start = time.time()
+            while getattr(self, '_wifi_scan_in_progress', False) and (time.time() - wait_start) < 6.0:
+                time.sleep(0.2)
+            # If no scan results exist yet, trigger a scan and wait a short period for stabilization
+            if not self._wifi_networks and not getattr(self, '_wifi_scan_in_progress', False):
+                try:
+                    logger.info("BOOT: No scan results yet; triggering a quick scan before auto-reconnect…")
+                    QTimer.singleShot(0, self.scanWifiNetworks)
+                except Exception:
+                    pass
+                # Wait up to 6s for scan to complete
+                wait_start = time.time()
+                while getattr(self, '_wifi_scan_in_progress', False) and (time.time() - wait_start) < 6.0:
+                    time.sleep(0.2)
 
             # Build candidate list of remembered networks in order of recency
             candidates = [n for n in self._remembered_networks if n.get('ssid')]
@@ -5861,13 +5890,24 @@ Window {
             }
             // Reload weather views
             if (typeof weatherSwipe !== 'undefined') {
-                for (var i = 0; i < weatherSwipe.count; i++) {
-                    var item = weatherSwipe.itemAt(i);
-                    if (item && item.children[0] && item.children[0].reload) {
-                        item.children[0].reload();
-                        console.log("Weather view", i, "reloaded");
+            for (var i = 0; i < weatherSwipe.count; i++) {
+                var item = weatherSwipe.itemAt(i);
+                if (!item) continue;
+                // Item -> Rectangle container -> WebEngineView (id: webView)
+                var container = item.children && item.children.length > 0 ? item.children[0] : null;
+                var webChild = null;
+                if (container && container.children && container.children.length > 0) {
+                    // Find the first child with runJavaScript or reload method (WebEngineView)
+                    for (var c = 0; c < container.children.length; c++) {
+                        var ch = container.children[c];
+                        if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
                     }
                 }
+                if (webChild && webChild.reload) {
+                    try { webChild.reload(); console.log("Weather view", i, "reloaded (WebEngineView)"); }
+                    catch (e) { console.log("Weather view", i, "reload failed:", e); }
+                }
+            }
             }
             // Refresh countdown
             if (typeof backend !== 'undefined' && backend.update_countdown) {
