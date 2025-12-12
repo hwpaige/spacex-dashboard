@@ -3906,16 +3906,32 @@ class Backend(QObject):
                         wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
                         if wpa_check.returncode == 0:
                             wifi_interface = self.get_wifi_interface()
+                            # Kick off an initial scan
                             scan_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
                                                          capture_output=True, text=True, timeout=5)
                             if scan_result.returncode == 0:
                                 start_time = time.time()
                                 last_count = -1
-                                stable_since = None
+                                last_increase_ts = start_time
+                                last_rescan_ts = start_time
+                                rescan_interval = 4.0
+                                stabilize_no_growth = 2.0
+                                max_window = 15.0
                                 seen = {}
                                 loop_iter = 0
-                                while time.time() - start_time < 10.0:
+                                while time.time() - start_time < max_window:
                                     loop_iter += 1
+                                    # Periodically trigger another scan; some drivers discover progressively
+                                    now = time.time()
+                                    if now - last_rescan_ts >= rescan_interval:
+                                        try:
+                                            subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
+                                                           capture_output=True, text=True, timeout=5)
+                                            logger.debug("wpa_cli: triggered mid-loop rescan")
+                                        except Exception as _re:
+                                            logger.debug(f"wpa_cli: mid-loop rescan failed: {_re}")
+                                        last_rescan_ts = now
+
                                     results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
                                                                     capture_output=True, text=True, timeout=5)
                                     if results_result.returncode != 0:
@@ -3947,16 +3963,15 @@ class Backend(QObject):
                                         if s not in seen or data['signal'] > seen[s]['signal']:
                                             seen[s] = data
                                     count = len(seen)
-                                    if count == last_count:
-                                        if stable_since is None:
-                                            stable_since = time.time()
-                                        elif time.time() - stable_since >= 1.5 and count > 0:
-                                            logger.info(f"wpa_cli scan stabilized after {loop_iter} polls with {count} networks")
-                                            break
-                                    else:
+                                    if count > last_count:
                                         last_count = count
-                                        stable_since = None
-                                    time.sleep(0.5)
+                                        last_increase_ts = now
+                                    else:
+                                        # No growth this poll; check stabilization window
+                                        if (now - last_increase_ts) >= stabilize_no_growth and count > 0:
+                                            logger.info(f"wpa_cli scan stabilized (no growth {stabilize_no_growth}s) after {loop_iter} polls with {count} networks")
+                                            break
+                                    time.sleep(0.45)
                                 networks = list(seen.values())
                             else:
                                 logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
