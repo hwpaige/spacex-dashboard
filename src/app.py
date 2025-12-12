@@ -1651,12 +1651,23 @@ class Backend(QObject):
         except Exception as _e:
             logger.debug(f"Failed to schedule initial async connectivity check: {_e}")
 
-        # Attempt boot-time Wi‑Fi auto-reconnect to the most recently used network (non-blocking)
+        # Attempt boot-time Wi‑Fi scan and auto-reconnect to the most recently used network (non-blocking)
         try:
+            # First, kick off an initial scan so the network list is populated during splash
+            # and any subsequent auto-reconnect uses the same discovery path as the Scan button.
+            def _boot_initial_scan():
+                try:
+                    logger.info("BOOT: Performing initial WiFi scan to populate network list…")
+                    self.scanWifiNetworks()
+                except Exception as _e:
+                    logger.debug(f"Failed to perform boot-time WiFi scan: {_e}")
+
             def _boot_autoreconnect():
                 try:
+                    # Always perform scan at boot for initial list, regardless of platform
+                    # Auto-reconnect logic remains Linux-focused (Pi), other platforms keep manual connect.
                     if platform.system() != 'Linux':
-                        return  # Boot-time auto-reconnect logic targets Linux (Pi)
+                        return
                     if self._wifi_connected or self._wifi_connecting:
                         return
                     if not self._last_connected_network or not self._last_connected_network.get('ssid'):
@@ -1668,7 +1679,10 @@ class Backend(QObject):
                     logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
 
             # Wait a moment so system services (wpa_supplicant/NetworkManager) are ready
-            QTimer.singleShot(1500, _boot_autoreconnect)
+            # Do the initial scan first (populates list like pressing the Scan button),
+            # then attempt auto-reconnect shortly after. Allow ~3s for scan to complete.
+            QTimer.singleShot(800, _boot_initial_scan)
+            QTimer.singleShot(3000, _boot_autoreconnect)
         except Exception as _e:
             logger.debug(f"Failed to set boot-time auto-reconnect timer: {_e}")
 
@@ -3910,6 +3924,15 @@ class Backend(QObject):
 
             self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
             logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
+            # Print the list of SSIDs to the terminal for verification
+            try:
+                ssid_list = ", ".join([f"{n.get('ssid','')} ({n.get('signal','?')} dBm)" for n in self._wifi_networks if n.get('ssid')])
+                if ssid_list:
+                    logger.info(f"Available WiFi networks: {ssid_list}")
+                else:
+                    logger.info("Available WiFi networks: <none>")
+            except Exception as _e:
+                logger.debug(f"Failed to print SSID list: {_e}")
             self.wifiNetworksChanged.emit()
 
         except Exception as e:
