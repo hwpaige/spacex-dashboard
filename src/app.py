@@ -5799,13 +5799,44 @@ Window {
                 xComView.reload()
                 console.log("x.com view reloaded")
             }
-            // Reload weather views
-            if (typeof weatherSwipe !== 'undefined') {
+            // Reload weather (Windy) views
+            // Note: The WebEngineView is nested inside the delegate's first Rectangle,
+            // so we must traverse down to find the child with a reload() function.
+            if (typeof weatherSwipe !== 'undefined' && weatherSwipe.count > 0 && weatherSwipe.itemAt) {
                 for (var i = 0; i < weatherSwipe.count; i++) {
-                    var item = weatherSwipe.itemAt(i);
-                    if (item && item.children[0] && item.children[0].reload) {
-                        item.children[0].reload();
-                        console.log("Weather view", i, "reloaded");
+                    try {
+                        var item = weatherSwipe.itemAt(i);
+                        var target = null;
+                        if (item && item.children && item.children.length > 0) {
+                            var firstLayer = item.children[0]; // Rectangle container
+                            if (firstLayer && firstLayer.children && firstLayer.children.length > 0) {
+                                // Find any child that has a reload() (the WebEngineView)
+                                for (var c = 0; c < firstLayer.children.length; c++) {
+                                    var cand = firstLayer.children[c];
+                                    if (cand && typeof cand.reload === 'function') { target = cand; break; }
+                                }
+                            }
+                        }
+                        // Fallback: broader search one more level deep
+                        if (!target && item && item.children) {
+                            for (var k = 0; k < item.children.length; k++) {
+                                var child = item.children[k];
+                                var grand = (child && child.children) ? child.children : [];
+                                for (var g = 0; g < grand.length; g++) {
+                                    var cand2 = grand[g];
+                                    if (cand2 && typeof cand2.reload === 'function') { target = cand2; break; }
+                                }
+                                if (target) break;
+                            }
+                        }
+                        if (target && typeof target.reload === 'function') {
+                            target.reload();
+                            console.log("Weather view", i, "reloaded");
+                        } else {
+                            console.log("Weather view", i, "not found for reload (no reload() child)");
+                        }
+                    } catch (e) {
+                        console.log("Weather view reload error at index", i, e);
                     }
                 }
             }
