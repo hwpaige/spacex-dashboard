@@ -1748,19 +1748,7 @@ class Backend(QObject):
         try:
             f = Fernet(self.get_encryption_key())
             return f.decrypt(encrypted_password.encode()).decode()
-        except Exception as _e:
-            # Backward-compat: earlier versions may have stored plaintext.
-            # If the stored value doesn't look like a Fernet token, assume it's plaintext
-            # so users don't lose their remembered password on upgrade.
-            try:
-                token = str(encrypted_password)
-                # Typical Fernet tokens start with 'gAAAA' and are URL-safe base64
-                if not token.startswith('gAAAA'):
-                    logger.warning("WiFi password appears to be stored in plaintext; accepting as-is and will re-encrypt on next save")
-                    return token
-            except Exception:
-                pass
-            logger.debug(f"Failed to decrypt WiFi password (will treat as missing): {_e}")
+        except:
             return None
 
     def get_wifi_interface(self):
@@ -1844,38 +1832,12 @@ class Backend(QObject):
         self._remembered_networks = self._remembered_networks[:10]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
-        # Re-annotate current scan list so icons update immediately
-        try:
-            remembered_set = {n.get('ssid') for n in self._remembered_networks}
-            for nw in self._wifi_networks:
-                try:
-                    ss = nw.get('ssid')
-                    if ss:
-                        nw['remembered'] = ss in remembered_set
-                except Exception:
-                    pass
-            self.wifiNetworksChanged.emit()
-        except Exception:
-            pass
 
     def remove_remembered_network(self, ssid):
         """Remove a network from remembered networks"""
         self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
-        # Re-annotate current scan list so icons update immediately
-        try:
-            remembered_set = {n.get('ssid') for n in self._remembered_networks}
-            for nw in self._wifi_networks:
-                try:
-                    ss = nw.get('ssid')
-                    if ss:
-                        nw['remembered'] = ss in remembered_set
-                except Exception:
-                    pass
-            self.wifiNetworksChanged.emit()
-        except Exception:
-            pass
 
     def reload_web_content(self):
         """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
@@ -4176,11 +4138,6 @@ class Backend(QObject):
         try:
             # Remove duplicates and prefer strongest signal per SSID
             seen_ssids = {}
-            # Build quick lookup for remembered metadata
-            try:
-                remembered_lookup = {n.get('ssid'): n for n in (self._remembered_networks or []) if n.get('ssid')}
-            except Exception:
-                remembered_lookup = {}
             for network in networks or []:
                 try:
                     ssid = network.get('ssid')
@@ -4189,19 +4146,6 @@ class Backend(QObject):
                 if ssid:
                     prev = seen_ssids.get(ssid)
                     if (prev is None) or (int(network.get('signal', -100)) > int(prev.get('signal', -100))):
-                        # Annotate remembered status for UI (icon) and future logic
-                        rn = remembered_lookup.get(ssid)
-                        if rn is not None:
-                            try:
-                                network['remembered'] = True
-                                network['last_connected'] = rn.get('last_connected', 0)
-                            except Exception:
-                                pass
-                        else:
-                            try:
-                                network['remembered'] = False
-                            except Exception:
-                                pass
                         seen_ssids[ssid] = network
             unique_networks = list(seen_ssids.values())
             # Sort by signal descending
@@ -4236,34 +4180,6 @@ class Backend(QObject):
         self._wifi_connecting = True
         self.wifiConnectingChanged.emit()
 
-        # Safety guard: auto-clear a stuck "Connecting..." state after timeout
-        try:
-            if getattr(self, '_wifi_connect_guard_timer', None):
-                try:
-                    self._wifi_connect_guard_timer.stop()
-                except Exception:
-                    pass
-                self._wifi_connect_guard_timer = None
-            self._wifi_connect_guard_timer = QTimer()
-            self._wifi_connect_guard_timer.setSingleShot(True)
-            # 20 seconds should be plenty for NM to transition or fail; adjust if needed
-            self._wifi_connect_guard_timer.setInterval(20000)
-            def _guard_clear():
-                try:
-                    if self._wifi_connecting:
-                        logger.warning("WiFi connect guard timeout reached; clearing connecting state")
-                        self._wifi_connecting = False
-                        self.wifiConnectingChanged.emit()
-                finally:
-                    try:
-                        self._wifi_connect_guard_timer.stop()
-                    except Exception:
-                        pass
-            self._wifi_connect_guard_timer.timeout.connect(_guard_clear)
-            self._wifi_connect_guard_timer.start()
-        except Exception as _e:
-            logger.debug(f"Failed to start WiFi connect guard timer: {_e}")
-
         def _finish():
             try:
                 self._wifi_connecting = False
@@ -4272,13 +4188,6 @@ class Backend(QObject):
                 self.update_wifi_status()
             finally:
                 self._wifi_connect_in_progress = False
-                # Stop guard timer if running
-                try:
-                    if getattr(self, '_wifi_connect_guard_timer', None):
-                        self._wifi_connect_guard_timer.stop()
-                        self._wifi_connect_guard_timer = None
-                except Exception:
-                    pass
 
         def _worker():
             try:
@@ -4314,19 +4223,10 @@ class Backend(QObject):
                         os.makedirs('C:\\temp', exist_ok=True)
                         with open(profile_path, 'w') as f:
                             f.write(profile_xml)
-                        add_res = subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
-                                                 capture_output=True, text=True, timeout=10)
-                        conn_res = subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
-                                                  capture_output=True, text=True, timeout=10)
-                        # If connect command appears successful, persist network/password locally
-                        try:
-                            if add_res.returncode == 0 and conn_res.returncode == 0:
-                                QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
-                                QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
-                            else:
-                                logger.warning(f"Windows netsh connect may have failed: add_rc={add_res.returncode}, conn_rc={conn_res.returncode}")
-                        except Exception as _perr:
-                            logger.debug(f"Failed to persist Windows WiFi connection details: {_perr}")
+                        subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
+                                       capture_output=True, timeout=10)
+                        subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
+                                       capture_output=True, timeout=10)
                         try:
                             os.remove(profile_path)
                         except Exception:
@@ -8098,17 +7998,6 @@ Window {
                                 font.pixelSize: 12
                                 color: modelData.encrypted ? "#FF9800" : "#4CAF50"
                                 Layout.preferredWidth: 16
-                            }
-
-                            // Remembered indicator (star)
-                            Text {
-                                visible: !!modelData.remembered
-                                text: "\uf005" // star
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 11
-                                color: "#FFC107"
-                                Layout.preferredWidth: visible ? 14 : 0
-                                ToolTip { text: "Remembered"; delay: 400 }
                             }
 
                             // Network info in one line
