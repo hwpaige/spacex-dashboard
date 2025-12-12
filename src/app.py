@@ -1556,6 +1556,8 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    # WiFi scanning progress notify (for UI spinner)
+    wifiScanInProgressChanged = pyqtSignal()
     # Emitted by background boot worker to deliver results to main thread
     initialChecksReady = pyqtSignal(bool, bool, dict, dict)
     # Update progress UI signals
@@ -1594,6 +1596,8 @@ class Backend(QObject):
         self._wifi_connected = initial_wifi_connected
         self._wifi_connecting = False
         self._current_wifi_ssid = initial_wifi_ssid
+        # Expose scan progress to QML for spinner/disabled state
+        self._wifi_scan_in_progress = False
         self._remembered_networks = self.load_remembered_networks()
         self._last_connected_network = self.load_last_connected_network()
         
@@ -2388,6 +2392,11 @@ class Backend(QObject):
     @pyqtProperty(bool, notify=wifiConnectingChanged)
     def wifiConnecting(self):
         return self._wifi_connecting
+
+    @pyqtProperty(bool, notify=wifiScanInProgressChanged)
+    def wifiScanInProgress(self):
+        """Expose WiFi scan progress to QML for showing a spinner/disabled state."""
+        return getattr(self, '_wifi_scan_in_progress', False)
 
     @pyqtProperty(str, notify=wifiConnectedChanged)
     def currentWifiSsid(self):
@@ -3808,6 +3817,10 @@ class Backend(QObject):
             logger.info("WiFi scan already in progress; ignoring new request")
             return
         self._wifi_scan_in_progress = True
+        try:
+            self.wifiScanInProgressChanged.emit()
+        except Exception:
+            pass
         logger.info("Starting WiFi network scan in background thread…")
 
         def _apply_results(networks):
@@ -3833,6 +3846,10 @@ class Backend(QObject):
                 self.wifiNetworksChanged.emit()
             finally:
                 self._wifi_scan_in_progress = False
+                try:
+                    self.wifiScanInProgressChanged.emit()
+                except Exception:
+                    pass
 
         def _worker():
             networks = []
@@ -7692,10 +7709,10 @@ Window {
 
                 // Scan button - compact
                 Button {
-                    text: backend.wifiConnecting ? "Connecting..." : "Scan Networks"
+                    text: backend.wifiScanInProgress ? "Scanning..." : (backend.wifiConnecting ? "Connecting..." : "Scan Networks")
                     Layout.fillWidth: true
                     Layout.preferredHeight: 25
-                    enabled: !backend.wifiConnecting
+                    enabled: !(backend.wifiScanInProgress || backend.wifiConnecting)
                     onClicked: backend.scanWifiNetworks()
 
                     background: Rectangle {
@@ -7710,6 +7727,15 @@ Window {
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
+                }
+
+                // Scanning spinner indicator
+                BusyIndicator {
+                    running: !!(backend && backend.wifiScanInProgress)
+                    visible: running
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: 16
+                    Layout.preferredWidth: 16
                 }
 
                 // Debug info button - compact
