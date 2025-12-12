@@ -173,6 +173,7 @@ if [ -d "$PROJECT_DIR/cache" ]; then
         -not -name 'previous_launches_cache_backup.json' \
         -not -name 'upcoming_launches_cache.json' \
         -not -name 'trajectory_cache.json' \
+        -not -name 'wifi_key.bin' \
         -not -name 'remembered_networks.json' \
         -not -name 'last_connected_network.json' \
         -not -name 'tracks' \

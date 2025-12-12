@@ -1679,16 +1679,21 @@ class Backend(QObject):
                     logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
 
             # Wait a moment so system services (wpa_supplicant/NetworkManager) are ready
-            # Do the initial scan first (populates list like pressing the Scan button),
-            # then attempt auto-reconnect shortly after. Allow ~3s for scan to complete.
+            # Kick off an initial scan early for the UI list, but don't block auto‑reconnect on it.
+            # Try auto‑reconnect a bit earlier (~1.5s) since nmcli profile bring‑up doesn't require scan results.
             QTimer.singleShot(800, _boot_initial_scan)
-            QTimer.singleShot(3000, _boot_autoreconnect)
+            QTimer.singleShot(1500, _boot_autoreconnect)
         except Exception as _e:
             logger.debug(f"Failed to set boot-time auto-reconnect timer: {_e}")
 
     def get_encryption_key(self):
         """Get or create encryption key for WiFi passwords"""
         key_file = os.path.join(os.path.dirname(__file__), '..', 'cache', 'wifi_key.bin')
+        # Ensure cache directory exists so key persists across runs
+        try:
+            os.makedirs(os.path.dirname(key_file), exist_ok=True)
+        except Exception as _e:
+            logger.debug(f"Failed to ensure cache directory for key: {_e}")
         if os.path.exists(key_file):
             with open(key_file, 'rb') as f:
                 return f.read()
@@ -1764,6 +1769,11 @@ class Backend(QObject):
         """Save remembered WiFi networks to file"""
         try:
             remembered_file = os.path.join(os.path.dirname(__file__), '..', 'cache', 'remembered_networks.json')
+            # Ensure cache directory exists before writing
+            try:
+                os.makedirs(os.path.dirname(remembered_file), exist_ok=True)
+            except Exception as _e:
+                logger.debug(f"Failed to ensure cache directory for remembered networks: {_e}")
             # Encrypt passwords before saving
             networks_to_save = []
             for network in self._remembered_networks:
@@ -1818,6 +1828,11 @@ class Backend(QObject):
         """Save the last connected network to file"""
         try:
             last_connected_file = os.path.join(os.path.dirname(__file__), '..', 'cache', 'last_connected_network.json')
+            # Ensure cache directory exists before writing
+            try:
+                os.makedirs(os.path.dirname(last_connected_file), exist_ok=True)
+            except Exception as _e:
+                logger.debug(f"Failed to ensure cache directory for last connected network: {_e}")
             with open(last_connected_file, 'w', encoding='utf-8') as f:
                 json.dump({'ssid': ssid, 'timestamp': time.time()}, f, indent=2, ensure_ascii=False)
         except Exception as e:
