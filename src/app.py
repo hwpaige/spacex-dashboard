@@ -1558,6 +1558,8 @@ class Backend(QObject):
     updateDialogRequested = pyqtSignal()
     # WiFi scanning progress notify (for UI spinner)
     wifiScanInProgressChanged = pyqtSignal()
+    # WiFi scan results delivered from background thread (queued to UI thread)
+    wifiScanResultsReady = pyqtSignal(list)
     # Emitted by background boot worker to deliver results to main thread
     initialChecksReady = pyqtSignal(bool, bool, dict, dict)
     # Update progress UI signals
@@ -1628,6 +1630,11 @@ class Backend(QObject):
             self.initialChecksReady.connect(self._apply_initial_checks_results)
         except Exception as _e:
             logger.debug(f"Could not connect initialChecksReady signal: {_e}")
+        # Connect Wi‑Fi scan results signal (ensures UI-thread application)
+        try:
+            self.wifiScanResultsReady.connect(self._apply_wifi_scan_results)
+        except Exception as _e:
+            logger.debug(f"Could not connect wifiScanResultsReady signal: {_e}")
         # Boot guard timer placeholder
         self._initial_checks_guard_timer = None
 
@@ -3823,33 +3830,8 @@ class Backend(QObject):
             pass
         logger.info("Starting WiFi network scan in background thread…")
 
-        def _apply_results(networks):
-            try:
-                # Remove duplicates and sort by signal strength
-                seen_ssids = {}
-                for network in networks:
-                    ssid = network.get('ssid')
-                    if ssid:
-                        if ssid not in seen_ssids or network.get('signal', -100) > seen_ssids[ssid].get('signal', -100):
-                            seen_ssids[ssid] = network
-                unique_networks = list(seen_ssids.values())
-                self._wifi_networks = sorted(unique_networks, key=lambda x: x.get('signal', -100), reverse=True)
-                logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
-                try:
-                    ssid_list = ", ".join([f"{n.get('ssid','')} ({n.get('signal','?')} dBm)" for n in self._wifi_networks if n.get('ssid')])
-                    if ssid_list:
-                        logger.info(f"Available WiFi networks: {ssid_list}")
-                    else:
-                        logger.info("Available WiFi networks: <none>")
-                except Exception as _e:
-                    logger.debug(f"Failed to print SSID list: {_e}")
-                self.wifiNetworksChanged.emit()
-            finally:
-                self._wifi_scan_in_progress = False
-                try:
-                    self.wifiScanInProgressChanged.emit()
-                except Exception:
-                    pass
+        # Note: Results are now applied via the wifiScanResultsReady signal to ensure
+        # they run on the main thread using Qt's queued connections across threads.
 
         def _worker():
             networks = []
@@ -3963,10 +3945,56 @@ class Backend(QObject):
             except Exception as e:
                 logger.error(f"Error scanning WiFi networks: {e}")
                 networks = []
-            # Marshal back to UI thread
-            QTimer.singleShot(0, lambda: _apply_results(networks))
+            # Deliver results to UI thread via signal (queued connection)
+            try:
+                self.wifiScanResultsReady.emit(networks)
+            except Exception as emit_err:
+                logger.debug(f"Failed to emit wifiScanResultsReady: {emit_err}")
+                # Fallback: at least clear the scanning flag on UI thread
+                try:
+                    QTimer.singleShot(0, lambda: self._apply_wifi_scan_results(networks))
+                except Exception:
+                    pass
 
         threading.Thread(target=_worker, daemon=True).start()
+
+    @pyqtSlot(list)
+    def _apply_wifi_scan_results(self, networks):
+        """Apply Wi‑Fi scan results on the UI thread and reset scanning state."""
+        try:
+            # Remove duplicates and prefer strongest signal per SSID
+            seen_ssids = {}
+            for network in networks or []:
+                try:
+                    ssid = network.get('ssid')
+                except Exception:
+                    ssid = None
+                if ssid:
+                    prev = seen_ssids.get(ssid)
+                    if (prev is None) or (int(network.get('signal', -100)) > int(prev.get('signal', -100))):
+                        seen_ssids[ssid] = network
+            unique_networks = list(seen_ssids.values())
+            # Sort by signal descending
+            self._wifi_networks = sorted(unique_networks, key=lambda x: int(x.get('signal', -100)), reverse=True)
+            logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
+            try:
+                ssid_list = ", ".join([f"{n.get('ssid','')} ({n.get('signal','?')})" for n in self._wifi_networks if n.get('ssid')])
+                if ssid_list:
+                    logger.info(f"Available WiFi networks: {ssid_list}")
+                else:
+                    logger.info("Available WiFi networks: <none>")
+            except Exception as _e:
+                logger.debug(f"Failed to print SSID list: {_e}")
+            self.wifiNetworksChanged.emit()
+        except Exception as e:
+            logger.error(f"Failed to apply WiFi scan results: {e}")
+        finally:
+            # Always clear scanning flag so UI doesn't get stuck
+            self._wifi_scan_in_progress = False
+            try:
+                self.wifiScanInProgressChanged.emit()
+            except Exception:
+                pass
 
     @pyqtSlot(str, str)
     def connectToWifi(self, ssid, password):
