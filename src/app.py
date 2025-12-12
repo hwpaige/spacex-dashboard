@@ -3838,48 +3838,70 @@ class Backend(QObject):
             try:
                 is_windows = platform.system() == 'Windows'
                 if is_windows:
-                    # Windows netsh scan
-                    logger.info("Scanning WiFi networks using Windows netsh (bg)…")
+                    # Windows netsh scan with polling and stabilization, merging strongest per SSID
+                    logger.info("Scanning WiFi networks using Windows netsh (bg) with polling…")
                     try:
-                        result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-                                                capture_output=True, text=True, timeout=15)
-                        if result.returncode != 0:
-                            logger.warning(f"netsh command failed: {result.stderr}")
-                            raise Exception(f"netsh failed with return code {result.returncode}")
-                        current_network = None
-                        network_map = {}
-                        for line in result.stdout.split('\n'):
-                            line = line.strip()
-                            if line.startswith('SSID') and ':' in line:
-                                ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
-                                if ssid_match:
-                                    ssid = ssid_match.group(1).strip()
-                                    if ssid and ssid != '<disconnected>':
-                                        if ssid not in network_map:
-                                            network_map[ssid] = {'ssid': ssid, 'signal': -100, 'encrypted': False}
-                                        current_network = network_map[ssid]
+                        start_time = time.time()
+                        last_count = -1
+                        stable_since = None
+                        seen = {}
+                        loop_iter = 0
+                        while time.time() - start_time < 8.0:  # poll up to 8s
+                            loop_iter += 1
+                            result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+                                                    capture_output=True, text=True, timeout=10)
+                            if result.returncode != 0:
+                                logger.debug(f"netsh iteration {loop_iter} failed: {result.stderr}")
+                                time.sleep(0.5)
+                                continue
+                            current_seen = {}
+                            current_network = None
+                            for raw_line in result.stdout.split('\n'):
+                                line = raw_line.strip()
+                                if line.startswith('SSID') and ':' in line:
+                                    ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
+                                    if ssid_match:
+                                        ssid = ssid_match.group(1).strip()
+                                        if ssid and ssid != '<disconnected>':
+                                            if ssid not in current_seen:
+                                                # Use percentage consistently across platforms for 'signal'
+                                                current_seen[ssid] = {'ssid': ssid, 'signal': 0, 'encrypted': False}
+                                            current_network = current_seen[ssid]
+                                        else:
+                                            current_network = None
                                     else:
                                         current_network = None
-                                else:
-                                    current_network = None
-                            elif line.startswith('Signal') and ':' in line and current_network:
-                                signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
-                                if signal_match:
-                                    percentage = int(signal_match.group(1))
-                                    if 0 <= percentage <= 100:
-                                        dbm = -100 + (percentage * 0.7)
-                                        if dbm > current_network['signal']:
-                                            current_network['signal'] = int(dbm)
-                            elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
-                                if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
-                                    current_network['encrypted'] = True
-                        networks = list(network_map.values())
+                                elif line.startswith('Signal') and ':' in line and current_network:
+                                    signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
+                                    if signal_match:
+                                        percentage = int(signal_match.group(1))
+                                        if 0 <= percentage <= 100 and percentage > current_network['signal']:
+                                            current_network['signal'] = percentage
+                                elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
+                                    if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
+                                        current_network['encrypted'] = True
+                            # Merge into global seen (keep strongest percentage)
+                            for s, data in current_seen.items():
+                                if s not in seen or int(data.get('signal', 0)) > int(seen[s].get('signal', 0)):
+                                    seen[s] = data
+                            count = len(seen)
+                            if count == last_count:
+                                if stable_since is None:
+                                    stable_since = time.time()
+                                elif time.time() - stable_since >= 1.0 and count > 0:
+                                    logger.info(f"Windows scan stabilized after {loop_iter} polls with {count} networks")
+                                    break
+                            else:
+                                last_count = count
+                                stable_since = None
+                            time.sleep(0.6)
+                        networks = list(seen.values())
                     except Exception as e:
                         logger.error(f"Windows WiFi scan failed: {e}")
                         networks = []
                 else:
                     # Linux wpa_cli scan with polling (bg)
-                    logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli) in background…")
+                    logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli) in background with polling…")
                     try:
                         wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
                         if wpa_check.returncode == 0:
@@ -3891,7 +3913,9 @@ class Backend(QObject):
                                 last_count = -1
                                 stable_since = None
                                 seen = {}
-                                while time.time() - start_time < 7.0:
+                                loop_iter = 0
+                                while time.time() - start_time < 10.0:
+                                    loop_iter += 1
                                     results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
                                                                     capture_output=True, text=True, timeout=5)
                                     if results_result.returncode != 0:
@@ -3926,7 +3950,8 @@ class Backend(QObject):
                                     if count == last_count:
                                         if stable_since is None:
                                             stable_since = time.time()
-                                        elif time.time() - stable_since >= 1.0 and count > 0:
+                                        elif time.time() - stable_since >= 1.5 and count > 0:
+                                            logger.info(f"wpa_cli scan stabilized after {loop_iter} polls with {count} networks")
                                             break
                                     else:
                                         last_count = count
