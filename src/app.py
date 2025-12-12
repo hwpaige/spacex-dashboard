@@ -3742,7 +3742,22 @@ class Backend(QObject):
 
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks using wpa_supplicant directly"""
+        """Scan for available WiFi networks.
+
+        Note:
+        - On Windows, a single netsh query can return a partial list while the
+          WLAN service is still refreshing results. We therefore perform two
+          short-spaced queries and merge the results to avoid the common
+          "first scan shows only a few networks" issue.
+        - On Linux (wpa_supplicant), initiating a scan then waiting a fixed 3s
+          is often insufficient; wpa_supplicant/driver populate scan_results
+          incrementally while probing across channels and honoring regulatory
+          constraints. Polling scan_results for a few seconds until the set of
+          SSIDs stabilizes yields a more complete list. You can tune the
+          stabilization window with env vars SPACEX_WIFI_SCAN_STABILIZE_MAXWAIT
+          (seconds, default 8) and SPACEX_WIFI_SCAN_STABILIZE_INTERVAL (seconds,
+          default 1).
+        """
         try:
             logger.info("Starting WiFi network scan...")
             is_windows = platform.system() == 'Windows'
@@ -3751,65 +3766,74 @@ class Backend(QObject):
                 # Use Windows netsh command to scan for WiFi networks
                 logger.info("Scanning WiFi networks using Windows netsh...")
                 try:
-                    result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-                                          capture_output=True, text=True, timeout=15)
-
-                    if result.returncode != 0:
-                        logger.warning(f"netsh command failed: {result.stderr}")
-                        raise Exception(f"netsh failed with return code {result.returncode}")
-
-                    networks = []
-                    current_ssid = None
-                    current_network = None
-                    network_map = {}  # Track networks by SSID to handle multiple BSSIDs
-                    logger.debug(f"netsh output length: {len(result.stdout)}")
-
-                    for line in result.stdout.split('\n'):
-                        line = line.strip()
-                        logger.debug(f"Processing line: {line}")
-
-                        # Look for SSID (new network)
-                        if line.startswith('SSID') and ':' in line:
-                            ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
-                            if ssid_match:
-                                ssid = ssid_match.group(1).strip()
-                                if ssid and ssid != '<disconnected>':
-                                    current_ssid = ssid
-                                    if current_ssid not in network_map:
-                                        network_map[current_ssid] = {'ssid': current_ssid, 'signal': -100, 'encrypted': False}
-                                    current_network = network_map[current_ssid]
-                                    logger.debug(f"Processing network: {ssid}")
+                    def _parse_netsh_output(stdout: str):
+                        networks_local = []
+                        current_ssid_l = None
+                        current_network_l = None
+                        network_map_l = {}
+                        logger.debug(f"netsh output length: {len(stdout)}")
+                        for line in stdout.split('\n'):
+                            line = line.strip()
+                            # Look for SSID (new network)
+                            if line.startswith('SSID') and ':' in line:
+                                ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
+                                if ssid_match:
+                                    ssid = ssid_match.group(1).strip()
+                                    if ssid and ssid != '<disconnected>':
+                                        current_ssid_l = ssid
+                                        if current_ssid_l not in network_map_l:
+                                            network_map_l[current_ssid_l] = {'ssid': current_ssid_l, 'signal': -100, 'encrypted': False}
+                                        current_network_l = network_map_l[current_ssid_l]
+                                    else:
+                                        current_ssid_l = None
+                                        current_network_l = None
                                 else:
-                                    current_ssid = None
-                                    current_network = None
-                            else:
-                                current_ssid = None
-                                current_network = None
+                                    current_ssid_l = None
+                                    current_network_l = None
+                            # Look for signal strength (take the strongest signal for each SSID)
+                            elif line.startswith('Signal') and ':' in line and current_network_l:
+                                signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
+                                if signal_match:
+                                    percentage = int(signal_match.group(1))
+                                    if 0 <= percentage <= 100:
+                                        # Keep the strongest signal for this SSID (use percentage to keep units consistent later)
+                                        if percentage > current_network_l['signal']:
+                                            current_network_l['signal'] = percentage
+                            # Look for authentication (encryption) - only set once per SSID
+                            elif line.startswith('Authentication') and ':' in line and current_network_l and not current_network_l['encrypted']:
+                                if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
+                                    current_network_l['encrypted'] = True
+                        networks_local = list(network_map_l.values())
+                        return networks_local
 
-                        # Look for signal strength (take the strongest signal for each SSID)
-                        elif line.startswith('Signal') and ':' in line and current_network:
-                            signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
-                            if signal_match:
-                                percentage = int(signal_match.group(1))
-                                # More accurate conversion from percentage to dBm
-                                # Typical range: 0% = -100dBm, 100% = -30dBm
-                                if percentage >= 0 and percentage <= 100:
-                                    dbm = -100 + (percentage * 0.7)  # -100 to -30 range
-                                    # Keep the strongest signal for this SSID
-                                    if dbm > current_network['signal']:
-                                        current_network['signal'] = int(dbm)
-                                        logger.debug(f"Updated signal for {current_network['ssid']}: {percentage}% = {dbm}dBm")
+                    # First query
+                    result1 = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+                                             capture_output=True, text=True, timeout=15)
+                    if result1.returncode != 0:
+                        logger.warning(f"netsh command failed: {result1.stderr}")
+                        raise Exception(f"netsh failed with return code {result1.returncode}")
 
-                        # Look for authentication (encryption) - only set once per SSID
-                        elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
-                            if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
-                                current_network['encrypted'] = True
-                                logger.debug(f"Network {current_network['ssid']} is encrypted")
+                    networks_first = _parse_netsh_output(result1.stdout)
+                    # Small delay and second query to catch late-arriving entries
+                    time.sleep(2)
+                    result2 = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+                                             capture_output=True, text=True, timeout=15)
+                    if result2.returncode != 0:
+                        logger.warning(f"netsh second query failed: {result2.stderr}")
+                        networks_second = []
+                    else:
+                        networks_second = _parse_netsh_output(result2.stdout)
 
-                    # Convert network_map to networks list
-                    networks = list(network_map.values())
-                    logger.info(f"Windows netsh scan found {len(networks)} unique networks")
-
+                    # Merge by SSID keeping strongest signal
+                    merged = {}
+                    for lst in (networks_first, networks_second):
+                        for n in lst:
+                            s = n['ssid']
+                            if s and (s not in merged or n['signal'] > merged[s]['signal']):
+                                merged[s] = n
+                    networks = list(merged.values())
+                    logger.info(f"Windows netsh scan (merged) found {len(networks)} unique networks")
+                
                 except subprocess.TimeoutExpired:
                     logger.error("Windows WiFi scan timed out")
                     networks = []
@@ -3841,62 +3865,81 @@ class Backend(QObject):
                         if scan_result.returncode == 0:
                             logger.info("wpa_cli scan initiated successfully")
 
-                            # Wait for scan results
-                            time.sleep(3)
+                            # Poll scan_results for up to max_wait seconds, accept first stable or improving set
+                            start_time = time.time()
+                            # Allow tuning via environment variables
+                            try:
+                                max_wait = float(os.getenv('SPACEX_WIFI_SCAN_STABILIZE_MAXWAIT', '8'))
+                            except Exception:
+                                max_wait = 8.0
+                            try:
+                                poll_interval = float(os.getenv('SPACEX_WIFI_SCAN_STABILIZE_INTERVAL', '1'))
+                            except Exception:
+                                poll_interval = 1.0
+                            last_count = -1
+                            best_networks = []
+                            logger.info(
+                                "Linux: polling wpa_cli scan_results to stabilize. Reason: scan results arrive "
+                                "incrementally as channels are scanned and drivers apply dwell/regulatory timing. "
+                                f"Max wait {max_wait}s, interval {poll_interval}s."
+                            )
 
-                            # Get scan results
-                            results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
-                                                          capture_output=True, text=True, timeout=5)
-
-                            if results_result.returncode == 0 and results_result.stdout.strip():
-                                logger.info("wpa_cli scan results retrieved successfully")
-                                raw_output = results_result.stdout.strip()
-                                logger.debug(f"Raw wpa_cli scan_results output:\n{raw_output}")
-                                networks = []
-
-                                lines = results_result.stdout.strip().split('\n')
-                                # Skip header line
-                                for line in lines[1:]:
-                                    logger.debug(f"Processing wpa_cli line: {line}")
-                                    parts = line.split('\t')
-                                    if len(parts) >= 5:
-                                        # Format: bssid, frequency, signal, flags, ssid
-                                        bssid = parts[0]
-                                        frequency = parts[1]
-                                        signal_level = int(parts[2]) if parts[2].isdigit() else -100
-                                        flags = parts[3]
-                                        ssid = parts[4] if len(parts) > 4 else ''
-
-                                        # Decode escape sequences in SSID if present (wpa_cli may output \x escapes for non-ASCII)
-                                        if ssid and '\\x' in ssid:
+                            def _parse_scan_results(stdout: str):
+                                parsed = []
+                                lines_local = stdout.strip().split('\n')
+                                for line_local in lines_local[1:]:  # skip header
+                                    parts_local = line_local.split('\t')
+                                    if len(parts_local) >= 5:
+                                        flags_local = parts_local[3]
+                                        ssid_local = parts_local[4] if len(parts_local) > 4 else ''
+                                        if ssid_local and ssid_local != '<hidden>':
+                                            # Signal in dBm (negative); convert to 0-100 scale
                                             try:
-                                                # wpa_cli outputs UTF-8 bytes as \x escapes, need to decode properly
-                                                ssid = ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
-                                            except Exception as e:
-                                                logger.debug(f"Failed to decode SSID escapes: {e}, keeping original")
+                                                dBm = int(parts_local[2])
+                                            except Exception:
+                                                dBm = -100
+                                            signal_percent_local = min(100, max(0, 100 + dBm))
+                                            # Encryption detection
+                                            encrypted_local = ('WPA' in flags_local) or ('WEP' in flags_local)
+                                            # Decode escape sequences if present
+                                            if '\\x' in ssid_local:
+                                                try:
+                                                    ssid_local = ssid_local.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                                except Exception:
+                                                    pass
+                                            parsed.append({'ssid': ssid_local, 'signal': signal_percent_local, 'encrypted': encrypted_local})
+                                return parsed
 
-                                        if ssid and ssid != '<hidden>':
-                                            # Convert signal level to percentage (rough approximation)
-                                            # wpa_supplicant signal is in dBm, convert to 0-100 scale
-                                            signal_percent = min(100, max(0, 100 + signal_level))
-
-                                            encrypted = 'WPA' in flags or 'WEP' in flags
-
-                                            networks.append({
-                                                'ssid': ssid,
-                                                'signal': signal_percent,
-                                                'encrypted': encrypted
-                                            })
-                                            logger.debug(f"Found network via wpa_cli: {ssid}, signal: {signal_percent}, encrypted: {encrypted}")
-                                        else:
-                                            logger.debug(f"Skipping network with empty or hidden SSID: '{ssid}'")
+                            while time.time() - start_time < max_wait:
+                                results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
+                                                                capture_output=True, text=True, timeout=5)
+                                if results_result.returncode == 0 and results_result.stdout.strip():
+                                    current = _parse_scan_results(results_result.stdout)
+                                    # dedupe by SSID keeping strongest
+                                    tmp = {}
+                                    for n in current:
+                                        s = n['ssid']
+                                        if s and (s not in tmp or n['signal'] > tmp[s]['signal']):
+                                            tmp[s] = n
+                                    current_unique = list(tmp.values())
+                                    count = len(current_unique)
+                                    if count > last_count:
+                                        best_networks = current_unique
+                                        last_count = count
+                                        # continue polling in case more appear
+                                        time.sleep(poll_interval)
+                                        continue
                                     else:
-                                        logger.debug(f"Skipping line with insufficient parts: {len(parts)} parts")
+                                        # stabilized (no increase), accept
+                                        networks = best_networks
+                                        break
+                                # brief wait before next poll
+                                time.sleep(poll_interval)
 
-                                logger.info(f"wpa_cli scan found {len(networks)} networks")
-                            else:
-                                logger.warning("wpa_cli scan_results failed or returned empty")
-                                networks = []
+                            # Fallback if loop exited without setting networks
+                            if not networks:
+                                networks = best_networks
+                            logger.info(f"wpa_cli scan found {len(networks)} networks (stabilized)")
                         else:
                             logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
                             networks = []
