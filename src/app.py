@@ -4268,6 +4268,12 @@ class Backend(QObject):
                                        capture_output=True, timeout=10)
                         subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
                                        capture_output=True, timeout=10)
+                        # Persist this network as remembered on Windows too so the UI shows the remove button
+                        try:
+                            QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
+                            QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
+                        except Exception as _e:
+                            logger.debug(f"Failed to persist remembered network on Windows: {_e}")
                         try:
                             os.remove(profile_path)
                         except Exception:
@@ -4621,6 +4627,14 @@ class Backend(QObject):
             
             self._wifi_connected = connected
             self._current_wifi_ssid = current_ssid
+
+            # If the system reports we're connected, clear any lingering UI "connecting" state
+            if connected and getattr(self, '_wifi_connecting', False):
+                try:
+                    self._wifi_connecting = False
+                    self.wifiConnectingChanged.emit()
+                except Exception:
+                    pass
             
             if wifi_changed:
                 logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
