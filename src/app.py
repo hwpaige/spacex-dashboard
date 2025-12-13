@@ -8177,35 +8177,13 @@ Window {
             y: (parent.height - height - 200) / 2  // Leave room for keyboard
             modal: true
             focus: true
-            // Keep the dialog (and thus the virtual keyboard) open while in the password flow.
-            // Taps on the on-screen keyboard are outside this Popup, so CloseOnPressOutside would
-            // dismiss the dialog and hide the keyboard. Restrict to Escape-only to avoid that.
+            // Keep the password dialog open while interacting with the custom on-screen keyboard
+            // so that tapping outside (on the keyboard) does not close it.
             closePolicy: Popup.CloseOnEscape
 
             onOpened: {
                 passwordField.focus = true
-                passwordField.forceActiveFocus()
-                // Ensure the (system) virtual keyboard remains visible as we enter the flow
-                try { Qt.inputMethod.show(); } catch(e) {}
                 passwordField.text = ""
-            }
-
-            onVisibleChanged: {
-                if (visible) {
-                    try { Qt.inputMethod.show(); } catch(e) {}
-                    if (!passwordField.activeFocus) passwordField.forceActiveFocus()
-                } else {
-                    try { Qt.inputMethod.hide(); } catch(e) {}
-                }
-            }
-
-            // If user taps anywhere within the dialog (non-button areas), keep focus on the field and keep keyboard up
-            TapHandler {
-                acceptedButtons: Qt.AllButtons
-                onTapped: {
-                    passwordField.forceActiveFocus()
-                    try { Qt.inputMethod.show(); } catch(e) {}
-                }
             }
 
             background: Rectangle {
@@ -8236,35 +8214,8 @@ Window {
                         id: passwordField
                         placeholderText: "Enter password"
                         echoMode: TextField.Password
-                        // Keep the OSK engaged as this is a sensitive password entry field
-                        // Hints help some platforms avoid hiding the keyboard on echo mode toggles
-                        inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                         Layout.fillWidth: true
                         Layout.preferredHeight: 28
-
-                        // If focus moves away while dialog is open, immediately restore it
-                        onActiveFocusChanged: {
-                            if (passwordDialog.visible && !activeFocus) {
-                                // Defer to end of event loop to avoid disrupting clicks
-                                Qt.callLater(function(){
-                                    if (!passwordField.activeFocus && passwordDialog.visible) {
-                                        passwordField.forceActiveFocus()
-                                        try { Qt.inputMethod.show(); } catch(e) {}
-                                    }
-                                })
-                            }
-                        }
-
-                        // Some platforms hide the OSK when echoMode changes.
-                        // Immediately refocus and re-show the input method after the toggle.
-                        onEchoModeChanged: {
-                            if (passwordDialog.visible) {
-                                Qt.callLater(function(){
-                                    passwordField.forceActiveFocus()
-                                    try { Qt.inputMethod.show(); } catch(e) {}
-                                })
-                            }
-                        }
 
                         background: Rectangle {
                             color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
@@ -8280,20 +8231,9 @@ Window {
                         text: "👁"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
-                        focusPolicy: Qt.NoFocus
-                        // Ensure the OSK doesn't hide as soon as the press occurs
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
-                            // Defer to end of event loop to avoid the IME briefly hiding on click
-                            Qt.callLater(function(){
-                                passwordField.focus = true
-                                passwordField.forceActiveFocus()
-                                try { Qt.inputMethod.show(); } catch(e) {}
-                            })
+                            passwordField.focus = true
                         }
 
                         background: Rectangle {
@@ -8318,12 +8258,6 @@ Window {
                         text: "Cancel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        focusPolicy: Qt.NoFocus
-                        // Keep OSK visible during press in case the user changes mind
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             passwordField.text = ""
                             passwordDialog.close()
@@ -8347,12 +8281,6 @@ Window {
                         text: "Connect"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        focusPolicy: Qt.NoFocus
-                        // Keep OSK visible during press; connection action happens on click
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
@@ -8386,6 +8314,10 @@ Window {
             modal: false
             focus: false
             visible: passwordDialog.visible
+            // Prevent the keyboard from auto-closing when tapping outside or interacting with other controls
+            closePolicy: Popup.NoAutoClose
+            // Ensure the keyboard stays above other content
+            z: 2000
             property bool shiftPressed: false
             property bool numberMode: false
 
@@ -8419,6 +8351,8 @@ Window {
                             text: modelData
                             Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
@@ -8449,6 +8383,8 @@ Window {
                             text: modelData
                             Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
@@ -8478,6 +8414,8 @@ Window {
                         Layout.preferredWidth: 46
                         Layout.preferredHeight: 30
                         enabled: !virtualKeyboard.numberMode
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
                         onClicked: {
                             virtualKeyboard.shiftPressed = !virtualKeyboard.shiftPressed
                         }
@@ -8503,6 +8441,8 @@ Window {
                             text: modelData
                             Layout.preferredWidth: 33
                             Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
@@ -8525,6 +8465,8 @@ Window {
                         text: "⌫"
                         Layout.preferredWidth: 46
                         Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
                         onClicked: passwordField.text = passwordField.text.slice(0, -1)
 
                         background: Rectangle {
@@ -8552,6 +8494,8 @@ Window {
                         text: virtualKeyboard.numberMode ? "ABC" : "123"
                         Layout.preferredWidth: 53
                         Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
                         onClicked: {
                             virtualKeyboard.numberMode = !virtualKeyboard.numberMode
                             virtualKeyboard.shiftPressed = false  // Reset shift when switching modes
@@ -8576,6 +8520,8 @@ Window {
                         text: "Space"
                         Layout.preferredWidth: 267
                         Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
                         onClicked: passwordField.text += " "
 
                         background: Rectangle {
