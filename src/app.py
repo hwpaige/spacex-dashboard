@@ -8184,7 +8184,28 @@ Window {
 
             onOpened: {
                 passwordField.focus = true
+                passwordField.forceActiveFocus()
+                // Ensure the (system) virtual keyboard remains visible as we enter the flow
+                try { Qt.inputMethod.show(); } catch(e) {}
                 passwordField.text = ""
+            }
+
+            onVisibleChanged: {
+                if (visible) {
+                    try { Qt.inputMethod.show(); } catch(e) {}
+                    if (!passwordField.activeFocus) passwordField.forceActiveFocus()
+                } else {
+                    try { Qt.inputMethod.hide(); } catch(e) {}
+                }
+            }
+
+            // If user taps anywhere within the dialog (non-button areas), keep focus on the field and keep keyboard up
+            TapHandler {
+                acceptedButtons: Qt.AllButtons
+                onTapped: {
+                    passwordField.forceActiveFocus()
+                    try { Qt.inputMethod.show(); } catch(e) {}
+                }
             }
 
             background: Rectangle {
@@ -8218,6 +8239,19 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 28
 
+                        // If focus moves away while dialog is open, immediately restore it
+                        onActiveFocusChanged: {
+                            if (passwordDialog.visible && !activeFocus) {
+                                // Defer to end of event loop to avoid disrupting clicks
+                                Qt.callLater(function(){
+                                    if (!passwordField.activeFocus && passwordDialog.visible) {
+                                        passwordField.forceActiveFocus()
+                                        try { Qt.inputMethod.show(); } catch(e) {}
+                                    }
+                                })
+                            }
+                        }
+
                         background: Rectangle {
                             color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
                             border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
@@ -8232,9 +8266,12 @@ Window {
                         text: "👁"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
+                        focusPolicy: Qt.NoFocus
                         onClicked: {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
                             passwordField.focus = true
+                            passwordField.forceActiveFocus()
+                            try { Qt.inputMethod.show(); } catch(e) {}
                         }
 
                         background: Rectangle {
@@ -8259,6 +8296,7 @@ Window {
                         text: "Cancel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
+                        focusPolicy: Qt.NoFocus
                         onClicked: {
                             passwordField.text = ""
                             passwordDialog.close()
@@ -8282,6 +8320,7 @@ Window {
                         text: "Connect"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
+                        focusPolicy: Qt.NoFocus
                         onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
