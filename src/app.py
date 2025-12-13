@@ -4645,6 +4645,19 @@ class Backend(QObject):
                     logger.info("WiFi connection detected - reloading web content")
                     self.reload_web_content()
 
+                    # Ensure the just-connected SSID is tracked as last-connected and remembered
+                    try:
+                        if current_ssid:
+                            # Record as last-connected (also updates recency ordering and emits change)
+                            self.save_last_connected_network(current_ssid)
+                            # Make sure it's present in remembered list even if password is unknown
+                            # This enables the QML "remove" button immediately after a successful connection
+                            # without requiring that the connection flowed through connectToWifi.
+                            if not any((n.get('ssid') == current_ssid) for n in (self._remembered_networks or [])):
+                                self.add_remembered_network(current_ssid, None)
+                    except Exception as _e:
+                        logger.debug(f"Failed to sync remembered/last-connected after connect: {_e}")
+
                     # If data loading was deferred due to no connectivity, start it now
                     if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
                         logger.info("WiFi connected - starting deferred data loading")
@@ -5963,11 +5976,22 @@ Window {
             if (typeof globeView !== 'undefined' && globeView.reload) {
                 globeView.reload()
                 console.log("Globe view reloaded")
+                // Nudge animation loop in case it paused due to network/render stall
+                if (globeView.runJavaScript) {
+                    try {
+                        globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                    } catch (e) { console.log("Globe view JS resume failed:", e); }
+                }
             }
             // Reload plot card globe view (left-most card)
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.reload) {
                 plotGlobeView.reload()
                 console.log("Plot globe view reloaded")
+                if (plotGlobeView.runJavaScript) {
+                    try {
+                        plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+                }
             }
             // Reload F1 chart view
             if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
