@@ -5967,78 +5967,81 @@ Window {
         webView.runJavaScript(js);
     }
 
+    // Debounce non-globe web content reloads so the globe keeps spinning smoothly
+    // and other views refresh once after Wi‑Fi connection settles.
+    Timer {
+        id: reloadCoalesceTimer
+        interval: 1200
+        repeat: false
+        running: false
+        onTriggered: {
+            // Reload F1 chart view
+            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
+                f1ChartView.reload()
+                console.log("F1 chart view reloaded (debounced)")
+            }
+            // Reload YouTube/map view
+            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
+                youtubeView.reload()
+                console.log("YouTube/map view reloaded (debounced)")
+            }
+            // Reload x.com view
+            if (typeof xComView !== 'undefined' && xComView.reload) {
+                xComView.reload()
+                console.log("x.com view reloaded (debounced)")
+            }
+            // Reload weather views
+            if (typeof weatherSwipe !== 'undefined') {
+                for (var i = 0; i < weatherSwipe.count; i++) {
+                    var item = weatherSwipe.itemAt(i);
+                    if (!item) continue;
+                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
+                    var webChild = null;
+                    if (container && container.children && container.children.length > 0) {
+                        for (var c = 0; c < container.children.length; c++) {
+                            var ch = container.children[c];
+                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
+                        }
+                    }
+                    if (webChild && webChild.reload) {
+                        try { webChild.reload(); console.log("Weather view", i, "reloaded (debounced)"); }
+                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
+                    }
+                }
+            }
+            // Lightweight backend refreshes
+            if (typeof backend !== 'undefined' && backend.update_countdown) {
+                backend.update_countdown();
+                console.log("Countdown refreshed (debounced)");
+            }
+            if (typeof backend !== 'undefined' && backend.update_weather) {
+                backend.update_weather();
+                console.log("Weather data refresh initiated (debounced)");
+            }
+        }
+    }
+
     Component.onCompleted: {
         console.log("Window created - bottom bar should be visible")
         // Connect web content reload signal
         backend.reloadWebContent.connect(function() {
             console.log("Reloading web content after WiFi connection...")
-            // Reload globe view
-            if (typeof globeView !== 'undefined' && globeView.reload) {
-                globeView.reload()
-                console.log("Globe view reloaded")
-                // Nudge animation loop in case it paused due to network/render stall
-                if (globeView.runJavaScript) {
-                    try {
-                        globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
-                    } catch (e) { console.log("Globe view JS resume failed:", e); }
-                }
+            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
+            // Instead, nudge animation loops to resume if they paused.
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try {
+                    globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                } catch (e) { console.log("Globe view JS resume failed:", e); }
             }
-            // Reload plot card globe view (left-most card)
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.reload) {
-                plotGlobeView.reload()
-                console.log("Plot globe view reloaded")
-                if (plotGlobeView.runJavaScript) {
-                    try {
-                        plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
-                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
-                }
+            // Plot card globe view (left-most card) – also avoid reload
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try {
+                    plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                } catch (e) { console.log("Plot globe view JS resume failed:", e); }
             }
-            // Reload F1 chart view
-            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
-                f1ChartView.reload()
-                console.log("F1 chart view reloaded")
-            }
-            // Reload YouTube/map view
-            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
-                youtubeView.reload()
-                console.log("YouTube/map view reloaded")
-            }
-            // Reload x.com view
-            if (typeof xComView !== 'undefined' && xComView.reload) {
-                xComView.reload()
-                console.log("x.com view reloaded")
-            }
-            // Reload weather views
-            if (typeof weatherSwipe !== 'undefined') {
-            for (var i = 0; i < weatherSwipe.count; i++) {
-                var item = weatherSwipe.itemAt(i);
-                if (!item) continue;
-                // Item -> Rectangle container -> WebEngineView (id: webView)
-                var container = item.children && item.children.length > 0 ? item.children[0] : null;
-                var webChild = null;
-                if (container && container.children && container.children.length > 0) {
-                    // Find the first child with runJavaScript or reload method (WebEngineView)
-                    for (var c = 0; c < container.children.length; c++) {
-                        var ch = container.children[c];
-                        if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
-                    }
-                }
-                if (webChild && webChild.reload) {
-                    try { webChild.reload(); console.log("Weather view", i, "reloaded (WebEngineView)"); }
-                    catch (e) { console.log("Weather view", i, "reload failed:", e); }
-                }
-            }
-            }
-            // Refresh countdown
-            if (typeof backend !== 'undefined' && backend.update_countdown) {
-                backend.update_countdown();
-                console.log("Countdown refreshed");
-            }
-            // Refresh weather data for bottom left pill
-            if (typeof backend !== 'undefined' && backend.update_weather) {
-                backend.update_weather();
-                console.log("Weather data refresh initiated");
-            }
+            // Debounce all other heavy reloads to a single update shortly after connect
+            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
+            reloadCoalesceTimer.start();
         })
     }
 
