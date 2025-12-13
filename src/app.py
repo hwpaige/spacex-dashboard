@@ -1602,6 +1602,11 @@ class Backend(QObject):
         self._wifi_scan_in_progress = False
         self._remembered_networks = self.load_remembered_networks()
         self._last_connected_network = self.load_last_connected_network()
+        # Notify QML that remembered networks are available at startup
+        try:
+            self.rememberedNetworksChanged.emit()
+        except Exception:
+            pass
         
         # Network connectivity properties (separate from WiFi)
         # Optimistically mirror Wi‑Fi state so the header icon doesn't show
@@ -1833,6 +1838,7 @@ class Backend(QObject):
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
 
+    @pyqtSlot(str)
     def remove_remembered_network(self, ssid):
         """Remove a network from remembered networks"""
         self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
@@ -3737,13 +3743,48 @@ class Backend(QObject):
                     return
 
                 # Check if the network is currently available before attempting connection
-                available_networks = [net['ssid'] for net in self._wifi_networks]
-                if preferred_ssid not in available_networks:
-                    logger.info(f"Preferred network '{preferred_ssid}' not currently available, skipping auto-reconnection")
+                available_networks = [net.get('ssid') for net in self._wifi_networks if net.get('ssid')]
+                if preferred_ssid in available_networks:
+                    # Add a small delay before attempting reconnection to avoid race conditions
+                    QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(preferred_ssid, remembered_network['password']))
                     return
 
-                # Add a small delay before attempting reconnection to avoid race conditions
-                QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(preferred_ssid, remembered_network['password']))
+                # Preferred not available. Try other remembered networks (most recent first)
+                logger.info(f"Preferred network '{preferred_ssid}' not available; trying other remembered networks…")
+                # If we have no scan results yet, kick off a scan and re-run after a short delay
+                if not self._wifi_networks:
+                    try:
+                        self.scanWifiNetworks()
+                    except Exception:
+                        pass
+                    # Retry after scan settles
+                    QTimer.singleShot(2500, lambda: self._auto_reconnect_to_last_network(False))
+                    return
+
+                # Build candidate list by recency and availability with stored passwords
+                candidates = [n for n in self._remembered_networks if n.get('ssid') and n.get('password')]
+                # Filter to only those currently visible
+                visible = set(available_networks)
+                candidates = [n for n in candidates if n['ssid'] in visible]
+                if not candidates:
+                    logger.info("No remembered networks currently visible; skipping auto-reconnect")
+                    return
+
+                # Platform-specific approach: On Linux prefer the boot-time helper (uses NM profiles), otherwise direct connect
+                try:
+                    if platform.system() == 'Linux':
+                        # Let the more capable helper handle ordering and NM profiles
+                        self._scan_and_reconnect_to_best_network()
+                        return
+                except Exception:
+                    pass
+
+                # Non-Linux (or fallback): try the top candidate directly
+                top = candidates[0]
+                ssid_to_try = top.get('ssid')
+                pwd_to_try = top.get('password')
+                logger.info(f"Attempting auto-reconnection to alternative remembered network: {ssid_to_try}")
+                QTimer.singleShot(1000, lambda: self._perform_auto_reconnection(ssid_to_try, pwd_to_try))
 
         except Exception as e:
             logger.error(f"Error during auto-reconnection setup: {e}")
