@@ -6388,6 +6388,10 @@ Window {
                                         }
                                         // Enforce rounded corners inside the page itself
                                         root._injectRoundedCorners(plotGlobeView, 8)
+                                        // Ensure the plot card globe animation loop starts/resumes on initial load
+                                        try {
+                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Plot globe animation start failed', e);}})();");
+                                        } catch (e) { console.log("Plot globe JS nudge error:", e); }
                                     }
                                 }
                             }
@@ -9348,6 +9352,10 @@ Window {
                                         if (trajectoryData) {
                                             globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
                                         }
+                                        // Ensure the globe animation loop starts/resumes on initial load
+                                        try {
+                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Globe animation start failed', e);}})();");
+                                        } catch (e) { console.log("Globe JS nudge error:", e); }
                                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                         console.log("Globe HTML failed to load:", loadRequest.errorString);
                                     }
