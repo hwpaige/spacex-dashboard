@@ -8243,9 +8243,6 @@ Window {
                         id: passwordField
                         placeholderText: "Enter password"
                         echoMode: TextField.Password
-                        // Keep the OSK engaged as this is a sensitive password entry field
-                        // Hints help some platforms avoid hiding the keyboard on echo mode toggles
-                        inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                         Layout.fillWidth: true
                         Layout.preferredHeight: 28
 
@@ -8258,17 +8255,6 @@ Window {
                                         passwordField.forceActiveFocus()
                                         try { Qt.inputMethod.show(); } catch(e) {}
                                     }
-                                })
-                            }
-                        }
-
-                        // Some platforms hide the OSK when echoMode changes.
-                        // Immediately refocus and re-show the input method after the toggle.
-                        onEchoModeChanged: {
-                            if (passwordDialog.visible) {
-                                Qt.callLater(function(){
-                                    passwordField.forceActiveFocus()
-                                    try { Qt.inputMethod.show(); } catch(e) {}
                                 })
                             }
                         }
@@ -8290,12 +8276,9 @@ Window {
                         focusPolicy: Qt.NoFocus
                         onClicked: {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
-                            // Defer to end of event loop to avoid the IME briefly hiding on click
-                            Qt.callLater(function(){
-                                passwordField.focus = true
-                                passwordField.forceActiveFocus()
-                                try { Qt.inputMethod.show(); } catch(e) {}
-                            })
+                            passwordField.focus = true
+                            passwordField.forceActiveFocus()
+                            try { Qt.inputMethod.show(); } catch(e) {}
                         }
 
                         background: Rectangle {
