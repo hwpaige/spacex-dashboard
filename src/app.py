@@ -3757,180 +3757,236 @@ class Backend(QObject):
 
     @pyqtSlot()
     def scanWifiNetworks(self):
-        """Scan for available WiFi networks without blocking the UI thread."""
-        # Prevent overlapping scans
-        if getattr(self, '_wifi_scan_in_progress', False):
-            logger.info("WiFi scan already in progress; ignoring new request")
-            return
-        self._wifi_scan_in_progress = True
-        logger.info("Starting WiFi network scan in background thread…")
+        """Scan for available WiFi networks using wpa_supplicant directly"""
+        try:
+            logger.info("Starting WiFi network scan...")
+            is_windows = platform.system() == 'Windows'
 
-        def _apply_results(networks):
-            try:
-                # Remove duplicates and sort by signal strength
-                seen_ssids = {}
-                for network in networks:
-                    ssid = network.get('ssid')
-                    if ssid:
-                        if ssid not in seen_ssids or network.get('signal', -100) > seen_ssids[ssid].get('signal', -100):
-                            seen_ssids[ssid] = network
-                unique_networks = list(seen_ssids.values())
-                self._wifi_networks = sorted(unique_networks, key=lambda x: x.get('signal', -100), reverse=True)
-                logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
+            if is_windows:
+                # Use Windows netsh command to scan for WiFi networks
+                logger.info("Scanning WiFi networks using Windows netsh...")
                 try:
-                    ssid_list = ", ".join([f"{n.get('ssid','')} ({n.get('signal','?')} dBm)" for n in self._wifi_networks if n.get('ssid')])
-                    if ssid_list:
-                        logger.info(f"Available WiFi networks: {ssid_list}")
-                    else:
-                        logger.info("Available WiFi networks: <none>")
-                except Exception as _e:
-                    logger.debug(f"Failed to print SSID list: {_e}")
-                self.wifiNetworksChanged.emit()
-            finally:
-                self._wifi_scan_in_progress = False
+                    result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
+                                          capture_output=True, text=True, timeout=15)
 
-        def _worker():
-            networks = []
-            try:
-                is_windows = platform.system() == 'Windows'
-                if is_windows:
-                    # Windows netsh scan
-                    logger.info("Scanning WiFi networks using Windows netsh (bg)…")
-                    try:
-                        result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-                                                capture_output=True, text=True, timeout=15)
-                        if result.returncode != 0:
-                            logger.warning(f"netsh command failed: {result.stderr}")
-                            raise Exception(f"netsh failed with return code {result.returncode}")
-                        current_network = None
-                        network_map = {}
-                        for line in result.stdout.split('\n'):
-                            line = line.strip()
-                            if line.startswith('SSID') and ':' in line:
-                                ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
-                                if ssid_match:
-                                    ssid = ssid_match.group(1).strip()
-                                    if ssid and ssid != '<disconnected>':
-                                        if ssid not in network_map:
-                                            network_map[ssid] = {'ssid': ssid, 'signal': -100, 'encrypted': False}
-                                        current_network = network_map[ssid]
-                                    else:
-                                        current_network = None
+                    if result.returncode != 0:
+                        logger.warning(f"netsh command failed: {result.stderr}")
+                        raise Exception(f"netsh failed with return code {result.returncode}")
+
+                    networks = []
+                    current_ssid = None
+                    current_network = None
+                    network_map = {}  # Track networks by SSID to handle multiple BSSIDs
+                    logger.debug(f"netsh output length: {len(result.stdout)}")
+
+                    for line in result.stdout.split('\n'):
+                        line = line.strip()
+                        logger.debug(f"Processing line: {line}")
+
+                        # Look for SSID (new network)
+                        if line.startswith('SSID') and ':' in line:
+                            ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
+                            if ssid_match:
+                                ssid = ssid_match.group(1).strip()
+                                if ssid and ssid != '<disconnected>':
+                                    current_ssid = ssid
+                                    if current_ssid not in network_map:
+                                        network_map[current_ssid] = {'ssid': current_ssid, 'signal': -100, 'encrypted': False}
+                                    current_network = network_map[current_ssid]
+                                    logger.debug(f"Processing network: {ssid}")
                                 else:
+                                    current_ssid = None
                                     current_network = None
-                            elif line.startswith('Signal') and ':' in line and current_network:
-                                signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
-                                if signal_match:
-                                    percentage = int(signal_match.group(1))
-                                    if 0 <= percentage <= 100:
-                                        dbm = -100 + (percentage * 0.7)
-                                        if dbm > current_network['signal']:
-                                            current_network['signal'] = int(dbm)
-                            elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
-                                if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
-                                    current_network['encrypted'] = True
-                        networks = list(network_map.values())
-                    except Exception as e:
-                        logger.error(f"Windows WiFi scan failed: {e}")
-                        networks = []
-                else:
-                    # Linux wpa_cli scan with polling (bg)
-                    logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli) in background…")
-                    try:
-                        wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
-                        if wpa_check.returncode == 0:
-                            wifi_interface = self.get_wifi_interface()
-                            scan_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
-                                                         capture_output=True, text=True, timeout=5)
-                            if scan_result.returncode == 0:
-                                start_time = time.time()
-                                last_count = -1
-                                stable_since = None
-                                seen = {}
-                                while time.time() - start_time < 7.0:
-                                    results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
-                                                                    capture_output=True, text=True, timeout=5)
-                                    if results_result.returncode != 0:
-                                        time.sleep(0.3)
-                                        continue
-                                    raw_output = results_result.stdout.strip()
-                                    if not raw_output:
-                                        time.sleep(0.3)
-                                        continue
-                                    current_seen = {}
-                                    lines = raw_output.split('\n')
-                                    for line in lines[1:]:
-                                        parts = line.split('\t')
-                                        if len(parts) >= 5:
-                                            signal_level = int(parts[2]) if parts[2].lstrip('-').isdigit() else -100
-                                            flags = parts[3]
-                                            ssid = parts[4] if len(parts) > 4 else ''
-                                            if ssid and '\\x' in ssid:
-                                                try:
-                                                    ssid = ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
-                                                except Exception:
-                                                    pass
-                                            if ssid and ssid != '<hidden>':
-                                                signal_percent = min(100, max(0, 100 + signal_level))
-                                                encrypted = 'WPA' in flags or 'WEP' in flags
-                                                if ssid not in current_seen or signal_percent > current_seen[ssid]['signal']:
-                                                    current_seen[ssid] = {'ssid': ssid, 'signal': signal_percent, 'encrypted': encrypted}
-                                    for s, data in current_seen.items():
-                                        if s not in seen or data['signal'] > seen[s]['signal']:
-                                            seen[s] = data
-                                    count = len(seen)
-                                    if count == last_count:
-                                        if stable_since is None:
-                                            stable_since = time.time()
-                                        elif time.time() - stable_since >= 1.0 and count > 0:
-                                            break
-                                    else:
-                                        last_count = count
-                                        stable_since = None
-                                    time.sleep(0.5)
-                                networks = list(seen.values())
                             else:
-                                logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
+                                current_ssid = None
+                                current_network = None
+
+                        # Look for signal strength (take the strongest signal for each SSID)
+                        elif line.startswith('Signal') and ':' in line and current_network:
+                            signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
+                            if signal_match:
+                                percentage = int(signal_match.group(1))
+                                # More accurate conversion from percentage to dBm
+                                # Typical range: 0% = -100dBm, 100% = -30dBm
+                                if percentage >= 0 and percentage <= 100:
+                                    dbm = -100 + (percentage * 0.7)  # -100 to -30 range
+                                    # Keep the strongest signal for this SSID
+                                    if dbm > current_network['signal']:
+                                        current_network['signal'] = int(dbm)
+                                        logger.debug(f"Updated signal for {current_network['ssid']}: {percentage}% = {dbm}dBm")
+
+                        # Look for authentication (encryption) - only set once per SSID
+                        elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
+                            if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
+                                current_network['encrypted'] = True
+                                logger.debug(f"Network {current_network['ssid']} is encrypted")
+
+                    # Convert network_map to networks list
+                    networks = list(network_map.values())
+                    logger.info(f"Windows netsh scan found {len(networks)} unique networks")
+
+                except subprocess.TimeoutExpired:
+                    logger.error("Windows WiFi scan timed out")
+                    networks = []
+                except FileNotFoundError:
+                    logger.error("netsh command not found - WiFi scanning not available on this Windows system")
+                    networks = []
+                except Exception as e:
+                    logger.error(f"Windows WiFi scan failed: {e}")
+                    networks = []
+            else:
+                # Use wpa_supplicant directly for Linux WiFi scanning (NetworkManager disabled)
+                logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli)...")
+                networks = []
+                
+                try:
+                    # Check if wpa_cli is available
+                    wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                    if wpa_check.returncode == 0:
+                        logger.info("wpa_cli found, attempting direct wpa_supplicant scan")
+
+                        # Get the WiFi interface
+                        wifi_interface = self.get_wifi_interface()
+                        logger.debug(f"Using WiFi interface: {wifi_interface}")
+
+                        # Try to scan using wpa_cli
+                        scan_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
+                                                   capture_output=True, text=True, timeout=5)
+
+                        if scan_result.returncode == 0:
+                            logger.info("wpa_cli scan initiated successfully")
+
+                            # Poll scan results for a short period to allow the driver to populate all BSS entries.
+                            # Many Linux drivers populate results progressively; grabbing immediately often yields a partial list.
+                            start_time = time.time()
+                            last_count = -1
+                            stable_since = None
+                            seen = {}
+                            poll_attempt = 0
+                            while time.time() - start_time < 7.0:  # hard cap 7s
+                                poll_attempt += 1
+                                results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
+                                                                capture_output=True, text=True, timeout=5)
+                                if results_result.returncode != 0:
+                                    logger.debug(f"wpa_cli scan_results attempt {poll_attempt} failed: {results_result.stderr}")
+                                    time.sleep(0.3)
+                                    continue
+
+                                raw_output = results_result.stdout.strip()
+                                if not raw_output:
+                                    logger.debug(f"wpa_cli scan_results attempt {poll_attempt} returned empty output")
+                                    time.sleep(0.3)
+                                    continue
+
+                                lines = raw_output.split('\n')
+                                # Skip header line
+                                current_seen = {}
+                                for line in lines[1:]:
+                                    parts = line.split('\t')
+                                    if len(parts) >= 5:
+                                        signal_level = int(parts[2]) if parts[2].lstrip('-').isdigit() else -100
+                                        flags = parts[3]
+                                        ssid = parts[4] if len(parts) > 4 else ''
+
+                                        if ssid and '\\x' in ssid:
+                                            try:
+                                                ssid = ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
+                                            except Exception as e:
+                                                logger.debug(f"Failed to decode SSID escapes: {e}, keeping original")
+
+                                        if ssid and ssid != '<hidden>':
+                                            signal_percent = min(100, max(0, 100 + signal_level))
+                                            encrypted = 'WPA' in flags or 'WEP' in flags
+                                            # Keep strongest per SSID
+                                            if ssid not in current_seen or signal_percent > current_seen[ssid]['signal']:
+                                                current_seen[ssid] = {
+                                                    'ssid': ssid,
+                                                    'signal': signal_percent,
+                                                    'encrypted': encrypted
+                                                }
+
+                                # Merge into overall seen set (to accumulate if driver reports incrementally)
+                                for ssid, data in current_seen.items():
+                                    if ssid not in seen or data['signal'] > seen[ssid]['signal']:
+                                        seen[ssid] = data
+
+                                count = len(seen)
+                                logger.debug(f"wpa_cli scan_results attempt {poll_attempt}: accumulated {count} networks")
+
+                                if count == last_count:
+                                    # No change; consider stable if we've seen no growth for 1s
+                                    if stable_since is None:
+                                        stable_since = time.time()
+                                    elif time.time() - stable_since >= 1.0 and count > 0:
+                                        logger.info(f"wpa_cli scan results stabilized after {round(time.time()-start_time,1)}s with {count} networks")
+                                        break
+                                else:
+                                    last_count = count
+                                    stable_since = None
+
+                                time.sleep(0.5)
+
+                            networks = list(seen.values())
+                            if networks:
+                                logger.info(f"wpa_cli scan found {len(networks)} networks (after polling)")
+                            else:
+                                logger.warning("wpa_cli scan_results failed or returned empty")
                                 networks = []
                         else:
-                            logger.error("wpa_cli not found - WiFi scanning not available")
+                            logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
                             networks = []
-                    except Exception as wpa_e:
-                        logger.error(f"wpa_cli scan failed: {wpa_e}")
+                    else:
+                        logger.error("wpa_cli not found - WiFi scanning not available")
                         networks = []
-            except Exception as e:
-                logger.error(f"Error scanning WiFi networks: {e}")
-                networks = []
-            # Marshal back to UI thread
-            QTimer.singleShot(0, lambda: _apply_results(networks))
+                except subprocess.TimeoutExpired:
+                    logger.warning("wpa_cli scan timed out")
+                    networks = []
+                except Exception as wpa_e:
+                    logger.error(f"wpa_cli scan failed: {wpa_e}")
+            # Remove duplicates and sort by signal strength
+            seen_ssids = {}
+            for network in networks:
+                ssid = network['ssid']
+                if ssid:
+                    if ssid not in seen_ssids or network['signal'] > seen_ssids[ssid]['signal']:
+                        seen_ssids[ssid] = network
+                        logger.debug(f"Keeping network {ssid} with signal {network['signal']}")
 
-        threading.Thread(target=_worker, daemon=True).start()
+            unique_networks = list(seen_ssids.values())
+            logger.info(f"After deduplication: {len(unique_networks)} unique networks from {len(networks)} total entries")
+            for network in unique_networks:
+                logger.debug(f"Final network: {network['ssid']} (signal: {network['signal']})")
+
+            self._wifi_networks = sorted(unique_networks, key=lambda x: x['signal'], reverse=True)
+            logger.info(f"WiFi scan completed, found {len(self._wifi_networks)} networks")
+            # Print the list of SSIDs to the terminal for verification
+            try:
+                ssid_list = ", ".join([f"{n.get('ssid','')} ({n.get('signal','?')} dBm)" for n in self._wifi_networks if n.get('ssid')])
+                if ssid_list:
+                    logger.info(f"Available WiFi networks: {ssid_list}")
+                else:
+                    logger.info("Available WiFi networks: <none>")
+            except Exception as _e:
+                logger.debug(f"Failed to print SSID list: {_e}")
+            self.wifiNetworksChanged.emit()
+
+        except Exception as e:
+            logger.error(f"Error scanning WiFi networks: {e}")
+            self._wifi_networks = []
+            self.wifiNetworksChanged.emit()
 
     @pyqtSlot(str, str)
     def connectToWifi(self, ssid, password):
-        """Connect to a WiFi network without blocking the UI thread."""
-        if getattr(self, '_wifi_connect_in_progress', False):
-            logger.info("WiFi connection already in progress; ignoring new request")
-            return
-        self._wifi_connect_in_progress = True
-        self._wifi_connecting = True
-        self.wifiConnectingChanged.emit()
+        """Connect to a WiFi network using nmcli"""
+        try:
+            self._wifi_connecting = True
+            self.wifiConnectingChanged.emit()
 
-        def _finish():
-            try:
-                self._wifi_connecting = False
-                self.wifiConnectingChanged.emit()
-                # Refresh connection status on main thread
-                self.update_wifi_status()
-            finally:
-                self._wifi_connect_in_progress = False
+            is_windows = platform.system() == 'Windows'
 
-        def _worker():
-            try:
-                is_windows = platform.system() == 'Windows'
-                if is_windows:
-                    try:
-                        profile_xml = f'''<?xml version="1.0"?>
+            if is_windows:
+                # Create a temporary XML profile for Windows WiFi connection
+                profile_xml = f'''<?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
     <name>{ssid}</name>
     <SSIDConfig>
@@ -3955,90 +4011,160 @@ class Backend(QObject):
         </security>
     </MSM>
 </WLANProfile>'''
-                        profile_path = f'C:\\temp\\wifi_profile_{ssid}.xml'
-                        os.makedirs('C:\\temp', exist_ok=True)
-                        with open(profile_path, 'w') as f:
-                            f.write(profile_xml)
-                        subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
-                                       capture_output=True, timeout=10)
-                        subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
-                                       capture_output=True, timeout=10)
-                        try:
-                            os.remove(profile_path)
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        logger.error(f"Windows WiFi connect failed: {e}")
-                else:
-                    try:
-                        wifi_interface = self.get_wifi_interface()
-                        nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
-                        if nmcli_check.returncode == 0:
-                            logger.info(f"Trying nmcli connection to: {ssid}")
-                            if self._try_nmcli_connection(ssid, password, wifi_interface):
-                                # Persist
-                                QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
-                                QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
-                                QTimer.singleShot(0, lambda: self._manage_networkmanager_autoconnect(ssid))
-                                QTimer.singleShot(0, _finish)
-                                return
+
+                # Write profile to temp file
+                profile_path = f'C:\\temp\\wifi_profile_{ssid}.xml'
+                os.makedirs('C:\\temp', exist_ok=True)
+                with open(profile_path, 'w') as f:
+                    f.write(profile_xml)
+
+                # Add the profile
+                subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
+                             capture_output=True, timeout=10)
+
+                # Connect to the network
+                subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
+                             capture_output=True, timeout=10)
+
+                # Clean up
+                try:
+                    os.remove(profile_path)
+                except:
+                    pass
+            else:
+                # Prefer NetworkManager (nmcli) when available to ensure proper autoconnect at boot
+                try:
+                    # Get the WiFi interface
+                    wifi_interface = self.get_wifi_interface()
+                    logger.debug(f"Using WiFi interface: {wifi_interface}")
+
+                    # Check if nmcli is available first
+                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
+                    if nmcli_check.returncode == 0:
+                        logger.info(f"Trying nmcli connection to: {ssid}")
+                        if self._try_nmcli_connection(ssid, password, wifi_interface):
+                            self.add_remembered_network(ssid, password)
+                            self.save_last_connected_network(ssid)
+                            # Ensure autoconnect and priority
+                            self._manage_networkmanager_autoconnect(ssid)
+                        else:
+                            logger.warning("nmcli connection failed, attempting wpa_cli fallback")
+                            # Fallback to wpa_cli if available
+                            wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                            if wpa_check.returncode == 0:
+                                logger.info(f"Trying wpa_cli connection to: {ssid}")
+                                # Use wpa_cli path below
                             else:
-                                logger.warning("nmcli connection failed, attempting wpa_cli fallback")
-                        # wpa_cli fallback or primary
-                        wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
-                        if wpa_check.returncode == 0:
-                            add_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'add_network'],
-                                                        capture_output=True, text=True, timeout=5)
-                            if add_result.returncode == 0:
+                                raise RuntimeError("Neither nmcli (failed) nor wpa_cli available")
+
+                    # If nmcli isn't available, try wpa_cli directly
+                    wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
+                    if wpa_check.returncode == 0:
+                        logger.info(f"Trying wpa_cli connection to: {ssid}")
+                        
+                        # Use wpa_cli directly
+                        # Add network
+                        add_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'add_network'], 
+                                                  capture_output=True, text=True, timeout=5)
+                        if add_result.returncode == 0:
                                 network_id = add_result.stdout.strip()
+                                logger.info(f"Added network with ID: {network_id}")
+                                
+                                # Set SSID - handle Unicode characters by hex encoding if necessary
                                 if all(ord(c) < 128 for c in ssid):
+                                    # ASCII SSID
                                     ssid_param = f'"{ssid}"'
                                 else:
-                                    ssid_param = ssid.encode('utf-8').hex()
-                                ssid_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'ssid', ssid_param],
-                                                             capture_output=True, text=True, timeout=5)
+                                    # Unicode SSID - encode as hex
+                                    ssid_hex = ssid.encode('utf-8').hex()
+                                    ssid_param = ssid_hex
+                                
+                                ssid_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'ssid', ssid_param], 
+                                                           capture_output=True, text=True, timeout=5)
                                 if ssid_result.returncode != 0:
                                     logger.error(f"Failed to set SSID: {ssid_result.stderr}")
+                                    # Clean up
                                     subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
-                                    QTimer.singleShot(0, _finish)
+                                    self._wifi_connecting = False
+                                    self.wifiConnectingChanged.emit()
                                     return
+                                
                                 if password:
-                                    psk_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'psk', f'"{password}"'],
-                                                                capture_output=True, text=True, timeout=5)
+                                    # Set password
+                                    psk_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'set_network', network_id, 'psk', f'"{password}"'], 
+                                                              capture_output=True, text=True, timeout=5)
                                     if psk_result.returncode != 0:
                                         logger.error(f"Failed to set password: {psk_result.stderr}")
+                                        # Clean up
                                         subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
-                                        QTimer.singleShot(0, _finish)
+                                        self._wifi_connecting = False
+                                        self.wifiConnectingChanged.emit()
                                         return
-                                enable_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'enable_network', network_id],
-                                                               capture_output=True, text=True, timeout=5)
+                                
+                                # Enable network
+                                enable_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'enable_network', network_id], 
+                                                             capture_output=True, text=True, timeout=5)
                                 if enable_result.returncode != 0:
                                     logger.error(f"Failed to enable network: {enable_result.stderr}")
+                                    # Clean up
                                     subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
-                                    QTimer.singleShot(0, _finish)
+                                    self._wifi_connecting = False
+                                    self.wifiConnectingChanged.emit()
                                     return
-                                select_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'select_network', network_id],
-                                                               capture_output=True, text=True, timeout=5)
+                                
+                                # Select network
+                                select_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'select_network', network_id], 
+                                                             capture_output=True, text=True, timeout=5)
                                 if select_result.returncode == 0:
-                                    save_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'save_config'],
-                                                                 capture_output=True, text=True, timeout=5)
-                                    if save_result.returncode != 0:
+                                    logger.info(f"Successfully connected to {ssid} using wpa_cli")
+                                    # Save the configuration to persist across reboots
+                                    save_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'save_config'], 
+                                                               capture_output=True, text=True, timeout=5)
+                                    if save_result.returncode == 0:
+                                        logger.info("WiFi configuration saved to persist across reboots")
+                                    else:
                                         logger.warning(f"Failed to save WiFi config: {save_result.stderr}")
-                                    QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
-                                    QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
-                                    QTimer.singleShot(0, lambda: self._manage_networkmanager_autoconnect(ssid))
+                                    # Remember this network for future connections
+                                    self.add_remembered_network(ssid, password)
+                                    # Save as last connected network
+                                    self.save_last_connected_network(ssid)
+                                    # Manage NetworkManager autoconnect settings
+                                    self._manage_networkmanager_autoconnect(ssid)
                                 else:
                                     logger.error(f"Failed to select network: {select_result.stderr}")
-                            else:
-                                logger.error(f"Failed to add network: {add_result.stderr}")
+                                    # Clean up
+                                    subprocess.run(['wpa_cli', '-i', wifi_interface, 'remove_network', network_id], capture_output=True)
                         else:
-                            logger.warning("wpa_cli not available and nmcli either unavailable or failed")
-                    except Exception as e:
-                        logger.error(f"Linux WiFi connect failed: {e}")
-            finally:
-                QTimer.singleShot(0, _finish)
+                            logger.error(f"Failed to add network: {add_result.stderr}")
+                    else:
+                        logger.warning("wpa_cli not available and nmcli either unavailable or failed")
+                        
+                except Exception as e:
+                    logger.error(f"wpa_cli connection failed: {e}")
+                    # Try nmcli as fallback
+                    try:
+                        if self._try_nmcli_connection(ssid, password, self.get_wifi_interface()):
+                            self.add_remembered_network(ssid, password)
+                            self.save_last_connected_network(ssid)
+                            # Manage NetworkManager autoconnect settings
+                            self._manage_networkmanager_autoconnect(ssid)
+                    except Exception as e2:
+                        logger.error(f"nmcli fallback also failed: {e2}")
+                    
+                    self._wifi_connecting = False
+                    self.wifiConnectingChanged.emit()
+                    return
 
-        threading.Thread(target=_worker, daemon=True).start()
+            self._wifi_connecting = False
+            self.wifiConnectingChanged.emit()
+
+            # Check if connected
+            self.update_wifi_status()
+
+        except Exception as e:
+            logger.error(f"Error connecting to WiFi: {e}")
+            self._wifi_connecting = False
+            self.wifiConnectingChanged.emit()
 
     @pyqtSlot(str)
     def connectToRememberedNetwork(self, ssid):
