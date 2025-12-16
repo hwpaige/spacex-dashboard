@@ -1748,19 +1748,7 @@ class Backend(QObject):
         try:
             f = Fernet(self.get_encryption_key())
             return f.decrypt(encrypted_password.encode()).decode()
-        except Exception as _e:
-            # Backward-compat: earlier versions may have stored plaintext.
-            # If the stored value doesn't look like a Fernet token, assume it's plaintext
-            # so users don't lose their remembered password on upgrade.
-            try:
-                token = str(encrypted_password)
-                # Typical Fernet tokens start with 'gAAAA' and are URL-safe base64
-                if not token.startswith('gAAAA'):
-                    logger.warning("WiFi password appears to be stored in plaintext; accepting as-is and will re-encrypt on next save")
-                    return token
-            except Exception:
-                pass
-            logger.debug(f"Failed to decrypt WiFi password (will treat as missing): {_e}")
+        except:
             return None
 
     def get_wifi_interface(self):
@@ -4314,19 +4302,10 @@ class Backend(QObject):
                         os.makedirs('C:\\temp', exist_ok=True)
                         with open(profile_path, 'w') as f:
                             f.write(profile_xml)
-                        add_res = subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
-                                                 capture_output=True, text=True, timeout=10)
-                        conn_res = subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
-                                                  capture_output=True, text=True, timeout=10)
-                        # If connect command appears successful, persist network/password locally
-                        try:
-                            if add_res.returncode == 0 and conn_res.returncode == 0:
-                                QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
-                                QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
-                            else:
-                                logger.warning(f"Windows netsh connect may have failed: add_rc={add_res.returncode}, conn_rc={conn_res.returncode}")
-                        except Exception as _perr:
-                            logger.debug(f"Failed to persist Windows WiFi connection details: {_perr}")
+                        subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'],
+                                       capture_output=True, timeout=10)
+                        subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'],
+                                       capture_output=True, timeout=10)
                         try:
                             os.remove(profile_path)
                         except Exception:
