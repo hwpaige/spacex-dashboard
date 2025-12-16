@@ -4645,19 +4645,6 @@ class Backend(QObject):
                     logger.info("WiFi connection detected - reloading web content")
                     self.reload_web_content()
 
-                    # Ensure the just-connected SSID is tracked as last-connected and remembered
-                    try:
-                        if current_ssid:
-                            # Record as last-connected (also updates recency ordering and emits change)
-                            self.save_last_connected_network(current_ssid)
-                            # Make sure it's present in remembered list even if password is unknown
-                            # This enables the QML "remove" button immediately after a successful connection
-                            # without requiring that the connection flowed through connectToWifi.
-                            if not any((n.get('ssid') == current_ssid) for n in (self._remembered_networks or [])):
-                                self.add_remembered_network(current_ssid, None)
-                    except Exception as _e:
-                        logger.debug(f"Failed to sync remembered/last-connected after connect: {_e}")
-
                     # If data loading was deferred due to no connectivity, start it now
                     if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
                         logger.info("WiFi connected - starting deferred data loading")
@@ -5967,81 +5954,67 @@ Window {
         webView.runJavaScript(js);
     }
 
-    // Debounce non-globe web content reloads so the globe keeps spinning smoothly
-    // and other views refresh once after Wi‑Fi connection settles.
-    Timer {
-        id: reloadCoalesceTimer
-        interval: 1200
-        repeat: false
-        running: false
-        onTriggered: {
-            // Reload F1 chart view
-            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
-                f1ChartView.reload()
-                console.log("F1 chart view reloaded (debounced)")
-            }
-            // Reload YouTube/map view
-            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
-                youtubeView.reload()
-                console.log("YouTube/map view reloaded (debounced)")
-            }
-            // Reload x.com view
-            if (typeof xComView !== 'undefined' && xComView.reload) {
-                xComView.reload()
-                console.log("x.com view reloaded (debounced)")
-            }
-            // Reload weather views
-            if (typeof weatherSwipe !== 'undefined') {
-                for (var i = 0; i < weatherSwipe.count; i++) {
-                    var item = weatherSwipe.itemAt(i);
-                    if (!item) continue;
-                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
-                    var webChild = null;
-                    if (container && container.children && container.children.length > 0) {
-                        for (var c = 0; c < container.children.length; c++) {
-                            var ch = container.children[c];
-                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
-                        }
-                    }
-                    if (webChild && webChild.reload) {
-                        try { webChild.reload(); console.log("Weather view", i, "reloaded (debounced)"); }
-                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
-                    }
-                }
-            }
-            // Lightweight backend refreshes
-            if (typeof backend !== 'undefined' && backend.update_countdown) {
-                backend.update_countdown();
-                console.log("Countdown refreshed (debounced)");
-            }
-            if (typeof backend !== 'undefined' && backend.update_weather) {
-                backend.update_weather();
-                console.log("Weather data refresh initiated (debounced)");
-            }
-        }
-    }
-
     Component.onCompleted: {
         console.log("Window created - bottom bar should be visible")
         // Connect web content reload signal
         backend.reloadWebContent.connect(function() {
             console.log("Reloading web content after WiFi connection...")
-            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
-            // Instead, nudge animation loops to resume if they paused.
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                try {
-                    globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
-                } catch (e) { console.log("Globe view JS resume failed:", e); }
+            // Reload globe view
+            if (typeof globeView !== 'undefined' && globeView.reload) {
+                globeView.reload()
+                console.log("Globe view reloaded")
             }
-            // Plot card globe view (left-most card) – also avoid reload
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                try {
-                    plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
-                } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+            // Reload plot card globe view (left-most card)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.reload) {
+                plotGlobeView.reload()
+                console.log("Plot globe view reloaded")
             }
-            // Debounce all other heavy reloads to a single update shortly after connect
-            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
-            reloadCoalesceTimer.start();
+            // Reload F1 chart view
+            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
+                f1ChartView.reload()
+                console.log("F1 chart view reloaded")
+            }
+            // Reload YouTube/map view
+            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
+                youtubeView.reload()
+                console.log("YouTube/map view reloaded")
+            }
+            // Reload x.com view
+            if (typeof xComView !== 'undefined' && xComView.reload) {
+                xComView.reload()
+                console.log("x.com view reloaded")
+            }
+            // Reload weather views
+            if (typeof weatherSwipe !== 'undefined') {
+            for (var i = 0; i < weatherSwipe.count; i++) {
+                var item = weatherSwipe.itemAt(i);
+                if (!item) continue;
+                // Item -> Rectangle container -> WebEngineView (id: webView)
+                var container = item.children && item.children.length > 0 ? item.children[0] : null;
+                var webChild = null;
+                if (container && container.children && container.children.length > 0) {
+                    // Find the first child with runJavaScript or reload method (WebEngineView)
+                    for (var c = 0; c < container.children.length; c++) {
+                        var ch = container.children[c];
+                        if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
+                    }
+                }
+                if (webChild && webChild.reload) {
+                    try { webChild.reload(); console.log("Weather view", i, "reloaded (WebEngineView)"); }
+                    catch (e) { console.log("Weather view", i, "reload failed:", e); }
+                }
+            }
+            }
+            // Refresh countdown
+            if (typeof backend !== 'undefined' && backend.update_countdown) {
+                backend.update_countdown();
+                console.log("Countdown refreshed");
+            }
+            // Refresh weather data for bottom left pill
+            if (typeof backend !== 'undefined' && backend.update_weather) {
+                backend.update_weather();
+                console.log("Weather data refresh initiated");
+            }
         })
     }
 
@@ -6388,10 +6361,6 @@ Window {
                                         }
                                         // Enforce rounded corners inside the page itself
                                         root._injectRoundedCorners(plotGlobeView, 8)
-                                        // Ensure the plot card globe animation loop starts/resumes on initial load
-                                        try {
-                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Plot globe animation start failed', e);}})();");
-                                        } catch (e) { console.log("Plot globe JS nudge error:", e); }
                                     }
                                 }
                             }
@@ -9332,10 +9301,6 @@ Window {
                                         if (trajectoryData) {
                                             globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
                                         }
-                                        // Ensure the globe animation loop starts/resumes on initial load
-                                        try {
-                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Globe animation start failed', e);}})();");
-                                        } catch (e) { console.log("Globe JS nudge error:", e); }
                                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                         console.log("Globe HTML failed to load:", loadRequest.errorString);
                                     }
