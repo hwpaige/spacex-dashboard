@@ -3895,41 +3895,6 @@ class Backend(QObject):
                                 last_count = count
                                 stable_since = None
                             time.sleep(0.6)
-                        # Final harvest: one more quick poll to catch late arrivals without another manual scan
-                        try:
-                            result = subprocess.run(['netsh', 'wlan', 'show', 'networks', 'mode=bssid'],
-                                                    capture_output=True, text=True, timeout=10)
-                            if result.returncode == 0:
-                                current_seen = {}
-                                current_network = None
-                                for raw_line in result.stdout.split('\n'):
-                                    line = raw_line.strip()
-                                    if line.startswith('SSID') and ':' in line:
-                                        ssid_match = re.search(r'SSID\s*\d*\s*:\s*(.+)', line)
-                                        if ssid_match:
-                                            ssid = ssid_match.group(1).strip()
-                                            if ssid and ssid != '<disconnected>':
-                                                if ssid not in current_seen:
-                                                    current_seen[ssid] = {'ssid': ssid, 'signal': 0, 'encrypted': False}
-                                                current_network = current_seen[ssid]
-                                            else:
-                                                current_network = None
-                                        else:
-                                            current_network = None
-                                    elif line.startswith('Signal') and ':' in line and current_network:
-                                        signal_match = re.search(r'Signal\s*:\s*(\d+)%', line)
-                                        if signal_match:
-                                            percentage = int(signal_match.group(1))
-                                            if 0 <= percentage <= 100 and percentage > current_network['signal']:
-                                                current_network['signal'] = percentage
-                                    elif line.startswith('Authentication') and ':' in line and current_network and not current_network['encrypted']:
-                                        if 'WPA' in line or 'WPA2' in line or 'WPA3' in line or 'WEP' in line:
-                                            current_network['encrypted'] = True
-                                for s, data in current_seen.items():
-                                    if s not in seen or int(data.get('signal', 0)) > int(seen[s].get('signal', 0)):
-                                        seen[s] = data
-                        except Exception as _fh:
-                            logger.debug(f"Windows final harvest failed: {_fh}")
                         networks = list(seen.values())
                     except Exception as e:
                         logger.error(f"Windows WiFi scan failed: {e}")
@@ -4007,35 +3972,6 @@ class Backend(QObject):
                                             logger.info(f"wpa_cli scan stabilized (no growth {stabilize_no_growth}s) after {loop_iter} polls with {count} networks")
                                             break
                                     time.sleep(0.45)
-                                # Final harvest: one more scan_results after a short pause to catch late entries
-                                try:
-                                    time.sleep(0.4)
-                                    results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
-                                                                    capture_output=True, text=True, timeout=5)
-                                    if results_result.returncode == 0:
-                                        lines = results_result.stdout.strip().split('\n')
-                                        current_seen = {}
-                                        for line in lines[1:]:
-                                            parts = line.split('\t')
-                                            if len(parts) >= 5:
-                                                signal_level = int(parts[2]) if parts[2].lstrip('-').isdigit() else -100
-                                                flags = parts[3]
-                                                ssid = parts[4] if len(parts) > 4 else ''
-                                                if ssid and '\\x' in ssid:
-                                                    try:
-                                                        ssid = ssid.encode('latin1').decode('unicode_escape').encode('latin1').decode('utf-8')
-                                                    except Exception:
-                                                        pass
-                                                if ssid and ssid != '<hidden>':
-                                                    signal_percent = min(100, max(0, 100 + signal_level))
-                                                    encrypted = 'WPA' in flags or 'WEP' in flags
-                                                    if ssid not in current_seen or signal_percent > current_seen[ssid]['signal']:
-                                                        current_seen[ssid] = {'ssid': ssid, 'signal': signal_percent, 'encrypted': encrypted}
-                                        for s, data in current_seen.items():
-                                            if s not in seen or data['signal'] > seen[s]['signal']:
-                                                seen[s] = data
-                                except Exception as _fh:
-                                    logger.debug(f"wpa_cli final harvest failed: {_fh}")
                                 networks = list(seen.values())
                             else:
                                 logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
