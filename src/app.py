@@ -8079,17 +8079,6 @@ Window {
                                 Layout.preferredWidth: 16
                             }
 
-                            // Remembered indicator (star)
-                            Text {
-                                visible: !!modelData.remembered
-                                text: "\uf005" // star
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 11
-                                color: "#FFC107"
-                                Layout.preferredWidth: visible ? 14 : 0
-                                ToolTip { text: "Remembered"; delay: 400 }
-                            }
-
                             // Network info in one line
                             Text {
                                 text: modelData.ssid + " (" + modelData.signal + " dBm)"
