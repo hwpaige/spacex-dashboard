@@ -1755,14 +1755,10 @@ class Backend(QObject):
             if os.path.exists(remembered_file):
                 with open(remembered_file, 'r', encoding='utf-8') as f:
                     networks = json.load(f)
-                    # Decrypt passwords and ensure last_connected key exists
+                    # Decrypt passwords
                     for network in networks:
                         if 'password' in network and network['password']:
                             network['password'] = self.decrypt_password(network['password'])
-                        if 'last_connected' not in network:
-                            network['last_connected'] = 0
-                    # Sort by most recent first (desc)
-                    networks.sort(key=lambda n: n.get('last_connected', 0), reverse=True)
                     return networks
             return []
         except Exception as e:
@@ -1792,19 +1788,11 @@ class Backend(QObject):
 
     def add_remembered_network(self, ssid, password=None):
         """Add a network to remembered networks"""
-        now_ts = time.time()
-        # Update if exists, otherwise add
-        updated = False
-        for n in self._remembered_networks:
-            if n.get('ssid') == ssid:
-                n['password'] = password
-                n['last_connected'] = now_ts
-                updated = True
-                break
-        if not updated:
-            self._remembered_networks.append({'ssid': ssid, 'password': password, 'last_connected': now_ts})
-        # Sort by recency and keep only last 10
-        self._remembered_networks.sort(key=lambda n: n.get('last_connected', 0), reverse=True)
+        # Remove if already exists
+        self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
+        # Add to front
+        self._remembered_networks.insert(0, {'ssid': ssid, 'password': password})
+        # Keep only last 10
         self._remembered_networks = self._remembered_networks[:10]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
@@ -1845,25 +1833,8 @@ class Backend(QObject):
                 os.makedirs(os.path.dirname(last_connected_file), exist_ok=True)
             except Exception as _e:
                 logger.debug(f"Failed to ensure cache directory for last connected network: {_e}")
-            ts = time.time()
             with open(last_connected_file, 'w', encoding='utf-8') as f:
-                json.dump({'ssid': ssid, 'timestamp': ts}, f, indent=2, ensure_ascii=False)
-            # Also update remembered list recency and persist
-            try:
-                found = False
-                for n in self._remembered_networks:
-                    if n.get('ssid') == ssid:
-                        n['last_connected'] = ts
-                        found = True
-                        break
-                if not found:
-                    # Add without password if unknown
-                    self._remembered_networks.append({'ssid': ssid, 'password': None, 'last_connected': ts})
-                self._remembered_networks.sort(key=lambda n: n.get('last_connected', 0), reverse=True)
-                self.save_remembered_networks()
-                self.rememberedNetworksChanged.emit()
-            except Exception as _e:
-                logger.debug(f"Failed to sync remembered networks with last connected: {_e}")
+                json.dump({'ssid': ssid, 'timestamp': time.time()}, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Error saving last connected network: {e}")
 
@@ -3660,21 +3631,18 @@ class Backend(QObject):
     def _auto_reconnect_to_last_network(self, boot_time=False):
         """Auto-reconnect to the last connected network if not currently connected"""
         try:
-            # If connecting right now, skip
-            if self._wifi_connecting:
-                logger.debug("WiFi is currently connecting, skipping auto-reconnection")
+            # Only attempt reconnection if we're not already connected and not currently connecting
+            if self._wifi_connected or self._wifi_connecting:
+                logger.debug("WiFi already connected or connecting, skipping auto-reconnection")
                 return
 
-            # Determine current SSID
-            current_ssid = self._current_wifi_ssid or ''
-            # Determine preferred SSID by most recent remembered/last-connected
-            preferred_ssid = None
-            if self._remembered_networks:
-                preferred_ssid = self._remembered_networks[0].get('ssid')
-            if (not preferred_ssid) and self._last_connected_network:
-                preferred_ssid = self._last_connected_network.get('ssid')
-            if not preferred_ssid:
-                logger.debug("No preferred SSID available for auto-reconnect")
+            if not self._last_connected_network:
+                logger.debug("No last connected network to auto-reconnect to")
+                return
+
+            last_ssid = self._last_connected_network.get('ssid')
+            if not last_ssid:
+                logger.debug("No last connected network SSID found")
                 return
 
             # Check if we've attempted reconnection recently (avoid spam)
@@ -3686,103 +3654,90 @@ class Backend(QObject):
             self._last_reconnect_attempt = current_time
 
             if boot_time:
-                # At boot, even if connected to a default, prefer switching to the most recent preferred network
-                if self._wifi_connected and current_ssid == preferred_ssid:
-                    logger.info(f"BOOT: Already connected to preferred SSID '{preferred_ssid}', no action")
-                    return
-                logger.info("BOOT: Attempting auto-reconnection to preferred network based on recency…")
+                # For boot-time reconnection, scan for available networks and try the most recent remembered one
+                logger.info("BOOT: Scanning for available networks for auto-reconnection...")
                 self._scan_and_reconnect_to_best_network()
             else:
                 # For regular auto-reconnection, try the last connected network
-                logger.info(f"Attempting auto-reconnection to preferred network: {preferred_ssid}")
+                logger.info(f"Attempting auto-reconnection to last connected network: {last_ssid}")
 
                 # Find the network in remembered networks
                 remembered_network = None
                 for network in self._remembered_networks:
-                    if network['ssid'] == preferred_ssid:
+                    if network['ssid'] == last_ssid:
                         remembered_network = network
                         break
 
                 if not remembered_network or not remembered_network.get('password'):
-                    logger.warning(f"Cannot auto-reconnect to {preferred_ssid}: network not in remembered list or no password stored")
+                    logger.warning(f"Cannot auto-reconnect to {last_ssid}: network not in remembered list or no password stored")
                     return
 
                 # Check if the network is currently available before attempting connection
                 available_networks = [net['ssid'] for net in self._wifi_networks]
-                if preferred_ssid not in available_networks:
-                    logger.info(f"Preferred network '{preferred_ssid}' not currently available, skipping auto-reconnection")
+                if last_ssid not in available_networks:
+                    logger.info(f"Last connected network '{last_ssid}' not currently available, skipping auto-reconnection")
                     return
 
                 # Add a small delay before attempting reconnection to avoid race conditions
-                QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(preferred_ssid, remembered_network['password']))
+                QTimer.singleShot(2000, lambda: self._perform_auto_reconnection(last_ssid, remembered_network['password']))
 
         except Exception as e:
             logger.error(f"Error during auto-reconnection setup: {e}")
 
     def _scan_and_reconnect_to_best_network(self):
-        """Try to connect to the most recently used remembered Wi‑Fi network.
-        Prefers NetworkManager profiles; falls back to direct connect. Intended for boot path."""
+        """Scan for Wi‑Fi and try to reconnect to the last used/remembered network reliably.
+        This runs on a background thread when called from boot path."""
         try:
             is_linux = platform.system() == 'Linux'
             if not is_linux:
                 logger.debug("Auto-reconnect scan skipped (non-Linux platform)")
                 return
 
-            # Build candidate list of remembered networks in order of recency
-            candidates = [n for n in self._remembered_networks if n.get('ssid')]
-            if not candidates:
-                logger.debug("No remembered networks available for auto-reconnect")
+            # Resolve last SSID and its stored password (if any)
+            last_ssid = (self._last_connected_network or {}).get('ssid')
+            if not last_ssid:
+                logger.debug("No last SSID available for auto-reconnect")
                 return
+            remembered = next((n for n in self._remembered_networks if n.get('ssid') == last_ssid), None)
+            password = remembered.get('password') if remembered else None
 
             # If NetworkManager has a connection profile, prefer bringing it up by name (fast, uses stored creds)
             try:
                 nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=5)
                 if nmcli_check.returncode == 0:
-                    list_conns = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE,802-11-wireless.ssid', 'connection', 'show'],
+                    list_conns = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE', 'connection', 'show'],
                                                 capture_output=True, text=True, timeout=8)
                     if list_conns.returncode == 0:
-                        profiles = []
+                        names = []
                         for line in list_conns.stdout.strip().split('\n'):
                             if not line:
                                 continue
                             parts = line.split(':')
-                            if len(parts) >= 3 and parts[1].lower() == 'wifi':
-                                profiles.append({'name': parts[0], 'ssid': parts[2]})
-                        # Iterate candidates by recency and try profile by SSID or by name
-                        for cand in candidates:
-                            target_ssid = cand.get('ssid')
-                            if not target_ssid:
-                                continue
-                            # First try to find profile by SSID field match
-                            matched = next((p for p in profiles if p.get('ssid') == target_ssid), None)
-                            if matched is None:
-                                # Fallback to name equal to SSID (common case)
-                                matched = next((p for p in profiles if p.get('name') == target_ssid), None)
-                            if matched:
-                                logger.info(f"BOOT: Bringing up NM connection for preferred SSID '{target_ssid}' using profile '{matched['name']}'")
-                                up = subprocess.run(['nmcli', 'connection', 'up', 'id', matched['name']], capture_output=True, text=True, timeout=20)
-                                if up.returncode == 0:
-                                    logger.info(f"BOOT: nmcli brought up '{matched['name']}' successfully")
-                                    QTimer.singleShot(0, lambda: self.save_last_connected_network(target_ssid))
-                                    QTimer.singleShot(0, self.update_wifi_status)
-                                    return
-                                else:
-                                    logger.warning(f"BOOT: nmcli up failed for '{matched['name']}': {up.stderr}")
+                            if len(parts) >= 2 and parts[1].lower() == 'wifi':
+                                names.append(parts[0])
+                        # Try exact name match first, then a case-insensitive match fallback
+                        candidate = last_ssid if last_ssid in names else next((n for n in names if n.lower() == last_ssid.lower()), None)
+                        if candidate:
+                            logger.info(f"BOOT: Bringing up stored NetworkManager connection: {candidate}")
+                            up = subprocess.run(['nmcli', 'connection', 'up', 'id', candidate], capture_output=True, text=True, timeout=15)
+                            if up.returncode == 0:
+                                logger.info(f"BOOT: nmcli brought up connection '{candidate}' successfully")
+                                # Update status on the Qt thread
+                                QTimer.singleShot(0, self.update_wifi_status)
+                                return
+                            else:
+                                logger.warning(f"BOOT: nmcli up failed for '{candidate}': {up.stderr}")
                 else:
                     logger.debug("nmcli not available; will try wpa_cli or connectToWifi fallback")
             except Exception as e:
                 logger.debug(f"BOOT: Error while attempting nmcli profile bring-up: {e}")
 
-            # If no profile path succeeded, fall back to direct connect for each candidate using stored password
-            for cand in candidates:
-                target_ssid = cand.get('ssid')
-                password = cand.get('password')
-                if password is None:
-                    continue
-                logger.info(f"BOOT: Falling back to direct connect to preferred SSID '{target_ssid}'")
-                QTimer.singleShot(0, lambda s=target_ssid, p=password: self.connectToWifi(s, p))
-                return
-            logger.info("BOOT: No candidates with stored password for direct connect; skipping auto-connect fallback")
+            # If no profile was found or bringing it up failed, fall back to direct connect using stored password
+            if password is not None:
+                logger.info(f"BOOT: Falling back to direct connect to last SSID '{last_ssid}'")
+                QTimer.singleShot(0, lambda: self.connectToWifi(last_ssid, password))
+            else:
+                logger.info(f"BOOT: No stored password for '{last_ssid}'. Skipping direct auto-connect.")
         except Exception as e:
             logger.error(f"Error during boot-time scan/reconnect: {e}")
 
