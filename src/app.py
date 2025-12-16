@@ -3978,10 +3978,9 @@ class Backend(QObject):
                                 last_count = -1
                                 last_increase_ts = start_time
                                 last_rescan_ts = start_time
-                                # Some chipsets report progressively and need longer
-                                rescan_interval = 3.5
-                                stabilize_no_growth = 3.5
-                                max_window = 18.0
+                                rescan_interval = 4.0
+                                stabilize_no_growth = 2.0
+                                max_window = 15.0
                                 seen = {}
                                 loop_iter = 0
                                 while time.time() - start_time < max_window:
@@ -4033,19 +4032,13 @@ class Backend(QObject):
                                         last_increase_ts = now
                                     else:
                                         # No growth this poll; check stabilization window
-                                        # Don't allow early exit until a minimum elapsed time to collect stragglers
-                                        min_elapsed_before_stop = 8.0
-                                        if (now - start_time) >= min_elapsed_before_stop and (now - last_increase_ts) >= stabilize_no_growth and count > 0:
-                                            elapsed = now - start_time
-                                            logger.info(f"wpa_cli scan stabilized (no growth {stabilize_no_growth}s, elapsed {elapsed:.1f}s) after {loop_iter} polls with {count} networks")
+                                        if (now - last_increase_ts) >= stabilize_no_growth and count > 0:
+                                            logger.info(f"wpa_cli scan stabilized (no growth {stabilize_no_growth}s) after {loop_iter} polls with {count} networks")
                                             break
                                     time.sleep(0.45)
-                                # Final harvest: force one more rescan, short wait, then read scan_results
+                                # Final harvest: one more scan_results after a short pause to catch late entries
                                 try:
-                                    # Kick a last rescan to pull in any remaining BSSIDs
-                                    subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
-                                                   capture_output=True, text=True, timeout=5)
-                                    time.sleep(0.8)
+                                    time.sleep(0.4)
                                     results_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan_results'],
                                                                     capture_output=True, text=True, timeout=5)
                                     if results_result.returncode == 0:
@@ -4070,42 +4063,8 @@ class Backend(QObject):
                                         for s, data in current_seen.items():
                                             if s not in seen or data['signal'] > seen[s]['signal']:
                                                 seen[s] = data
-                                    else:
-                                        logger.debug(f"wpa_cli final harvest scan_results failed: {results_result.stderr}")
                                 except Exception as _fh:
                                     logger.debug(f"wpa_cli final harvest failed: {_fh}")
-                                # Optional: merge results from nmcli list as a second source
-                                try:
-                                    nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
-                                    if nmcli_check.returncode == 0:
-                                        nm_list = subprocess.run(['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list'],
-                                                                 capture_output=True, text=True, timeout=8)
-                                        if nm_list.returncode == 0:
-                                            extra = 0
-                                            for line in nm_list.stdout.strip().split('\n'):
-                                                if not line:
-                                                    continue
-                                                parts = line.split(':')
-                                                if len(parts) >= 2:
-                                                    ssid = parts[0].strip()
-                                                    if not ssid:
-                                                        continue
-                                                    # nmcli gives percent already
-                                                    try:
-                                                        signal_percent = int(parts[1]) if parts[1].isdigit() else 0
-                                                    except Exception:
-                                                        signal_percent = 0
-                                                    security = parts[2] if len(parts) > 2 else ''
-                                                    encrypted = bool(security) and security.upper() not in ('--', 'NONE')
-                                                    prior = seen.get(ssid)
-                                                    if (prior is None) or (signal_percent > int(prior.get('signal', 0))):
-                                                        seen[ssid] = {'ssid': ssid, 'signal': signal_percent, 'encrypted': encrypted}
-                                                        extra += 1
-                                            logger.info(f"nmcli merge added/updated {extra} entries; total now {len(seen)} networks")
-                                        else:
-                                            logger.debug(f"nmcli wifi list failed: {nm_list.stderr}")
-                                except Exception as _nm:
-                                    logger.debug(f"nmcli merge skipped/failed: {_nm}")
                                 networks = list(seen.values())
                             else:
                                 logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
