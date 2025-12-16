@@ -1832,38 +1832,12 @@ class Backend(QObject):
         self._remembered_networks = self._remembered_networks[:10]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
-        # Re-annotate current scan list so icons update immediately
-        try:
-            remembered_set = {n.get('ssid') for n in self._remembered_networks}
-            for nw in self._wifi_networks:
-                try:
-                    ss = nw.get('ssid')
-                    if ss:
-                        nw['remembered'] = ss in remembered_set
-                except Exception:
-                    pass
-            self.wifiNetworksChanged.emit()
-        except Exception:
-            pass
 
     def remove_remembered_network(self, ssid):
         """Remove a network from remembered networks"""
         self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
         self.save_remembered_networks()
         self.rememberedNetworksChanged.emit()
-        # Re-annotate current scan list so icons update immediately
-        try:
-            remembered_set = {n.get('ssid') for n in self._remembered_networks}
-            for nw in self._wifi_networks:
-                try:
-                    ss = nw.get('ssid')
-                    if ss:
-                        nw['remembered'] = ss in remembered_set
-                except Exception:
-                    pass
-            self.wifiNetworksChanged.emit()
-        except Exception:
-            pass
 
     def reload_web_content(self):
         """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
