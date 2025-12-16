@@ -8184,10 +8184,7 @@ Window {
             y: (parent.height - height - 200) / 2  // Leave room for keyboard
             modal: true
             focus: true
-            // Keep the dialog (and thus the virtual keyboard) open while in the password flow.
-            // Taps on the on-screen keyboard are outside this Popup, so CloseOnPressOutside would
-            // dismiss the dialog and hide the keyboard. Restrict to Escape-only to avoid that.
-            closePolicy: Popup.CloseOnEscape
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             onOpened: {
                 passwordField.focus = true
