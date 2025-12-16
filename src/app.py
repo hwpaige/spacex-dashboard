@@ -8288,11 +8288,6 @@ Window {
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
                         focusPolicy: Qt.NoFocus
-                        // Ensure the OSK doesn't hide as soon as the press occurs
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
                             // Defer to end of event loop to avoid the IME briefly hiding on click
@@ -8326,11 +8321,6 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
                         focusPolicy: Qt.NoFocus
-                        // Keep OSK visible during press in case the user changes mind
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             passwordField.text = ""
                             passwordDialog.close()
@@ -8355,11 +8345,6 @@ Window {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
                         focusPolicy: Qt.NoFocus
-                        // Keep OSK visible during press; connection action happens on click
-                        onPressed: {
-                            passwordField.forceActiveFocus()
-                            try { Qt.inputMethod.show(); } catch(e) {}
-                        }
                         onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
