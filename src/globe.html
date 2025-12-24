@@ -262,6 +262,9 @@
                 renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
                 console.log("Event listeners added");
 
+                // Disable in-page context menu (right-click/long-press)
+                try { document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, { passive: false }); } catch(_e) {}
+
             } catch (error) {
                 console.error("Error during initialization:", error);
             }

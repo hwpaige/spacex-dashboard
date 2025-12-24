@@ -1351,8 +1351,9 @@ create_xinitrc() {
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-echo "Starting openbox at $(date)" > ~/xinitrc.log
-exec openbox-session
+echo "Starting X (matchbox session) at $(date)" > ~/xinitrc.log
+# Defer to the same session script LightDM uses, which launches matchbox-window-manager and the app
+exec "$HOME/.xsession"
 EOF
     chown "$USER:$USER" "$HOME_DIR/.xinitrc"
     chmod +x "$HOME_DIR/.xinitrc"

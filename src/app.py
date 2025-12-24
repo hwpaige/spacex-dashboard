@@ -6450,6 +6450,8 @@ Window {
                                 layer.smooth: true
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: false
+                                // Disable any default context menu (long-press/right-click)
+                                onContextMenuRequested: function(request) { request.accepted = true }
 
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
@@ -9413,6 +9415,8 @@ Window {
                                 zoomFactor: 1.0
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: false
+                                // Disable any default context menu (long-press/right-click)
+                                onContextMenuRequested: function(request) { request.accepted = true }
 
                                 onLoadingChanged: function(loadRequest) {
                                     console.log("WebEngineView loading changed:", loadRequest.status, loadRequest.url);
