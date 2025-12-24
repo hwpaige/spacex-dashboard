@@ -1916,28 +1916,24 @@ class Backend(QObject):
         if rescan_result.returncode != 0:
             logger.debug(f"nmcli rescan failed: {rescan_result.stderr}")
         
-        # Wait a moment for rescan to complete
-        time.sleep(3)
+        # Wait a bit longer for rescan to complete (avoid ~30s cache, allow drivers to populate)
+        time.sleep(6)
         
-        # List networks with specific interface
-        list_cmd = ['nmcli', 'device', 'wifi', 'list']
+        # List networks (terse) with specific interface for robust parsing
+        list_cmd = ['nmcli', '-t', '-f', 'SSID', 'device', 'wifi', 'list']
         if wifi_device:
             list_cmd.extend(['ifname', wifi_device])
         list_result = subprocess.run(list_cmd, capture_output=True, text=True, timeout=10)
-        logger.debug(f"nmcli wifi list output: {list_result.stdout}")
+        logger.debug(f"nmcli wifi list output (terse SSID): {list_result.stdout}")
         
         # Parse the output to find SSIDs
         available_networks = []
-        lines = list_result.stdout.strip().split('\n')
-        if lines:
-            # Skip header line
-            for line in lines[1:]:
-                parts = line.split()
-                if len(parts) >= 1:
-                    # SSID is usually the last column
-                    ssid_candidate = parts[-1] if parts else ""
-                    if ssid_candidate and ssid_candidate != '--' and ssid_candidate != 'SSID':
-                        available_networks.append(ssid_candidate)
+        lines = [l for l in list_result.stdout.strip().split('\n') if l]
+        for line in lines:
+            # With -t -f SSID we only get SSID values; unescape any colons
+            ssid_candidate = line.replace('\\:', ':').strip()
+            if ssid_candidate and ssid_candidate not in ('--', 'SSID'):
+                available_networks.append(ssid_candidate)
         
         logger.debug(f"Parsed available networks: {available_networks}")
         
@@ -4005,11 +4001,77 @@ class Backend(QObject):
                         logger.error(f"Windows WiFi scan failed: {e}")
                         networks = []
                 else:
-                    # Linux wpa_cli scan with polling (bg)
-                    logger.info("Scanning WiFi networks using wpa_supplicant (wpa_cli) in background with polling…")
+                    # Linux: Prefer NetworkManager (nmcli) scan with rescan+polling, then fall back to wpa_cli
+                    logger.info("Scanning WiFi networks on Linux…")
                     try:
+                        # Try nmcli first if available (preferred on Ubuntu Server with NetworkManager)
+                        nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
+                        if nmcli_check.returncode == 0:
+                            try:
+                                wifi_interface = self.get_wifi_interface()
+                                logger.info("Using nmcli rescan + polling for WiFi discovery…")
+                                # Trigger a fresh scan (avoids cached results ~30s)
+                                rescan_cmd = ['nmcli', 'device', 'wifi', 'rescan']
+                                if wifi_interface:
+                                    rescan_cmd += ['ifname', wifi_interface]
+                                subprocess.run(rescan_cmd, capture_output=True, text=True, timeout=10)
+
+                                start_time = time.time()
+                                last_count = -1
+                                stable_since = None
+                                seen = {}
+                                loop_iter = 0
+                                # Poll nmcli list until results stabilize or timeout
+                                while time.time() - start_time < 12.0:
+                                    loop_iter += 1
+                                    list_cmd = ['nmcli', '-t', '-f', 'SSID,SIGNAL,SECURITY', 'device', 'wifi', 'list']
+                                    if wifi_interface:
+                                        list_cmd += ['ifname', wifi_interface]
+                                    lst = subprocess.run(list_cmd, capture_output=True, text=True, timeout=8)
+                                    if lst.returncode == 0:
+                                        current_seen = {}
+                                        for raw in lst.stdout.strip().split('\n'):
+                                            if not raw:
+                                                continue
+                                            parts = raw.split(':')
+                                            # SSID may be empty for hidden networks; skip empties
+                                            ssid = parts[0].replace('\\:', ':').strip() if len(parts) >= 1 else ''
+                                            if not ssid or ssid == '<hidden>':
+                                                continue
+                                            try:
+                                                signal = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
+                                            except Exception:
+                                                signal = 0
+                                            security = parts[2] if len(parts) >= 3 else ''
+                                            encrypted = bool(security) and security.upper() not in ('--', 'NONE')
+                                            if (ssid not in current_seen) or (signal > int(current_seen[ssid].get('signal', 0))):
+                                                current_seen[ssid] = {'ssid': ssid, 'signal': signal, 'encrypted': encrypted}
+                                        # Merge strongest per SSID into global seen
+                                        for s, dat in current_seen.items():
+                                            if (s not in seen) or (int(dat.get('signal', 0)) > int(seen[s].get('signal', 0))):
+                                                seen[s] = dat
+                                        count = len(seen)
+                                        if count == last_count and count > 0:
+                                            if stable_since is None:
+                                                stable_since = time.time()
+                                            elif time.time() - stable_since >= 2.0 and time.time() - start_time >= 5.0:
+                                                logger.info(f"nmcli scan stabilized after {loop_iter} polls with {count} networks")
+                                                break
+                                        else:
+                                            last_count = count
+                                            stable_since = None
+                                    time.sleep(0.6)
+                                if seen:
+                                    networks = list(seen.values())
+                                    logger.info(f"nmcli scan found {len(networks)} networks")
+                                else:
+                                    logger.info("nmcli returned no networks; falling back to wpa_cli scan")
+                            except Exception as _nm_scan_e:
+                                logger.debug(f"nmcli scan path failed: {_nm_scan_e}; falling back to wpa_cli")
+
+                        # Fallback: wpa_cli scan with polling (works if wpa_supplicant is present)
                         wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
-                        if wpa_check.returncode == 0:
+                        if (not networks) and wpa_check.returncode == 0:
                             wifi_interface = self.get_wifi_interface()
                             # Kick off an initial scan
                             scan_result = subprocess.run(['wpa_cli', '-i', wifi_interface, 'scan'],
@@ -4151,8 +4213,8 @@ class Backend(QObject):
                             else:
                                 logger.warning(f"wpa_cli scan failed: {scan_result.stderr}")
                                 networks = []
-                        else:
-                            logger.error("wpa_cli not found - WiFi scanning not available")
+                        elif not networks:
+                            logger.error("Neither nmcli results nor wpa_cli available - WiFi scanning not available")
                             networks = []
                     except Exception as wpa_e:
                         logger.error(f"wpa_cli scan failed: {wpa_e}")

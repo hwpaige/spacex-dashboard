@@ -39,7 +39,8 @@ setup_user() {
     # Setup X authority and permissions
     sudo -u "$USER" touch "$HOME_DIR/.Xauthority"
     sudo -u "$USER" chmod 600 "$HOME_DIR/.Xauthority"
-    usermod -aG render,video,tty,input "$USER"
+    # Add to groups for GPU and network control (netdev used with polkit rule below)
+    usermod -aG render,video,tty,input,netdev "$USER"
     usermod -s /bin/bash "$USER"
 }
 
@@ -100,6 +101,176 @@ update_system() {
     add-apt-repository universe -y 2>/dev/null || log "WARNING: Could not add universe repository"
 }
 
+configure_networkmanager() {
+    log "Ensuring NetworkManager is the active network stack (Netplan)…"
+
+    # Detect if netplan is available
+    if ! command -v netplan >/dev/null 2>&1; then
+        log "WARNING: netplan command not found; skipping renderer switch and proceeding"
+        # Still try to enable NetworkManager so nmcli can be used if present
+        systemctl enable NetworkManager 2>/dev/null || log "WARNING: Could not enable NetworkManager"
+        systemctl start NetworkManager 2>/dev/null || log "WARNING: Could not start NetworkManager"
+        return
+    fi
+
+    mkdir -p /etc/netplan
+
+    # Detect if we're running over an SSH session to avoid dropping connectivity
+    local is_ssh_session=0
+    # Primary detection via SSH_* vars (may be cleared by sudo)
+    if [ -n "$SSH_CONNECTION" ] || [ -n "$SSH_TTY" ] || [ -n "$SSH_CLIENT" ]; then
+        is_ssh_session=1
+    else
+        # Heuristic: if controlling TTY is /dev/pts/*, likely a remote/pty session
+        if tty 1>/dev/null 2>&1; then
+            if tty | grep -qE "^/dev/pts/"; then
+                is_ssh_session=1
+            fi
+        fi
+    fi
+    if [ "$SAFE_MODE" = "ssh" ] || [ "$SAFEMODE" = "ssh" ]; then
+        is_ssh_session=1
+    fi
+    if [ $is_ssh_session -eq 1 ]; then
+        log "Environment: remote/SSH-like session (will avoid disruptive networking changes until reboot)"
+    else
+        log "Environment: local/console session"
+    fi
+
+    # Check current renderer from existing netplan YAMLs
+    local current_renderer=""
+    if grep -RiqE "^\s*renderer:\s*NetworkManager\b" /etc/netplan/*.yaml 2>/dev/null; then
+        current_renderer="NetworkManager"
+    elif grep -RiqE "^\s*renderer:\s*networkd\b" /etc/netplan/*.yaml 2>/dev/null; then
+        current_renderer="networkd"
+    else
+        current_renderer="unknown"
+    fi
+    log "Detected current netplan renderer: ${current_renderer}"
+
+    # Only (over)write 99-network-manager.yaml if renderer is not already NetworkManager
+    if [ "$current_renderer" != "NetworkManager" ]; then
+        log "Writing /etc/netplan/99-network-manager.yaml to set renderer: NetworkManager"
+        cat > /etc/netplan/99-network-manager.yaml << 'EOF'
+network:
+  version: 2
+  renderer: NetworkManager
+EOF
+        # Fix permissions as netplan requires strict perms
+        chown root:root /etc/netplan/99-network-manager.yaml 2>/dev/null || true
+        chmod 600 /etc/netplan/99-network-manager.yaml 2>/dev/null || true
+    else
+        log "Netplan already configured for NetworkManager; will regenerate/apply to ensure consistency"
+        # Ensure all netplan YAMLs have strict permissions to avoid warnings and failures
+        chown root:root /etc/netplan/*.yaml 2>/dev/null || true
+        chmod 600 /etc/netplan/*.yaml 2>/dev/null || true
+    fi
+
+    # Generate netplan and attempt to apply with a timeout to prevent hangs
+    if netplan generate 2>&1 | tee -a "$LOG_FILE"; then
+        log "netplan generate completed"
+    else
+        log "WARNING: netplan generate failed (continuing; changes may take effect after reboot)"
+    fi
+
+    local applied_ok=0
+    if [ $is_ssh_session -eq 1 ]; then
+        # Avoid applying immediately over SSH to prevent disconnecting the session
+        log "SSH session detected: skipping immediate 'netplan apply' to avoid dropping the connection; changes will take effect after reboot"
+    else
+        if command -v timeout >/dev/null 2>&1; then
+            log "Applying netplan with timeout (12s) to avoid long blocks…"
+            if timeout 12 netplan apply 2>&1 | tee -a "$LOG_FILE"; then
+                applied_ok=1
+                log "✓ netplan apply succeeded"
+            else
+                log "WARNING: netplan apply failed or timed out; deferring full effect to reboot"
+            fi
+        else
+            log "Applying netplan (no timeout utility available)…"
+            if netplan apply 2>&1 | tee -a "$LOG_FILE"; then
+                applied_ok=1
+                log "✓ netplan apply succeeded"
+            else
+                log "WARNING: netplan apply failed; deferring full effect to reboot"
+            fi
+        fi
+    fi
+
+    # Enable NetworkManager and optionally disable systemd-networkd if apply worked
+    if systemctl enable NetworkManager 2>/dev/null; then
+        log "Enabled NetworkManager to start at boot"
+    else
+        log "WARNING: Could not enable NetworkManager"
+    fi
+
+    # Start NetworkManager now only if we successfully applied netplan locally (to avoid conflicts)
+    if [ $applied_ok -eq 1 ] && [ $is_ssh_session -eq 0 ]; then
+        if systemctl start NetworkManager 2>/dev/null; then
+            log "Started NetworkManager"
+        else
+            log "WARNING: Could not start NetworkManager"
+        fi
+    else
+        log "Deferring NetworkManager start until reboot (enabled for next boot)"
+    fi
+
+    # Ensure systemd-resolved is enabled and resolv.conf is properly linked
+    configure_resolver_integration
+
+    # Wait (bounded) for NetworkManager to become active
+    local waited=0
+    while [ $waited -lt 15 ]; do
+        if systemctl is-active --quiet NetworkManager; then
+            log "NetworkManager is active"
+            break
+        fi
+        sleep 1
+        waited=$((waited+1))
+    done
+    if [ $waited -ge 15 ]; then
+        log "WARNING: NetworkManager did not become active within 15s (continuing)"
+    fi
+
+    # Quick DNS sanity check; if DNS broken, attempt to set fallback servers on active connection (Wi‑Fi/Ethernet)
+    if command -v resolvectl >/dev/null 2>&1; then
+        if ! timeout 5s resolvectl query github.com >/dev/null 2>&1; then
+            log "WARNING: DNS query failed after NM start; attempting to set fallback DNS servers (1.1.1.1, 8.8.8.8) on active connection"
+            active_name=$(nmcli -t -f NAME,TYPE,DEVICE con show --active 2>/dev/null | awk -F: '$2=="wifi" || $2=="ethernet" {print $1; exit}')
+            if [ -n "$active_name" ]; then
+                nmcli connection modify "$active_name" ipv4.dns "1.1.1.1 8.8.8.8" ipv4.ignore-auto-dns yes 2>/dev/null || true
+                nmcli connection up "$active_name" 2>/dev/null || true
+                sleep 2
+            else
+                log "No active Wi‑Fi/Ethernet NM connection found to modify DNS; skipping fallback DNS setup"
+            fi
+        fi
+    fi
+
+    # Only stop systemd-networkd if netplan apply succeeded; otherwise avoid disrupting current session
+    if [ $applied_ok -eq 1 ]; then
+        systemctl disable --now systemd-networkd 2>/dev/null || true
+        log "systemd-networkd disabled (and stopped) since netplan apply succeeded"
+    else
+        # Do not stop it now to avoid hangs; optionally disable for next boot
+        systemctl disable systemd-networkd 2>/dev/null || true
+        log "systemd-networkd disabled for next boot (not stopped now due to netplan apply issues)"
+    fi
+}
+
+configure_nm_polkit() {
+    log "Configuring PolicyKit to allow Wi‑Fi control without root for netdev group…"
+    mkdir -p /etc/polkit-1/rules.d
+    cat > /etc/polkit-1/rules.d/10-networkmanager.rules << 'EOF'
+polkit.addRule(function(action, subject) {
+    if (subject.isInGroup("netdev") && action && action.id &&
+        action.id.indexOf("org.freedesktop.NetworkManager.") === 0) {
+        return polkit.Result.YES;
+    }
+});
+EOF
+}
+
 install_packages() {
     log "Installing system packages..."
     
@@ -114,7 +285,7 @@ install_packages() {
         python3-numpy python3-scipy python3-matplotlib python3-opengl python3-pyqtgraph
         python3-psutil
         unclutter plymouth plymouth-themes htop libgbm1 libdrm2 upower iw net-tools network-manager
-        xserver-xorg xinit x11-xserver-utils openbox libinput-tools imagemagick
+        xserver-xorg xinit x11-xserver-utils openbox matchbox-window-manager libinput-tools imagemagick
         ubuntu-raspi-settings xserver-xorg-video-modesetting lightdm
         libgl1-mesa-dri libgles2 libopengl0 mesa-utils libegl1 mesa-vulkan-drivers
         mesa-opencl-icd ocl-icd-opencl-dev libgles2-mesa-dev
@@ -149,6 +320,59 @@ install_packages() {
     else
         log "All packages installed successfully"
     fi
+}
+
+# Ensure NetworkManager <-> systemd-resolved integration and resolv.conf link are correct
+configure_resolver_integration() {
+    # Make sure systemd-resolved is enabled and started
+    if systemctl enable --now systemd-resolved 2>/dev/null; then
+        log "systemd-resolved enabled and started"
+    else
+        log "WARNING: could not enable/start systemd-resolved"
+    fi
+
+    # Ensure NetworkManager uses systemd-resolved for DNS
+    mkdir -p /etc/NetworkManager
+    if [ -f /etc/NetworkManager/NetworkManager.conf ]; then
+        if ! grep -qE '^\s*dns\s*=\s*systemd-resolved\s*$' /etc/NetworkManager/NetworkManager.conf; then
+            # Append/ensure [main] section has dns=systemd-resolved
+            if grep -q "^\[main\]" /etc/NetworkManager/NetworkManager.conf; then
+                sed -i '/^\[main\]/a dns=systemd-resolved' /etc/NetworkManager/NetworkManager.conf || true
+            else
+                printf "[main]\ndns=systemd-resolved\n" >> /etc/NetworkManager/NetworkManager.conf || true
+            fi
+            log "Configured NetworkManager to use systemd-resolved for DNS"
+            systemctl restart NetworkManager 2>/dev/null || true
+        fi
+    else
+        cat > /etc/NetworkManager/NetworkManager.conf << 'EOF'
+[main]
+dns=systemd-resolved
+plugins=keyfile
+
+[logging]
+level=INFO
+EOF
+        log "Created /etc/NetworkManager/NetworkManager.conf with dns=systemd-resolved"
+        systemctl restart NetworkManager 2>/dev/null || true
+    fi
+
+    # Fix /etc/resolv.conf symlink to systemd-resolved stub if needed
+    if [ -L /etc/resolv.conf ]; then
+        target=$(readlink -f /etc/resolv.conf)
+        if [ "$target" != "/run/systemd/resolve/stub-resolv.conf" ] && [ "$target" != "/run/systemd/resolve/resolv.conf" ]; then
+            rm -f /etc/resolv.conf
+            ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf || true
+            log "Re-linked /etc/resolv.conf to systemd-resolved stub"
+        fi
+    else
+        rm -f /etc/resolv.conf
+        ln -s /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf || ln -s /run/systemd/resolve/resolv.conf /etc/resolv.conf || true
+        log "Linked /etc/resolv.conf to systemd-resolved stub"
+    fi
+
+    # Brief wait for resolver to be ready
+    sleep 1
 }
 
 check_qt_version() {
@@ -422,6 +646,31 @@ EOF
     systemctl disable spacex-dashboard.service 2>/dev/null || true
 }
 
+configure_eglfs_service() {
+    log "Creating optional EGLFS (no X/LightDM) systemd service for pure kiosk mode…"
+    cat << EOF > /etc/systemd/system/spacex-dashboard-eglfs.service
+[Unit]
+Description=SpaceX Dashboard (Qt EGLFS direct framebuffer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=$USER
+Environment=QT_QPA_PLATFORM=eglfs
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage
+WorkingDirectory=/home/$USER/Desktop/project/src
+ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    log "EGLFS service created (disabled by default). To use EGLFS: systemctl disable lightdm; systemctl enable --now spacex-dashboard-eglfs"
+}
+
 configure_boot() {
     log "Configuring boot settings..."
     
@@ -470,8 +719,33 @@ setup_repository() {
     # Change to home directory before deleting project directory to avoid working directory issues
     cd "$HOME_DIR"
     [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
-    sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
-    chown -R "$USER:$USER" "$REPO_DIR"
+    # Check connectivity before cloning to avoid hard failure when DNS/network is not ready
+    local can_reach=0
+    if command -v curl >/dev/null 2>&1; then
+        if timeout 6s curl -Is https://github.com 1>/dev/null 2>&1; then
+            can_reach=1
+        fi
+    fi
+    if [ $can_reach -eq 0 ] && command -v resolvectl >/dev/null 2>&1; then
+        if timeout 5s resolvectl query github.com 1>/dev/null 2>&1; then
+            can_reach=1
+        fi
+    fi
+    if [ $can_reach -eq 0 ]; then
+        log "WARNING: Network/DNS not ready; skipping git clone for now. You can rerun setup_repository later or run: git clone $REPO_URL $REPO_DIR"
+    else
+        # Temporarily disable 'exit on error' for clone, then restore
+        set +e
+        sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
+        local clone_rc=$?
+        set -e
+        if [ $clone_rc -ne 0 ]; then
+            log "WARNING: git clone failed (possibly transient network). You can clone manually later: git clone $REPO_URL $REPO_DIR"
+        fi
+    fi
+    if [ -d "$REPO_DIR" ]; then
+        chown -R "$USER:$USER" "$REPO_DIR"
+    fi
     
     # Fix git permissions in case any operations were done as root
     if [ -d "$REPO_DIR/.git" ]; then
@@ -1074,7 +1348,7 @@ configure_autologin() {
 [Seat:*]
 autologin-user=$USER
 autologin-user-timeout=0
-user-session=openbox
+user-session=matchbox
 greeter-enable=false
 xserver-command=X -core
 EOF
@@ -1085,16 +1359,16 @@ EOF
 [Seat:*]
 autologin-user=$USER
 autologin-user-timeout=0
-user-session=openbox
+user-session=matchbox
 greeter-enable=false
 EOF
     
-    # Create X session script for LightDM
+    # Create X session entry for LightDM (matchbox session placeholder that calls ~/.xsession)
     mkdir -p /usr/share/xsessions
-    cat << EOF > /usr/share/xsessions/openbox.desktop
+    cat << EOF > /usr/share/xsessions/matchbox.desktop
 [Desktop Entry]
-Name=Openbox
-Comment=Openbox window manager
+Name=Matchbox
+Comment=Matchbox window manager session
 Exec=/home/$USER/.xsession
 TryExec=/home/$USER/.xsession
 Type=Application
@@ -1123,6 +1397,9 @@ xset s noblank
 
 # Hide cursor
 unclutter -idle 0 -root &
+
+# Start a lightweight window manager for kiosk (Matchbox)
+matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
 export QT_QPA_PLATFORM=xcb
@@ -1200,6 +1477,8 @@ main() {
     setup_gpu_permissions
     update_system
     install_packages
+    configure_networkmanager
+    configure_nm_polkit
     check_qt_version
     setup_python_environment
     create_debug_script
@@ -1211,6 +1490,7 @@ main() {
     configure_touch_rotation
     create_xinitrc
     configure_autologin
+    configure_eglfs_service
     optimize_performance
     
     # Note: Using LightDM autologin with .xsession for clean startup
