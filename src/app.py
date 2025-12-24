@@ -253,6 +253,11 @@ CACHE_FILE_F1_SCHEDULE = os.path.join(CACHE_DIR_F1, 'f1_schedule_cache.json')
 CACHE_FILE_F1_DRIVERS = os.path.join(CACHE_DIR_F1, 'f1_drivers_cache.json')
 CACHE_FILE_F1_CONSTRUCTORS = os.path.join(CACHE_DIR_F1, 'f1_constructors_cache.json')
 
+# Runtime (user) cache paths for SpaceX launches. We keep the git-seeded repo cache intact
+# and write incremental updates to the persistent user cache.
+RUNTIME_CACHE_FILE_PREVIOUS = os.path.join(CACHE_DIR_F1, 'previous_launches_cache.json')
+RUNTIME_CACHE_FILE_UPCOMING = os.path.join(CACHE_DIR_F1, 'upcoming_launches_cache.json')
+
 # Different refresh intervals for different F1 data types
 CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely changes)
 CACHE_REFRESH_INTERVAL_F1_STANDINGS = 3600  # 1 hour for standings (updates frequently)
@@ -293,6 +298,41 @@ def save_cache_to_file(cache_file, data, timestamp):
             json.dump(cache_data, f)
     except (OSError, PermissionError) as e:
         logger.warning(f"Failed to save cache to {cache_file}: {e}")
+
+# Helpers for launch caches that prefer the runtime cache but fall back to the git seed
+def load_launch_cache(kind: str):
+    """Load a launch cache for kind in {'previous','upcoming'}.
+    Prefer the runtime cache in ~/.cache; fall back to the git-seeded cache under repo /cache.
+    Returns a dict: {'data': list, 'timestamp': datetime} or None.
+    """
+    try:
+        if kind not in ('previous', 'upcoming'):
+            raise ValueError("kind must be 'previous' or 'upcoming'")
+        runtime_path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
+        seed_path = CACHE_FILE_PREVIOUS if kind == 'previous' else CACHE_FILE_UPCOMING
+
+        data = load_cache_from_file(runtime_path)
+        if data and isinstance(data.get('data'), list):
+            logger.info(f"Loaded {kind} launches from runtime cache: {runtime_path}")
+            return data
+
+        logger.info(f"Runtime {kind} cache unavailable or invalid; falling back to seed cache: {seed_path}")
+        return load_cache_from_file(seed_path)
+    except Exception as e:
+        logger.warning(f"Failed to load {kind} launch cache (runtime/seed): {e}")
+        return None
+
+def save_launch_cache(kind: str, data_list: list, timestamp=None):
+    """Save launches to runtime cache only (keep seed intact)."""
+    try:
+        if kind not in ('previous', 'upcoming'):
+            raise ValueError("kind must be 'previous' or 'upcoming'")
+        path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
+        ts = timestamp or datetime.now(pytz.UTC)
+        save_cache_to_file(path, data_list, ts)
+        logger.info(f"Saved {len(data_list)} {kind} launches to runtime cache: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to save {kind} launch cache: {e}")
 
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
@@ -491,8 +531,8 @@ def fetch_launches():
     except (urllib.error.URLError, socket.timeout, OSError) as e:
         logger.warning(f"Network connectivity check failed for launch data: {e}")
         # Return cached data if available
-        previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
-        upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+        previous_cache = load_launch_cache('previous')
+        upcoming_cache = load_launch_cache('upcoming')
         if previous_cache and upcoming_cache:
             logger.info("Returning cached launch data due to network issues")
             return {
@@ -507,9 +547,9 @@ def fetch_launches():
     current_date_str = current_time.strftime('%Y-%m-%d')
     current_year = current_time.year
 
-    # Load previous launches cache (source of truth - only add new launches)
-    prev_cache_existed_before = os.path.exists(CACHE_FILE_PREVIOUS)
-    previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
+    # Load previous launches (prefer runtime; keep git seed intact)
+    prev_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_PREVIOUS)
+    previous_cache = load_launch_cache('previous')
     if previous_cache:
         previous_launches = previous_cache['data']
         logger.info(f"Loaded {len(previous_launches)} previous launches from cache")
@@ -551,6 +591,7 @@ def fetch_launches():
                 
                 try:
                     launch_data = {
+                        'id': launch.get('id'),
                         'mission': launch['name'],
                         'date': launch['net'].split('T')[0],
                         'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
@@ -569,7 +610,7 @@ def fetch_launches():
             if new_launches:
                 # Add new launches to the beginning (most recent first)
                 previous_launches = new_launches + previous_launches
-                save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
+                save_launch_cache('previous', previous_launches, current_time)
                 logger.info(f"Added {len(new_launches)} new launches to cache")
                 # Status reflecting first-time cache creation
                 try:
@@ -591,7 +632,7 @@ def fetch_launches():
             previous_launches = backup_cache['data']
             logger.info(f"Loaded {len(previous_launches)} previous launches from backup cache")
             # Save backup as main cache
-            save_cache_to_file(CACHE_FILE_PREVIOUS, previous_launches, current_time)
+            save_launch_cache('previous', previous_launches, current_time)
         else:
             logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
@@ -600,8 +641,8 @@ def fetch_launches():
             ]
 
     # Load upcoming launches cache
-    up_cache_existed_before = os.path.exists(CACHE_FILE_UPCOMING)
-    upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+    up_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_UPCOMING)
+    upcoming_cache = load_launch_cache('upcoming')
     if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING:
         upcoming_launches = upcoming_cache['data']
         logger.info("Using persistent cached upcoming launches")
@@ -628,6 +669,7 @@ def fetch_launches():
             logger.info(f"API response received, status: {response.status_code}")
             upcoming_launches = [
                 {
+                    'id': launch.get('id'),
                     'mission': launch['name'],
                     'date': launch['net'].split('T')[0],
                     'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
@@ -639,7 +681,7 @@ def fetch_launches():
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
                 } for launch in data['results']
             ]
-            save_cache_to_file(CACHE_FILE_UPCOMING, upcoming_launches, current_time)
+            save_launch_cache('upcoming', upcoming_launches, current_time)
             logger.info(f"Successfully fetched and saved {len(upcoming_launches)} upcoming launches")
             try:
                 suffix = " for the first time" if not up_cache_existed_before else ""
@@ -652,7 +694,7 @@ def fetch_launches():
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             # Fallback to cached upcoming launches if available, even if stale
-            cache_fallback = load_cache_from_file(CACHE_FILE_UPCOMING)
+            cache_fallback = load_launch_cache('upcoming')
             if cache_fallback and cache_fallback.get('data'):
                 upcoming_launches = cache_fallback['data']
                 logger.warning(
@@ -1559,6 +1601,9 @@ class Backend(QObject):
     rememberedNetworksChanged = pyqtSignal()
     networkConnectedChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
+    # New signals for signal-based startup flow
+    launchCacheReady = pyqtSignal()
+    firstOnline = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
     launchTrayVisibilityChanged = pyqtSignal()
@@ -1639,6 +1684,8 @@ class Backend(QObject):
         self.loader = None
         self.thread = None
         self._data_loading_deferred = False
+        self._first_online_emitted = False
+        self._web_reloaded_after_online = False
 
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
@@ -1680,48 +1727,74 @@ class Backend(QObject):
             logger.debug(f"Failed to schedule initial async connectivity check: {_e}")
 
         # Attempt boot-time Wi‑Fi scan and auto-reconnect to the most recently used network (non-blocking)
-        try:
-            # First, kick off an initial scan so the network list is populated during splash
-            # and any subsequent auto-reconnect uses the same discovery path as the Scan button.
-            def _boot_initial_scan():
-                try:
-                    logger.info("BOOT: Performing initial WiFi scan to populate network list…")
-                    self.scanWifiNetworks()
-                except Exception as _e:
-                    logger.debug(f"Failed to perform boot-time WiFi scan: {_e}")
+        # First, kick off an initial scan so the network list is populated during splash
+        # and any subsequent auto-reconnect uses the same discovery path as the Scan button.
+        def _boot_initial_scan():
+            try:
+                logger.info("BOOT: Performing initial WiFi scan to populate network list…")
+                self.scanWifiNetworks()
+            except Exception as _e:
+                logger.debug(f"Failed to perform boot-time WiFi scan: {_e}")
 
-            def _boot_autoreconnect():
+        def _boot_autoreconnect():
+            try:
+                # Always perform scan at boot for initial list, regardless of platform
+                # Auto-reconnect logic remains Linux-focused (Pi), other platforms keep manual connect.
+                if platform.system() != 'Linux':
+                    return
+                if self._wifi_connected or self._wifi_connecting:
+                    return
+                if not self._last_connected_network or not self._last_connected_network.get('ssid'):
+                    return
+                logger.info("BOOT: Scheduling auto-reconnect to last WiFi network…")
+                # Run the scanning/connection in a background thread to avoid UI stalls
                 try:
-                    # Always perform scan at boot for initial list, regardless of platform
-                    # Auto-reconnect logic remains Linux-focused (Pi), other platforms keep manual connect.
-                    if platform.system() != 'Linux':
-                        return
-                    if self._wifi_connected or self._wifi_connecting:
-                        return
-                    if not self._last_connected_network or not self._last_connected_network.get('ssid'):
-                        return
-                    logger.info("BOOT: Scheduling auto-reconnect to last WiFi network…")
-                    # Run the scanning/connection in a background thread to avoid UI stalls
+                    self._boot_auto_reconnect_in_progress = True
+                except Exception:
+                    pass
+                def _worker():
                     try:
-                        self._boot_auto_reconnect_in_progress = True
-                    except Exception:
-                        pass
-                    def _worker():
+                        self._auto_reconnect_to_last_network(boot_time=True)
+                    finally:
+                        # Clear the in-progress flag regardless of outcome
                         try:
-                            self._auto_reconnect_to_last_network(boot_time=True)
-                        finally:
-                            # Clear the in-progress flag regardless of outcome
-                            try:
-                                self._boot_auto_reconnect_in_progress = False
-                            except Exception:
-                                pass
-                    threading.Thread(target=_worker, daemon=True).start()
-                except Exception as _e:
-                    logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
+                            self._boot_auto_reconnect_in_progress = False
+                        except Exception:
+                            pass
+                threading.Thread(target=_worker, daemon=True).start()
+            except Exception as _e:
+                logger.debug(f"Failed to schedule boot-time auto-reconnect: {_e}")
 
-            # Wait a moment so system services (wpa_supplicant/NetworkManager) are ready
-            # Kick off an initial scan early for the UI list, but don't block auto‑reconnect on it.
-            # Try auto‑reconnect a bit earlier (~1.5s) since nmcli profile bring‑up doesn't require scan results.
+        # Seed bootstrap: apply git/runtime cached data immediately and exit splash based on signal, no time-based waits
+        try:
+            QTimer.singleShot(0, self._seed_bootstrap)
+        except Exception as _e:
+            logger.debug(f"Failed to schedule seed bootstrap: {_e}")
+
+        # When network connectivity flips to online for the first time, begin online data loading and refresh web embeds
+        try:
+            def _on_network_connected_changed():
+                try:
+                    if self._network_connected and not self._first_online_emitted:
+                        self._first_online_emitted = True
+                        logger.info("BOOT: firstOnline detected — emitting signal and starting online data load")
+                        try:
+                            self.firstOnline.emit()
+                        except Exception:
+                            pass
+                        # Start data loading immediately (no guards or timeouts)
+                        self._start_data_loading_online()
+                except Exception as _e:
+                    logger.debug(f"Error in firstOnline handler: {_e}")
+
+            self.networkConnectedChanged.connect(_on_network_connected_changed)
+        except Exception as _e:
+            logger.debug(f"Failed to connect networkConnectedChanged to firstOnline handler: {_e}")
+
+        # Wait a moment so system services (wpa_supplicant/NetworkManager) are ready
+        # Kick off an initial scan early for the UI list, but don't block auto‑reconnect on it.
+        # Try auto‑reconnect a bit earlier (~1.5s) since nmcli profile bring‑up doesn't require scan results.
+        try:
             QTimer.singleShot(800, _boot_initial_scan)
             QTimer.singleShot(1500, _boot_autoreconnect)
         except Exception as _e:
@@ -2023,10 +2096,10 @@ class Backend(QObject):
 
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
-        logger.info("BOOT: startDataLoader called")
-        self.setLoadingStatus("Checking network connectivity...")
-        # Run potentially blocking checks in background to avoid UI freeze
-        logger.info("BOOT: Scheduling background connectivity and update checks...")
+        logger.info("BOOT: startDataLoader called (legacy path)")
+        self.setLoadingStatus("Checking network connectivity…")
+        # Legacy path kept for compatibility; avoid time-based gating. We'll kick off background
+        # connectivity check and, if online, start immediate data loading. No splash timers.
 
         def _initial_checks_worker():
             connectivity_result = False
@@ -2058,50 +2131,20 @@ class Backend(QObject):
                 logger.error(f"BOOT: Failed to emit initialChecksReady: {e}")
 
         threading.Thread(target=_initial_checks_worker, daemon=True).start()
-        # Return immediately; UI remains responsive while checks run
-        # Start a guard timer to avoid being stuck on "Checking network connectivity..."
-        try:
-            if self._initial_checks_guard_timer is None:
-                self._initial_checks_guard_timer = QTimer(self)
-                self._initial_checks_guard_timer.setSingleShot(True)
-                self._initial_checks_guard_timer.timeout.connect(self._on_initial_checks_guard_timeout)
-            # 12s guard in case background checks hang early in boot
-            self._initial_checks_guard_timer.start(12000)
-            logger.info("BOOT: Initial checks guard timer started (12 seconds)")
-        except Exception as _e:
-            logger.debug(f"Failed to start initial checks guard timer: {_e}")
+        # Return immediately; UI remains responsive while checks run. No guard timers.
 
     @pyqtSlot(bool, bool, dict, dict)
     def _apply_initial_checks_results(self, connectivity_result, update_available, current_info, latest_info):
         """Apply initial check results on the main (Qt) thread."""
         try:
-            # Cancel guard timer if active
-            try:
-                if self._initial_checks_guard_timer and self._initial_checks_guard_timer.isActive():
-                    self._initial_checks_guard_timer.stop()
-                    logger.info("BOOT: Initial checks guard timer stopped (results received)")
-            except Exception:
-                pass
             self.updateAvailable = update_available
             self._current_version_info = current_info
             self._latest_version_info = latest_info
 
             if not connectivity_result:
-                logger.warning("BOOT: No network connectivity detected - deferring data loading")
-                logger.info("BOOT: Setting _data_loading_deferred = True")
-                self.setLoadingStatus("No internet connection - using cached data")
-                # Set a flag to indicate data loading is deferred
-                self._data_loading_deferred = True
-                # Set up a loading timeout timer to prevent indefinite loading screen
-                logger.info("BOOT: Creating loading timeout timer (15 seconds)")
-                self._loading_timeout_timer = QTimer(self)
-                self._loading_timeout_timer.setSingleShot(True)
-                self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
-                self._loading_timeout_timer.start(15000)  # 15 second timeout
-                logger.info("BOOT: Loading timeout timer started (15 seconds)")
-                # Set up timers anyway (they will check connectivity when they run)
+                logger.warning("BOOT: No network connectivity detected - staying with seed/runtime cache; will wait for firstOnline signal")
+                # Set up periodic timers; connectivity checks will bring us online and trigger firstOnline
                 self._setup_timers()
-                logger.info("BOOT: Data loading deferred - app will show cached data after timeout")
                 return
 
             # Clear deferred flag if we have connectivity
@@ -2128,23 +2171,8 @@ class Backend(QObject):
 
     @pyqtSlot()
     def _on_initial_checks_guard_timeout(self):
-        """Safety net to advance UI if background initial checks didn't report back."""
-        try:
-            if self._loading_status == "Checking network connectivity..." and self._isLoading:
-                logger.warning("BOOT: Guard timeout hit - assuming no connectivity and deferring data load")
-                self.setLoadingStatus("No internet connection - using cached data")
-                self._data_loading_deferred = True
-                # Start the offline loading timeout if not already running
-                if not hasattr(self, '_loading_timeout_timer') or not self._loading_timeout_timer.isActive():
-                    self._loading_timeout_timer = QTimer(self)
-                    self._loading_timeout_timer.setSingleShot(True)
-                    self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
-                    self._loading_timeout_timer.start(15000)
-                    logger.info("BOOT: Loading timeout timer started by guard (15 seconds)")
-                # Ensure periodic timers are running so connectivity can be rechecked
-                self._setup_timers()
-        except Exception as e:
-            logger.debug(f"Guard timeout handling failed: {e}")
+        """Deprecated: time-based guard disabled (signal-based startup)."""
+        logger.info("BOOT: _on_initial_checks_guard_timeout called but guard is disabled; no action")
 
     def _setup_timers(self):
         """Set up all the periodic timers"""
@@ -3527,10 +3555,18 @@ class Backend(QObject):
 
         # Update trajectory now that data is loaded
         self.updateGlobeTrajectory.emit()
+        # If this was the first online load, cue a one-shot web content reload
+        if self._first_online_emitted and not self._web_reloaded_after_online:
+            try:
+                self.reload_web_content()
+                self._web_reloaded_after_online = True
+                logger.info("Issued one-shot web content reload after first online data load")
+            except Exception as _e:
+                logger.debug(f"Failed to reload web content after first online: {_e}")
 
     def _on_loading_timeout(self):
         """Handle loading timeout when no network connectivity is available"""
-        logger.info("BOOT: Loading timeout reached - transitioning to offline mode")
+        logger.info("BOOT: Loading timeout reached (deprecated) — offline path retained for compatibility")
         logger.info("BOOT: Loading cached launch data...")
         # Load cached data if available, otherwise use empty data
         self._launch_data = self._load_cached_launch_data()
@@ -3561,11 +3597,65 @@ class Backend(QObject):
             logger.debug(f"BOOT: Error emitting offline refresh signals: {_e}")
         logger.info("BOOT: Offline mode activated - app should now show cached data")
 
+    def _seed_bootstrap(self):
+        """Apply cached (runtime or git-seeded) data immediately and exit splash.
+        This is signal-based and avoids any time-based waits."""
+        try:
+            self.setLoadingStatus("Loading cached SpaceX data…")
+            # Load launches from runtime cache, falling back to seed
+            prev_cache = load_launch_cache('previous')
+            up_cache = load_launch_cache('upcoming')
+            self._launch_data = {
+                'previous': (prev_cache.get('data') if prev_cache else []) or [],
+                'upcoming': (up_cache.get('data') if up_cache else []) or []
+            }
+            # Update EventModel immediately
+            self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
+            self._event_model.update_data()
+
+            # Notify UI of ready cache
+            try:
+                self.launchCacheReady.emit()
+            except Exception:
+                pass
+            self.launchesChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
+            self.eventModelChanged.emit()
+            # Update trajectory now that we have at least cached data
+            self.updateGlobeTrajectory.emit()
+            # Exit splash now that cache is applied
+            self.setLoadingStatus("Application loaded…")
+            self._isLoading = False
+            self.loadingFinished.emit()
+            logger.info("BOOT: Seed/runtime cache applied; splash dismissed via launchCacheReady")
+        except Exception as e:
+            logger.error(f"Seed bootstrap failed: {e}")
+
+    def _start_data_loading_online(self):
+        """Start DataLoader immediately (no guard timers), used when firstOnline fires."""
+        try:
+            self.setLoadingStatus("Loading online data…")
+            if self.loader is None:
+                logger.info("BOOT: Creating new DataLoader for online load…")
+                self.loader = DataLoader()
+                self.thread = QThread()
+                self.loader.moveToThread(self.thread)
+                self.loader.finished.connect(self.on_data_loaded)
+                self.loader.statusUpdate.connect(self.setLoadingStatus)
+                self.thread.started.connect(self.loader.run)
+                self.thread.start()
+            else:
+                logger.info("BOOT: DataLoader already exists; not starting a duplicate thread")
+            # Ensure periodic timers are running
+            self._setup_timers()
+        except Exception as e:
+            logger.error(f"Failed to start online data loading: {e}")
+
     def _load_cached_launch_data(self):
         """Load cached launch data for offline mode"""
         try:
-            previous_cache = load_cache_from_file(CACHE_FILE_PREVIOUS)
-            upcoming_cache = load_cache_from_file(CACHE_FILE_UPCOMING)
+            previous_cache = load_launch_cache('previous')
+            upcoming_cache = load_launch_cache('upcoming')
             if previous_cache and upcoming_cache:
                 logger.info("Backend: Loaded cached launch data for offline mode")
                 return {
