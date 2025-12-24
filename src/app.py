@@ -651,7 +651,16 @@ def fetch_launches():
             logger.error(f"Exception type: {type(e)}")
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
-            upcoming_launches = []
+            # Fallback to cached upcoming launches if available, even if stale
+            cache_fallback = load_cache_from_file(CACHE_FILE_UPCOMING)
+            if cache_fallback and cache_fallback.get('data'):
+                upcoming_launches = cache_fallback['data']
+                logger.warning(
+                    f"Using cached upcoming launches due to API failure; count={len(upcoming_launches)}"
+                )
+            else:
+                logger.warning("No cached upcoming launches available; proceeding with empty list")
+                upcoming_launches = []
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
 
@@ -3013,21 +3022,6 @@ class Backend(QObject):
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
-        # Example: Add logging to show the orbit type being processed
-        next_launch = None
-        if self._launch_data and self._launch_data.get('upcoming'):
-            next_launch = self._launch_data['upcoming'][0] if self._launch_data['upcoming'] else None
-        if not next_launch:
-            logger.info("No upcoming launch found for trajectory generation")
-            return None
-
-        logger.info(f"Next launch: {next_launch.get('mission', 'Unknown')} from {next_launch.get('pad', 'Unknown')}")
-        pad = next_launch.get('pad', '')
-        orbit = next_launch.get('orbit', '')
-
-        logger.info(f"Processing orbit type: '{orbit}' for trajectory generation")
-
-        # ...existing code for trajectory generation...
         """Get trajectory data for the next upcoming launch"""
         logger.info("get_launch_trajectory called")
         upcoming = self.get_upcoming_launches()
@@ -3054,6 +3048,8 @@ class Backend(QObject):
         logger.info(f"Next launch: {next_launch.get('mission', 'Unknown')} from {next_launch.get('pad', 'Unknown')}")
         pad = next_launch.get('pad', '')
         orbit = next_launch.get('orbit', '')
+
+        logger.info(f"Processing orbit type: '{orbit}' for trajectory generation")
 
         # Launch site coordinates
         launch_sites = {
@@ -3552,6 +3548,17 @@ class Backend(QObject):
         self.setLoadingStatus("Application loaded...")
         self._isLoading = False
         self.loadingFinished.emit()
+        # Mirror the same UI update signals as online path so QML refreshes lists and trajectory
+        try:
+            self.launchesChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
+            self.f1Changed.emit()
+            self.weatherChanged.emit()
+            self.eventModelChanged.emit()
+            # Update trajectory now that cached data is applied
+            self.updateGlobeTrajectory.emit()
+        except Exception as _e:
+            logger.debug(f"BOOT: Error emitting offline refresh signals: {_e}")
         logger.info("BOOT: Offline mode activated - app should now show cached data")
 
     def _load_cached_launch_data(self):
