@@ -76,6 +76,8 @@
         let userPaused = false;
         let systemPaused = false;
         let pendingSystemResume = false; // set when resume is requested during active interaction
+        // Explicit auto spin enable independent of OrbitControls (more robust on Qt WebEngine)
+        let autoSpinEnabled = true;
         // Track if the user is actively interacting (mouse down or any touch contact)
         // This is used to prevent auto-rotation from starting/resuming while touching.
         let userInteracting = false;
@@ -374,9 +376,10 @@
                         momentumX = 0;
                         momentumY = 0;
                     }
-                } else if (controls && controls.autoRotate && !userPaused && !systemPaused && !userInteracting) {
-                    // Normal auto-rotation (only if not paused)
-                    globe.rotation.y += controls.autoRotateSpeed * 0.01;
+                } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
+                    // Normal auto-rotation (decoupled from OrbitControls)
+                    const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
+                    globe.rotation.y += baseSpeed * 0.01;
                 }
             }
 
@@ -791,22 +794,70 @@
             }
         });
 
-        // Provide guarded hooks for external callers (e.g., Qt side) trying to resume/pause spin/animation.
-        // These will no-op while the user is interacting, to avoid unexpected auto-rotation restarts.
+        // Provide guarded hooks for external callers (Qt) to control spin/animation.
+        // These respect active user interaction and will resume deterministically.
+        window.clearInteraction = function(){
+            try { if (window.globeAutospinGuard) console.log('[globe] clearInteraction()'); } catch(e){}
+            activePointers = 0;
+            userInteracting = false;
+            isInMomentum = false;
+            momentumX = 0; momentumY = 0;
+            touchMode = 'none';
+            resetRecentMoves();
+        };
         window.resumeSpin = function(){
             if (userInteracting) { pendingSystemResume = true; return; }
             systemPaused = false;
+            autoSpinEnabled = true;
+            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             isAutoRotatePaused = (userPaused || systemPaused);
-            try { console.log('[globe] resumeSpin invoked'); } catch(e){}
+            try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch(e){}
+        };
+        window.forceResumeSpin = function(){
+            window.clearInteraction();
+            systemPaused = false;
+            autoSpinEnabled = true;
+            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
+            isAutoRotatePaused = (userPaused || systemPaused);
+            pendingSystemResume = false;
+            try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch(e){}
         };
         window.pauseSpin = function(){
             systemPaused = true;
             isAutoRotatePaused = (userPaused || systemPaused);
-            try { console.log('[globe] pauseSpin invoked'); } catch(e){}
+            try { if (window.globeAutospinGuard) console.log('[globe] pauseSpin invoked'); } catch(e){}
         };
-        window.startSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.resumeAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.startAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.resumeAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+
+        // Handle window focus/visibility to avoid "stuck interaction" states and auto-resume when appropriate
+        window.addEventListener('blur', function(){
+            if (window.globeAutospinGuard) {
+                window.clearInteraction();
+            }
+        });
+        document.addEventListener('visibilitychange', function(){
+            if (document.visibilityState === 'visible') {
+                if (window.globeAutospinGuard) {
+                    window.clearInteraction();
+                    // If we were pending a resume, complete it now
+                    if (pendingSystemResume) { pendingSystemResume = false; systemPaused = false; autoSpinEnabled = true; }
+                }
+            }
+        });
+
+        // Inactivity fallback: if marked interacting but no activity and no pointers, clear it
+        setInterval(function(){
+            try {
+                if (!window.globeAutospinGuard) return;
+                const now = Date.now();
+                if (userInteracting && activePointers === 0 && (now - lastMoveTimeMs) > 1500) {
+                    console.log('[globe] clearing stale interaction due to inactivity');
+                    window.clearInteraction();
+                }
+            } catch(e){}
+        }, 1000);
 
         // Visibility instrumentation
         document.addEventListener('visibilitychange', function(){
