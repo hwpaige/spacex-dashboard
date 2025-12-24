@@ -75,6 +75,8 @@
         // Track if the user is actively interacting (mouse down or any touch contact)
         // This is used to prevent auto-rotation from starting/resuming while touching.
         let userInteracting = false;
+        // Track active pointer contacts (helps on Linux/Qt where pointer events may be used)
+        let activePointers = 0;
         // Track gesture mode to avoid mixing pinch and drag states
         // Values: 'none' | 'drag' | 'pinch'
         let touchMode = 'none';
@@ -747,6 +749,31 @@
         document.addEventListener('touchcancel', () => {
             endTouchCommon();
             userInteracting = false;
+        });
+
+        // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
+        // We only count non-mouse pointers here to avoid double-handling regular mouse drags.
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            if (e && e.pointerType && e.pointerType !== 'mouse') {
+                activePointers++;
+                userInteracting = true;
+            }
+        });
+        document.addEventListener('pointerup', (e) => {
+            if (e && e.pointerType && e.pointerType !== 'mouse') {
+                activePointers = Math.max(0, activePointers - 1);
+                if (activePointers === 0 && !isMouseDown) {
+                    userInteracting = false;
+                }
+            }
+        });
+        document.addEventListener('pointercancel', (e) => {
+            if (e && e.pointerType && e.pointerType !== 'mouse') {
+                activePointers = Math.max(0, activePointers - 1);
+                if (activePointers === 0 && !isMouseDown) {
+                    userInteracting = false;
+                }
+            }
         });
 
         // Provide guarded hooks for external callers (e.g., Qt side) trying to resume spin/animation.

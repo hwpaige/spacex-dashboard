@@ -678,10 +678,12 @@ configure_boot() {
     local cmdline_file="/boot/firmware/cmdline.txt"
     
     # Silent boot settings with enhanced memory optimizations
-    # Note: Removed logo.nologo to allow Plymouth splash screen
-    if ! grep -q "fbcon=map:2" "$cmdline_file"; then
-        sed -i 's/$/ fbcon=map:2/' "$cmdline_file"
+    # Ensure kernel messages do not race with Plymouth by moving console to tty3
+    if ! grep -q "console=tty3" "$cmdline_file"; then
+        sed -i 's/$/ console=tty3/' "$cmdline_file"
     fi
+    # Remove logo.nologo if present (not needed and can interfere with some splash setups)
+    sed -i 's/ logo\.nologo//g' "$cmdline_file"
     
     # Display settings
     if ! grep -q "hdmi_mode=87" "$config_file"; then
@@ -865,11 +867,33 @@ EOF
         log "No matching initramfs images found to copy to /boot/firmware/"
     fi
 
+    # Ensure firmware loads initramfs at boot (required for Plymouth to appear early)
+    local cfg="/boot/firmware/config.txt"
+    if [ -f "$cfg" ]; then
+        # Determine the newest initrd that we just copied (prefer /boot/firmware)
+        local initrd_path
+        initrd_path=$(ls -1t /boot/firmware/initrd.img-* 2>/dev/null | head -n1)
+        if [ -z "$initrd_path" ]; then
+            initrd_path=$(ls -1t /boot/initrd.img-* 2>/dev/null | head -n1)
+        fi
+        if [ -n "$initrd_path" ]; then
+            local initrd_file
+            initrd_file=$(basename "$initrd_path")
+            # Remove any existing initramfs lines
+            sed -i '/^initramfs /d' "$cfg"
+            # Add the correct initramfs directive with followkernel
+            echo "initramfs ${initrd_file} followkernel" >> "$cfg"
+            log "✓ Enabled initramfs in config.txt: initramfs ${initrd_file} followkernel"
+        else
+            log "WARNING: Could not find an initrd.img to reference in config.txt"
+        fi
+    fi
+
     # Configure kernel command line for Plymouth
     CMDLINE_FILE="/boot/firmware/cmdline.txt"
     if [ -f "$CMDLINE_FILE" ]; then
         # Remove any existing Plymouth-related parameters
-        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g' "$CMDLINE_FILE"
+        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g; s/ logo\.nologo//g' "$CMDLINE_FILE"
 
         # Remove serial console to prevent conflicts
         sed -i 's/ console=serial0,[0-9]*//g' "$CMDLINE_FILE"
@@ -877,6 +901,11 @@ EOF
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
             sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
+        fi
+
+        # Ensure console is moved to tty3 (avoid kernel logs on Plymouth tty)
+        if ! grep -q "console=tty3" "$CMDLINE_FILE"; then
+            sed -i 's/$/ console=tty3/' "$CMDLINE_FILE"
         fi
 
         # Ensure fbcon=map:0 for correct framebuffer mapping
@@ -912,6 +941,9 @@ DeviceTimeout=8
 EOF
 
     log "✓ Plymouth configured with custom SpaceX theme"
+
+    # Make sure Plymouth units are enabled (usually pulled in by initramfs, but harmless to ensure)
+    systemctl enable plymouth-start.service plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true
 }
 
 configure_touch_rotation() {
