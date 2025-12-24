@@ -1592,6 +1592,9 @@ class Backend(QObject):
         self._current_version_info = None  # Cached current version info
         self._latest_version_info = None  # Cached latest version info
         self._update_checking = False  # Track if update check is in progress
+        # Throttle web content reload signals to avoid flapping-induced UI hiccups
+        self._last_web_reload_emit = 0.0
+        self._min_reload_emit_interval_sec = 8.0
         
         # WiFi properties - initialize with provided values
         self._wifi_networks = []
@@ -1848,7 +1851,13 @@ class Backend(QObject):
     def reload_web_content(self):
         """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
         try:
-            logger.info("Signaling QML to reload web content after WiFi connection...")
+            now = time.time()
+            # Rate-limit emits to avoid repeated reloads during brief connect/disconnect flaps
+            if (now - getattr(self, '_last_web_reload_emit', 0)) < getattr(self, '_min_reload_emit_interval_sec', 8.0):
+                logger.info("Reload web content throttled (recent emit) — skipping")
+                return
+            self._last_web_reload_emit = now
+            logger.info("Signaling QML to reload web content after WiFi connection…")
             self.reloadWebContent.emit()
             logger.info("Web content reload signal sent")
             
