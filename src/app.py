@@ -1610,6 +1610,8 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    # Globe spin/watchdog feature flag
+    globeAutospinGuardChanged = pyqtSignal()
     # WiFi scanning progress notify (for UI spinner)
     wifiScanInProgressChanged = pyqtSignal()
     # WiFi scan results delivered from background thread (queued to UI thread)
@@ -1686,6 +1688,8 @@ class Backend(QObject):
         self._data_loading_deferred = False
         self._first_online_emitted = False
         self._web_reloaded_after_online = False
+        # Globe watchdog/auto-resume feature flag (exposed to QML+globe.html)
+        self._globe_autospin_guard = True
 
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
@@ -2980,6 +2984,24 @@ class Backend(QObject):
     @pyqtProperty(bool, notify=updateDialogRequested)
     def updateChecking(self):
         return self._update_checking
+
+    # Globe auto-spin watchdog feature flag
+    @pyqtProperty(bool, notify=globeAutospinGuardChanged)
+    def globeAutospinGuard(self):
+        return getattr(self, '_globe_autospin_guard', True)
+
+    @globeAutospinGuard.setter
+    def globeAutospinGuard(self, value: bool):
+        try:
+            value = bool(value)
+        except Exception:
+            value = True
+        if getattr(self, '_globe_autospin_guard', True) != value:
+            self._globe_autospin_guard = value
+            try:
+                self.globeAutospinGuardChanged.emit()
+            except Exception:
+                pass
 
     @pyqtProperty(list, notify=launchesChanged)
     def launchDescriptions(self):
@@ -6210,6 +6232,13 @@ Window {
                 backend.update_weather();
                 console.log("Weather data refresh initiated (debounced)");
             }
+            // Nudge globe(s) again after network-driven reloads completed
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try { globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+            }
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try { plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+            }
         }
     }
 
@@ -6234,6 +6263,39 @@ Window {
             // Debounce all other heavy reloads to a single update shortly after connect
             if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
             reloadCoalesceTimer.start();
+        })
+        // Push globe autospin guard flag into globe pages
+        var guard = backend.globeAutospinGuard
+        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
+        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
+        }
+        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
+        }
+        // Resume spin on key backend signals
+        backend.launchCacheReady.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.updateGlobeTrajectory.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.loadingFinished.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.firstOnline.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        // Keep guard value in sync if changed at runtime
+        backend.globeAutospinGuardChanged.connect(function(){
+            var guard2 = backend.globeAutospinGuard
+            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
         })
     }
 
