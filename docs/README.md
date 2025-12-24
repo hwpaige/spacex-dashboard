@@ -51,3 +51,15 @@ The dashboard shows an illustrative ascent trajectory and an orbital ground trac
 - The ground track is generated to pass near the ascent end point and advances longitude at a rate scaled by cos(inclination). This creates a visually inclined orbit with polar vs. low-inclination differences.
 
 Caching: Generated trajectory/orbit points are cached in cache/trajectory_cache.json with a versioned key that includes launch site, orbit class, and assumed inclination. Delete this file if you want to force regeneration after changing logic.
+
+## FAQ
+
+### Why does Linux WiFi scanning poll multiple times?
+
+On Linux, the app uses wpa_supplicant via `wpa_cli`. After a scan is triggered, `scan_results` is populated incrementally as the driver roams across channels and applies dwell times and regulatory constraints (some channels require passive scanning). If results are read after a fixed short delay, you often get only a partial set of SSIDs. The app therefore polls `scan_results` for a short stabilization window and accepts the list once the number of unique SSIDs stops increasing.
+
+Tuning:
+- SPACEX_WIFI_SCAN_STABILIZE_MAXWAIT (seconds, default 8)
+- SPACEX_WIFI_SCAN_STABILIZE_INTERVAL (seconds, default 1)
+
+Set these environment variables if you want a shorter or longer stabilization period on your hardware.
