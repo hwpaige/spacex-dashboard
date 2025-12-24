@@ -3698,6 +3698,74 @@ class Backend(QObject):
         except Exception as e:
             logger.error(f"Failed to start online data loading: {e}")
 
+    # --- Globe trajectory helpers (async precompute + debounced emits) ---
+    def _emit_update_globe_signal(self):
+        try:
+            self.updateGlobeTrajectory.emit()
+        except Exception as _e:
+            logger.debug(f"Failed to emit updateGlobeTrajectory: {_e}")
+
+    def _emit_update_globe_trajectory_debounced(self):
+        try:
+            if self._trajectory_emit_timer.isActive():
+                self._trajectory_emit_timer.stop()
+        except Exception:
+            pass
+        try:
+            # Connect once
+            if not hasattr(self, '_traj_emit_connected') or not self._traj_emit_connected:
+                self._trajectory_emit_timer.timeout.connect(self._emit_update_globe_signal)
+                self._traj_emit_connected = True
+        except Exception as _e:
+            logger.debug(f"Failed to connect trajectory emit timer: {_e}")
+        try:
+            self._trajectory_emit_timer.start()
+        except Exception as _e:
+            logger.debug(f"Failed to start trajectory emit timer: {_e}")
+
+    def _schedule_trajectory_recompute(self, delay_ms: int = 250):
+        try:
+            self._trajectory_recompute_timer.stop()
+        except Exception:
+            pass
+        try:
+            self._trajectory_recompute_timer.setInterval(max(0, int(delay_ms)))
+        except Exception:
+            pass
+        try:
+            self._trajectory_recompute_timer.start()
+            logger.info("Scheduled trajectory recompute (debounced)")
+        except Exception as _e:
+            logger.debug(f"Failed to start trajectory recompute timer: {_e}")
+
+    def _compute_trajectory_async(self):
+        if getattr(self, '_trajectory_compute_inflight', False):
+            logger.debug("Trajectory compute already in flight; skipping")
+            return
+        self._trajectory_compute_inflight = True
+
+        def _worker():
+            try:
+                logger.info("Computing launch trajectory in background…")
+                # This will also populate the on-disk trajectory cache if needed
+                _ = self.get_launch_trajectory()
+            except Exception as e:
+                logger.warning(f"Background trajectory compute failed: {e}")
+            finally:
+                def _done():
+                    self._trajectory_compute_inflight = False
+                    self._emit_update_globe_trajectory_debounced()
+                try:
+                    QTimer.singleShot(0, _done)
+                except Exception:
+                    # As a fallback, emit directly (may still work on main thread)
+                    _done()
+
+        try:
+            threading.Thread(target=_worker, daemon=True).start()
+        except Exception as _e:
+            logger.debug(f"Failed to start trajectory worker thread: {_e}")
+
     def _load_cached_launch_data(self):
         """Load cached launch data for offline mode"""
         try:
