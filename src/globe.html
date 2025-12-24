@@ -71,7 +71,11 @@
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
-        let isAutoRotatePaused = false;
+        let isAutoRotatePaused = false; // kept for backward compatibility with existing code
+        // Distinguish between user-initiated pause and system-initiated pause (e.g., during app/network events)
+        let userPaused = false;
+        let systemPaused = false;
+        let pendingSystemResume = false; // set when resume is requested during active interaction
         // Track if the user is actively interacting (mouse down or any touch contact)
         // This is used to prevent auto-rotation from starting/resuming while touching.
         let userInteracting = false;
@@ -365,7 +369,7 @@
                         momentumX = 0;
                         momentumY = 0;
                     }
-                } else if (controls && controls.autoRotate && !isAutoRotatePaused && !userInteracting) {
+                } else if (controls && controls.autoRotate && !userPaused && !systemPaused && !userInteracting) {
                     // Normal auto-rotation (only if not paused)
                     globe.rotation.y += controls.autoRotateSpeed * 0.01;
                 }
@@ -664,6 +668,7 @@
             resetRecentMoves();
             // Mouse up ends direct interaction; momentum may continue but that's not a touch
             userInteracting = false;
+            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
         });
 
         // Touch support for mobile
@@ -744,11 +749,13 @@
             if (e.touches && e.touches.length > 0) return;
             endTouchCommon();
             userInteracting = false;
+            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
         });
 
         document.addEventListener('touchcancel', () => {
             endTouchCommon();
             userInteracting = false;
+            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
         });
 
         // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
@@ -778,14 +785,15 @@
 
         // Provide guarded hooks for external callers (e.g., Qt side) trying to resume spin/animation.
         // These will no-op while the user is interacting, to avoid unexpected auto-rotation restarts.
-        window.resumeSpin = function(){ if (!userInteracting) { isAutoRotatePaused = false; } };
-        window.startSpin = function(){ if (!userInteracting) { isAutoRotatePaused = false; } };
-        window.resumeAnimation = function(){ if (!userInteracting) { isAutoRotatePaused = false; } };
-        window.startAnimation = function(){ if (!userInteracting) { isAutoRotatePaused = false; } };
+        window.resumeSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.resumeAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
 
         // Play/Pause button functionality
         document.getElementById('playPauseBtn').addEventListener('click', () => {
-            isAutoRotatePaused = !isAutoRotatePaused;
+            userPaused = !userPaused;
+            isAutoRotatePaused = (userPaused || systemPaused);
             const button = document.getElementById('playPauseBtn');
             const icon = button.querySelector('i');
             if (isAutoRotatePaused) {

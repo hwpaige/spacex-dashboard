@@ -6092,13 +6092,13 @@ Window {
             // Instead, nudge animation loops to resume if they paused.
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
                 try {
-                    globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                    globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
                 } catch (e) { console.log("Globe view JS resume failed:", e); }
             }
             // Plot card globe view (left-most card) – also avoid reload
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
                 try {
-                    plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);} }catch(e){}})();")
+                    plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();")
                 } catch (e) { console.log("Plot globe view JS resume failed:", e); }
             }
             // Debounce all other heavy reloads to a single update shortly after connect
@@ -6452,7 +6452,7 @@ Window {
                                         root._injectRoundedCorners(plotGlobeView, 8)
                                         // Ensure the plot card globe animation loop starts/resumes on initial load
                                         try {
-                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Plot globe animation start failed', e);}})();");
+                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
                                         } catch (e) { console.log("Plot globe JS nudge error:", e); }
                                     }
                                 }
@@ -9416,7 +9416,7 @@ Window {
                                         }
                                         // Ensure the globe animation loop starts/resumes on initial load
                                         try {
-                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();if(window.startSpin)startSpin();if(window.resumeAnimation)resumeAnimation();if(window.startAnimation)startAnimation();if(typeof animate==='function'){requestAnimationFrame(animate);}}catch(e){console.log('Globe animation start failed', e);}})();");
+                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Globe animation start failed', e);}})();");
                                         } catch (e) { console.log("Globe JS nudge error:", e); }
                                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                         console.log("Globe HTML failed to load:", loadRequest.errorString);
