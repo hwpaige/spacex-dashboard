@@ -1690,6 +1690,31 @@ class Backend(QObject):
         self._web_reloaded_after_online = False
         # Globe watchdog/auto-resume feature flag (exposed to QML+globe.html)
         self._globe_autospin_guard = True
+        # Trajectory precompute/debounce helpers
+        self._trajectory_recompute_timer = QTimer(self)
+        self._trajectory_recompute_timer.setSingleShot(True)
+        try:
+            self._trajectory_recompute_timer.setInterval(250)
+        except Exception:
+            pass
+        self._trajectory_compute_inflight = False
+        self._trajectory_emit_timer = QTimer(self)
+        self._trajectory_emit_timer.setSingleShot(True)
+        try:
+            self._trajectory_emit_timer.setInterval(120)
+        except Exception:
+            pass
+
+        def _on_traj_timer():
+            try:
+                self._compute_trajectory_async()
+            except Exception as _e:
+                logger.debug(f"Failed to start async trajectory compute: {_e}")
+
+        try:
+            self._trajectory_recompute_timer.timeout.connect(_on_traj_timer)
+        except Exception as _e:
+            logger.debug(f"Could not connect trajectory timer: {_e}")
 
         logger.info(f"Initial WiFi status: connected={initial_wifi_connected}, ssid='{initial_wifi_ssid}'")
         logger.info("Setting up timers...")
