@@ -3600,8 +3600,9 @@ class Backend(QObject):
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
 
-        # Update trajectory now that data is loaded
-        self.updateGlobeTrajectory.emit()
+        # Update trajectory now that data is loaded (debounced) and precompute in background
+        self._emit_update_globe_trajectory_debounced()
+        self._schedule_trajectory_recompute()
         # If this was the first online load, cue a one-shot web content reload
         if self._first_online_emitted and not self._web_reloaded_after_online:
             try:
@@ -3639,7 +3640,8 @@ class Backend(QObject):
             self.weatherChanged.emit()
             self.eventModelChanged.emit()
             # Update trajectory now that cached data is applied
-            self.updateGlobeTrajectory.emit()
+            self._emit_update_globe_trajectory_debounced()
+            self._schedule_trajectory_recompute()
         except Exception as _e:
             logger.debug(f"BOOT: Error emitting offline refresh signals: {_e}")
         logger.info("BOOT: Offline mode activated - app should now show cached data")
@@ -3669,7 +3671,8 @@ class Backend(QObject):
             self.launchTrayVisibilityChanged.emit()
             self.eventModelChanged.emit()
             # Update trajectory now that we have at least cached data
-            self.updateGlobeTrajectory.emit()
+            self._emit_update_globe_trajectory_debounced()
+            self._schedule_trajectory_recompute()
             # Exit splash now that cache is applied
             self.setLoadingStatus("Application loaded…")
             self._isLoading = False
@@ -3890,7 +3893,8 @@ class Backend(QObject):
         self.launchTrayVisibilityChanged.emit()
         self.update_event_model()
         # Update globe trajectory in case current/next launch changed (e.g., after Success)
-        self.updateGlobeTrajectory.emit()
+        self._emit_update_globe_trajectory_debounced()
+        self._schedule_trajectory_recompute()
         # Clean up thread
         if hasattr(self, '_launch_updater_thread'):
             self._launch_updater_thread.quit()
