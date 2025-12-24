@@ -5587,6 +5587,30 @@ if __name__ == '__main__':
     
     app = QApplication(sys.argv)
 
+    # Harden Qt WebEngine against background throttling before initialization
+    try:
+        extra_flags = [
+            "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding",
+            "--disable-backgrounding-occluded-windows",
+            # Keep GPU fast paths if available
+            "--enable-zero-copy",
+            "--ignore-gpu-blocklist",
+        ]
+        existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
+        to_add = []
+        for f in extra_flags:
+            if f not in existing_flags:
+                to_add.append(f)
+        if to_add:
+            combined = (existing_flags + ' ' + ' '.join(to_add)).strip()
+            os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = combined
+            logger.info(f"Applied QTWEBENGINE_CHROMIUM_FLAGS: {combined}")
+        else:
+            logger.info("QTWEBENGINE_CHROMIUM_FLAGS already contain required anti-throttling flags")
+    except Exception as _e:
+        logger.warning(f"Failed to apply QTWEBENGINE_CHROMIUM_FLAGS: {_e}")
+
     # Ensure Qt WebEngine QML types are initialized before loading QML
     # This prevents runtime errors where WebEngineView is unknown in QML on some setups
     try:

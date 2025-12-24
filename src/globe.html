@@ -350,6 +350,8 @@
             }
         }
 
+        let __lastRenderTs = performance.now();
+        let __lastResumeLogTs = 0;
         function animate() {
             requestAnimationFrame(animate);
 
@@ -387,6 +389,9 @@
             if (renderer && scene && camera) {
                 renderer.render(scene, camera);
             }
+
+            // Track last render timestamp for watchdog
+            __lastRenderTs = performance.now();
         }
 
         function updateTrajectory(trajectoryData) {            // Remove existing trajectory line
@@ -786,12 +791,51 @@
             }
         });
 
-        // Provide guarded hooks for external callers (e.g., Qt side) trying to resume spin/animation.
+        // Provide guarded hooks for external callers (e.g., Qt side) trying to resume/pause spin/animation.
         // These will no-op while the user is interacting, to avoid unexpected auto-rotation restarts.
-        window.resumeSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.resumeSpin = function(){
+            if (userInteracting) { pendingSystemResume = true; return; }
+            systemPaused = false;
+            isAutoRotatePaused = (userPaused || systemPaused);
+            try { console.log('[globe] resumeSpin invoked'); } catch(e){}
+        };
+        window.pauseSpin = function(){
+            systemPaused = true;
+            isAutoRotatePaused = (userPaused || systemPaused);
+            try { console.log('[globe] pauseSpin invoked'); } catch(e){}
+        };
         window.startSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
         window.resumeAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
         window.startAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); };
+
+        // Visibility instrumentation
+        document.addEventListener('visibilitychange', function(){
+            try { console.log('[globe] visibilitychange:', document.visibilityState); } catch(e){}
+            if (document.visibilityState === 'visible') {
+                // When page becomes visible, allow a small grace then resume if allowed
+                setTimeout(function(){
+                    if (!userPaused && window.globeAutospinGuard !== false) {
+                        window.resumeSpin();
+                    }
+                }, 250);
+            }
+        });
+
+        // Self-healing watchdog: if frames stop for >3s while visible, resume
+        (function(){
+            const CHECK_MS = 1000;
+            const STALL_MS = 3000;
+            setInterval(function(){
+                if (typeof document === 'undefined') return;
+                if (document.visibilityState !== 'visible') return;
+                if (window.globeAutospinGuard === false) return;
+                const now = performance.now();
+                if (now - __lastRenderTs > STALL_MS) {
+                    try { console.log('[globe] watchdog: render stalled, attempting resume'); } catch(e){}
+                    window.resumeSpin();
+                }
+            }, CHECK_MS);
+        })();
 
         // Play/Pause button functionality
         document.getElementById('playPauseBtn').addEventListener('click', () => {
@@ -805,6 +849,9 @@
                 icon.className = 'fas fa-pause';
             }
         });
+
+        // Initial instrumentation
+        try { console.log('[globe] script loaded; awaiting boot'); } catch(e){}
     </script>
 </body>
 </html>
