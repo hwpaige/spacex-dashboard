@@ -1138,9 +1138,6 @@ configure_openbox() {
       <mousebind button=\"Right\" action=\"Press\">
         <action name=\"Focus\"/>
         <action name=\"Raise\"/>
-        <action name=\"ShowMenu\">
-          <menu>client-menu</menu>
-        </action>
       </mousebind>
     </context>
     <context name=\"Top\">
@@ -1200,16 +1197,10 @@ configure_openbox() {
         <action name=\"Focus\"/>
         <action name=\"Raise\"/>
         <action name=\"Unshade\"/>
-        <action name=\"ShowMenu\">
-          <menu>client-menu</menu>
-        </action>
       </mousebind>
       <mousebind button=\"Right\" action=\"Press\">
         <action name=\"Focus\"/>
         <action name=\"Raise\"/>
-        <action name=\"ShowMenu\">
-          <menu>client-menu</menu>
-        </action>
       </mousebind>
     </context>
     <context name=\"AllDesktops\">
@@ -1302,14 +1293,10 @@ configure_openbox() {
     </context>
     <context name=\"Root\">
       <mousebind button=\"Middle\" action=\"Press\">
-        <action name=\"ShowMenu\">
-          <menu>client-list-combined-menu</menu>
-        </action>
+        <action name=\"Focus\"/>
       </mousebind>
       <mousebind button=\"Right\" action=\"Press\">
-        <action name=\"ShowMenu\">
-          <menu>root-menu</menu>
-        </action>
+        <action name=\"Focus\"/>
       </mousebind>
     </context>
     <context name=\"MoveResize\">
@@ -1518,6 +1505,7 @@ main() {
     configure_boot
     setup_repository
     configure_update_permissions
+    configure_openbox
     configure_plymouth
     configure_touch_rotation
     create_xinitrc
