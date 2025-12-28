@@ -1,0 +1,3551 @@
+"""
+QML source moved from src/app.py into this module to reduce the size and
+complexity of app.py.
+
+INSTRUCTIONS FOR MECHANICAL COPY (one-time):
+1) Copy the entire QML text currently preserved in src/app.py as a large
+   triple-quoted literal (it starts right after the line that says
+   "QML moved to src/ui_qml.py (variable: qml_code)." and ends at the
+   closing triple quotes just before engine.loadData call).
+2) Paste it below as the value of qml_code (replace the placeholder).
+3) After you paste, you can safely delete the big triple-quoted block from
+   src/app.py.
+
+Notes:
+- Keep the triple quotes exactly as shown below to avoid escaping issues.
+- No Python formatting is needed; just paste the QML text as-is between
+  the triple quotes.
+"""
+
+# Minimal placeholder so the app can still start before you paste the full QML.
+# Replace this entire string with the real QML as per the steps above.
+qml_code = """
+import QtQuick
+import QtQuick.Window
+import QtQuick.Controls
+import QtQuick.Layouts
+import Charts 1.0
+import QtWebEngine
+// Qt5Compat.GraphicalEffects (OpacityMask) removed to avoid hard dependency
+
+Window {
+    id: root
+    visible: true
+    width: 1480
+    height: 320
+    title: "SpaceX/F1 Dashboard"
+    onActiveChanged: {
+        if (active) {
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+            }
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+            }
+        }
+    }
+    // Use the same background color as the globe view for visual consistency
+    color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+    Behavior on color { ColorAnimation { duration: 300 } }
+
+    property bool isWindyFullscreen: false
+    // Track the currently selected YouTube URL for the video card.
+    // Initialized to the default playlist URL provided by the backend context property.
+    property url currentVideoUrl: videoUrl
+
+    // Alignment guide removed after calibration; margins are now fixed below.
+
+    // Helper to enforce rounded corners inside WebEngine pages themselves.
+    // This injects CSS into the page to round and clip at the document level,
+    // which works even when the scene-graph clipping is ignored by Chromium.
+    function _injectRoundedCorners(webView, radiusPx) {
+        if (!webView || !webView.runJavaScript)
+            return;
+        var r = Math.max(0, radiusPx|0);
+        var js = "(function(){try{" +
+                 "var r=" + r + ";" +
+                 "var apply=function(){var h=document.documentElement, b=document.body;" +
+                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.background='transparent'; h.style.clipPath='inset(0 round '+r+'px)';}" +
+                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.background='transparent'; b.style.clipPath='inset(0 round '+r+'px)';}" +
+                 "};" +
+                 "apply();" +
+                 "var i=0; var timer=setInterval(function(){try{apply(); if(++i>10) clearInterval(timer);}catch(e){clearInterval(timer);}}, 500);" +
+                 "}catch(e){}})();";
+        webView.runJavaScript(js);
+    }
+
+    // Debounce non-globe web content reloads so the globe keeps spinning smoothly
+    // and other views refresh once after Wi‑Fi connection settles.
+    Timer {
+        id: reloadCoalesceTimer
+        interval: 1200
+        repeat: false
+        running: false
+        onTriggered: {
+            // Reload F1 chart view
+            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
+                f1ChartView.reload()
+                console.log("F1 chart view reloaded (debounced)")
+            }
+            // Reload YouTube/map view
+            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
+                youtubeView.reload()
+                console.log("YouTube/map view reloaded (debounced)")
+            }
+            // Reload x.com view
+            if (typeof xComView !== 'undefined' && xComView.reload) {
+                xComView.reload()
+                console.log("x.com view reloaded (debounced)")
+            }
+            // Reload weather views
+            if (typeof weatherSwipe !== 'undefined') {
+                for (var i = 0; i < weatherSwipe.count; i++) {
+                    var item = weatherSwipe.itemAt(i);
+                    if (!item) continue;
+                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
+                    var webChild = null;
+                    if (container && container.children && container.children.length > 0) {
+                        for (var c = 0; c < container.children.length; c++) {
+                            var ch = container.children[c];
+                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
+                        }
+                    }
+                    if (webChild && webChild.reload) {
+                        try { webChild.reload(); console.log("Weather view", i, "reloaded (debounced)"); }
+                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
+                    }
+                }
+            }
+            // Lightweight backend refreshes
+            if (typeof backend !== 'undefined' && backend.update_countdown) {
+                backend.update_countdown();
+                console.log("Countdown refreshed (debounced)");
+            }
+            if (typeof backend !== 'undefined' && backend.update_weather) {
+                backend.update_weather();
+                console.log("Weather data refresh initiated (debounced)");
+            }
+            // Nudge globe(s) again after network-driven reloads completed
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+            }
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+            }
+        }
+    }
+
+    Component.onCompleted: {
+        console.log("Window created - bottom bar should be visible")
+        // Connect web content reload signal
+        backend.reloadWebContent.connect(function() {
+            console.log("Reloading web content after WiFi connection...")
+            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
+            // Instead, nudge animation loops to resume if they paused.
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try {
+                    globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                } catch (e) { console.log("Globe view JS resume failed:", e); }
+            }
+            // Plot card globe view (left-most card) – also avoid reload
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try {
+                    plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+            }
+            // Debounce all other heavy reloads to a single update shortly after connect
+            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
+            reloadCoalesceTimer.start();
+        })
+        // Push globe autospin guard flag into globe pages
+        var guard = backend.globeAutospinGuard
+        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
+        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
+        }
+        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
+        }
+        // Resume spin on key backend signals
+        backend.launchCacheReady.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.updateGlobeTrajectory.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.loadingFinished.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.firstOnline.connect(function(){
+            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        // Keep guard value in sync if changed at runtime
+        backend.globeAutospinGuardChanged.connect(function(){
+            var guard2 = backend.globeAutospinGuard
+            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
+        })
+    }
+
+    Rectangle {
+        id: loadingScreen
+        anchors.fill: parent
+        // Match app background to the globe background
+        color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+    // Keep this container visible during initial load OR while an update is in progress
+    visible: !!(backend && (backend.isLoading || backend.updatingInProgress))
+        z: 1
+
+        ColumnLayout {
+            anchors.centerIn: parent
+            spacing: 20
+
+            Image {
+                source: "file:///" + spacexLogoPath
+                Layout.alignment: Qt.AlignHCenter
+                width: 120
+                height: 120
+                sourceSize.width: 120
+                sourceSize.height: 120
+                fillMode: Image.PreserveAspectFit
+            }
+
+            Text {
+                text: backend.loadingStatus
+                Layout.alignment: Qt.AlignHCenter
+                color: backend.theme === "dark" ? "#ffffff" : "#000000"
+                font.pixelSize: 16
+                font.family: "D-DIN"
+                horizontalAlignment: Text.AlignHCenter
+            }
+        }
+
+        // Update progress overlay (shown during in-app update)
+        Rectangle {
+            id: updateOverlay
+            anchors.fill: parent
+            visible: backend && backend.updatingInProgress
+            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+            opacity: 0.98
+            z: 9999
+
+            // Block all mouse/keyboard input to underlying UI while updating
+            MouseArea { anchors.fill: parent; hoverEnabled: true }
+
+            Column {
+                anchors.centerIn: parent
+                spacing: 16
+                width: Math.min(parent.width * 0.8, 700)
+
+                // Logo
+                Image {
+                    source: spacexLogoPath
+                    width: 240
+                    height: 48
+                    fillMode: Image.PreserveAspectFit
+                    anchors.horizontalCenter: parent.horizontalCenter
+                }
+
+                // Progress text area showing tail of updater log
+                Rectangle {
+                    width: parent.width
+                    height: 140
+                    radius: 8
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+
+                    ScrollView {
+                        anchors.fill: parent
+                        anchors.margins: 10
+                        clip: true
+                        ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+
+                        TextArea {
+                            readOnly: true
+                            text: backend && backend.updatingStatus ? backend.updatingStatus : "Preparing update…"
+                            color: backend.theme === "dark" ? "#E0E0E0" : "#202020"
+                            selectionColor: "transparent"
+                            wrapMode: TextArea.Wrap
+                            background: null
+                        }
+                    }
+                }
+
+                // Subtext
+                Text {
+                    text: "Updating application… the device will reboot automatically when complete."
+                    color: backend.theme === "dark" ? "#C0C0C0" : "#404040"
+                    font.pixelSize: 14
+                    horizontalAlignment: Text.AlignHCenter
+                    width: parent.width
+                }
+
+                // Minimal spinner imitation (animated dots)
+                Row {
+                    spacing: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    Repeater {
+                        model: 3
+                        Rectangle {
+                            width: 8; height: 8; radius: 4
+                            color: backend.theme === "dark" ? "#9ad1d4" : "#2a2e2e"
+                            SequentialAnimation on opacity {
+                                running: updateOverlay.visible
+                                loops: Animation.Infinite
+                                NumberAnimation { from: 0.2; to: 1.0; duration: 600; easing.type: Easing.InOutQuad }
+                                NumberAnimation { from: 1.0; to: 0.2; duration: 600; easing.type: Easing.InOutQuad }
+                                // Use a dedicated PauseAnimation element; 'pause' is not a valid property
+                                PauseAnimation { duration: index * 120 }
+                            }
+                        }
+                    }
+                }
+
+                // Cancel button row
+                Row {
+                    spacing: 8
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    // Keep some top margin from the log area
+                    anchors.topMargin: 6
+
+                    Rectangle {
+                        id: cancelUpdateBtn
+                        width: 140
+                        height: 28
+                        radius: 14
+                        color: "#F44336"   // Red to match dropdown switch/error accent
+                        border.color: backend.theme === "dark" ? "#b93b30" : "#d13c32"
+                        border.width: 1
+                        visible: backend && backend.updatingInProgress
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "Cancel Update"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: "white"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (backend && backend.cancelUpdate) {
+                                    backend.cancelUpdate()
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Alignment guide rectangle removed
+
+    // Cache expensive / repeated lookups
+    property var nextRace: backend.get_next_race()
+    Timer { interval: 60000; running: true; repeat: true; onTriggered: nextRace = backend.get_next_race() }
+
+    Connections {
+        target: backend
+        function onModeChanged() {
+            if (backend.mode === "f1") {
+                nextRace = backend.get_next_race()
+            }
+        }
+        function onF1Changed() {
+            if (backend.mode === "f1") {
+                nextRace = backend.get_next_race()
+            }
+        }
+        function onUpdateGlobeTrajectory() {
+            // Update trajectory when data loads
+            var trajectoryData = backend.get_launch_trajectory();
+            if (trajectoryData) {
+                if (globeView && globeView.runJavaScript) {
+                    globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
+                if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
+                    plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
+            }
+        }
+    }
+
+    // Safe area: pretend the right edge is closer by shrinking the usable width
+    // This ensures all content is laid out as if the screen were narrower.
+    Item {
+        id: safeArea
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
+        anchors.rightMargin: 12
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 5
+            // No rightMargin here — safeArea already reduces width on the right
+            anchors.topMargin: 5
+            anchors.bottomMargin: 5
+            spacing: 5
+            visible: !!(!backend || !backend.isLoading)
+
+            RowLayout {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            spacing: 5
+
+            // Column 1: Launch Trends or Driver Standings
+            Rectangle {
+                id: plotCard
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                // When showing the globe inside this card, match the app background
+                // so the globe appears to sit directly on the window background.
+                color: plotCard.plotCardShowsGlobe
+                       ? (backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8")
+                       : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                radius: 8
+                clip: false
+                visible: !isWindyFullscreen
+                // Toggle to switch between plot and globe within this card
+                // Default to globe view on app load
+                property bool plotCardShowsGlobe: true
+                // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
+                property real toggleAbsX: 0
+                property real toggleAbsY: 0
+                function cacheToggleAbsPos() {
+                    // If the bar toggle is visible, use its real position
+                    if (globeToggle && globeToggle.visible) {
+                        var pt = globeToggle.mapToItem(plotCard, 0, 0)
+                        toggleAbsX = pt.x
+                        toggleAbsY = pt.y
+                    } else {
+                        // Fallback for initial globe mode (bar hidden): compute exact position
+                        // to match where the toggle would be inside the centered RowLayout.
+                        // Row composition (as currently defined):
+                        // - 5 chart buttons @ 40px each
+                        // - RowLayout spacing: 6px between items (6 gaps before toggle)
+                        // - spacer Item: 8px
+                        // - toggle button: 40px (matches other buttons)
+                        var btnCount = 5;
+                        var btnW = 40;
+                        var spacerW = 8;
+                        var toggleW = 40;
+                        var spacing = 6;
+                        var gapsBeforeToggle = btnCount /*buttons*/ + 1 /*spacer*/; // number of items before toggle
+                        var spacingBeforeToggle = gapsBeforeToggle * spacing; // gaps before toggle
+                        var widthBeforeToggle = (btnCount * btnW) + spacerW + spacingBeforeToggle;
+                        var totalRowWidth = widthBeforeToggle + toggleW + spacing; // include last spacing after toggle for symmetry (harmless)
+
+                        // The RowLayout is centered in the bar, so compute its left edge
+                        var rowLeftX = Math.max(0, (plotCard.width - totalRowWidth) / 2);
+                        // Toggle's left X inside the card
+                        toggleAbsX = rowLeftX + widthBeforeToggle;
+
+                        // Vertically align within the (hidden) bar area at the bottom of the card
+                        var pillH = 28; // match button height
+                        var barH = 30;
+                        toggleAbsY = Math.max(2, plotCard.height - barH + (barH - pillH) / 2);
+                    }
+                }
+                Component.onCompleted: {
+                    cacheToggleAbsPos()
+                    // Defer once more to ensure layout metrics are finalized
+                    Qt.callLater(cacheToggleAbsPos)
+                }
+                onWidthChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
+                onHeightChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: !!(backend && backend.mode === "spacex")
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            // Remove spacing in globe mode so no background strip remains
+                            spacing: plotCard.plotCardShowsGlobe ? 0 : 5
+
+                            // Plot view (default)
+                            ChartItem {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                visible: !plotCard.plotCardShowsGlobe
+
+                                chartType: backend.chartType
+                                viewMode: backend.chartViewMode
+                                series: backend.launchTrendsSeries
+                                months: backend.launchTrendsMonths
+                                maxValue: backend.launchTrendsMaxValue
+                                theme: backend.theme
+
+                                opacity: showAnimated
+
+                                property real showAnimated: 0
+
+                                Component.onCompleted: showAnimated = 1
+
+                                Behavior on showAnimated {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                }
+                            }
+
+                            // Globe view (reuses the upcoming launch tray globe)
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                            WebEngineView {
+                                id: plotGlobeView
+                                // Ensure the globe view fills all available space in the layout
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                visible: plotCard.plotCardShowsGlobe
+                                url: globeUrl
+                                // Transparent so the card's color shows through rounded edges after DOM rounding
+                                backgroundColor: "transparent"
+                                zoomFactor: 1.0
+                                layer.enabled: true
+                                layer.smooth: true
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: false
+                                // Disable any default context menu (long-press/right-click)
+                                onContextMenuRequested: function(request) { request.accepted = true }
+
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        var trajectoryData = backend.get_launch_trajectory();
+                                        if (trajectoryData) {
+                                            plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                        }
+                                        // Enforce rounded corners inside the page itself
+                                        root._injectRoundedCorners(plotGlobeView, 8)
+                                        // Ensure the plot card globe animation loop starts/resumes on initial load
+                                        try {
+                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
+                                        } catch (e) { console.log("Plot globe JS nudge error:", e); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Chart control buttons container (hidden in globe view)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: plotCard.plotCardShowsGlobe ? 0 : 30
+                        Layout.maximumHeight: plotCard.plotCardShowsGlobe ? 0 : 30
+                        Layout.alignment: Qt.AlignTop
+                        color: "transparent"
+                        visible: backend && backend.mode === "spacex" && !plotCard.plotCardShowsGlobe
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
+                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
+                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                           (backend.chartType === modelData.type ?
+                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")) :
+                                           (backend.chartViewMode === modelData.type ?
+                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"))
+                                    radius: 14
+                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend.chartType === modelData.type ?
+                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")) :
+                                                 (backend.chartViewMode === modelData.type ?
+                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend.chartType === modelData.type ? 2 : 1) :
+                                                 (backend.chartViewMode === modelData.type ? 2 : 1)
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                  backend.chartType = modelData.type :
+                                                  backend.chartViewMode = modelData.type
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        delay: 500
+                                    }
+                                }
+                            }
+
+                            // Toggle button between Plot and Globe (matches bar button style)
+                            Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
+                            Rectangle {
+                                id: globeToggle
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                width: 40
+                                height: 28
+                                radius: 14
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    // In plot view (globe hidden), show globe icon; if ever visible otherwise, show plot icon
+                                    text: plotCard.plotCardShowsGlobe ? "\uf201" : "\uf0ac"
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
+                                        // Cache absolute position before switching modes so overlay button can match position
+                                        plotCard.cacheToggleAbsPos()
+                                        plotCard.plotCardShowsGlobe = true
+                                    }
+                                    cursorShape: Qt.PointingHandCursor
+                                }
+
+                                ToolTip { text: "Show Globe"; delay: 500 }
+                                // Keep cached position updated when layout changes while visible
+                                onXChanged: plotCard.cacheToggleAbsPos()
+                                onYChanged: plotCard.cacheToggleAbsPos()
+                                onWidthChanged: plotCard.cacheToggleAbsPos()
+                                onHeightChanged: plotCard.cacheToggleAbsPos()
+                                onVisibleChanged: if (visible) plotCard.cacheToggleAbsPos()
+                            }
+                        }
+                    }
+
+                    // Overlay toggle button (same style as bar buttons), positioned absolutely using cached coordinates
+                    Rectangle {
+                        id: globeOverlayToggle
+                        parent: plotCard
+                        visible: backend && backend.mode === "spacex" && plotCard.plotCardShowsGlobe
+                        x: plotCard.toggleAbsX
+                        y: plotCard.toggleAbsY
+                        width: 40
+                        height: 28
+                        radius: 14
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
+                        z: 1000
+
+                        Behavior on color { ColorAnimation { duration: 200 } }
+                        Behavior on border.color { ColorAnimation { duration: 200 } }
+                        Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                        Text {
+                            anchors.centerIn: parent
+                            // In globe view (overlay visible), show plot icon to switch back
+                            text: "\uf201"
+                            font.pixelSize: 14
+                            font.family: "Font Awesome 5 Free"
+                            color: backend.theme === "dark" ? "white" : "black"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                // Restore bar; cache position in case layout shifts back
+                                plotCard.plotCardShowsGlobe = false
+                                plotCard.cacheToggleAbsPos()
+                            }
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        ToolTip { text: "Show Plot"; delay: 500 }
+                    }
+
+                    // F1 Driver Points Chart
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: backend && backend.mode === "f1"
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            spacing: 0
+
+                            Text {
+                                text: "F1 Driver Standings Over Time"
+                                font.pixelSize: 14
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                                Layout.alignment: Qt.AlignHCenter
+                                Layout.margins: 1
+                            }
+
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                            WebEngineView {
+                                id: f1ChartView
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.margins: 5
+                                layer.enabled: true
+                                layer.smooth: true
+                                backgroundColor: "transparent"
+
+                                // Bind url to chart file URL that updates reactively
+                                url: backend.f1ChartUrl
+
+                                opacity: showAnimated
+
+                                property real showAnimated: 0
+
+                                Component.onCompleted: showAnimated = 1
+
+                                Behavior on showAnimated {
+                                    NumberAnimation {
+                                        duration: 500
+                                        easing.type: Easing.InOutQuad
+                                    }
+                                }
+
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        root._injectRoundedCorners(f1ChartView, 8)
+                                    }
+                                }
+                            }
+
+                            // F1 Stat selector buttons container
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 30
+                                Layout.maximumHeight: 30
+                                Layout.alignment: Qt.AlignTop
+                                color: "transparent"
+                                visible: backend && backend.mode === "f1"
+
+                                RowLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 6
+
+                                    // Chart category buttons
+                                    Repeater {
+                                        model: [
+                                            {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
+                                            {"type": "weather", "icon": "\uf6c4", "tooltip": "Weather Data"},
+                                            {"type": "telemetry", "icon": "\uf0e4", "tooltip": "Telemetry"},
+                                            {"type": "positions", "icon": "\uf3c5", "tooltip": "Driver Positions"},
+                                            {"type": "laps", "icon": "\uf2f1", "tooltip": "Lap Times"}
+                                        ]
+                                        Rectangle {
+                                            Layout.preferredWidth: 40
+                                            Layout.preferredHeight: 28
+                                            color: backend.f1ChartType === modelData.type ?
+                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                            radius: 14
+                                            border.color: backend.f1ChartType === modelData.type ?
+                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                            border.width: backend.f1ChartType === modelData.type ? 2 : 1
+
+                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.icon
+                                                font.pixelSize: 14
+                                                font.family: "Font Awesome 5 Free"
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: backend.f1ChartType = modelData.type
+                                            }
+
+                                            ToolTip {
+                                                text: modelData.tooltip
+                                                delay: 500
+                                            }
+                                        }
+                                    }
+
+                                    // Stat type buttons
+                                    Repeater {
+                                        model: [
+                                            {"type": "points", "icon": "\uf091", "tooltip": "Points"},
+                                            {"type": "wins", "icon": "\uf005", "tooltip": "Wins"}
+                                        ]
+                                        Rectangle {
+                                            Layout.preferredWidth: 40
+                                            Layout.preferredHeight: 28
+                                            color: backend.f1ChartStat === modelData.type ?
+                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                            radius: 14
+                                            border.color: backend.f1ChartStat === modelData.type ?
+                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                            border.width: backend.f1ChartStat === modelData.type ? 2 : 1
+
+                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.color { ColorAnimation { duration: 200 } }
+                                            Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: modelData.icon
+                                                font.pixelSize: 14
+                                                font.family: "Font Awesome 5 Free"
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                            }
+
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: backend.f1ChartStat = modelData.type
+                                            }
+
+                                            ToolTip {
+                                                text: modelData.tooltip
+                                                delay: 500
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Column 2: Radar or Race Calendar
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                // Remove rounded corners/clipping for Windy card to restore animations
+                radius: 0
+                clip: false
+                // Layers can remain enabled; no clipping applied
+                layer.enabled: true
+                layer.smooth: true
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                        SwipeView {
+                            id: weatherSwipe
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            anchors.margins: 10
+                            visible: backend && backend.mode === "spacex"
+                            orientation: Qt.Vertical
+                            // Do not clip; allow Windy WebGL to render freely
+                            clip: false
+                            // Keep layer enabled for performance but without clipping
+                            layer.enabled: true
+                            layer.smooth: true
+                            interactive: true
+                            currentIndex: 1
+
+                        Component.onCompleted: {
+                            console.log("SwipeView completed, count:", count);
+                        }
+
+                        Repeater {
+                            model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
+
+                            Item {
+                                // Container without rounded corners or clipping for Windy views
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 0
+                                    color: "transparent"
+                                    clip: false
+                                    // Layer can remain enabled
+                                    layer.enabled: true
+                                    layer.smooth: true
+
+                                    // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                                    WebEngineView {
+                                        id: webView
+                                        objectName: "webView"
+                                        anchors.fill: parent
+                                        // Make the view itself a layer to cooperate with ancestor clipping
+                                        layer.enabled: true
+                                        layer.smooth: true
+                                        // Avoid white square corners by letting parent background show through
+                                        backgroundColor: "transparent"
+                                        url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
+                                        settings.webGLEnabled: true
+                                        settings.accelerated2dCanvasEnabled: true
+                                        settings.allowRunningInsecureContent: true
+                                        settings.javascriptEnabled: true
+                                        settings.localContentCanAccessRemoteUrls: true
+                                        onFullScreenRequested: function(request) {
+                                            request.accept();
+                                            root.visibility = Window.FullScreen
+                                        }
+                                        onLoadingChanged: function(loadRequest) {
+                                            if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                                console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
+                                            } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                                console.log("WebEngineView loaded successfully for", modelData);
+                                                // No rounding injection for Windy to preserve animations
+                                            }
+                                        }
+                                    }
+
+                                    // overlay mask removed
+                                }
+
+                                // Removed top-center icon overlay for Windy views as requested
+
+                                // Fullscreen button for weather views
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.topMargin: 90
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 5
+                                    width: 30
+                                    height: 30
+                                    color: "transparent"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
+                                        font.family: "Font Awesome 5 Free"
+                                        font.pixelSize: 16
+                                        color: "white"
+                                        style: Text.Outline
+                                        styleColor: "black"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: isWindyFullscreen = !isWindyFullscreen
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // F1 Leaderboards
+                    Item {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        visible: backend && backend.mode === "f1"
+
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            spacing: 0
+
+                        // Standings List
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            Layout.margins: 5
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                            radius: 8
+                            border.color: backend.theme === "dark" ? "#404040" : "#e0e0e0"
+                            border.width: 1
+
+                            GridView {
+                                id: standingsGrid
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                model: backend.f1StandingsType === "drivers" ?
+                                       backend.driverStandings.slice(0, 20) :
+                                       backend.constructorStandings.slice(0, 10)
+                                clip: true
+                                cellWidth: (width - 10) / 2  // 2 columns accounting for margins
+                                cellHeight: 22  // Slightly more compact
+                                flow: GridView.TopToBottom  // Fill columns top to bottom
+
+                                delegate: Rectangle {
+                                    width: standingsGrid.cellWidth - 2
+                                    height: 18  // Match cell height minus margins
+                                    color: "transparent"
+
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        anchors.margins: 1
+                                        color: index % 2 === 0 ?
+                                               (backend.theme === "dark" ? "#404040" : "#f8f8f8") :
+                                               (backend.theme === "dark" ? "#353535" : "#ffffff")
+                                        radius: 4
+                                        border.color: backend.theme === "dark" ? "#555555" : "#e8e8e8"
+                                        border.width: 1
+
+                                        // Position number - always same color
+                                        Text {
+                                            width: 16
+                                            height: parent.height - 1
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 1
+                                            verticalAlignment: Text.AlignVCenter
+                                            horizontalAlignment: Text.AlignCenter
+                                            text: modelData.position
+                                            font.pixelSize: 7
+                                            font.bold: true
+                                            color: backend.theme === "dark" ? "#ffffff" : "#333333"
+                                        }
+
+                                        Row {
+                                            spacing: 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            anchors.left: parent.left
+                                            anchors.leftMargin: 18  // Leave space for position number
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 40  // Leave space for points
+
+                                            // Team logo
+                                            Image {
+                                                width: 14
+                                                height: 14
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                source: {
+                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
+
+                                                    // Normalize team name for lookup
+                                                    var normalizedTeamName = teamName.toLowerCase();
+                                                    var lookupName = normalizedTeamName;
+                                                    
+                                                    // Map raw API names to standard names
+                                                    var nameMapping = {
+                                                        "mclaren formula 1 team": "McLaren",
+                                                        "red bull racing": "Red Bull",
+                                                        "mercedes formula 1 team": "Mercedes",
+                                                        "scuderia ferrari": "Ferrari",
+                                                        "williams racing": "Williams",
+                                                        "rb f1 team": "AlphaTauri",
+                                                        "sauber f1 team": "Alfa Romeo",
+                                                        "haas f1 team": "Haas F1 Team",
+                                                        "aston martin f1 team": "Aston Martin",
+                                                        "alpine f1 team": "Alpine"
+                                                    };
+                                                    
+                                                    if (nameMapping[normalizedTeamName]) {
+                                                        lookupName = nameMapping[normalizedTeamName];
+                                                    }
+
+                                                    var teamLogos = {
+                                                        "Mercedes": "file:///" + f1TeamsPath + "/mercedes.svg",
+                                                        "Red Bull": "file:///" + f1TeamsPath + "/red_bull.svg",
+                                                        "Ferrari": "file:///" + f1TeamsPath + "/ferrari.svg",
+                                                        "McLaren": "file:///" + f1TeamsPath + "/mclaren.svg",
+                                                        "Alpine": "file:///" + f1TeamsPath + "/alpine.svg",
+                                                        "Aston Martin": "file:///" + f1TeamsPath + "/aston_martin.svg",
+                                                        "Williams": "file:///" + f1TeamsPath + "/williams.svg",
+                                                        "Alfa Romeo": "file:///" + f1TeamsPath + "/alfa_romeo.svg",
+                                                        "Haas F1 Team": "file:///" + f1TeamsPath + "/haas.svg",
+                                                        "AlphaTauri": "file:///" + f1TeamsPath + "/alpha_tauri.svg"
+                                                    };
+                                                    var logo = teamLogos[lookupName];
+                                                    return logo || "";
+                                                }
+                                                fillMode: Image.PreserveAspectFit
+                                                visible: source !== ""
+                                            }
+
+                                            // Driver/Constructor name
+                                            Text {
+                                                text: backend.f1StandingsType === "drivers" ?
+                                                      (modelData.Driver.givenName + " " + modelData.Driver.familyName) :
+                                                      modelData.Constructor.name
+                                                font.pixelSize: 8
+                                                font.bold: true
+                                                color: backend.theme === "dark" ? "#ffffff" : "#333333"
+                                                Layout.fillWidth: true
+                                                elide: Text.ElideRight
+                                            }
+
+                                            // Team color indicator
+                                            Rectangle {
+                                                width: 12
+                                                height: 12
+                                                anchors.verticalCenter: parent.verticalCenter
+                                                color: {
+                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
+                                                    return color || "#FF0000";
+                                                }
+                                                radius: 2
+                                                border.color: backend.theme === "dark" ? "#666666" : "#cccccc"
+                                                border.width: 1
+                                            }
+                                        }
+
+                                        // Points - positioned at far right
+                                        Text {
+                                            anchors.right: parent.right
+                                            anchors.rightMargin: 2
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            text: modelData.points + " pts"
+                                            font.pixelSize: 7
+                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                            font.bold: true
+                                            width: 35
+                                            horizontalAlignment: Text.AlignRight
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Standings type selector buttons container
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 30
+                            Layout.maximumHeight: 30
+                            Layout.alignment: Qt.AlignTop
+                            color: "transparent"
+                            visible: backend && backend.mode === "f1"
+
+                            RowLayout {
+                                anchors.centerIn: parent
+                                spacing: 6
+
+                                // Standings type buttons
+                                Repeater {
+                                    model: [
+                                        {"type": "drivers", "icon": "\uf1b9", "tooltip": "Driver Standings"},
+                                        {"type": "constructors", "icon": "\uf085", "tooltip": "Constructor Standings"}
+                                    ]
+                                    Rectangle {
+                                        Layout.preferredWidth: 40
+                                        Layout.preferredHeight: 28
+                                        color: backend.f1StandingsType === modelData.type ?
+                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                               (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                        radius: 14
+                                        border.color: backend.f1StandingsType === modelData.type ?
+                                                     (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                     (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                        border.width: backend.f1StandingsType === modelData.type ? 2 : 1
+
+                                        Behavior on color { ColorAnimation { duration: 200 } }
+                                        Behavior on border.color { ColorAnimation { duration: 200 } }
+                                        Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.icon
+                                            font.pixelSize: 14
+                                            font.family: "Font Awesome 5 Free"
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.f1StandingsType = modelData.type
+                                        }
+
+                                        ToolTip {
+                                            text: modelData.tooltip
+                                            delay: 500
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                    // Weather view buttons container
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        Layout.maximumHeight: 30
+                        Layout.alignment: Qt.AlignTop
+                        color: "transparent"
+                        visible: backend && backend.mode === "spacex"
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "radar", "icon": "\uf7c0", "tooltip": "Weather Radar"},
+                                    {"type": "wind", "icon": "\uf72e", "tooltip": "Wind Speed"},
+                                    {"type": "gust", "icon": "\uf72e", "tooltip": "Wind Gusts"},
+                                    {"type": "clouds", "icon": "\uf0c2", "tooltip": "Cloud Cover"},
+                                    {"type": "temp", "icon": "\uf2c7", "tooltip": "Temperature"},
+                                    {"type": "pressure", "icon": "\uf6c4", "tooltip": "Pressure"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: weatherSwipe.currentIndex === index ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 14
+                                    border.color: weatherSwipe.currentIndex === index ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: weatherSwipe.currentIndex === index ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: weatherSwipe.currentIndex = index
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+
+            // Column 3: Launches or Races
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                clip: true
+                visible: !isWindyFullscreen
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    ListView {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        model: backend.eventModel
+                        clip: true
+                        spacing: 5
+
+                        delegate: Item {
+                            width: ListView.view.width
+                            height: model && model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model && model.sessions && model.sessions.length ? model.sessions.length * 30 : 0)) : 40))
+
+                            Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
+
+                            Text {
+                                anchors.left: parent.left
+                                anchors.leftMargin: 15
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: (model && model.isGroup) ? (model.groupName ? model.groupName : "") : ""
+                                font.pixelSize: 14; font.bold: true; color: "#999999"; visible: !!(model && model.isGroup)
+                            }
+
+                            Column {
+                                id: launchColumn
+                                anchors.top: parent.top; anchors.topMargin: 5
+                                anchors.left: parent.left; anchors.leftMargin: 10
+                                anchors.right: parent.right; anchors.rightMargin: 10
+                                spacing: 5
+                                visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
+
+                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 12; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                Row { spacing: 5
+                                    Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
+                                }
+                                Row { spacing: 5
+                                    Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
+                                }
+                                Row { spacing: 5
+                                    Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
+                                }
+                                Text { text: ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                Text { text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
+                            }
+
+                            Rectangle {
+                                width: statusText.implicitWidth + 16
+                                height: 18
+                                color: (model && model.status === "TBD") ? "#FF9800" : ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336"
+                                radius: 10
+                                anchors.top: parent.top
+                                anchors.right: parent.right
+                                anchors.margins: 5
+                                visible: !!(model && !model.isGroup)
+                                Text {
+                                    id: statusText
+                                    text: ((model && model.status) ? model.status : "")
+                                    font.pixelSize: 13
+                                    font.bold: true
+                                    color: "white"
+                                    anchors.centerIn: parent
+                                }
+                            }
+
+                            Row {
+                                anchors.fill: parent; anchors.margins: 10
+                                visible: !!(model && !model.isGroup && backend.mode === "f1" && typeof model === 'object')
+                                spacing: 10
+                                
+                                Column {
+                                    width: parent.width * 0.6  // 60% for text
+                                    spacing: 5
+                                    
+                                    // Race header with flag and name
+                                    Row {
+                                        spacing: 8
+                                        Image {
+                                            source: model && model.countryName ? backend.getCountryFlag(model.countryName) : ""
+                                            width: 24
+                                            height: 18
+                                            visible: backend && backend.mode === "f1" && source !== ""
+                                        }
+                                        Text {
+                                            text: model && model.countryName && !backend.getCountryFlag(model.countryName) ? '🏁' : ''
+                                            font.pixelSize: 16
+                                            visible: backend && backend.mode === "f1" && text !== ''
+                                        }
+                                        Text { 
+                                            text: model && model.meetingName ? model.meetingName : ''; 
+                                            color: backend.theme === "dark" ? "white" : "black"; 
+                                            font.pixelSize: 14; 
+                                            font.bold: true
+                                        }
+                                    }
+                                    
+                                    // Circuit info
+                                    Text { text: model && model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
+                                    Text { text: model && model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
+                                    
+                                    // Sessions list
+                                    Column {
+                                        spacing: 2
+                                        visible: backend && backend.mode === "f1"
+                                        
+                                        property var raceSessions: model ? (model.sessions || []) : []
+                                        
+                                        Repeater {
+                                            model: parent.raceSessions
+                                            delegate: Row {
+                                                spacing: 8
+                                                visible: !!(modelData && typeof modelData === 'object' && modelData.session_name && modelData.date_start)
+                                                Text { 
+                                                    text: "\uf017"; 
+                                                    font.family: "Font Awesome 5 Free"; 
+                                                    font.pixelSize: 10; 
+                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#666666";
+                                                    anchors.verticalCenter: parent.verticalCenter
+                                                }
+                                                Text { 
+                                                    text: (modelData && modelData.session_name ? modelData.session_name : "") + ": " + (modelData && modelData.date_start ? Qt.formatDateTime(new Date(modelData.date_start), "MMM dd yyyy, hh:mm") + " UTC" : ""); 
+                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#999999"; 
+                                                    font.pixelSize: 11;
+                                                    font.bold: !!(modelData && modelData.session_type === "Race");
+                                                    anchors.verticalCenter: parent.verticalCenter;
+                                                    width: 200;  // Smaller since space is limited
+                                                    wrapMode: Text.Wrap;
+                                                    maximumLineCount: 2;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Track map
+                                Image {
+                                    width: parent.width * 0.4  // 40% for map
+                                    height: parent.height
+                                    source: model && model.trackMapPath ? model.trackMapPath : ""
+                                    visible: !!(model && model.trackMapPath)
+                                    fillMode: Image.PreserveAspectFit
+                                    asynchronous: true
+                                }
+                            }
+                        }
+                    }
+
+                    // Launch/Race view buttons container
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 30
+                        Layout.maximumHeight: 30
+                        Layout.alignment: Qt.AlignTop
+                        color: "transparent"
+                        visible: backend && (backend.mode === "spacex" || backend.mode === "f1")
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: backend.mode === "spacex" ? [
+                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
+                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"}
+                                ] : [
+                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Races"},
+                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Races"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: backend.eventType === modelData.type ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 14
+                                    border.color: backend.eventType === modelData.type ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.eventType === modelData.type ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: backend.eventType = modelData.type
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Column 4: Videos or Next Race Location
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                clip: true
+                visible: !isWindyFullscreen
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    spacing: 0
+
+                    WebEngineProfile {
+                        id: youtubeProfile
+                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        httpAcceptLanguage: "en-US,en"
+                        // Allow sending Referer headers for YouTube embeds
+                        offTheRecord: false
+                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
+                        httpCacheType: WebEngineProfile.DiskHttpCache
+                    }
+
+                    // Rounded-corner container to ensure YouTube/map view corners are clipped
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        radius: 8
+                        color: "transparent"
+                        clip: true
+                        layer.enabled: true
+                        layer.smooth: true
+
+                        // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                        WebEngineView {
+                            id: youtubeView
+                            profile: youtubeProfile
+                            anchors.fill: parent
+                            // Ensure proper rounded clipping and avoid white corners
+                            layer.enabled: true
+                            layer.smooth: true
+                            backgroundColor: "transparent"
+                            url: parent.visible ? (backend.mode === "spacex" ? root.currentVideoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
+                            settings.webGLEnabled: true
+                            settings.accelerated2dCanvasEnabled: true
+                            settings.allowRunningInsecureContent: true
+                            settings.javascriptEnabled: true
+                            settings.localContentCanAccessRemoteUrls: true
+                            settings.playbackRequiresUserGesture: false  // Allow autoplay
+                            settings.pluginsEnabled: true
+                            settings.javascriptCanOpenWindows: false
+                            settings.javascriptCanAccessClipboard: false
+                            settings.allowWindowActivationFromJavaScript: false
+                            onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
+                            onLoadingChanged: function(loadRequest) {
+                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                    console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                                    console.log("Error code:", loadRequest.errorCode);
+                                    console.log("Error domain:", loadRequest.errorDomain);
+
+                                    // Handle specific error codes
+                                    if (loadRequest.errorCode === 153) {
+                                        console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                        console.log("This is a new YouTube policy requiring API client identification");
+                                        console.log("Attempting to reload with proper headers...");
+
+                                        // Auto-retry for Referer header errors
+                                        reloadTimer.restart();
+                                    } else if (loadRequest.errorCode === 2) {
+                                        console.log("ERR_FAILED - Network or server error. Check your internet connection.");
+                                    } else if (loadRequest.errorCode === 3) {
+                                        console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
+                                    } else if (loadRequest.errorCode === 6) {
+                                        console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
+                                    } else if (loadRequest.errorCode === -3) {
+                                        console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
+                                    } else {
+                                        console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
+                                    }
+                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                    console.log("YouTube/Map WebEngineView loaded successfully");
+                                    // Apply internal page rounding to ensure corners clip
+                                    root._injectRoundedCorners(youtubeView, 8)
+                                    reloadTimer.stop(); // Stop any pending retries
+                                }
+                            }
+
+                            // Auto-retry timer for content length mismatch
+                            Timer {
+                                id: reloadTimer
+                                interval: 3000 // 3 seconds
+                                repeat: false
+                                onTriggered: {
+                                    console.log("Attempting to reload YouTube video after error 153...");
+                                    youtubeView.reload();
+                                }
+                            }
+                        }
+
+                        // Overlay for quick-action buttons floating on top of the video
+                        Item {
+                            id: youtubeOverlay
+                            anchors.fill: parent
+                            z: 2
+                            visible: backend && backend.mode === "spacex" && !isWindyFullscreen
+
+                            RowLayout {
+                                id: youtubePills
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                anchors.bottom: parent.bottom
+                                anchors.bottomMargin: 6
+                                spacing: 6
+
+                                // Starship playlist (current YouTube URL)
+                                Rectangle {
+                                    id: starshipBtn
+                                    // Match highlight logic used by Windy/plot pills: compare as strings to avoid url vs string type mismatch
+                                    property bool selected: (typeof videoUrl !== 'undefined' && videoUrl) ? (String(root.currentVideoUrl) === String(videoUrl)) : false
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: selected ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf135"   // FontAwesome rocket icon to match launch list
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (typeof videoUrl !== 'undefined' && videoUrl) {
+                                                // Ensure currentVideoUrl updates as a string URL to keep comparison consistent
+                                                root.currentVideoUrl = String(videoUrl)
+                                            } else {
+                                                console.log("videoUrl is not defined or empty")
+                                            }
+                                        }
+                                    }
+
+                                    ToolTip { text: "Starship Playlist"; delay: 500 }
+                                }
+
+                                // NSF Starbase Live stream
+                                Rectangle {
+                                    id: nsfBtn
+                                    // Load via local wrapper page to match existing youtube_embed.html approach
+                                    property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
+                                    // Compare as strings to match Windy/plot highlight logic reliably
+                                    property bool selected: String(root.currentVideoUrl) === nsfStarbaseUrl
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: selected ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf519"  // FontAwesome broadcast-tower
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            // Assign as string for consistent comparisons/updates
+                                            root.currentVideoUrl = nsfBtn.nsfStarbaseUrl
+                                        }
+                                    }
+
+                                    ToolTip { text: "NSF Starbase Live"; delay: 500 }
+                                }
+
+                                // Placeholder for current launch livestream (disabled)
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    radius: 14
+                                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.width: 1
+                                    opacity: 0.6
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "LIVE"
+                                        font.pixelSize: 14
+                                        font.bold: true
+                                        color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
+                                    }
+                                    MouseArea { anchors.fill: parent; enabled: false }
+                                    ToolTip { text: "Placeholder – will switch to the current launch livestream"; delay: 400 }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Bottom bar - FIXED VERSION
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 30
+            color: "transparent"
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 10
+                // Fixed padding to reflect calibrated right-edge inset (10 base + 6 measured = 16)
+                anchors.rightMargin: 16
+                spacing: 8
+
+                // Left pill (time and weather) - FIXED WIDTH
+                Rectangle {
+                    Layout.preferredWidth: 200
+                    Layout.maximumWidth: 200
+                    height: 28
+                    radius: 14
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 10
+
+                        Text {
+                            text: backend.currentTime
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                        }
+                        Text {
+                            id: weatherText
+                            text: {
+                                var weather = backend.weather;
+                                if (weather && weather.temperature_f !== undefined) {
+                                    return "Wind " + (weather.wind_speed_kts || 0).toFixed(1) + " kts | " +
+                                           (weather.temperature_f || 0).toFixed(1) + "°F";
+                                }
+                                return "Weather loading...";
+                            }
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                        }
+                    }
+                }
+
+                // Scrolling launch ticker
+                Rectangle {
+                    id: tickerRect
+                    Layout.fillWidth: true
+                    Layout.minimumWidth: 400
+                    Layout.maximumWidth: 1500
+                    height: 28
+                    radius: 14
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+                    clip: true
+
+                    Text {
+                        id: tickerText
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: backend.launchDescriptions.join(" \\ ")
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 14
+                        font.family: "D-DIN"
+
+                        SequentialAnimation on x {
+                            loops: Animation.Infinite
+                            NumberAnimation {
+                                from: tickerRect.width
+                                to: -tickerText.width + 400  // Pause with text still visible
+                                duration: 1600000
+                            }
+                            PauseAnimation { duration: 4000 }  // 4 second pause
+                            PropertyAnimation {
+                                to: tickerRect.width  // Reset to starting position
+                                duration: 0  // Instant reset
+                            }
+                        }
+                    }
+                }
+
+                // Right side controls - consistent spacing
+                RowLayout {
+                    Layout.alignment: Qt.AlignRight
+                    spacing: 8
+                Rectangle {
+                    width: 28
+                    height: 28
+                    radius: 14
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: "\uf021"
+                        font.family: "Font Awesome 5 Free"
+                        font.pixelSize: 12
+                        color: backend.theme === "dark" ? "white" : "black"
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: {
+                            console.log("Update clicked - showing update dialog")
+                            backend.show_update_dialog()
+                        }
+                    }
+
+                    ToolTip {
+                        text: backend.updateAvailable ? "Update Available - Click to Update and Reboot" : "Update and Reboot"
+                        delay: 500
+                    }
+
+                    // Red dot indicator for available updates
+                    Rectangle {
+                        width: 8
+                        height: 8
+                        radius: 4
+                        color: "#FF4444"
+                        border.color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.width: 1
+                        anchors.top: parent.top
+                        anchors.right: parent.right
+                        anchors.topMargin: -2
+                        anchors.rightMargin: -2
+                        visible: !!(backend && backend.updateAvailable)
+                    }
+                }
+
+                    // WiFi icon
+                    Rectangle {
+                        width: 28
+                        height: 28
+                        radius: 14
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: backend.networkConnected ? "\uf1eb" : "\uf071"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            color: backend.networkConnected ? "#4CAF50" : "#F44336"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                console.log("WiFi clicked - opening popup")
+                                wifiPopup.open()
+                                console.log("WiFi popup opened, visible:", wifiPopup.visible)
+                            }
+                        }
+                    }
+                    // Mode selector - F1/SpaceX toggle
+                    Row {
+                        spacing: 4
+                        Repeater {
+                            model: ["F1", "SpaceX"]
+                            Rectangle {
+                                width: 50
+                                height: 32
+                                color: backend.mode === modelData.toLowerCase() ?
+                                       (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                       (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                radius: 16
+                                border.color: backend.mode === modelData.toLowerCase() ?
+                                             (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                             (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                border.width: backend.mode === modelData.toLowerCase() ? 2 : 1
+
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData === "F1" ? "\uf1b9" : "\uf135"  // Car for F1, Rocket for SpaceX
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    font.pixelSize: 16
+                                    font.family: "Font Awesome 5 Free"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: backend.mode = modelData.toLowerCase()
+                                }
+
+                                ToolTip {
+                                    text: modelData === "F1" ? "Formula 1 Dashboard" : "SpaceX Dashboard"
+                                    delay: 500
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Launch details tray toggle
+                Rectangle {
+                    visible: backend.mode === "spacex"
+                    Layout.preferredWidth: 50
+                    Layout.preferredHeight: 28
+                    radius: 14
+                    color: backend.launchTrayManualMode ?
+                        "#FF3838" :
+                        (backend.theme === "dark" ? "#666666" : "#CCCCCC")
+
+                    Behavior on color { ColorAnimation { duration: 200 } }
+
+                    Rectangle {
+                        width: 22
+                        height: 22
+                        radius: 11
+                        x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
+                        y: 3
+                        color: "white"
+                        border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
+                        border.width: 1
+
+                        Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                        cursorShape: Qt.PointingHandCursor
+                    }
+
+                    ToolTip {
+                        text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
+                        delay: 500
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // Right pill (countdown, location, theme) - FIXED WIDTH
+                Rectangle {
+                    Layout.preferredWidth: 400
+                    Layout.maximumWidth: 400
+                    height: 28
+                    radius: 14
+                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    border.width: 1
+
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Text {
+                            text: backend.countdown
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                            anchors.verticalCenter: parent.verticalCenter
+                        }
+
+                        // Location selector
+                        Row {
+                            spacing: 4
+                            Repeater {
+                                model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
+                                Rectangle {
+                                    width: 40
+                                    height: 24
+                                    color: backend.location === modelData ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 12
+                                    border.color: backend.location === modelData ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.location === modelData ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.substring(0, 4)  // Abbreviate: Star, Vand, Cape, Hawt
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        font.pixelSize: 11
+                                        font.family: "D-DIN"
+                                        font.bold: backend.location === modelData
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: backend.location = modelData
+                                    }
+
+                                    ToolTip {
+                                        text: modelData
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+
+                        // Theme selector
+                        Row {
+                            spacing: 4
+                            Repeater {
+                                model: ["Light", "Dark"]
+                                Rectangle {
+                                    width: 45
+                                    height: 24
+                                    color: backend.theme === modelData.toLowerCase() ?
+                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                    radius: 12
+                                    border.color: backend.theme === modelData.toLowerCase() ?
+                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    border.width: backend.theme === modelData.toLowerCase() ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData === "Light" ? "\uf185" : "\uf186"  // Sun for Light, Moon for Dark
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: backend.theme = modelData.toLowerCase()
+                                    }
+
+                                    ToolTip {
+                                        text: modelData + " Theme"
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // WiFi popup
+        Popup {
+            id: wifiPopup
+            width: 500
+            height: 300
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            property string selectedNetwork: ""
+
+            onOpened: backend.startWifiTimer()
+            onClosed: backend.stopWifiTimer()
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 5
+
+                Text {
+                    text: "WiFi Networks"
+                    font.pixelSize: 16
+                    font.bold: true
+                    color: backend.theme === "dark" ? "white" : "black"
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Current connection status - compact
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 30
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 5
+                        spacing: 5
+
+                        Text {
+                            text: backend.wifiConnected ? "\uf1eb" : "\uf6ab"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            color: backend.wifiConnected ? "#4CAF50" : "#F44336"
+                        }
+
+                        Text {
+                            text: backend.wifiConnected ? ("Connected: " + backend.currentWifiSsid) : "Not connected"
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            Layout.fillWidth: true
+                            elide: Text.ElideRight
+                        }
+
+                        Button {
+                            text: "Disconnect"
+                            visible: !!(backend && backend.wifiConnected)
+                            Layout.preferredWidth: 60
+                            Layout.preferredHeight: 20
+                            onClicked: {
+                                backend.disconnectWifi()
+                                wifiPopup.close()
+                            }
+                            background: Rectangle {
+                                color: "#F44336"
+                                radius: 3
+                            }
+                            contentItem: Text {
+                                text: parent.text
+                                color: "white"
+                                font.pixelSize: 9
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                // Scan button - compact
+                Button {
+                    text: backend.wifiScanInProgress ? "Scanning..." : (backend.wifiConnecting ? "Connecting..." : "Scan Networks")
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 25
+                    enabled: !(backend.wifiScanInProgress || backend.wifiConnecting)
+                    onClicked: backend.scanWifiNetworks()
+
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        radius: 3
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 11
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // Scanning spinner indicator
+                BusyIndicator {
+                    running: !!(backend && backend.wifiScanInProgress)
+                    visible: running
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredHeight: 16
+                    Layout.preferredWidth: 16
+                }
+
+                // Debug info button - compact
+                Button {
+                    text: "Interface Info"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 22
+                    onClicked: debugDialog.open()
+
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                        radius: 3
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                        font.pixelSize: 9
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+
+                // Networks list - compact single line layout
+                ListView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    model: backend.wifiNetworks
+                    clip: true
+                    spacing: 2
+
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 32
+                        color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                        radius: 3
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 5
+                            spacing: 8
+
+                            // Network icon
+                            Text {
+                                text: modelData.encrypted ? "\uf023" : "\uf09c"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 12
+                                color: modelData.encrypted ? "#FF9800" : "#4CAF50"
+                                Layout.preferredWidth: 16
+                            }
+
+                            // Network info in one line
+                            Text {
+                                text: modelData.ssid + " (" + modelData.signal + " dBm)"
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                font.bold: true
+                                Layout.fillWidth: true
+                                elide: Text.ElideRight
+                            }
+
+                            // Remove button for remembered networks
+                            Button {
+                                text: "\uf2ed"
+                                font.family: "Font Awesome 5 Free"
+                                Layout.preferredWidth: 22
+                                Layout.preferredHeight: 22
+                                visible: {
+                                    for (var i = 0; i < backend.rememberedNetworks.length; i++) {
+                                        if (backend.rememberedNetworks[i].ssid === modelData.ssid) {
+                                            return true
+                                        }
+                                    }
+                                    return false
+                                }
+                                onClicked: {
+                                    backend.remove_remembered_network(modelData.ssid)
+                                }
+
+                                background: Rectangle {
+                                    color: "#F44336"
+                                    radius: 3
+                                }
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: "white"
+                                    font.pixelSize: 10
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+
+                                ToolTip {
+                                    text: "Remove from remembered networks"
+                                    delay: 500
+                                }
+                            }
+
+                            // Connect button - compact
+                            Button {
+                                text: "Connect"
+                                Layout.preferredWidth: 55
+                                Layout.preferredHeight: 22
+                                onClicked: {
+                                    wifiPopup.selectedNetwork = modelData.ssid
+                                    // Check if this network is remembered
+                                    var isRemembered = false
+                                    for (var i = 0; i < backend.rememberedNetworks.length; i++) {
+                                        if (backend.rememberedNetworks[i].ssid === modelData.ssid) {
+                                            isRemembered = true
+                                            break
+                                        }
+                                    }
+                                    if (isRemembered) {
+                                        backend.connectToRememberedNetwork(modelData.ssid)
+                                        wifiPopup.close()
+                                    } else {
+                                        passwordDialog.open()
+                                    }
+                                }
+
+                                background: Rectangle {
+                                    color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                    radius: 3
+                                }
+
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                    font.pixelSize: 9
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Password dialog
+        Popup {
+            id: passwordDialog
+            width: 320
+            height: 120
+            x: (parent.width - width) / 2
+            y: (parent.height - height - 200) / 2  // Leave room for keyboard
+            modal: true
+            focus: true
+            // Keep the password dialog open while interacting with the custom on-screen keyboard
+            // so that tapping outside (on the keyboard) does not close it.
+            closePolicy: Popup.CloseOnEscape
+
+            onOpened: {
+                passwordField.focus = true
+                passwordField.text = ""
+            }
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                Text {
+                    text: "Password for " + wifiPopup.selectedNetwork
+                    color: backend.theme === "dark" ? "white" : "black"
+                    font.pixelSize: 13
+                    font.bold: true
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
+                }
+
+                RowLayout {
+                    spacing: 5
+
+                    TextField {
+                        id: passwordField
+                        placeholderText: "Enter password"
+                        echoMode: TextField.Password
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 28
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            border.width: 1
+                            radius: 3
+                        }
+
+                        color: backend.theme === "dark" ? "white" : "black"
+                    }
+
+                    Button {
+                        text: "👁"
+                        Layout.preferredWidth: 30
+                        Layout.preferredHeight: 28
+                        onClicked: {
+                            passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
+                            passwordField.focus = true
+                        }
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 12
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 8
+
+                    Button {
+                        text: "Cancel"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 24
+                        onClicked: {
+                            passwordField.text = ""
+                            passwordDialog.close()
+                        }
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Connect"
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 24
+                        onClicked: {
+                            backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
+                            passwordDialog.close()
+                            wifiPopup.close()
+                        }
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        // Virtual Keyboard for password entry
+        Popup {
+            id: virtualKeyboard
+            width: 480
+            height: 180
+            x: passwordDialog.x + passwordDialog.width / 2 - width / 2
+            y: passwordDialog.y + passwordDialog.height + 5
+            modal: false
+            focus: false
+            visible: passwordDialog.visible
+            // Prevent the keyboard from auto-closing when tapping outside or interacting with other controls
+            closePolicy: Popup.NoAutoClose
+            // Ensure the keyboard stays above other content
+            z: 2000
+            property bool shiftPressed: false
+            property bool numberMode: false
+
+            onOpened: {
+                // Reset keyboard state when opened
+                shiftPressed = false
+                numberMode = false
+            }
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 5
+
+                // QWERTY keyboard rows
+                RowLayout {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 460
+
+                    Repeater {
+                        model: virtualKeyboard.numberMode ? ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"] : (virtualKeyboard.shiftPressed ? ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"] : ["q", "w", "e", "r", "t", "y", "u", "i", "o", "p"])
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 33
+                            Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 460
+
+                    Repeater {
+                        model: virtualKeyboard.numberMode ? ["!", "@", "#", "$", "%", "^", "&", "*", "(", ")"] : (virtualKeyboard.shiftPressed ? ["A", "S", "D", "F", "G", "H", "J", "K", "L"] : ["a", "s", "d", "f", "g", "h", "j", "k", "l"])
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 33
+                            Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 460
+
+                    Button {
+                        text: "⇧"
+                        Layout.preferredWidth: 46
+                        Layout.preferredHeight: 30
+                        enabled: !virtualKeyboard.numberMode
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
+                        onClicked: {
+                            virtualKeyboard.shiftPressed = !virtualKeyboard.shiftPressed
+                        }
+
+                        background: Rectangle {
+                            color: parent.pressed ? "#FF6B35" : (virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#2a2e2e" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")))
+                            radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Repeater {
+                        model: virtualKeyboard.numberMode ? ["-", "_", "+", "=", "{", "}", "[", "]", "|"] : (virtualKeyboard.shiftPressed ? ["Z", "X", "C", "V", "B", "N", "M"] : ["z", "x", "c", "v", "b", "n", "m"])
+                        Button {
+                            text: modelData
+                            Layout.preferredWidth: 33
+                            Layout.preferredHeight: 30
+                            // Avoid stealing focus from the password field
+                            focusPolicy: Qt.NoFocus
+                            onClicked: passwordField.text += text
+
+                            background: Rectangle {
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                radius: 3
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                            }
+
+                            contentItem: Text {
+                                text: parent.text
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 12
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+
+                    Button {
+                        text: "⌫"
+                        Layout.preferredWidth: 46
+                        Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
+                        onClicked: passwordField.text = passwordField.text.slice(0, -1)
+
+                        background: Rectangle {
+                            color: parent.pressed ? "#D84315" : "#FF5722"
+                            radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+
+                RowLayout {
+                    spacing: 3
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: 460
+
+                    Button {
+                        text: virtualKeyboard.numberMode ? "ABC" : "123"
+                        Layout.preferredWidth: 53
+                        Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
+                        onClicked: {
+                            virtualKeyboard.numberMode = !virtualKeyboard.numberMode
+                            virtualKeyboard.shiftPressed = false  // Reset shift when switching modes
+                        }
+
+                        background: Rectangle {
+                            color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")
+                            radius: 3
+                            Behavior on color { ColorAnimation { duration: 100 } }
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Space"
+                        Layout.preferredWidth: 267
+                        Layout.preferredHeight: 30
+                        // Avoid stealing focus from the password field
+                        focusPolicy: Qt.NoFocus
+                        onClicked: passwordField.text += " "
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Done"
+                        Layout.preferredWidth: 67
+                        Layout.preferredHeight: 30
+                        onClicked: virtualKeyboard.visible = false
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 10
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        // Update popup
+        Popup {
+            id: updatePopup
+            width: 450
+            height: 280
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 15
+                spacing: 10
+
+                // Title and last checked
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 10
+
+                    Text {
+                        text: "Update Available"
+                        font.pixelSize: 16
+                        font.bold: true
+                        color: backend.theme === "dark" ? "white" : "black"
+                    }
+
+                    Text {
+                        text: "• Last checked: " + backend.lastUpdateCheckTime
+                        font.pixelSize: 10
+                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                        Layout.alignment: Qt.AlignVCenter
+                    }
+                }
+
+                // Current version - compact single line
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 45
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+
+                        Text {
+                            text: "\uf126"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 14
+                            color: "#2196F3"
+                            Layout.preferredWidth: 20
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Current: " + (backend.currentVersionInfo.short_hash || "Unknown")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                            }
+
+                            Text {
+                                text: backend.currentVersionInfo.message || "Unable to retrieve current version"
+                                font.pixelSize: 9
+                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+
+                // Latest version - compact single line
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 45
+                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 8
+                        spacing: 8
+
+                        Text {
+                            text: "\uf062"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 14
+                            color: "#4CAF50"
+                            Layout.preferredWidth: 20
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+
+                            Text {
+                                text: "Latest: " + (backend.latestVersionInfo.short_hash || "Unknown")
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: backend.theme === "dark" ? "white" : "black"
+                            }
+
+                            Text {
+                                text: backend.latestVersionInfo.message || "Unable to retrieve latest version"
+                                font.pixelSize: 9
+                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+
+                // Status message - compact
+                Text {
+                    text: {
+                        var current = backend.currentVersionInfo.hash
+                        var latest = backend.latestVersionInfo.hash
+                        if (!current || !latest) {
+                            return "Unable to check for updates"
+                        } else if (current === latest) {
+                            return "✓ You are up to date!"
+                        } else {
+                            return "⬆ New version available!"
+                        }
+                    }
+                    font.pixelSize: 12
+                    font.bold: true
+                    color: {
+                        var current = backend.currentVersionInfo.hash
+                        var latest = backend.latestVersionInfo.hash
+                        if (!current || !latest) {
+                            return "#F44336"
+                        } else if (current === latest) {
+                            return "#4CAF50"
+                        } else {
+                            return "#FF9800"
+                        }
+                    }
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Buttons - compact horizontal layout
+                RowLayout {
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 12
+
+                    Button {
+                        text: backend.updateChecking ? "Checking..." : "Check Now"
+                        Layout.preferredWidth: 80
+                        Layout.preferredHeight: 28
+                        enabled: !backend.updateChecking
+                        onClicked: backend.checkForUpdatesNow()
+
+                        background: Rectangle {
+                            color: backend.updateChecking ?
+                                (backend.theme === "dark" ? "#666" : "#ccc") :
+                                (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0")
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Cancel"
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 28
+                        onClicked: updatePopup.close()
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Update Now"
+                        Layout.preferredWidth: 90
+                        Layout.preferredHeight: 28
+                        visible: {
+                            var current = backend.currentVersionInfo.hash
+                            var latest = backend.latestVersionInfo.hash
+                            return current && latest && current !== latest
+                        }
+                        onClicked: {
+                            backend.runUpdateScript()
+                            updatePopup.close()
+                        }
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: "white"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+                }
+            }
+        }
+
+        Connections {
+            target: backend
+            function onUpdateDialogRequested() {
+                updatePopup.open()
+            }
+        }
+
+        // Debug info dialog
+        Popup {
+            id: debugDialog
+            width: 450
+            height: 250
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                radius: 8
+                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.width: 1
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 8
+
+                Text {
+                    text: "WiFi Interface Information"
+                    color: backend.theme === "dark" ? "white" : "black"
+                    font.pixelSize: 14
+                    font.bold: true
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    TextArea {
+                        id: debugText
+                        text: backend.getWifiInterfaceInfo()
+                        readOnly: true
+                        wrapMode: TextArea.Wrap
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            border.width: 1
+                            radius: 3
+                        }
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 9
+                        font.family: "Courier New"
+                    }
+                }
+
+                Button {
+                    text: "Refresh"
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 24
+                    onClicked: debugText.text = backend.getWifiInterfaceInfo()
+
+                    background: Rectangle {
+                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        radius: 3
+                    }
+
+                    contentItem: Text {
+                        text: parent.text
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 10
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+                }
+            }
+        }
+
+        // Sliding launch details tray
+        Popup {
+            id: launchTray
+            width: parent.width
+            height: 25  // Start with larger collapsed height
+            x: 0
+            y: 0  // Position at top of screen
+            modal: false
+            focus: false
+            visible: !!(backend && backend.launchTrayVisible)
+            closePolicy: Popup.NoAutoClose
+
+            leftPadding: 15
+            rightPadding: 15
+            topPadding: 0
+            bottomPadding: 0
+            leftMargin: 0
+            rightMargin: 0
+            topMargin: 0
+            bottomMargin: 0
+
+            property real expandedHeight: parent.height
+            property real collapsedHeight: 25  // Increased for better visibility when collapsed
+            property var nextLaunch: null
+            property real colorFactor: (height - collapsedHeight) / (expandedHeight - collapsedHeight)
+            property color collapsedColor: "#FF3838"
+            property color expandedColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+            property string tMinus: ""
+
+            Timer {
+                interval: 1000  // Update every second for testing
+                running: true
+                repeat: true
+                onTriggered: {
+                    var next = backend.get_next_launch();
+                    launchTray.nextLaunch = next;
+                    // Use the backend's countdown calculation for consistency
+                    launchTray.tMinus = backend.countdown;
+                }
+            }
+
+            background: Rectangle {
+                color: Qt.rgba(
+                    launchTray.collapsedColor.r + launchTray.colorFactor * (launchTray.expandedColor.r - launchTray.collapsedColor.r),
+                    launchTray.collapsedColor.g + launchTray.colorFactor * (launchTray.expandedColor.g - launchTray.collapsedColor.g),
+                    launchTray.collapsedColor.b + launchTray.colorFactor * (launchTray.expandedColor.b - launchTray.collapsedColor.b),
+                    0.7 + launchTray.colorFactor * 0.3  // Fade from 70% to 100% opacity
+                )
+                radius: 12
+                border.width: 0
+
+                Behavior on color {
+                    ColorAnimation { duration: 300 }
+                }
+            }
+
+            // Smooth animation for height changes
+            Behavior on height {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+
+            // Bottom status text - T-minus on left, launch name on right
+            Item {
+                width: parent.width
+                height: 20
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 3  // Moved up slightly for better centering
+                z: -1  // Ensure this is behind the drag handle
+
+                Text {
+                    text: launchTray.tMinus || "T-0"
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: "white"
+                    anchors.left: parent.left
+                    anchors.leftMargin: 0
+                    anchors.right: parent.horizontalCenter
+                    anchors.rightMargin: 10
+                    anchors.verticalCenter: parent.verticalCenter
+                    elide: Text.ElideRight
+                    horizontalAlignment: Text.AlignLeft
+                }
+
+                Text {
+                    text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
+                    font.pixelSize: 14
+                    font.bold: true
+                    color: "white"
+                    elide: Text.ElideRight
+                    anchors.right: parent.right
+                    anchors.rightMargin: 0
+                    anchors.verticalCenter: parent.verticalCenter
+                    horizontalAlignment: Text.AlignRight
+                }
+            }
+
+            // Drag handle at bottom
+            Rectangle {
+                width: parent.width
+                height: 60  // Reduced height for more compact touch area
+                color: "transparent"
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 2  // Small gap to match original spacing
+                z: 1  // Ensure this is on top for touch events
+
+                // Double chevron indicator
+                Item {
+                    width: 60
+                    height: 30
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: -3  // Moved down slightly for better centering
+                    anchors.horizontalCenter: parent.horizontalCenter
+
+                    Image {
+                        source: "file:///" + chevronPath
+                        width: 24
+                        height: 24
+                        anchors.centerIn: parent
+                        rotation: launchTray.height > launchTray.collapsedHeight + 50 ? -90 : 90  // Point up when expanded, down when collapsed
+                        Behavior on rotation {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                    }
+                }
+
+                MouseArea {
+                    anchors.fill: parent  // Now fills the larger 40px height area
+
+                    property point startGlobalPos: Qt.point(0, 0)
+                    property real startHeight: 0
+                    property bool isDragging: false
+
+                    onPressed: {
+                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                        startHeight = launchTray.height
+                        isDragging = true
+                    }
+
+                    onPositionChanged: {
+                        if (isDragging && pressed) {
+                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                            var deltaY = currentGlobalPos.y - startGlobalPos.y
+                            var newHeight = startHeight + deltaY
+
+                            // Constrain the height
+                            newHeight = Math.max(launchTray.collapsedHeight, Math.min(launchTray.expandedHeight, newHeight))
+
+                            launchTray.height = newHeight
+                        }
+                    }
+
+                    onReleased: {
+                        isDragging = false
+
+                        // Snap based on drag distance from start position
+                        var delta = launchTray.height - startHeight
+                        var range = launchTray.expandedHeight - launchTray.collapsedHeight
+                        var threshold = 0.15 * range
+
+                        if (delta > threshold) {
+                            // Dragged down enough, snap to expanded
+                            launchTray.height = launchTray.expandedHeight
+                        } else if (delta < -threshold) {
+                            // Dragged up enough, snap to collapsed
+                            launchTray.height = launchTray.collapsedHeight
+                        } else {
+                            // Not dragged enough, snap back to start
+                            launchTray.height = startHeight
+                        }
+                    }
+                }
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.topMargin: 10
+                anchors.bottomMargin: 10  // Reduced to bring content closer to bottom handle
+                spacing: 10
+                clip: true  // Ensure content doesn't overflow
+
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 15
+
+                    RowLayout {
+                        opacity: launchTray.colorFactor
+                        visible: launchTray.height > launchTray.collapsedHeight + 10
+                        Behavior on opacity { NumberAnimation { duration: 300 } }
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        spacing: 10
+
+                        Flickable {
+                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillHeight: true
+                            contentHeight: launchDetailsColumn.height
+                            clip: true
+
+                            Rectangle {
+                                id: launchDetailsColumn
+                                width: parent.width
+                                radius: 12
+                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                implicitHeight: launchDetailsLayout.height
+
+                                ColumnLayout {
+                                    id: launchDetailsLayout
+                                    anchors.fill: parent
+                                    anchors.margins: 15
+                                    spacing: 10
+
+                                    ColumnLayout {
+                                        spacing: 6
+
+                                        Text {
+                                            text: "🚀 MISSION: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission.toUpperCase() : "NO UPCOMING LAUNCHES")
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                            font.letterSpacing: 1
+                                            color: "#FF6B35"
+                                            wrapMode: Text.Wrap
+                                            Layout.fillWidth: true
+                                        }
+
+                                        // Table-like layout for launch details
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📅"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LAUNCH DATE:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_date : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "⏰"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LAUNCH TIME:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_time : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📡"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "NET:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "📊"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "STATUS:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.status.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: launchTray.nextLaunch && launchTray.nextLaunch.status.toLowerCase().includes("go") ? "#00FF88" : "#FF4444"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🚀"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "VEHICLE:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🛰️"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "ORBIT:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🏗️"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "PAD:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.pad.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            Text {
+                                                text: "🎥"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "STREAM:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.video_url : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.Wrap
+                                                visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillHeight: true
+                            radius: 0
+                            // Match the app background so the globe appears to sit on the background
+                            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+
+                            WebEngineView {
+                                id: globeView
+                                anchors.fill: parent
+                                anchors.margins: 0
+                                url: globeUrl
+                                backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                zoomFactor: 1.0
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: false
+                                // Disable any default context menu (long-press/right-click)
+                                onContextMenuRequested: function(request) { request.accepted = true }
+
+                                onLoadingChanged: function(loadRequest) {
+                                    console.log("WebEngineView loading changed:", loadRequest.status, loadRequest.url);
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        console.log("Globe HTML loaded successfully");
+                                        // Update trajectory when globe loads
+                                        var trajectoryData = backend.get_launch_trajectory();
+                                        if (trajectoryData) {
+                                            globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
+                                        }
+                                        // Ensure the globe animation loop starts/resumes on initial load
+                                        try {
+                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Globe animation start failed', e);}})();");
+                                        } catch (e) { console.log("Globe JS nudge error:", e); }
+                                    } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                        console.log("Globe HTML failed to load:", loadRequest.errorString);
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.preferredWidth: launchTray.width / 3
+                            Layout.fillHeight: true
+                            radius: 12
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                            clip: true
+                            layer.enabled: true
+                            layer.smooth: true
+
+                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                            WebEngineView {
+                                id: xComView
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                layer.enabled: true
+                                layer.smooth: true
+                                backgroundColor: "transparent"
+                                url: "https://x.com/SpaceX"
+                                zoomFactor: 0.6
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        root._injectRoundedCorners(xComView, 12)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+}
+"""
