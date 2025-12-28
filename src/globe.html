@@ -254,29 +254,6 @@
                     enableRotate: true
                 };
 
-                // Handle WebGL context loss/restoration (can happen during network/GPU changes)
-                try {
-                    const canvas = renderer && renderer.domElement;
-                    if (canvas) {
-                        canvas.addEventListener('webglcontextlost', function(e){
-                            try { console.log('[globe] WebGL context lost'); } catch(_e){}
-                            // Prevent default so browser will try to restore context
-                            if (e && e.preventDefault) e.preventDefault();
-                            systemPaused = true;
-                            isAutoRotatePaused = (userPaused || systemPaused);
-                        }, false);
-                        canvas.addEventListener('webglcontextrestored', function(){
-                            try { console.log('[globe] WebGL context restored'); } catch(_e){}
-                            systemPaused = false;
-                            isAutoRotatePaused = (userPaused || systemPaused);
-                            // Re-arm the animation loop in case rAF chain was broken
-                            try { requestAnimationFrame(animate); } catch(_e){}
-                            // Ensure spin resumes promptly
-                            setTimeout(function(){ try { if (window.forceResumeSpin) forceResumeSpin(); else if (window.resumeSpin) resumeSpin(); } catch(_e){} }, 0);
-                        }, false);
-                    }
-                } catch(_e) { /* ignore */ }
-
                 // Handle window resize
                 window.addEventListener('resize', onWindowResize, false);
                 // Mouse wheel zoom (clamped so you can't zoom out past default)
@@ -906,10 +883,7 @@
                 const now = performance.now();
                 if (now - __lastRenderTs > STALL_MS) {
                     try { console.log('[globe] watchdog: render stalled, attempting resume'); } catch(e){}
-                    // Nudge auto-rotation state
-                    window.resumeSpin && window.resumeSpin();
-                    // Re-arm the animation loop in case rAF chain stopped
-                    try { requestAnimationFrame(animate); } catch(_e){}
+                    window.resumeSpin();
                 }
             }, CHECK_MS);
         })();
