@@ -41,30 +41,32 @@ from plotly_charts import (
 import http.server
 import socketserver
 import threading
+import functions as funcs
+from functions import (
+    # status helpers
+    set_loader_status_callback,
+    emit_loader_status,
+    # cache io
+    load_cache_from_file,
+    save_cache_to_file,
+    # launch cache helpers
+    load_launch_cache,
+    save_launch_cache,
+    # network/system helpers
+    check_wifi_status,
+    fetch_launches,
+    fetch_f1_data,
+    fetch_weather,
+    # parsing/math helpers
+    parse_metar,
+    rotate,
+)
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
 # from gi.repository import GLib
 
-# --- Lightweight loader status hook so non-Qt functions can report splash updates ---
-_loader_status_cb = None  # set by DataLoader during run()
-
-def set_loader_status_callback(cb):
-    """Set a callable that receives status text for splash/loader updates.
-    The DataLoader installs a callback; helpers in this module can emit with emit_loader_status().
-    """
-    global _loader_status_cb
-    _loader_status_cb = cb
-
-def emit_loader_status(message: str):
-    """Emit a loader status message if a callback has been registered."""
-    try:
-        cb = _loader_status_cb
-        if cb:
-            cb(str(message))
-    except Exception as _e:
-        # Avoid crashing during startup due to UI disposal races
-        logging.getLogger(__name__).debug(f"emit_loader_status skipped: {_e}")
+# Loader status helpers moved to functions.py
 
 # Set console encoding to UTF-8 to handle Unicode characters properly
 if hasattr(sys.stdout, 'reconfigure'):
@@ -278,61 +280,9 @@ F1_TEAM_COLORS = {
     'haas': '#B6BABD'          # Haas grey
 }
 
-# Load cache from file
-def load_cache_from_file(cache_file):
-    try:
-        if os.path.exists(cache_file):
-            with open(cache_file, 'r') as f:
-                cache_data = json.load(f)
-                cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp']).replace(tzinfo=pytz.UTC)
-                return cache_data
-    except (OSError, PermissionError, json.JSONDecodeError, ValueError) as e:
-        logger.warning(f"Failed to load cache from {cache_file}: {e}")
-    return None
+# load_cache_from_file and save_cache_to_file moved to functions.py
 
-# Save cache to file
-def save_cache_to_file(cache_file, data, timestamp):
-    try:
-        cache_data = {'data': data, 'timestamp': timestamp.isoformat()}
-        with open(cache_file, 'w') as f:
-            json.dump(cache_data, f)
-    except (OSError, PermissionError) as e:
-        logger.warning(f"Failed to save cache to {cache_file}: {e}")
-
-# Helpers for launch caches that prefer the runtime cache but fall back to the git seed
-def load_launch_cache(kind: str):
-    """Load a launch cache for kind in {'previous','upcoming'}.
-    Prefer the runtime cache in ~/.cache; fall back to the git-seeded cache under repo /cache.
-    Returns a dict: {'data': list, 'timestamp': datetime} or None.
-    """
-    try:
-        if kind not in ('previous', 'upcoming'):
-            raise ValueError("kind must be 'previous' or 'upcoming'")
-        runtime_path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
-        seed_path = CACHE_FILE_PREVIOUS if kind == 'previous' else CACHE_FILE_UPCOMING
-
-        data = load_cache_from_file(runtime_path)
-        if data and isinstance(data.get('data'), list):
-            logger.info(f"Loaded {kind} launches from runtime cache: {runtime_path}")
-            return data
-
-        logger.info(f"Runtime {kind} cache unavailable or invalid; falling back to seed cache: {seed_path}")
-        return load_cache_from_file(seed_path)
-    except Exception as e:
-        logger.warning(f"Failed to load {kind} launch cache (runtime/seed): {e}")
-        return None
-
-def save_launch_cache(kind: str, data_list: list, timestamp=None):
-    """Save launches to runtime cache only (keep seed intact)."""
-    try:
-        if kind not in ('previous', 'upcoming'):
-            raise ValueError("kind must be 'previous' or 'upcoming'")
-        path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
-        ts = timestamp or datetime.now(pytz.UTC)
-        save_cache_to_file(path, data_list, ts)
-        logger.info(f"Saved {len(data_list)} {kind} launches to runtime cache: {path}")
-    except Exception as e:
-        logger.warning(f"Failed to save {kind} launch cache: {e}")
+"""load_launch_cache/save_launch_cache moved to functions.py"""
 
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
@@ -1064,64 +1014,7 @@ def fetch_f1_data():
     logger.info("Successfully assembled F1 data from optimized cache")
     return f1_data
 
-# Fetch weather data
-def parse_metar(raw_metar):
-    """
-    Parse METAR string to extract weather data
-    Returns dict with temperature_c, temperature_f, wind_speed_ms, wind_speed_kts, wind_direction, cloud_cover
-    """
-    import re
-
-    # Default values
-    temperature_c = 25
-    wind_speed_kts = 0
-    wind_direction = 0
-    cloud_cover = 0
-
-    try:
-        # Extract temperature (format: 25/20 where first is temp, second is dewpoint)
-        temp_match = re.search(r'(\d{1,3})/', raw_metar)
-        if temp_match:
-            temperature_c = int(temp_match.group(1))
-            # Convert M (minus) prefix for negative temperatures
-            if raw_metar[temp_match.start()-1] == 'M':
-                temperature_c = -temperature_c
-
-        # Extract wind (format: 12010KT or 12010G15KT)
-        wind_match = re.search(r'(\d{3})(\d{2,3})(?:G\d{2,3})?KT', raw_metar)
-        if wind_match:
-            wind_direction = int(wind_match.group(1))
-            wind_speed_kts = int(wind_match.group(2))
-
-        # Estimate cloud cover based on cloud types
-        if 'SKC' in raw_metar or 'CLR' in raw_metar:
-            cloud_cover = 0  # Clear
-        elif 'FEW' in raw_metar:
-            cloud_cover = 25  # Few clouds
-        elif 'SCT' in raw_metar:
-            cloud_cover = 50  # Scattered
-        elif 'BKN' in raw_metar:
-            cloud_cover = 75  # Broken
-        elif 'OVC' in raw_metar:
-            cloud_cover = 100  # Overcast
-        else:
-            cloud_cover = 50  # Default to partly cloudy if no cloud info
-
-    except Exception as e:
-        logger.warning(f"Error parsing METAR data '{raw_metar}': {e}")
-
-    # Convert to required format
-    temperature_f = temperature_c * 9 / 5 + 32
-    wind_speed_ms = wind_speed_kts * 0.514444  # Convert knots to m/s
-
-    return {
-        'temperature_c': temperature_c,
-        'temperature_f': temperature_f,
-        'wind_speed_ms': wind_speed_ms,
-        'wind_speed_kts': wind_speed_kts,
-        'wind_direction': wind_direction,
-        'cloud_cover': cloud_cover
-    }
+# parse_metar moved to functions.py
 
 def fetch_weather(lat, lon, location):
     logger.info(f"Fetching METAR weather data for {location}")
@@ -1185,11 +1078,7 @@ def fetch_weather(lat, lon, location):
 # Track rotations for F1 circuits
 track_rotations = [('Sakhir', 92.0), ('Jeddah', 104.0), ('Melbourne', 44.0), ('Baku', 357.0), ('Miami', 2.0), ('Monte Carlo', 62.0), ('Catalunya', 95.0), ('Montreal', 62.0), ('Silverstone', 92.0), ('Hungaroring', 40.0), ('Spa-Francorchamps', 91.0), ('Zandvoort', 0.0), ('Monza', 95.0), ('Singapore', 335.0), ('Suzuka', 49.0), ('Lusail', 61.0), ('Austin', 0.0), ('Mexico City', 36.0), ('Interlagos', 0.0), ('Las Vegas', 90.0), ('Yas Marina Circuit', 335.0)]
 
-# Rotation function
-def rotate(xy, *, angle):
-    rot_mat = np.array([[np.cos(angle), np.sin(angle)],
-                        [-np.sin(angle), np.cos(angle)]])
-    return np.matmul(xy, rot_mat)
+"""rotate moved to functions.py"""
 
 # Location settings
 location_settings = {
@@ -1468,7 +1357,7 @@ class DataLoader(QObject):
 
         # Install module-level status callback so helpers can report progress to splash
         try:
-            set_loader_status_callback(self.statusUpdate.emit)
+            funcs.set_loader_status_callback(self.statusUpdate.emit)
         except Exception:
             pass
 
@@ -1478,7 +1367,7 @@ class DataLoader(QObject):
         def fetch_launch_data():
             try:
                 logger.info("DataLoader: Calling fetch_launches...")
-                launch_data = fetch_launches()
+                launch_data = funcs.fetch_launches()
                 logger.info(f"DataLoader: fetch_launches returned {len(launch_data.get('upcoming', []))} upcoming launches")
                 return launch_data
             except Exception as e:
@@ -1489,7 +1378,7 @@ class DataLoader(QObject):
         def fetch_f1_data_wrapper():
             try:
                 self.statusUpdate.emit("Checking F1 caches and schedule…")
-                return fetch_f1_data()
+                return funcs.fetch_f1_data()
             except Exception as e:
                 logger.error(f"DataLoader: fetch_f1_data failed: {e}")
                 return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
@@ -1503,7 +1392,7 @@ class DataLoader(QObject):
             with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
                 # Submit all weather fetch tasks
                 future_to_location = {
-                    executor.submit(fetch_weather, settings['lat'], settings['lon'], location): location 
+                    executor.submit(funcs.fetch_weather, settings['lat'], settings['lon'], location): location 
                     for location, settings in location_settings.items()
                 }
                 
@@ -1548,7 +1437,7 @@ class DataLoader(QObject):
         _safe_emit_finished(launch_data, f1_data, weather_data)
         # Remove status callback
         try:
-            set_loader_status_callback(None)
+            funcs.set_loader_status_callback(None)
         except Exception:
             pass
 
@@ -6175,7 +6064,7 @@ qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 # Check WiFi status before creating Backend to ensure accurate initial state
 logger.info("BOOT: Checking initial WiFi status before creating Backend...")
-wifi_connected, wifi_ssid = check_wifi_status()
+wifi_connected, wifi_ssid = funcs.check_wifi_status()
 logger.info(f"BOOT: Initial WiFi check result - connected: {wifi_connected}, SSID: {wifi_ssid}")
 
 logger.info("BOOT: Creating Backend instance...")
