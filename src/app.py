@@ -1598,6 +1598,9 @@ class Backend(QObject):
     wifiNetworksChanged = pyqtSignal()
     wifiConnectedChanged = pyqtSignal()
     wifiConnectingChanged = pyqtSignal()
+    # Signal to allow UI to close only the Wi‑Fi password dialog without
+    # dismissing the Wi‑Fi list/window
+    wifiPasswordDialogCloseRequested = pyqtSignal()
     rememberedNetworksChanged = pyqtSignal()
     networkConnectedChanged = pyqtSignal()
     loadingFinished = pyqtSignal()
@@ -1606,6 +1609,8 @@ class Backend(QObject):
     firstOnline = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
+    # Lightweight nudge for globe animation (no heavy reloads)
+    nudgeGlobeSpin = pyqtSignal()
     launchTrayVisibilityChanged = pyqtSignal()
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
@@ -1657,6 +1662,9 @@ class Backend(QObject):
         self._wifi_connected = initial_wifi_connected
         self._wifi_connecting = False
         self._current_wifi_ssid = initial_wifi_ssid
+        # Track target SSID during an in‑progress connection attempt so the
+        # list can show a transient "Connecting…" status
+        self._pending_connect_ssid = None
         # Expose scan progress to QML for spinner/disabled state
         self._wifi_scan_in_progress = False
         self._remembered_networks = self.load_remembered_networks()
@@ -4507,13 +4515,43 @@ class Backend(QObject):
         self._wifi_connect_in_progress = True
         self._wifi_connecting = True
         self.wifiConnectingChanged.emit()
+        # Remember the target SSID and update the list to show a transient
+        # "Connecting…" state in the Wi‑Fi list view.
+        self._pending_connect_ssid = ssid
+        try:
+            any_change = False
+            for n in (self._wifi_networks or []):
+                if n.get('ssid') == ssid:
+                    if n.get('status') != 'connecting':
+                        n['status'] = 'connecting'
+                        any_change = True
+                else:
+                    if n.get('status') == 'connecting':
+                        # Clear stale connecting flags on other entries
+                        n.pop('status', None)
+                        any_change = True
+            if any_change:
+                self.wifiNetworksChanged.emit()
+        except Exception:
+            pass
+        # Ask UI to close only the password dialog; keep the Wi‑Fi list open
+        try:
+            self.wifiPasswordDialogCloseRequested.emit()
+        except Exception:
+            pass
 
         def _finish():
             try:
-                self._wifi_connecting = False
-                self.wifiConnectingChanged.emit()
+                # Do not clear the connecting flag here; wait until we confirm
+                # connected (or a later failure handler decides otherwise).
                 # Refresh connection status on main thread
                 self.update_wifi_status()
+                # Regardless of success or failure, nudge the globe spin so it
+                # won’t remain paused after Wi‑Fi attempts (Qt/Chromium can stall rAF)
+                try:
+                    self.nudgeGlobeSpin.emit()
+                except Exception:
+                    pass
             finally:
                 self._wifi_connect_in_progress = False
 
@@ -4922,6 +4960,42 @@ class Backend(QObject):
                     self.wifiConnectingChanged.emit()
                 except Exception:
                     pass
+
+            # Keep the Wi‑Fi list view in sync with transient states so it can show
+            # "Connecting…" and then "Connected" in real‑time.
+            try:
+                any_change = False
+                if connected and current_ssid:
+                    # Mark only the active SSID as connected; clear other statuses
+                    for n in (self._wifi_networks or []):
+                        if n.get('ssid') == current_ssid:
+                            if n.get('status') != 'connected':
+                                n['status'] = 'connected'
+                                any_change = True
+                        else:
+                            if n.get('status') in ('connecting', 'connected'):
+                                n.pop('status', None)
+                                any_change = True
+                    # Clear pending target once connected
+                    if getattr(self, '_pending_connect_ssid', None):
+                        self._pending_connect_ssid = None
+                else:
+                    # Not connected yet — if a connection is in progress, mark it
+                    pending = getattr(self, '_pending_connect_ssid', None)
+                    if pending:
+                        for n in (self._wifi_networks or []):
+                            if n.get('ssid') == pending:
+                                if n.get('status') != 'connecting':
+                                    n['status'] = 'connecting'
+                                    any_change = True
+                            else:
+                                if n.get('status') == 'connecting':
+                                    n.pop('status', None)
+                                    any_change = True
+                if any_change:
+                    self.wifiNetworksChanged.emit()
+            except Exception:
+                pass
             
             if wifi_changed:
                 logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
@@ -6370,6 +6444,15 @@ Window {
             // Debounce all other heavy reloads to a single update shortly after connect
             if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
             reloadCoalesceTimer.start();
+        })
+        // Nudge globe spin after any Wi‑Fi connect attempt finishes (success or failure)
+        backend.nudgeGlobeSpin.connect(function(){
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e) {}
+            }
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e) {}
+            }
         })
         // Push globe autospin guard flag into globe pages
         var guard = backend.globeAutospinGuard
