@@ -1887,10 +1887,10 @@ Window {
 
                         Text {
                             anchors.centerIn: parent
-                            text: backend.networkConnected ? "\uf1eb" : "\uf071"
+                            text: backend.wifiConnected ? "\uf1eb" : "\uf071"
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
-                            color: backend.networkConnected ? "#4CAF50" : "#F44336"
+                            color: backend.wifiConnected ? "#4CAF50" : "#F44336"
                         }
 
                         MouseArea {
