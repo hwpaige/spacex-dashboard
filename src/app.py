@@ -289,8 +289,8 @@ class DataLoader(QObject):
             try: self.statusUpdate.emit(msg)
             except RuntimeError: pass
 
-        def _safe_emit_finished(l, f, w):
-            try: self.finished.emit(l, f, w)
+        def _safe_emit_finished(l, f, w, n):
+            try: self.finished.emit(l, f, w, n)
             except RuntimeError: pass
 
         # Delegate full load to functions.py

@@ -737,14 +737,22 @@ def fetch_narratives():
         response.raise_for_status()
         data = response.json()
         
-        # The API returns a list of strings
+        # The API returns a dict with 'descriptions' key
+        if isinstance(data, dict) and 'descriptions' in data:
+            narratives = data['descriptions']
+            if isinstance(narratives, list):
+                save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
+                logger.info(f"Fetched and cached {len(narratives)} narratives")
+                return narratives
+        
+        # Fallback if top-level list (in case API changes back)
         if isinstance(data, list):
             narratives = data
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
             logger.info(f"Fetched and cached {len(narratives)} narratives")
             return narratives
-        else:
-            logger.warning("Narratives API returned unexpected format")
+            
+        logger.warning(f"Narratives API returned unexpected format: {type(data)}")
             
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
