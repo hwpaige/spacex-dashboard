@@ -1809,10 +1809,12 @@ class Backend(QObject):
 
             # If the system reports we're connected, clear any lingering UI "connecting" state
             if connected and (getattr(self, '_wifi_connecting', False) or getattr(self, '_wifi_connect_in_progress', False)):
+                logger.info(f"Connected to {current_ssid} - clearing connecting state")
                 try:
                     self._wifi_connecting = False
                     self._wifi_connect_in_progress = False
                     self.wifiConnectingChanged.emit()
+                    self.wifiScanInProgressChanged.emit() # Ensure spinner stops
                 except: pass
             
             if wifi_changed:
