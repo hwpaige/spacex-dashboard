@@ -5,6 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Charts 1.0
 import QtWebEngine
+import QtQuick.Effects
 // Qt5Compat.GraphicalEffects (OpacityMask) removed to avoid hard dependency
 
 Window {
@@ -379,6 +380,7 @@ Window {
         anchors.rightMargin: 12
 
         ColumnLayout {
+            id: centralContent
             anchors.fill: parent
             anchors.leftMargin: 5
             // No rightMargin here — safeArea already reduces width on the right
@@ -1916,13 +1918,42 @@ Window {
                             }
                         }
                         
-                        background: Rectangle {
-                            // Tesla-style semi-transparency
-                            color: backend.theme === "dark" ? "#cc2a2e2e" : "#ccf0f0f0"
-                            radius: 14
-                            opacity: 0.92
-                            border.width: 1
-                            border.color: backend.theme === "dark" ? "#44ffffff" : "#44000000"
+                        background: Item {
+                            // Tesla-style real-time blur (Glassmorphism)
+                            ShaderEffectSource {
+                                id: blurSource
+                                sourceItem: centralContent
+                                // Map the tray's global position back to the source item's coordinate space
+                                sourceRect: narrativeTray.height > 0 ? 
+                                            Qt.rect(mapToItem(centralContent, 0, 0).x,
+                                                    mapToItem(centralContent, 0, 0).y,
+                                                    narrativeTray.width,
+                                                    narrativeTray.height) : Qt.rect(0,0,0,0)
+                                live: narrativeTray.visible
+                                hideSource: false
+                                visible: false
+                                // Downsample for "thicker" blur look
+                                textureSize: Qt.size(parent.width / 4, parent.height / 4)
+                                smooth: true
+                            }
+
+                            MultiEffect {
+                                anchors.fill: parent
+                                source: blurSource
+                                blurEnabled: true
+                                blur: 1.0
+                                blurMax: 96 // Increased for stronger effect
+                                opacity: 1.0
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                // Slightly more transparent for better glass look
+                                color: backend.theme === "dark" ? "#881a1e1e" : "#88f8f8f8"
+                                radius: 14
+                                border.width: 1
+                                border.color: backend.theme === "dark" ? "#22ffffff" : "#22000000"
+                            }
                         }
                         
                         ColumnLayout {
