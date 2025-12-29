@@ -1812,33 +1812,204 @@ Window {
                     id: tickerRect
                     Layout.fillWidth: true
                     Layout.minimumWidth: 400
+                    Layout.maximumHeight: 28
                     Layout.maximumWidth: 1500
                     height: 28
                     radius: 14
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
-                    clip: true
+                    clip: false // Allow narrativeTray to expand beyond bounds
 
-                    Text {
-                        id: tickerText
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: backend.launchDescriptions.join(" \\ ")
-                        color: backend.theme === "dark" ? "white" : "black"
-                        font.pixelSize: 14
-                        font.family: "D-DIN"
+                    // Clipped container for scrolling text
+                    Item {
+                        anchors.fill: parent
+                        clip: true
+                        
+                        Text {
+                            id: tickerText
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: backend.launchDescriptions.join(" \\ ")
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                            // Fade out as tray expands (expandedHeight is now 208)
+                            opacity: 1.0 - Math.min(1.0, narrativeTray.height / 28.0)
 
-                        SequentialAnimation on x {
-                            loops: Animation.Infinite
-                            NumberAnimation {
-                                from: tickerRect.width
-                                to: -tickerText.width + 400  // Pause with text still visible
-                                duration: 1600000
+                            SequentialAnimation on x {
+                                loops: Animation.Infinite
+                                NumberAnimation {
+                                    from: tickerRect.width
+                                    to: -tickerText.width + 400  // Pause with text still visible
+                                    duration: 1600000
+                                }
+                                PauseAnimation { duration: 4000 }  // 4 second pause
+                                PropertyAnimation {
+                                    to: tickerRect.width  // Reset to starting position
+                                    duration: 0  // Instant reset
+                                }
                             }
-                            PauseAnimation { duration: 4000 }  // 4 second pause
-                            PropertyAnimation {
-                                to: tickerRect.width  // Reset to starting position
-                                duration: 0  // Instant reset
+                        }
+                    }
+                    
+                    // Slide-up handle for narrative tray
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        
+                        property point startGlobalPos: Qt.point(0, 0)
+                        property real startHeight: 0
+                        property bool isDragging: false
+                        
+                        onPressed: {
+                            startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                            // Ensure tray is ready
+                            if (narrativeTray.height === 0) {
+                                narrativeTray.height = 1
+                            }
+                            startHeight = narrativeTray.height
+                            isDragging = true
+                        }
+                        
+                        onPositionChanged: {
+                            if (isDragging && pressed) {
+                                var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                // Dragging UP (negative delta) increases height
+                                var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                var newHeight = startHeight - deltaY
+                                
+                                newHeight = Math.max(0, Math.min(narrativeTray.expandedHeight, newHeight))
+                                narrativeTray.height = newHeight
+                            }
+                        }
+                        
+                        onReleased: {
+                            isDragging = false
+                            if (narrativeTray.height > 50) {
+                                narrativeTray.height = narrativeTray.expandedHeight
+                            } else {
+                                narrativeTray.height = 0
+                            }
+                        }
+                    }
+
+                    // Sliding Launch Narratives Tray (Bottom)
+                    Popup {
+                        id: narrativeTray
+                        // Now child of tickerRect, so x:0 aligns perfectly
+                        x: 0
+                        width: parent.width
+                        height: 0
+                        // Sit at the bottom and grow UP, covering the ticker area
+                        y: parent.height - height
+                        modal: false
+                        focus: false
+                        visible: height > 0
+                        closePolicy: Popup.NoAutoClose
+                        
+                        property real expandedHeight: 208 // 180 + 28 ticker height
+                        
+                        Behavior on height {
+                            NumberAnimation {
+                                duration: 300
+                                easing.type: Easing.OutCubic
+                            }
+                        }
+                        
+                        background: Rectangle {
+                            color: tickerRect.color
+                            // Full pill shape as it covers the ticker exactly
+                            radius: 14
+                            opacity: 1.0
+                            border.width: 1
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        }
+                        
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 4
+                            spacing: 0
+                            
+                            // Drag Handle (Top of tray)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 25
+                                color: "transparent"
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf078"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: 12
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                }
+                                
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    
+                                    property point startGlobalPos: Qt.point(0, 0)
+                                    property real startHeight: 0
+                                    property bool isDragging: false
+                                    
+                                    onPressed: {
+                                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        startHeight = narrativeTray.height
+                                        isDragging = true
+                                    }
+                                    
+                                    onPositionChanged: {
+                                        if (isDragging && pressed) {
+                                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                            // Dragging DOWN (positive delta) decreases height since expanding from bottom
+                                            var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                            var newHeight = startHeight - deltaY
+                                            
+                                            newHeight = Math.max(0, Math.min(narrativeTray.expandedHeight, newHeight))
+                                            narrativeTray.height = newHeight
+                                        }
+                                    }
+                                    
+                                    onReleased: {
+                                        isDragging = false
+                                        if (narrativeTray.height < narrativeTray.expandedHeight * 0.5) {
+                                            narrativeTray.height = 0
+                                        } else {
+                                            narrativeTray.height = narrativeTray.expandedHeight
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Narratives List
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.margins: 5
+                                // Adjust layout to ensure content flows into the ticker area
+                                Layout.bottomMargin: 8 
+                                Layout.topMargin: 0
+                                clip: true
+                                model: backend.launchDescriptions
+                                spacing: 4
+                                
+                                delegate: Rectangle {
+                                    width: ListView.view.width
+                                    height: Math.max(30, narrativeText.implicitHeight + 10)
+                                    color: "transparent"
+                                    
+                                    Text {
+                                        id: narrativeText
+                                        text: modelData
+                                        anchors.fill: parent
+                                        anchors.margins: 5
+                                        wrapMode: Text.Wrap
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        font.pixelSize: 12
+                                        font.family: "D-DIN"
+                                        verticalAlignment: Text.AlignVCenter
+                                    }
+                                }
                             }
                         }
                     }
@@ -3608,7 +3779,8 @@ Window {
                 }
             }
         }
+
+        }
     }
-}
 }
 """
