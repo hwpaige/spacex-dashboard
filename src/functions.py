@@ -138,6 +138,7 @@ __all__ = [
     "disconnect_from_wifi",
     "bring_up_nm_connection",
     "sync_remembered_networks",
+    "remove_nm_connection",
 ]
 
 
@@ -455,54 +456,66 @@ def check_wifi_status():
             connected = False
             current_ssid = ""
 
-            # Method 1: Try nmcli first
-            logger.debug("BOOT: Trying nmcli device status...")
+            # Method 1: Try nmcli first (most reliable on modern Linux)
+            logger.debug("BOOT: Trying nmcli connection show --active...")
             try:
-                result = subprocess.run(['nmcli', 'device', 'status'],
-                                      capture_output=True, text=True, timeout=5)
-
-                logger.debug(f"BOOT: nmcli device status return code: {result.returncode}")
-                if result.returncode != 0:
-                    logger.warning(f"BOOT: nmcli device status failed with return code {result.returncode}")
-                    logger.debug(f"BOOT: nmcli stderr: {result.stderr}")
-
-                if result.returncode == 0:
-                    lines = result.stdout.split('\n')
-                    logger.debug(f"BOOT: nmcli output has {len(lines)} lines")
-                    for line in lines:
-                        logger.debug(f"BOOT: nmcli line: '{line}'")
-                        parts = line.split()
-                        if len(parts) >= 4:
-                            device_type = parts[1].lower()
-                            state = parts[2].lower()
-                            logger.debug(f"BOOT: nmcli device: {parts[0]}, type: {device_type}, state: {state}")
-                            if device_type == 'wifi' and state == 'connected':
+                nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
+                if nmcli_check.returncode == 0:
+                    # Get active wifi connections
+                    result = subprocess.run(['nmcli', '-t', '-f', 'TYPE,SSID,DEVICE', 'connection', 'show', '--active'],
+                                          capture_output=True, text=True, timeout=5)
+                    
+                    if result.returncode == 0:
+                        for line in result.stdout.strip().split('\n'):
+                            if not line: continue
+                            parts = line.split(':')
+                            if len(parts) >= 3 and parts[0].lower() == '802-11-wireless':
                                 connected = True
-                                logger.info("BOOT: Linux WiFi connected via nmcli device status")
+                                current_ssid = parts[1]
+                                logger.info(f"BOOT: Linux WiFi connected via nmcli (active connection): '{current_ssid}'")
                                 break
-
-                # Get current SSID if connected via nmcli
-                if connected:
-                    logger.debug("BOOT: Getting SSID from nmcli...")
-                    connected_device = None
-                    for line in result.stdout.split('\n'):
-                        parts = line.split()
-                        if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
-                            connected_device = parts[0]
-                            logger.debug(f"BOOT: Found connected WiFi device: {connected_device}")
-                            break
-
-                    if connected_device:
-                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', connected_device],
-                                                   capture_output=True, text=True, timeout=5)
-                        logger.debug(f"BOOT: nmcli SSID command return code: {ssid_result.returncode}")
-                        if ssid_result.returncode == 0:
-                            for line in ssid_result.stdout.split('\n'):
-                                logger.debug(f"BOOT: nmcli SSID line: '{line}'")
-                                if line.startswith('yes:'):
-                                    current_ssid = line.split(':', 1)[1].strip()
-                                    logger.info(f"BOOT: Linux WiFi SSID from nmcli: '{current_ssid}'")
+                    
+                    if not connected:
+                        # Fallback to device status if active connection check failed
+                        logger.debug("BOOT: Trying nmcli device status fallback...")
+                        result = subprocess.run(['nmcli', 'device', 'status'],
+                                              capture_output=True, text=True, timeout=5)
+                        if result.returncode == 0:
+                            for line in result.stdout.split('\n'):
+                                parts = line.split()
+                                if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
+                                    connected = True
+                                    # Try to get SSID for this device
+                                    dev = parts[0]
+                                    ssid_res = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi', 'list', 'ifname', dev],
+                                                            capture_output=True, text=True, timeout=5)
+                                    if ssid_res.returncode == 0:
+                                        for sline in ssid_res.stdout.split('\n'):
+                                            if sline.startswith('yes:'):
+                                                current_ssid = sline.split(':', 1)[1].strip()
+                                                break
+                                    logger.info(f"BOOT: Linux WiFi connected via nmcli device status: '{current_ssid}'")
                                     break
+            except Exception as e:
+                logger.warning(f"BOOT: nmcli status check encountered error: {e}")
+
+            # Method 2: Fallback to /proc/net/wireless or iwgetid if nmcli failed
+            if not connected:
+                logger.debug("BOOT: Trying iwgetid fallback...")
+                try:
+                    iw_res = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=3)
+                    if iw_res.returncode == 0:
+                        current_ssid = iw_res.stdout.strip()
+                        if current_ssid:
+                            connected = True
+                            logger.info(f"BOOT: Linux WiFi connected via iwgetid: '{current_ssid}'")
+                except: pass
+
+            logger.info(f"BOOT: Linux WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
+            return connected, current_ssid
+    except Exception as e:
+        logger.error(f"Error in check_wifi_status: {e}")
+        return False, ""
                         else:
                             logger.warning(f"BOOT: nmcli SSID command failed: {ssid_result.stderr}")
                     else:
@@ -2932,10 +2945,9 @@ def disconnect_from_wifi(wifi_interface=None):
             # Fallback for Linux
             if not wifi_interface: wifi_interface = get_wifi_interface()
             try:
-                # Try killing common supplicants and releasing DHCP
-                subprocess.run(['killall', 'wpa_supplicant'], capture_output=True, timeout=5)
-                subprocess.run(['dhclient', '-r', wifi_interface], capture_output=True, timeout=5)
-                return True, "Disconnected (fallback)"
+                # Try to use nmcli to disconnect the device specifically
+                subprocess.run(['nmcli', 'device', 'disconnect', wifi_interface], capture_output=True, timeout=5)
+                return True, "Disconnected (device fallback)"
             except Exception as e:
                 return False, str(e)
     except Exception as e:
@@ -2969,3 +2981,41 @@ def sync_remembered_networks(networks, ssid, timestamp, password=None):
     # Sort by recency
     networks.sort(key=lambda x: x.get('last_connected', 0), reverse=True)
     return networks
+
+def remove_nm_connection(ssid_or_name):
+    """Delete a NetworkManager connection profile by SSID or Name (Linux)."""
+    if platform.system() != 'Linux':
+        return False, "Not on Linux"
+    try:
+        # First, try to find a connection matching the SSID or name
+        result = subprocess.run(['nmcli', '-t', '-f', 'NAME,802-11-wireless.ssid', 'connection', 'show'],
+                              capture_output=True, text=True, timeout=5)
+        
+        target_name = None
+        if result.returncode == 0:
+            for line in result.stdout.strip().split('\n'):
+                if not line: continue
+                parts = line.split(':')
+                if len(parts) >= 2:
+                    name, ssid = parts[0], parts[1]
+                    if ssid == ssid_or_name or name == ssid_or_name:
+                        target_name = name
+                        break
+        
+        if not target_name:
+            # Fallback to assuming the input IS the name
+            target_name = ssid_or_name
+            
+        logger.info(f"Attempting to delete NM connection profile: '{target_name}'")
+        del_res = subprocess.run(['nmcli', 'connection', 'delete', 'id', target_name],
+                                capture_output=True, text=True, timeout=10)
+        
+        if del_res.returncode == 0:
+            logger.info(f"Successfully deleted NM profile: {target_name}")
+            return True, del_res.stdout.strip()
+        else:
+            logger.warning(f"Failed to delete NM profile: {del_res.stderr.strip()}")
+            return False, del_res.stderr.strip()
+    except Exception as e:
+        logger.error(f"Error removing NM connection: {e}")
+        return False, str(e)

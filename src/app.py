@@ -570,6 +570,16 @@ class Backend(QObject):
         """Remove a network from remembered networks"""
         self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
         save_remembered_networks(self._remembered_networks)
+        
+        # On Linux, also attempt to remove the NetworkManager connection profile
+        if platform.system() == 'Linux':
+            logger.info(f"Removing NetworkManager profile for forgotten network: {ssid}")
+            try:
+                # We do this in a background thread to avoid any potential UI delay
+                threading.Thread(target=lambda: remove_nm_connection(ssid), daemon=True).start()
+            except Exception as e:
+                logger.debug(f"Failed to start NM profile removal thread: {e}")
+                
         self.rememberedNetworksChanged.emit()
 
     def reload_web_content(self):
