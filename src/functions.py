@@ -516,46 +516,6 @@ def check_wifi_status():
     except Exception as e:
         logger.error(f"Error in check_wifi_status: {e}")
         return False, ""
-                        else:
-                            logger.warning(f"BOOT: nmcli SSID command failed: {ssid_result.stderr}")
-                    else:
-                        logger.debug("BOOT: No connected device found, trying active connections...")
-                        # Fallback to active connections
-                        ssid_result = subprocess.run(['nmcli', '-t', '-f', 'name', 'connection', 'show', '--active'],
-                                                   capture_output=True, text=True, timeout=5)
-                        logger.debug(f"BOOT: nmcli active connections return code: {ssid_result.returncode}")
-                        if ssid_result.returncode == 0:
-                            connections = ssid_result.stdout.strip().split('\n')
-                            logger.debug(f"BOOT: Active connections: {connections}")
-                            if connections and connections[0]:
-                                current_ssid = connections[0]
-                                logger.info(f"BOOT: Linux WiFi SSID from active connections: '{current_ssid}'")
-
-            except Exception as e:
-                logger.debug(f"BOOT: nmcli method failed: {e}")
-                # Try iwgetid as fallback
-                try:
-                    logger.debug("BOOT: Trying iwgetid...")
-                    ssid_result = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=5)
-                    logger.debug(f"BOOT: iwgetid return code: {ssid_result.returncode}")
-                    if ssid_result.returncode == 0:
-                        current_ssid = ssid_result.stdout.strip()
-                        logger.info(f"BOOT: Linux WiFi SSID via iwgetid: '{current_ssid}'")
-                    else:
-                        logger.debug(f"BOOT: iwgetid failed: {ssid_result.stderr}")
-                except Exception as e:
-                    logger.debug(f"BOOT: iwgetid failed: {e}")
-
-            logger.info(f"BOOT: Linux WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
-            return connected, current_ssid
-
-    except Exception as e:
-        logger.error(f"BOOT: Error checking WiFi status: {e}")
-        logger.error(f"BOOT: Exception type: {type(e).__name__}")
-        import traceback
-        logger.error(f"BOOT: Traceback: {traceback.format_exc()}")
-        return False, ""
-
 
 # --- Data fetchers moved from app.py ---
 def fetch_launches():
