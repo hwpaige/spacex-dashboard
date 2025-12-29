@@ -1664,15 +1664,28 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                 
                 # Bring up connection (either the new one we just made, or the existing one)
                 logger.info(f"Activating connection {ssid}...")
-                res = subprocess.run(['nmcli', 'con', 'up', ssid], capture_output=True, text=True, timeout=45)
                 
-                if res.returncode == 0:
-                    output = res.stdout.strip()
-                    logger.info(f"nmcli connection successful: {output}")
+                # Retry logic for connection activation
+                conn_success = False
+                output = ""
+                for conn_attempt in range(3):
+                    res = subprocess.run(['nmcli', 'con', 'up', ssid], capture_output=True, text=True, timeout=45)
+                    if res.returncode == 0:
+                        output = res.stdout.strip()
+                        logger.info(f"nmcli connection successful: {output}")
+                        conn_success = True
+                        break
+                    else:
+                        output = res.stderr.strip() or res.stdout.strip()
+                        if conn_attempt < 2:
+                            logger.warning(f"nmcli connection attempt {conn_attempt+1} failed: {output}. Retrying...")
+                            time.sleep(2)
+
+                if conn_success:
                     return True, None
                 
-                error_out = res.stderr.strip() or res.stdout.strip()
-                logger.warning(f"nmcli connection FAILED for {ssid} (code {res.returncode}): {error_out}")
+                error_out = output
+                logger.warning(f"nmcli connection FAILED for {ssid} (after retries): {error_out}")
                 # Don't return yet; try fallback if available
 
             # Fallback to wpa_cli
@@ -1703,25 +1716,35 @@ def _get_linux_wifi_security_type(ssid, interface):
     Detect the security type (key-mgmt) for a given SSID using nmcli scan results.
     Returns: 'wpa-psk', 'sae' (WPA3), 'none', or None (unknown)
     """
-    try:
-        # Scan for the specific SSID to get fresh info
-        res = subprocess.run(['nmcli', '-t', '-f', 'SSID,SECURITY', 'device', 'wifi', 'list', 'ifname', interface], 
-                           capture_output=True, text=True, timeout=5)
-        if res.returncode == 0:
-            for line in res.stdout.strip().split('\n'):
-                parts = line.split(':')
-                if len(parts) >= 2 and parts[0] == ssid:
-                    security = parts[1].upper()
-                    if 'WPA' in security or 'RSN' in security:
-                         if 'SAE' in security: return 'sae' # WPA3
-                         return 'wpa-psk' # WPA/WPA2
-                    if 'WEP' in security: return 'none' # WEP often handled via key settings, but nmcli usually auto-detects. 
-                                                        # Explicit 'wep' key-mgmt is complex; 'none' is often fallback for older nmcli or just omit key-mgmt.
-                                                        # However, for WPA-PSK we must be explicit.
-                    return 'none' # Open or unsupported
-        return None
-    except Exception:
-        return None
+    # Try up to 3 times to find the SSID in scan results
+    for attempt in range(3):
+        try:
+            # Scan for the specific SSID to get fresh info
+            res = subprocess.run(['nmcli', '-t', '-f', 'SSID,SECURITY', 'device', 'wifi', 'list', 'ifname', interface], 
+                               capture_output=True, text=True, timeout=5)
+            if res.returncode == 0:
+                for line in res.stdout.strip().split('\n'):
+                    parts = line.split(':')
+                    if len(parts) >= 2 and parts[0] == ssid:
+                        security = parts[1].upper()
+                        if 'WPA' in security or 'RSN' in security:
+                             if 'SAE' in security: return 'sae' # WPA3
+                             return 'wpa-psk' # WPA/WPA2
+                        if 'WEP' in security: return 'none'
+                        return 'none' # Open
+            
+            # If not found, wait briefly and try again (unless it's the last attempt)
+            if attempt < 2:
+                time.sleep(1.5)
+                # Trigger a fresh rescan if we didn't see it (nondestructive)
+                try: subprocess.run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', interface], capture_output=True, timeout=5)
+                except: pass
+                
+        except Exception as e:
+            logger.debug(f"Security detection attempt {attempt+1} failed: {e}")
+            if attempt < 2: time.sleep(1)
+            
+    return None
 
 
 def get_launch_trends_series(launches, chart_view_mode, current_year, current_month):
