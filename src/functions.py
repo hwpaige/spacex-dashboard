@@ -1643,9 +1643,11 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                 cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
                 if password:
                     cmd.extend(['password', password])
-                    # Fix for "property is missing" error: explicitly set key management
-                    cmd.extend(['wifi-sec.key-mgmt', 'wpa-psk'])
                 cmd.extend(['ifname', wifi_interface])
+                
+                if password:
+                     # Fix for "property is missing" error: explicitly set key management
+                     cmd.extend(['wifi-sec.key-mgmt', 'wpa-psk'])
                 
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
                 
