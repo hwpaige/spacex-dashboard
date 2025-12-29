@@ -1799,9 +1799,10 @@ class Backend(QObject):
             self._current_wifi_ssid = current_ssid
 
             # If the system reports we're connected, clear any lingering UI "connecting" state
-            if connected and getattr(self, '_wifi_connecting', False):
+            if connected and (getattr(self, '_wifi_connecting', False) or getattr(self, '_wifi_connect_in_progress', False)):
                 try:
                     self._wifi_connecting = False
+                    self._wifi_connect_in_progress = False
                     self.wifiConnectingChanged.emit()
                 except: pass
             
@@ -1839,6 +1840,33 @@ class Backend(QObject):
 
         except Exception as e:
             logger.error(f"Failed to apply WiFi status: {e}")
+
+    def _start_network_connectivity_check_async(self):
+        """Perform a background internet connectivity check"""
+        if getattr(self, '_network_check_in_progress', False):
+            return
+            
+        self._network_check_in_progress = True
+        
+        def _worker():
+            try:
+                # Use the imported test_network_connectivity helper
+                is_online = test_network_connectivity(self._wifi_connected)
+                QTimer.singleShot(0, lambda: self._apply_connectivity_result(is_online))
+            except Exception as e:
+                logger.debug(f"Connectivity check worker error: {e}")
+            finally:
+                self._network_check_in_progress = False
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_connectivity_result(self, is_online):
+        """Apply the results of the background connectivity check"""
+        if self._network_connected != is_online:
+            logger.info(f"Network connectivity status changed: {is_online}")
+            self._network_connected = is_online
+            try: self.networkConnectedChanged.emit()
+            except: pass
 
     def _resume_data_loading(self):
         """Resume or start data loading once connection is detected"""

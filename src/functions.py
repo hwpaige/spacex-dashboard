@@ -1127,24 +1127,28 @@ def decrypt_password(encrypted_password, key=None):
 
 
 def get_wifi_interface():
-    """Get the WiFi interface name"""
+    """Get the WiFi interface name with robust detection"""
     try:
-        # Try nmcli first
-        device_result = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
+        # 1. Try nmcli first (most reliable on Pi/Modern Linux)
+        device_result = subprocess.run(['nmcli', '-t', '-f', 'DEVICE,TYPE', 'device', 'status'], 
+                                     capture_output=True, text=True, timeout=5)
         if device_result.returncode == 0:
-            for line in device_result.stdout.split('\n'):
-                parts = line.split()
+            for line in device_result.stdout.strip().split('\n'):
+                parts = line.split(':')
                 if len(parts) >= 2 and parts[1].lower() == 'wifi':
                     return parts[0]
 
-        # Fallback to common interface names
-        for iface in ['wlan0', 'wlp2s0', 'wlp3s0', 'wlx000000000000']:
-            if os.path.exists(f'/sys/class/net/{iface}'):
-                return iface
+        # 2. Try common patterns in /sys/class/net
+        if os.path.exists('/sys/class/net/'):
+            ifaces = os.listdir('/sys/class/net/')
+            for iface in ifaces:
+                if iface.startswith(('wlan', 'wlp', 'wlx')):
+                    return iface
+                
     except Exception as e:
         logger.debug(f"Error detecting WiFi interface: {e}")
 
-    return 'wlan0'  # Default fallback
+    return 'wlan0'  # PI Default
 
 
 def load_remembered_networks(key=None):
@@ -1634,13 +1638,14 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                     logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
 
                 # 3. Connect using nmcli
-                logger.info(f"Executing: nmcli device wifi connect {ssid} ifname {wifi_interface} ...")
-                # We use a list for subprocess to avoid shell injection, but ssid/password can contain special chars
-                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', wifi_interface]
+                logger.info(f"Executing: nmcli device wifi connect {ssid} password <hidden> ifname {wifi_interface} ...")
+                # Argument Order: [nmcli, device, wifi, connect, SSID, password, PWD, ifname, IFACE]
+                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
                 if password:
                     cmd.extend(['password', password])
+                cmd.extend(['ifname', wifi_interface])
                 
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
                 
                 if res.returncode == 0:
                     output = res.stdout.strip()
@@ -2764,7 +2769,10 @@ def setup_dashboard_logging(module_file):
                 logging.StreamHandler(sys.stdout)
             ]
         )
-        return log_file
+        # Log the log path immediately to stdout
+        print(f"LOGGING TO: {os.path.abspath(log_file)}")
+        logger.info(f"LOGGING INITIALIZED: {os.path.abspath(log_file)}")
+        return os.path.abspath(log_file)
     except Exception as e:
         logging.basicConfig(level=logging.INFO)
         return None
