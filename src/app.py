@@ -121,6 +121,7 @@ from functions import (
     disconnect_from_wifi,
     bring_up_nm_connection,
     sync_remembered_networks,
+    fetch_narratives,
 )
 # DBus imports are now conditional and imported only on Linux
 # import dbus
@@ -279,7 +280,7 @@ class EventModel(QAbstractListModel):
         self.endResetModel()
 
 class DataLoader(QObject):
-    finished = pyqtSignal(dict, dict, dict)
+    finished = pyqtSignal(dict, dict, dict, list)
     statusUpdate = pyqtSignal(str)
 
     def run(self):
@@ -293,18 +294,19 @@ class DataLoader(QObject):
             except RuntimeError: pass
 
         # Delegate full load to functions.py
-        launch_data, f1_data, weather_data = perform_full_dashboard_data_load(
+        launch_data, f1_data, weather_data, narratives = perform_full_dashboard_data_load(
             location_settings, 
             status_callback=_safe_emit_status
         )
 
-        _safe_emit_finished(launch_data, f1_data, weather_data)
+        _safe_emit_finished(launch_data, f1_data, weather_data, narratives)
 
 class LaunchUpdater(QObject):
-    finished = pyqtSignal(dict)
+    finished = pyqtSignal(dict, list)
     def run(self):
         launch_data = fetch_launches()
-        self.finished.emit(launch_data)
+        narratives = fetch_narratives()
+        self.finished.emit(launch_data, narratives)
 
 class WeatherUpdater(QObject):
     finished = pyqtSignal(dict)
@@ -369,7 +371,9 @@ class Backend(QObject):
         self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._isLoading = True
         self._loading_status = "Initializing..."
+        self._loading_status = "Initializing..."
         self._launch_data = {'previous': [], 'upcoming': []}
+        self._launch_descriptions = LAUNCH_DESCRIPTIONS
         self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
         self._weather_data = {}
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
@@ -1183,7 +1187,7 @@ class Backend(QObject):
 
     @pyqtProperty(list, notify=launchesChanged)
     def launchDescriptions(self):
-        return LAUNCH_DESCRIPTIONS
+        return self._launch_descriptions
 
     @pyqtSlot(result=QVariant)
     def get_next_launch(self):
@@ -1249,13 +1253,14 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
 
-    @pyqtSlot(dict, dict, dict)
-    def on_data_loaded(self, launch_data, f1_data, weather_data):
+    @pyqtSlot(dict, dict, dict, list)
+    def on_data_loaded(self, launch_data, f1_data, weather_data, narratives):
         logger.info("Backend: on_data_loaded called")
         self.setLoadingStatus("Data loaded successfully")
         logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
         logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
+        self._launch_descriptions = narratives
         self._f1_data = f1_data
         self._weather_data = weather_data
         # Update the EventModel's data reference
@@ -1529,10 +1534,11 @@ class Backend(QObject):
         self.thread.quit()
         self.thread.wait()
 
-    @pyqtSlot(dict)
-    def _on_launches_updated(self, launch_data):
+    @pyqtSlot(dict, list)
+    def _on_launches_updated(self, launch_data, narratives):
         """Handle launch data update completion"""
         self._launch_data = launch_data
+        self._launch_descriptions = narratives
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()

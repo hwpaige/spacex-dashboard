@@ -76,6 +76,7 @@ __all__ = [
     "CACHE_FILE_F1_CONSTRUCTORS",
     "RUNTIME_CACHE_FILE_PREVIOUS",
     "RUNTIME_CACHE_FILE_UPCOMING",
+    "RUNTIME_CACHE_FILE_NARRATIVES",
     "WIFI_KEY_FILE",
     "REMEMBERED_NETWORKS_FILE",
     "LAST_CONNECTED_NETWORK_FILE",
@@ -140,6 +141,7 @@ __all__ = [
     "bring_up_nm_connection",
     "sync_remembered_networks",
     "remove_nm_connection",
+    "fetch_narratives",
 ]
 
 
@@ -186,10 +188,12 @@ CACHE_FILE_F1_CONSTRUCTORS = os.path.join(CACHE_DIR_F1, 'f1_constructors_cache.j
 # and write incremental updates to the persistent user cache.
 RUNTIME_CACHE_FILE_PREVIOUS = os.path.join(CACHE_DIR_F1, 'previous_launches_cache.json')
 RUNTIME_CACHE_FILE_UPCOMING = os.path.join(CACHE_DIR_F1, 'upcoming_launches_cache.json')
+RUNTIME_CACHE_FILE_NARRATIVES = os.path.join(CACHE_DIR_F1, 'narratives_cache.json')
 
 # Different refresh intervals for different F1 data types
 CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely changes)
 CACHE_REFRESH_INTERVAL_F1_STANDINGS = 3600  # 1 hour for standings (updates frequently)
+CACHE_REFRESH_INTERVAL_NARRATIVES = 3600    # 1 hour for narratives
 
 # WiFi and Encryption paths
 # WiFi and Encryption paths - Updated to use persistent cache directory
@@ -705,6 +709,55 @@ def fetch_launches():
                 upcoming_launches = []
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
+
+
+def fetch_narratives():
+    """Fetch witty launch narratives from the API with fallback and caching."""
+    logger.info("Fetching narratives")
+    narratives = []
+    
+    # Try loading from cache first
+    try:
+        cache = load_cache_from_file(RUNTIME_CACHE_FILE_NARRATIVES)
+        current_time = datetime.now(pytz.UTC)
+        if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_NARRATIVES:
+            logger.info("Using cached narratives")
+            return cache['data']
+    except Exception as e:
+        logger.warning(f"Failed to load narratives cache: {e}")
+
+    # Check network and fetch from API
+    try:
+        urllib.request.urlopen('http://www.google.com', timeout=5)
+        url = "https://launch-narrative-api-dafccc521fb8.herokuapp.com/recent_launches_narratives"
+        logger.info(f"Fetching narratives from API: {url}")
+        
+        # Verify=False to avoid potential SSL cert issues on embedded python envs
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        # The API returns a list of strings
+        if isinstance(data, list):
+            narratives = data
+            save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
+            logger.info(f"Fetched and cached {len(narratives)} narratives")
+            return narratives
+        else:
+            logger.warning("Narratives API returned unexpected format")
+            
+    except Exception as e:
+        logger.warning(f"Failed to fetch narratives from API: {e}")
+
+    # Fallback to cache if available (even if stale)
+    if cache and cache.get('data'):
+        logger.info("Using stale cached narratives as fallback")
+        return cache['data']
+
+    # Final fallback to hardcoded descriptions
+    logger.info("Using hardcoded fallback narratives")
+    return LAUNCH_DESCRIPTIONS
+
 
 
 def fetch_f1_data():
@@ -2772,17 +2825,24 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
         def _fetch_w():
             _emit("Getting live weather for locations…")
             return fetch_weather_for_all_locations(locations_config)
+            
+        # Narratives
+        def _fetch_n():
+            _emit("Fetching launch narratives…")
+            return fetch_narratives()
 
         f_launch = executor.submit(_fetch_l)
         f_f1 = executor.submit(_fetch_f1)
         f_weather = executor.submit(_fetch_w)
+        f_narratives = executor.submit(_fetch_n)
         
         launch_data = f_launch.result()
         f1_data = f_f1.result()
         weather_data = f_weather.result()
+        narratives = f_narratives.result()
 
     _emit("Data loading complete")
-    return launch_data, f1_data, weather_data
+    return launch_data, f1_data, weather_data, narratives
 
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
