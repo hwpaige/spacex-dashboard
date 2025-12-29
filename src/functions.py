@@ -1637,19 +1637,21 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                 except Exception as e:
                     logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
 
-                # 3. Connect using nmcli
-                logger.info(f"Executing: nmcli device wifi connect {ssid} password <hidden> ifname {wifi_interface} ...")
-                # Argument Order: [nmcli, device, wifi, connect, SSID, password, PWD, ifname, IFACE]
-                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
-                if password:
-                    cmd.extend(['password', password])
-                cmd.extend(['ifname', wifi_interface])
+                # 3. Connect using nmcli with explicit profile creation to avoid auto-detection issues
+                # Create profile
+                logger.debug(f"Creating NM profile for {ssid}...")
+                subprocess.run(['nmcli', 'con', 'add', 'type', 'wifi', 'con-name', ssid, 'ifname', wifi_interface, 'ssid', ssid], 
+                             capture_output=True, timeout=10)
                 
+                # Set security settings
                 if password:
-                     # Fix for "property is missing" error: explicitly set key management
-                     cmd.extend(['wifi-sec.key-mgmt', 'wpa-psk'])
+                    logger.debug(f"Setting security for {ssid}...")
+                    subprocess.run(['nmcli', 'con', 'modify', ssid, 'wifi-sec.key-mgmt', 'wpa-psk'], capture_output=True, timeout=5)
+                    subprocess.run(['nmcli', 'con', 'modify', ssid, 'wifi-sec.psk', password], capture_output=True, timeout=5)
                 
-                res = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+                # Bring up connection
+                logger.info(f"Activating connection {ssid}...")
+                res = subprocess.run(['nmcli', 'con', 'up', ssid], capture_output=True, text=True, timeout=45)
                 
                 if res.returncode == 0:
                     output = res.stdout.strip()
