@@ -1738,12 +1738,21 @@ class Backend(QObject):
                 success, error = connect_to_wifi_worker(ssid, password, wifi_interface)
                 
                 if success:
-                    # Persist remembered network and update last connected
+                    # Persist remembered network (needs main thread for property update)
                     QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
-                    QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
-                    # Call Linux-specific autoconnect manager
+                    
+                    # Save last connected network (io bound, safe in thread)
+                    try:
+                        self.save_last_connected_network(ssid)
+                    except Exception as e:
+                        logger.error(f"Failed to save last connected network: {e}")
+
+                    # Call Linux-specific autoconnect manager (BLOCKING subprocess calls - run in thread)
                     if not IS_WINDOWS:
-                        QTimer.singleShot(0, lambda: manage_nm_autoconnect(ssid))
+                        try:
+                            manage_nm_autoconnect(ssid)
+                        except Exception as e:
+                            logger.error(f"Failed to manage NM autoconnect: {e}")
                 
                 # Signal completion on main thread
                 QTimer.singleShot(0, _finish)
@@ -1765,18 +1774,29 @@ class Backend(QObject):
 
     @pyqtSlot()
     def disconnectWifi(self):
-        """Disconnect from current WiFi network"""
-        success, output = disconnect_from_wifi(get_wifi_interface())
-        if success:
-            logger.info(f"WiFi disconnected: {output}")
-            self._wifi_connected = False
-            self._current_wifi_ssid = ""
-            self.wifiConnectedChanged.emit()
-            self.update_wifi_status()
-        else:
-            logger.error(f"Failed to disconnect WiFi: {output}")
-            self._current_wifi_ssid = ""
-            self.wifiConnectedChanged.emit()
+        """Disconnect from current WiFi network (Threaded)"""
+        def _worker():
+            try:
+                success, output = disconnect_from_wifi(get_wifi_interface())
+                
+                # Update UI on main thread
+                def _update_ui():
+                    if success:
+                        logger.info(f"WiFi disconnected: {output}")
+                        self._wifi_connected = False
+                        self._current_wifi_ssid = ""
+                        self.wifiConnectedChanged.emit()
+                        self.update_wifi_status()
+                    else:
+                        logger.error(f"Failed to disconnect WiFi: {output}")
+                        self._current_wifi_ssid = ""
+                        self.wifiConnectedChanged.emit()
+                
+                QTimer.singleShot(0, _update_ui)
+            except Exception as e:
+                logger.error(f"Disconnect worker failed: {e}")
+        
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _manage_networkmanager_autoconnect(self, current_ssid):
         """Manage NetworkManager autoconnect settings for the current network"""
