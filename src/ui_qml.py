@@ -57,7 +57,7 @@ Window {
     // and other views refresh once after Wi‑Fi connection settles.
     Timer {
         id: reloadCoalesceTimer
-        interval: 1200
+        interval: 4500
         repeat: false
         running: false
         onTriggered: {

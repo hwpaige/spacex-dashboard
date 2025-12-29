@@ -3001,6 +3001,53 @@ def bring_up_nm_connection(profile_name):
     except Exception as e:
         return False, str(e)
 
+
+def load_remembered_networks():
+    """Load remembered networks from the JSON cache file."""
+    if not os.path.exists(REMEMBERED_NETWORKS_FILE):
+        return []
+    try:
+        with open(REMEMBERED_NETWORKS_FILE, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"Failed to load remembered networks: {e}")
+        return []
+
+def save_remembered_networks(networks):
+    """Save the list of remembered networks to the JSON cache file."""
+    try:
+        os.makedirs(os.path.dirname(REMEMBERED_NETWORKS_FILE), exist_ok=True)
+        with open(REMEMBERED_NETWORKS_FILE, 'w') as f:
+            json.dump(networks, f, indent=4)
+        logger.info(f"Saved {len(networks)} remembered networks to {REMEMBERED_NETWORKS_FILE}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save remembered networks: {e}")
+        return False
+
+def load_last_connected_network():
+    """Load the last connected network SSID from the JSON cache file."""
+    if not os.path.exists(LAST_CONNECTED_NETWORK_FILE):
+        return None
+    try:
+        with open(LAST_CONNECTED_NETWORK_FILE, 'r') as f:
+            data = json.load(f)
+            return data.get('ssid')
+    except Exception as e:
+        logger.error(f"Failed to load last connected network: {e}")
+        return None
+
+def save_last_connected_network(ssid):
+    """Save the last connected network SSID to the JSON cache file."""
+    try:
+        os.makedirs(os.path.dirname(LAST_CONNECTED_NETWORK_FILE), exist_ok=True)
+        with open(LAST_CONNECTED_NETWORK_FILE, 'w') as f:
+            json.dump({'ssid': ssid, 'timestamp': time.time()}, f, indent=4)
+        return True
+    except Exception as e:
+        logger.error(f"Failed to save last connected network: {e}")
+        return False
+
 def sync_remembered_networks(networks, ssid, timestamp, password=None):
     """Update a list of remembered networks with the latest connection info and return sorted list."""
     if not networks: networks = []

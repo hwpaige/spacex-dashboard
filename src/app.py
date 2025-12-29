@@ -390,6 +390,7 @@ class Backend(QObject):
         self._wifi_connected = initial_wifi_connected
         self._wifi_connecting = False
         self._current_wifi_ssid = initial_wifi_ssid
+        self._target_wifi_ssid = None # Track target SSID to prevent premature state clearing
         # Expose scan progress to QML for spinner/disabled state
         self._wifi_scan_in_progress = False
         self._remembered_networks = load_remembered_networks()
@@ -1549,6 +1550,7 @@ class Backend(QObject):
             logger.warning(f"WiFi connection cleanup: State was stuck 'connecting' for {ssid or 'unknown'}; resetting UI.")
             self._wifi_connecting = False
             self._wifi_connect_in_progress = False
+            self._target_wifi_ssid = None # Also reset target SSID
             self.wifiConnectingChanged.emit()
 
     def _auto_reconnect_to_last_network(self, boot_time=False):
@@ -1716,6 +1718,7 @@ class Backend(QObject):
             return
         self._wifi_connect_in_progress = True
         self._wifi_connecting = True
+        self._target_wifi_ssid = ssid # Set target SSID
         self.wifiConnectingChanged.emit()
 
         # Safety reset timer in case worker hangs
@@ -1814,12 +1817,16 @@ class Backend(QObject):
             self._wifi_connected = connected
             self._current_wifi_ssid = current_ssid
 
-            # If the system reports we're connected, clear any lingering UI "connecting" state
-            if connected and (getattr(self, '_wifi_connecting', False) or getattr(self, '_wifi_connect_in_progress', False)):
-                logger.info(f"Connected to {current_ssid} - clearing connecting state")
+            # If the system reports we're connected to the TARGET network, clear UI "connecting" state
+            # If no target set (legacy/manual), proceed as before.
+            target_match = (not getattr(self, '_target_wifi_ssid', None)) or (current_ssid == getattr(self, '_target_wifi_ssid', None))
+            
+            if connected and target_match and (getattr(self, '_wifi_connecting', False) or getattr(self, '_wifi_connect_in_progress', False)):
+                logger.info(f"Connected to target {current_ssid} - clearing connecting state")
                 try:
                     self._wifi_connecting = False
                     self._wifi_connect_in_progress = False
+                    self._target_wifi_ssid = None # Reset target
                     self.wifiConnectingChanged.emit()
                     self.wifiScanInProgressChanged.emit() # Ensure spinner stops
                 except: pass
