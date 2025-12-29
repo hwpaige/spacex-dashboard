@@ -1576,7 +1576,10 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
     try:
         if IS_WINDOWS:
             try:
-                profile_xml = f'''<?xml version="1.0"?>
+                # Only create/update profile if we have a password. 
+                # Otherwise, assume profile exists or isn't needed (e.g. open network or already saved in OS).
+                if password:
+                    profile_xml = f'''<?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
     <name>{ssid}</name>
     <SSIDConfig><SSID><name>{ssid}</name></SSID></SSIDConfig>
@@ -1597,18 +1600,20 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
         </security>
     </MSM>
 </WLANProfile>'''
-                # Use a safer temp path for Windows if possible, but keeping original logic
-                temp_dir = os.path.join(os.environ.get('TEMP', 'C:\\temp'), 'wifi_profiles')
-                os.makedirs(temp_dir, exist_ok=True)
-                profile_path = os.path.join(temp_dir, f'wifi_profile_{ssid}.xml')
-                with open(profile_path, 'w') as f:
-                    f.write(profile_xml)
+                    # Use a safer temp path for Windows if possible, but keeping original logic
+                    temp_dir = os.path.join(os.environ.get('TEMP', 'C:\\temp'), 'wifi_profiles')
+                    os.makedirs(temp_dir, exist_ok=True)
+                    profile_path = os.path.join(temp_dir, f'wifi_profile_{ssid}.xml')
+                    with open(profile_path, 'w') as f:
+                        f.write(profile_xml)
+                    
+                    subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'], capture_output=True, timeout=10)
+                    
+                    try: os.remove(profile_path)
+                    except: pass
                 
-                subprocess.run(['netsh', 'wlan', 'add', 'profile', f'filename={profile_path}'], capture_output=True, timeout=10)
+                # Always attempt to connect
                 conn_res = subprocess.run(['netsh', 'wlan', 'connect', f'name={ssid}'], capture_output=True, timeout=10)
-                
-                try: os.remove(profile_path)
-                except: pass
                 
                 if conn_res.returncode == 0:
                     return True, None
@@ -1631,21 +1636,20 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                 except Exception as e:
                     logger.debug(f"nmcli rescan failed: {e}")
                 
-                # 2. Proactively remove existing profile for this SSID to avoid conflicts/stale settings
-                try:
-                    logger.debug(f"Cleaning up existing NM profile for {ssid}...")
-                    remove_nm_connection(ssid)
-                except Exception as e:
-                    logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
-
-                # 3. Connect using nmcli with explicit profile creation to avoid auto-detection issues
-                # Create profile
-                logger.debug(f"Creating NM profile for {ssid}...")
-                subprocess.run(['nmcli', 'con', 'add', 'type', 'wifi', 'con-name', ssid, 'ifname', wifi_interface, 'ssid', ssid], 
-                             capture_output=True, timeout=10)
-                
-                # Set security settings
                 if password:
+                    # 2. Proactively remove existing profile for this SSID to avoid conflicts/stale settings
+                    try:
+                        logger.debug(f"Cleaning up existing NM profile for {ssid}...")
+                        remove_nm_connection(ssid)
+                    except Exception as e:
+                        logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
+
+                    # 3. Connect using nmcli with explicit profile creation to avoid auto-detection issues
+                    # Create profile
+                    logger.debug(f"Creating NM profile for {ssid}...")
+                    subprocess.run(['nmcli', 'con', 'add', 'type', 'wifi', 'con-name', ssid, 'ifname', wifi_interface, 'ssid', ssid], 
+                                 capture_output=True, timeout=10)
+                    
                     logger.debug(f"Setting security for {ssid}...")
                     
                     # Auto-detect security type
@@ -1658,7 +1662,7 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                     subprocess.run(['nmcli', 'con', 'modify', ssid, 'wifi-sec.key-mgmt', key_mgmt], capture_output=True, timeout=5)
                     subprocess.run(['nmcli', 'con', 'modify', ssid, 'wifi-sec.psk', password], capture_output=True, timeout=5)
                 
-                # Bring up connection
+                # Bring up connection (either the new one we just made, or the existing one)
                 logger.info(f"Activating connection {ssid}...")
                 res = subprocess.run(['nmcli', 'con', 'up', ssid], capture_output=True, text=True, timeout=45)
                 
