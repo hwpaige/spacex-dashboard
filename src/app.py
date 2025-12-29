@@ -1714,7 +1714,7 @@ class Backend(QObject):
         self.wifiConnectingChanged.emit()
 
         # Safety reset timer in case worker hangs
-        QTimer.singleShot(45000, lambda: self._safety_reset_wifi_connecting(ssid))
+        QTimer.singleShot(60000, lambda: self._safety_reset_wifi_connecting(ssid))
 
         def _finish():
             try:

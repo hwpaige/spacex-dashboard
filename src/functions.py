@@ -1643,6 +1643,8 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                 cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
                 if password:
                     cmd.extend(['password', password])
+                    # Fix for "property is missing" error: explicitly set key management
+                    cmd.extend(['wifi-sec.key-mgmt', 'wpa-psk'])
                 cmd.extend(['ifname', wifi_interface])
                 
                 res = subprocess.run(cmd, capture_output=True, text=True, timeout=45)
@@ -1671,6 +1673,7 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                     sel_res = subprocess.run(['wpa_cli', '-i', wifi_interface, 'select_network', net_id], capture_output=True, timeout=5)
                     if sel_res.returncode == 0:
                         subprocess.run(['wpa_cli', '-i', wifi_interface, 'save_config'], capture_output=True, timeout=5)
+                        logger.info(f"wpa_cli connection successful for {ssid}")
                         return True, None
             
             return False, "All connection methods failed"
