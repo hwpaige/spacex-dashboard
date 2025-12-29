@@ -1,24 +1,3 @@
-"""
-QML source moved from src/app.py into this module to reduce the size and
-complexity of app.py.
-
-INSTRUCTIONS FOR MECHANICAL COPY (one-time):
-1) Copy the entire QML text currently preserved in src/app.py as a large
-   triple-quoted literal (it starts right after the line that says
-   "QML moved to src/ui_qml.py (variable: qml_code)." and ends at the
-   closing triple quotes just before engine.loadData call).
-2) Paste it below as the value of qml_code (replace the placeholder).
-3) After you paste, you can safely delete the big triple-quoted block from
-   src/app.py.
-
-Notes:
-- Keep the triple quotes exactly as shown below to avoid escaping issues.
-- No Python formatting is needed; just paste the QML text as-is between
-  the triple quotes.
-"""
-
-# Minimal placeholder so the app can still start before you paste the full QML.
-# Replace this entire string with the real QML as per the steps above.
 qml_code = """
 import QtQuick
 import QtQuick.Window
@@ -2325,7 +2304,6 @@ Window {
                                     }
                                     if (isRemembered) {
                                         backend.connectToRememberedNetwork(modelData.ssid)
-                                        wifiPopup.close()
                                     } else {
                                         passwordDialog.open()
                                     }
@@ -2466,7 +2444,6 @@ Window {
                         onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
-                            wifiPopup.close()
                         }
 
                         background: Rectangle {

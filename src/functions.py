@@ -1617,13 +1617,39 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
             # Try nmcli first
             nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
             if nmcli_check.returncode == 0:
-                logger.info(f"Connecting to {ssid} via nmcli")
-                # nmcli device wifi connect <SSID> password <PASSWORD>
-                res = subprocess.run(['nmcli', 'device', 'wifi', 'connect', ssid, 'password', password],
-                                     capture_output=True, text=True, timeout=20)
+                logger.info(f"Connecting to {ssid} via nmcli (with rescan and profile cleanup)")
+                
+                # 1. Rescan to ensure the SSID is visible to nmcli
+                try: 
+                    subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], capture_output=True, timeout=8)
+                    time.sleep(2) # Give it a moment to populate results
+                except Exception as e:
+                    logger.debug(f"nmcli rescan failed: {e}")
+                
+                # 2. Proactively remove existing profile for this SSID to avoid conflicts/stale settings
+                try:
+                    logger.debug(f"Cleaning up existing NM profile for {ssid}...")
+                    remove_nm_connection(ssid)
+                except Exception as e:
+                    logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
+
+                # 3. Connect using nmcli
+                logger.info(f"Executing: nmcli device wifi connect {ssid} ...")
+                # We use a list for subprocess to avoid shell injection, but ssid/password can contain special chars
+                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
+                if password:
+                    cmd.extend(['password', password])
+                
+                res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                
                 if res.returncode == 0:
+                    output = res.stdout.strip()
+                    logger.info(f"nmcli connection successful: {output}")
                     return True, None
-                logger.warning(f"nmcli connection failed: {res.stderr}")
+                
+                error_out = res.stderr.strip() or res.stdout.strip()
+                logger.warning(f"nmcli connection FAILED for {ssid} (code {res.returncode}): {error_out}")
+                # Don't return yet; try fallback if available
 
             # Fallback to wpa_cli
             wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
