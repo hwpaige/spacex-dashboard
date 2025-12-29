@@ -16,10 +16,14 @@ Window {
     onActiveChanged: {
         if (active) {
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+                if (!(backend && backend.wifiConnecting)) {
+                   try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+                }
             }
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+                if (!(backend && backend.wifiConnecting)) {
+                   try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
+                }
             }
         }
     }
@@ -38,8 +42,8 @@ Window {
     // This injects CSS into the page to round and clip at the document level,
     // which works even when the scene-graph clipping is ignored by Chromium.
     function _injectRoundedCorners(webView, radiusPx) {
-        if (!webView || !webView.runJavaScript)
-            return;
+        if (!webView || !webView.runJavaScript) return;
+        if (typeof backend !== 'undefined' && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
@@ -72,10 +76,14 @@ Window {
             }
             // Nudge globe(s) again after network-driven reloads completed
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+                if (!(backend && backend.wifiConnecting)) {
+                    try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+                }
             }
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+                if (!(backend && backend.wifiConnecting)) {
+                    try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
+                }
             }
         }
     }
@@ -88,15 +96,19 @@ Window {
             // Smooth globe handling: avoid full reloads to prevent freeze/replot.
             // Instead, nudge animation loops to resume if they paused.
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                try {
-                    globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                } catch (e) { console.log("Globe view JS resume failed:", e); }
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Globe view JS resume failed:", e); }
+                }
             }
             // Plot card globe view (left-most card) – also avoid reload
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                try {
-                    plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+                }
             }
             // Debounce all other heavy reloads to a single update shortly after connect
             if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
@@ -113,23 +125,28 @@ Window {
         }
         // Resume spin on key backend signals
         backend.launchCacheReady.connect(function(){
+            if (backend.wifiConnecting) return;
             if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.updateGlobeTrajectory.connect(function(){
+            if (backend.wifiConnecting) return;
             if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.loadingFinished.connect(function(){
+            if (backend.wifiConnecting) return;
             if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.firstOnline.connect(function(){
+            if (backend.wifiConnecting) return;
             if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         // Keep guard value in sync if changed at runtime
         backend.globeAutospinGuardChanged.connect(function(){
+            if (backend.wifiConnecting) return;
             var guard2 = backend.globeAutospinGuard
             var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)

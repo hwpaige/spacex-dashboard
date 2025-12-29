@@ -1389,6 +1389,9 @@ class Backend(QObject):
     # --- Globe trajectory helpers (async precompute + debounced emits) ---
     def _emit_update_globe_signal(self):
         try:
+            # Don't touch the globe if we are in the middle of a connection attempt
+            if getattr(self, '_wifi_connecting', False):
+                return
             self.updateGlobeTrajectory.emit()
         except Exception as _e:
             logger.debug(f"Failed to emit updateGlobeTrajectory: {_e}")
