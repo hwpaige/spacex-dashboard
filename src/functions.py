@@ -192,9 +192,10 @@ CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely
 CACHE_REFRESH_INTERVAL_F1_STANDINGS = 3600  # 1 hour for standings (updates frequently)
 
 # WiFi and Encryption paths
-WIFI_KEY_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'wifi_key.bin')
-REMEMBERED_NETWORKS_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'remembered_networks.json')
-LAST_CONNECTED_NETWORK_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'last_connected_network.json')
+# WiFi and Encryption paths - Updated to use persistent cache directory
+WIFI_KEY_FILE = os.path.join(CACHE_DIR_F1, 'wifi_key.bin')
+REMEMBERED_NETWORKS_FILE = os.path.join(CACHE_DIR_F1, 'remembered_networks.json')
+LAST_CONNECTED_NETWORK_FILE = os.path.join(CACHE_DIR_F1, 'last_connected_network.json')
 
 # F1 Team colors for visualization
 F1_TEAM_COLORS = {

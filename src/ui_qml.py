@@ -61,41 +61,7 @@ Window {
         repeat: false
         running: false
         onTriggered: {
-            // Reload F1 chart view
-            if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
-                f1ChartView.reload()
-                console.log("F1 chart view reloaded (debounced)")
-            }
-            // Reload YouTube/map view
-            if (typeof youtubeView !== 'undefined' && youtubeView.reload) {
-                youtubeView.reload()
-                console.log("YouTube/map view reloaded (debounced)")
-            }
-            // Reload x.com view
-            if (typeof xComView !== 'undefined' && xComView.reload) {
-                xComView.reload()
-                console.log("x.com view reloaded (debounced)")
-            }
-            // Reload weather views
-            if (typeof weatherSwipe !== 'undefined') {
-                for (var i = 0; i < weatherSwipe.count; i++) {
-                    var item = weatherSwipe.itemAt(i);
-                    if (!item) continue;
-                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
-                    var webChild = null;
-                    if (container && container.children && container.children.length > 0) {
-                        for (var c = 0; c < container.children.length; c++) {
-                            var ch = container.children[c];
-                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
-                        }
-                    }
-                    if (webChild && webChild.reload) {
-                        try { webChild.reload(); console.log("Weather view", i, "reloaded (debounced)"); }
-                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
-                    }
-                }
-            }
-            // Lightweight backend refreshes
+            // Lightweight backend refreshes - keep these here
             if (typeof backend !== 'undefined' && backend.update_countdown) {
                 backend.update_countdown();
                 console.log("Countdown refreshed (debounced)");
@@ -762,6 +728,23 @@ Window {
                                         root._injectRoundedCorners(f1ChartView, 8)
                                     }
                                 }
+
+                                // Staggered reload for F1 view
+                                Connections {
+                                    target: backend
+                                    function onReloadWebContent() {
+                                        f1ReloadTimer.start()
+                                    }
+                                }
+                                Timer {
+                                    id: f1ReloadTimer
+                                    interval: 1100
+                                    repeat: false
+                                    onTriggered: {
+                                        f1ChartView.reload()
+                                        console.log("F1 chart view reloaded (staggered)")
+                                    }
+                                }
                             }
 
                             // F1 Stat selector buttons container
@@ -943,12 +926,38 @@ Window {
                                             request.accept();
                                             root.visibility = Window.FullScreen
                                         }
-                                        onLoadingChanged: function(loadRequest) {
+                                    onLoadingChanged: function(loadRequest) {
                                             if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                                 console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
                                             } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                                 console.log("WebEngineView loaded successfully for", modelData);
                                                 // No rounding injection for Windy to preserve animations
+                                            }
+                                        }
+
+                                        // Staggered reload for weather views
+                                        Connections {
+                                            target: backend
+                                            function onReloadWebContent() {
+                                                // Stagger based on index to prevent freeze
+                                                var delay = 1500 + (index * 500)
+                                                reloadTimer.interval = delay
+                                                reloadTimer.start()
+                                            }
+                                        }
+                                        Timer {
+                                            id: reloadTimer
+                                            repeat: false
+                                            onTriggered: {
+                                                if (parent.visible) { // Only reload if visible or about to be? 
+                                                    // Actually, reload all but staggered is safer.
+                                                    webView.reload()
+                                                    console.log("Weather view", index, "reloaded (staggered)")
+                                                } else {
+                                                    // If not visible, just reset URL to force reload when it becomes visible?
+                                                    // Or just reload anyway, staggered.
+                                                    webView.reload()
+                                                }
                                             }
                                         }
                                     }
@@ -1563,7 +1572,7 @@ Window {
                                         console.log("Attempting to reload with proper headers...");
 
                                         // Auto-retry for Referer header errors
-                                        reloadTimer.restart();
+                                        youtubeRetryTimer.restart();
                                     } else if (loadRequest.errorCode === 2) {
                                         console.log("ERR_FAILED - Network or server error. Check your internet connection.");
                                     } else if (loadRequest.errorCode === 3) {
@@ -1579,13 +1588,30 @@ Window {
                                     console.log("YouTube/Map WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
                                     root._injectRoundedCorners(youtubeView, 8)
-                                    reloadTimer.stop(); // Stop any pending retries
+                                    youtubeRetryTimer.stop(); // Stop any pending retries
+                                }
+                            }
+
+                            // Staggered global reload for YouTube view
+                            Connections {
+                                target: backend
+                                function onReloadWebContent() {
+                                    globalReloadTimer.start()
+                                }
+                            }
+                            Timer {
+                                id: globalReloadTimer
+                                interval: 100
+                                repeat: false
+                                onTriggered: {
+                                    youtubeView.reload()
+                                    console.log("YouTube/map view reloaded (staggered)")
                                 }
                             }
 
                             // Auto-retry timer for content length mismatch
                             Timer {
-                                id: reloadTimer
+                                id: youtubeRetryTimer
                                 interval: 3000 // 3 seconds
                                 repeat: false
                                 onTriggered: {
@@ -3540,6 +3566,23 @@ Window {
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                         root._injectRoundedCorners(xComView, 12)
+                                    }
+                                }
+
+                                // Staggered reload for X.com view
+                                Connections {
+                                    target: backend
+                                    function onReloadWebContent() {
+                                        xComReloadTimer.start()
+                                    }
+                                }
+                                Timer {
+                                    id: xComReloadTimer
+                                    interval: 600
+                                    repeat: false
+                                    onTriggered: {
+                                        xComView.reload()
+                                        console.log("x.com view reloaded (staggered)")
                                     }
                                 }
                             }
