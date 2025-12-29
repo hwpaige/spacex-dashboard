@@ -1833,7 +1833,7 @@ Window {
                             color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
-                            // Fade out as tray expands (expandedHeight is now 208)
+                            // Fade out as tray expands (stays consistent with ticker height)
                             opacity: 1.0 - Math.min(1.0, narrativeTray.height / 28.0)
 
                             SequentialAnimation on x {
@@ -1907,7 +1907,7 @@ Window {
                         visible: height > 0
                         closePolicy: Popup.NoAutoClose
                         
-                        property real expandedHeight: 208 // 180 + 28 ticker height
+                        property real expandedHeight: 220 // Taller list
                         
                         Behavior on height {
                             NumberAnimation {
@@ -1917,12 +1917,12 @@ Window {
                         }
                         
                         background: Rectangle {
-                            color: tickerRect.color
-                            // Full pill shape as it covers the ticker exactly
+                            // Tesla-style semi-transparency
+                            color: backend.theme === "dark" ? "#cc2a2e2e" : "#ccf0f0f0"
                             radius: 14
-                            opacity: 1.0
+                            opacity: 0.92
                             border.width: 1
-                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            border.color: backend.theme === "dark" ? "#44ffffff" : "#44000000"
                         }
                         
                         ColumnLayout {
@@ -1985,9 +1985,9 @@ Window {
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.margins: 5
-                                // Adjust layout to ensure content flows into the ticker area
-                                Layout.bottomMargin: 8 
+                                Layout.margins: 4
+                                // Extend right to the bottom edge
+                                Layout.bottomMargin: 2 
                                 Layout.topMargin: 0
                                 clip: true
                                 model: backend.launchDescriptions
