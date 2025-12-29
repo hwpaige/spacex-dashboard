@@ -466,6 +466,13 @@ class Backend(QObject):
             logger.debug(f"Could not connect wifiScanResultsReady signal: {_e}")
         # Boot guard timer placeholder
         self._initial_checks_guard_timer = None
+        
+        # Safety timer: if we don't get online data within 5s, dismiss splash and show cached data
+        self._loading_timeout_timer = QTimer(self)
+        self._loading_timeout_timer.setSingleShot(True)
+        self._loading_timeout_timer.setInterval(5000)
+        self._loading_timeout_timer.timeout.connect(self._on_loading_timeout)
+        self._loading_timeout_timer.start()
 
         # Emit initial states on the next Qt tick so QML bindings are already connected
         try:
@@ -1339,11 +1346,15 @@ class Backend(QObject):
             # Update trajectory now that we have at least cached data
             self._emit_update_globe_trajectory_debounced()
             self._schedule_trajectory_recompute()
-            # Exit splash now that cache is applied
-            self.setLoadingStatus("Application loaded…")
-            self._isLoading = False
-            self.loadingFinished.emit()
-            logger.info("BOOT: Seed/runtime cache applied; splash dismissed via launchCacheReady")
+            # Update trajectory now that we have at least cached data
+            self._emit_update_globe_trajectory_debounced()
+            self._schedule_trajectory_recompute()
+            
+            # NOTE: Do NOT exit splash here. Wait for network or timeout.
+            # self.setLoadingStatus("Application loaded…")
+            # self._isLoading = False
+            # self.loadingFinished.emit()
+            logger.info("BOOT: Seed/runtime cache applied; waiting for network or timeout to dismiss splash")
         except Exception as e:
             logger.error(f"Seed bootstrap failed: {e}")
 
