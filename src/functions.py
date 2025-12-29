@@ -10,8 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import math
-import os
 import platform
+IS_WINDOWS = platform.system() == 'Windows'
+import os
 import re
 import socket
 import subprocess
@@ -1568,8 +1569,7 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
     Returns (success, error_message)
     """
     try:
-        is_windows = platform.system() == 'Windows'
-        if is_windows:
+        if IS_WINDOWS:
             try:
                 profile_xml = f'''<?xml version="1.0"?>
 <WLANProfile xmlns="http://www.microsoft.com/networking/WLAN/profile/v1">
@@ -1617,11 +1617,11 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
             # Try nmcli first
             nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
             if nmcli_check.returncode == 0:
-                logger.info(f"Connecting to {ssid} via nmcli (with rescan and profile cleanup)")
+                logger.info(f"Connecting to {ssid} via nmcli on interface {wifi_interface} (with rescan and profile cleanup)")
                 
                 # 1. Rescan to ensure the SSID is visible to nmcli
                 try: 
-                    subprocess.run(['nmcli', 'device', 'wifi', 'rescan'], capture_output=True, timeout=8)
+                    subprocess.run(['nmcli', 'device', 'wifi', 'rescan', 'ifname', wifi_interface], capture_output=True, timeout=8)
                     time.sleep(2) # Give it a moment to populate results
                 except Exception as e:
                     logger.debug(f"nmcli rescan failed: {e}")
@@ -1634,9 +1634,9 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
                     logger.debug(f"Pre-connect profile cleanup failed (non-critical): {e}")
 
                 # 3. Connect using nmcli
-                logger.info(f"Executing: nmcli device wifi connect {ssid} ...")
+                logger.info(f"Executing: nmcli device wifi connect {ssid} ifname {wifi_interface} ...")
                 # We use a list for subprocess to avoid shell injection, but ssid/password can contain special chars
-                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid]
+                cmd = ['nmcli', 'device', 'wifi', 'connect', ssid, 'ifname', wifi_interface]
                 if password:
                     cmd.extend(['password', password])
                 
@@ -1654,7 +1654,7 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
             # Fallback to wpa_cli
             wpa_check = subprocess.run(['which', 'wpa_cli'], capture_output=True, timeout=3)
             if wpa_check.returncode == 0:
-                logger.info(f"Connecting to {ssid} via wpa_cli fallback")
+                logger.info(f"Connecting to {ssid} via wpa_cli fallback on {wifi_interface}")
                 add_res = subprocess.run(['wpa_cli', '-i', wifi_interface, 'add_network'], capture_output=True, text=True, timeout=5)
                 if add_res.returncode == 0:
                     net_id = add_res.stdout.strip()
@@ -1670,6 +1670,7 @@ def connect_to_wifi_worker(ssid, password, wifi_interface=None):
             
             return False, "All connection methods failed"
     except Exception as e:
+        logger.error(f"connect_to_wifi_worker error: {e}")
         return False, str(e)
 
 

@@ -1,4 +1,5 @@
 import platform
+IS_WINDOWS = platform.system() == 'Windows'
 import sys
 import os
 import json
@@ -710,14 +711,23 @@ class Backend(QObject):
         self.update_check_timer.timeout.connect(self.check_for_updates_periodic)
         self.update_check_timer.start(21600000)  # 6 hours
 
+    @pyqtSlot()
     def check_for_updates_periodic(self):
-        """Periodic update check"""
-        try:
-            update_available = self.check_for_updates()
-            self.updateAvailable = update_available
-            logger.info(f"Periodic update check result: {update_available}")
-        except Exception as e:
-            logger.error(f"Error in periodic update check: {e}")
+        """Periodic update check in background"""
+        def _worker():
+            try:
+                # Use a background thread for the network request
+                update_available = self.check_for_updates()
+                QTimer.singleShot(0, lambda: self._apply_update_result(update_available))
+            except Exception as e:
+                logger.debug(f"Periodic update check failure: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_update_result(self, update_available):
+        """Apply update result on main thread"""
+        self.updateAvailable = update_available
+        logger.info(f"Periodic update check result: {update_available}")
         
     # ...existing code...
         
@@ -1519,59 +1529,70 @@ class Backend(QObject):
             self._weather_updater_thread.quit()
             self._weather_updater_thread.wait()
 
+    def _safety_reset_wifi_connecting(self, ssid=None):
+        """Reset the connecting state if it's been stuck for too long"""
+        if getattr(self, '_wifi_connecting', False):
+            logger.warning(f"WiFi connection cleanup: State was stuck 'connecting' for {ssid or 'unknown'}; resetting UI.")
+            self._wifi_connecting = False
+            self._wifi_connect_in_progress = False
+            self.wifiConnectingChanged.emit()
+
     def _auto_reconnect_to_last_network(self, boot_time=False):
-        """Auto-reconnect to the last connected network if not currently connected"""
-        try:
-            # If connecting right now, skip
-            if self._wifi_connecting:
-                logger.debug("WiFi is currently connecting, skipping auto-reconnection")
-                return
+        """Auto-reconnect to the last connected network in background"""
+        def _worker():
+            try:
+                # If connecting right now, skip
+                if self._wifi_connecting:
+                    logger.debug("WiFi is currently connecting, skipping auto-reconnection")
+                    return
 
-            # Determine current SSID
-            current_ssid = self._current_wifi_ssid or ''
-            # Determine preferred SSID by most recent remembered/last-connected
-            preferred_ssid = None
-            if self._remembered_networks:
-                preferred_ssid = self._remembered_networks[0].get('ssid')
-            if (not preferred_ssid) and self._last_connected_network:
-                preferred_ssid = self._last_connected_network.get('ssid')
-            if not preferred_ssid and not boot_time:
-                logger.debug("No last connected network; skipping auto-reconnect")
-                return
+                # Determine current SSID
+                current_ssid = self._current_wifi_ssid or ''
+                # Determine preferred SSID by most recent remembered/last-connected
+                preferred_ssid = None
+                if self._remembered_networks:
+                    preferred_ssid = self._remembered_networks[0].get('ssid')
+                if (not preferred_ssid) and self._last_connected_network:
+                    preferred_ssid = self._last_connected_network.get('ssid')
+                if not preferred_ssid and not boot_time:
+                    logger.debug("No last connected network; skipping auto-reconnect")
+                    return
 
-            if boot_time and platform.system() == 'Linux':
-                # Boot path for Linux uses NM profiles more aggressively via dedicated helper
-                self._scan_and_reconnect_to_best_network()
-                return
+                if boot_time and not IS_WINDOWS:
+                    # Boot path for Linux uses NM profiles more aggressively via dedicated helper
+                    self._scan_and_reconnect_to_best_network()
+                    return
 
-            # Identify best candidate using shared logic
-            nm_profiles = get_nmcli_profiles() if platform.system() == 'Linux' else []
-            candidate = get_best_wifi_reconnection_candidate(
-                self._remembered_networks, 
-                self._wifi_networks,
-                nm_profiles
-            )
+                # Identify best candidate using shared logic
+                nm_profiles = get_nmcli_profiles() if not IS_WINDOWS else []
+                candidate = get_best_wifi_reconnection_candidate(
+                    self._remembered_networks, 
+                    self._wifi_networks,
+                    nm_profiles
+                )
 
-            if not candidate:
-                if not self._wifi_networks:
-                    # No scan results yet, trigger scan and retry
-                    self.scanWifiNetworks()
-                    QTimer.singleShot(2500, lambda: self._auto_reconnect_to_last_network(False))
-                return
+                if not candidate:
+                    if not self._wifi_networks:
+                        # No scan results yet, trigger scan and retry
+                        QTimer.singleShot(0, self.scanWifiNetworks)
+                        QTimer.singleShot(2500, lambda: self._auto_reconnect_to_last_network(False))
+                    return
 
-            if candidate['type'] == 'direct':
-                logger.info(f"Auto-reconnecting to visible remembered network: {candidate['ssid']}")
-                QTimer.singleShot(1000, lambda: self._perform_auto_reconnection(candidate['ssid'], candidate['password']))
-            elif candidate['type'] == 'nmcli':
-                logger.info(f"Bringing up NM profile for {candidate['ssid']} ({candidate['profile_name']})")
-                success, output = bring_up_nm_connection(candidate['profile_name'])
-                if success:
-                    self.save_last_connected_network(candidate['ssid'])
-                    self.update_wifi_status()
-                else:
-                    logger.warning(f"Failed to bring up NM profile: {output}")
-        except Exception as e:
-            logger.error(f"Error during auto-reconnection setup: {e}")
+                if candidate['type'] == 'direct':
+                    logger.info(f"Auto-reconnecting to visible remembered network: {candidate['ssid']}")
+                    QTimer.singleShot(1000, lambda: self._perform_auto_reconnection(candidate['ssid'], candidate['password']))
+                elif candidate['type'] == 'nmcli':
+                    logger.info(f"Bringing up NM profile for {candidate['ssid']} ({candidate['profile_name']})")
+                    success, output = bring_up_nm_connection(candidate['profile_name'])
+                    if success:
+                        QTimer.singleShot(0, lambda s=candidate['ssid']: self.save_last_connected_network(s))
+                        QTimer.singleShot(0, self.update_wifi_status)
+                    else:
+                        logger.warning(f"Failed to bring up NM profile: {output}")
+            except Exception as e:
+                logger.error(f"Error during auto-reconnection setup: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _scan_and_reconnect_to_best_network(self):
         """Try to auto-reconnect using NM profiles on Linux (intended for boot path)"""
@@ -1683,6 +1704,9 @@ class Backend(QObject):
         self._wifi_connecting = True
         self.wifiConnectingChanged.emit()
 
+        # Safety reset timer in case worker hangs
+        QTimer.singleShot(45000, lambda: self._safety_reset_wifi_connecting(ssid))
+
         def _finish():
             try:
                 self._wifi_connecting = False
@@ -1701,7 +1725,7 @@ class Backend(QObject):
                     QTimer.singleShot(0, lambda: self.add_remembered_network(ssid, password))
                     QTimer.singleShot(0, lambda: self.save_last_connected_network(ssid))
                     # Call Linux-specific autoconnect manager
-                    if not is_windows:
+                    if not IS_WINDOWS:
                         QTimer.singleShot(0, lambda: manage_nm_autoconnect(ssid))
                 
                 # Signal completion on main thread
@@ -1755,9 +1779,18 @@ class Backend(QObject):
 
     def update_wifi_status(self):
         """Update WiFi connection status with enhanced fallback methods"""
+        def _worker():
+            try:
+                connected, current_ssid = check_wifi_status()
+                QTimer.singleShot(0, lambda: self._apply_wifi_status(connected, current_ssid))
+            except Exception as e:
+                logger.error(f"WiFi status check worker error: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _apply_wifi_status(self, connected, current_ssid):
+        """Apply WiFi status results on the main thread"""
         try:
-            connected, current_ssid = check_wifi_status()
-            
             # Update properties
             wifi_changed = (self._wifi_connected != connected) or (self._current_wifi_ssid != current_ssid)
             wifi_just_connected = not self._wifi_connected and connected
@@ -1786,32 +1819,49 @@ class Backend(QObject):
                         if not any(n.get('ssid') == current_ssid for n in (self._remembered_networks or [])):
                             self.add_remembered_network(current_ssid, None)
 
-                    if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
-                        logger.info("WiFi connected - starting deferred data loading")
-                        self._data_loading_deferred = False
-                        if hasattr(self, '_loading_timeout_timer') and self._loading_timeout_timer.isActive():
-                            self._loading_timeout_timer.stop()
-                        if self.loader is None:
-                            from .dataloader import DataLoader # Assuming DataLoader is available
-                            self.loader = DataLoader()
-                            self.thread = QThread()
-                            self.loader.moveToThread(self.thread)
-                            self.loader.finished.connect(self.on_data_loaded)
-                            self.loader.statusUpdate.connect(self.setLoadingStatus)
-                            self.thread.started.connect(self.loader.run)
-                            self.thread.start()
-            
+            if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
+                logger.info("WiFi connected - starting deferred data loading")
+                self._data_loading_deferred = False
+                if hasattr(self, '_loading_timeout_timer') and self._loading_timeout_timer.isActive():
+                    self._loading_timeout_timer.stop()
+                self._resume_data_loading()
+
+            # Trigger network connectivity check if needed
             if connected:
                 current_time = time.time()
-                if self._last_network_check is None or current_time - self._last_network_check > 30:
+                if not hasattr(self, '_last_network_check') or self._last_network_check is None or current_time - self._last_network_check > 30:
                     self._last_network_check = current_time
                     self._start_network_connectivity_check_async()
-            elif self._network_connected:
+            elif getattr(self, '_network_connected', False):
                 self._network_connected = False
-                self.wifiConnectedChanged.emit()
-                
+                try: self.networkConnectedChanged.emit()
+                except: pass
+
         except Exception as e:
-            logger.error(f"Error updating WiFi status: {e}")
+            logger.error(f"Failed to apply WiFi status: {e}")
+
+    def _resume_data_loading(self):
+        """Resume or start data loading once connection is detected"""
+        try:
+            # We need DataLoader, it might not be imported at top-level in all versions
+            # but it is usually available in the package.
+            from .dataloader import DataLoader
+            if self.loader is None:
+                logger.info("WiFi connected - creating new DataLoader...")
+                self.loader = DataLoader()
+                self.thread = QThread()
+                self.loader.moveToThread(self.thread)
+                self.loader.finished.connect(self.on_data_loaded)
+                self.loader.statusUpdate.connect(self.setLoadingStatus)
+                self.thread.started.connect(self.loader.run)
+                self.thread.start()
+            else:
+                logger.info("WiFi connected - DataLoader already exists")
+                if hasattr(self, 'thread') and self.thread and not self.thread.isRunning():
+                    logger.info("Starting DataLoader thread...")
+                    self.thread.start()
+        except Exception as e:
+            logger.error(f"Failed to resume data loading: {e}")
             self._wifi_connected = False
             self._current_wifi_ssid = ""
             self.wifiConnectedChanged.emit()
