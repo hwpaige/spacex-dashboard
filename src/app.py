@@ -99,6 +99,7 @@ from functions import (
     get_empty_chart_url,
     generate_month_labels_for_days,
     connect_to_wifi_nmcli,
+    connect_to_wifi_worker,
     get_max_value_from_series,
     get_next_launch_info,
     get_upcoming_launches_list,
