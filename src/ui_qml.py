@@ -57,7 +57,7 @@ Window {
     // and other views refresh once after Wi‑Fi connection settles.
     Timer {
         id: reloadCoalesceTimer
-        interval: 4500
+        interval: 7000
         repeat: false
         running: false
         onTriggered: {
@@ -738,7 +738,7 @@ Window {
                                 }
                                 Timer {
                                     id: f1ReloadTimer
-                                    interval: 1100
+                                    interval: 5500
                                     repeat: false
                                     onTriggered: {
                                         f1ChartView.reload()
@@ -1601,7 +1601,7 @@ Window {
                             }
                             Timer {
                                 id: globalReloadTimer
-                                interval: 100
+                                interval: 2500
                                 repeat: false
                                 onTriggered: {
                                     youtubeView.reload()
@@ -3578,7 +3578,7 @@ Window {
                                 }
                                 Timer {
                                     id: xComReloadTimer
-                                    interval: 600
+                                    interval: 4000
                                     repeat: false
                                     onTriggered: {
                                         xComView.reload()
