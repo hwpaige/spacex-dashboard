@@ -1344,9 +1344,15 @@ class Backend(QObject):
     def _start_data_loading_online(self):
         """Start DataLoader immediately (no guard timers), used when firstOnline fires."""
         try:
+            # Phase 3 Guard: prevent multiple loader threads
+            if hasattr(self, 'thread') and self.thread and self.thread.isRunning():
+                logger.info("BOOT: DataLoader thread already running; skipping redundant start")
+                return
+
             self.setLoadingStatus("Loading online data…")
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader for online load…")
+                # DataLoader is defined in this file
                 self.loader = DataLoader()
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
@@ -1355,7 +1361,9 @@ class Backend(QObject):
                 self.thread.started.connect(self.loader.run)
                 self.thread.start()
             else:
-                logger.info("BOOT: DataLoader already exists; not starting a duplicate thread")
+                logger.info("BOOT: Restarting existing DataLoader thread…")
+                if not self.thread.isRunning():
+                    self.thread.start()
             # Ensure periodic timers are running
             self._setup_timers()
         except Exception as e:
@@ -1811,15 +1819,23 @@ class Backend(QObject):
                 logger.info(f"WiFi status updated - Connected: {connected}, SSID: {current_ssid}")
                 self.wifiConnectedChanged.emit()
 
+                if connected and current_ssid:
+                    logger.info(f"Syncing connection metadata for '{current_ssid}'")
+                    # Update last connected
+                    self.save_last_connected_network(current_ssid)
+                    
+                    # Ensure it's in remembered networks
+                    if not any(n.get('ssid') == current_ssid for n in (self._remembered_networks or [])):
+                        self.add_remembered_network(current_ssid, None)
+                    else:
+                        # Even if remembered, emit change to ensure UI elements (like Remove button) sync up
+                        try: self.rememberedNetworksChanged.emit()
+                        except: pass
+
                 if wifi_just_connected:
                     logger.info("WiFi connection detected - reloading web content")
                     self.reload_web_content()
                     self._web_reloaded_after_online = True
-
-                    if current_ssid:
-                        self.save_last_connected_network(current_ssid)
-                        if not any(n.get('ssid') == current_ssid for n in (self._remembered_networks or [])):
-                            self.add_remembered_network(current_ssid, None)
 
             if hasattr(self, '_data_loading_deferred') and self._data_loading_deferred:
                 logger.info("WiFi connected - starting deferred data loading")
@@ -1872,11 +1888,14 @@ class Backend(QObject):
     def _resume_data_loading(self):
         """Resume or start data loading once connection is detected"""
         try:
-            # We need DataLoader, it might not be imported at top-level in all versions
-            # but it is usually available in the package.
-            from .dataloader import DataLoader
+            # Phase 3 Guard: prevent multiple loader threads
+            if hasattr(self, 'thread') and self.thread and self.thread.isRunning():
+                logger.info("WiFi connected - DataLoader already running; skipping")
+                return
+
             if self.loader is None:
                 logger.info("WiFi connected - creating new DataLoader...")
+                # DataLoader is defined in this file
                 self.loader = DataLoader()
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
@@ -1885,9 +1904,8 @@ class Backend(QObject):
                 self.thread.started.connect(self.loader.run)
                 self.thread.start()
             else:
-                logger.info("WiFi connected - DataLoader already exists")
-                if hasattr(self, 'thread') and self.thread and not self.thread.isRunning():
-                    logger.info("Starting DataLoader thread...")
+                logger.info("WiFi connected - restart existing DataLoader if needed")
+                if not self.thread.isRunning():
                     self.thread.start()
         except Exception as e:
             logger.error(f"Failed to resume data loading: {e}")
