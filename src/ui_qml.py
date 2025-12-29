@@ -363,6 +363,32 @@ Window {
         function onF1Changed() {
             if (backend.mode === "f1") {
                 nextRace = backend.get_next_race()
+                // Reload F1 chart view to show fresh data
+                if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
+                    f1ChartView.reload()
+                    console.log("F1 chart view reloaded (f1Changed)")
+                }
+            }
+        }
+        function onUpdateWeather() {
+            // Only reload weather views if we are in SpaceX mode
+            if (backend.mode === "spacex" && typeof weatherSwipe !== 'undefined') {
+                for (var i = 0; i < weatherSwipe.count; i++) {
+                    var item = weatherSwipe.itemAt(i);
+                    if (!item) continue;
+                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
+                    var webChild = null;
+                    if (container && container.children && container.children.length > 0) {
+                        for (var c = 0; c < container.children.length; c++) {
+                            var ch = container.children[c];
+                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
+                        }
+                    }
+                    if (webChild && webChild.reload) {
+                        try { webChild.reload(); console.log("Weather view", i, "reloaded (updateWeather)"); }
+                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
+                    }
+                }
             }
         }
         function onUpdateGlobeTrajectory() {
