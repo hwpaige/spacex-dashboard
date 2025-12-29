@@ -122,6 +122,7 @@ from functions import (
     bring_up_nm_connection,
     sync_remembered_networks,
     fetch_narratives,
+    remove_nm_connection
 )
 # DBus imports are now conditional and imported only on Linux
 # import dbus
