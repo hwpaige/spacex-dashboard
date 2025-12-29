@@ -350,7 +350,10 @@ class Backend(QObject):
     initialChecksReady = pyqtSignal(bool, bool, dict, dict)
     # Update progress UI signals
     updatingInProgressChanged = pyqtSignal()
+    updatingInProgressChanged = pyqtSignal()
     updatingStatusChanged = pyqtSignal()
+    # Signal for thread-safe WiFi status updates
+    wifiCheckReady = pyqtSignal(bool, str)
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -392,8 +395,10 @@ class Backend(QObject):
         self._remembered_networks = load_remembered_networks()
         self._last_connected_network = load_last_connected_network()
         # Notify QML that remembered networks are available at startup
+        # Notify QML that remembered networks are available at startup
         try:
             self.rememberedNetworksChanged.emit()
+            self.wifiCheckReady.connect(self._apply_wifi_status) # Connect new signal
         except Exception:
             pass
         
@@ -1791,12 +1796,14 @@ class Backend(QObject):
         def _worker():
             try:
                 connected, current_ssid = check_wifi_status()
-                QTimer.singleShot(0, lambda: self._apply_wifi_status(connected, current_ssid))
+                # Use signal for thread-safe main-thread execution
+                self.wifiCheckReady.emit(connected, current_ssid)
             except Exception as e:
                 logger.error(f"WiFi status check worker error: {e}")
 
         threading.Thread(target=_worker, daemon=True).start()
 
+    @pyqtSlot(bool, str) # Mark as slot for signal connection
     def _apply_wifi_status(self, connected, current_ssid):
         """Apply WiFi status results on the main thread"""
         try:
