@@ -22,20 +22,27 @@
 
         #playPauseBtn {
             position: absolute;
-            top: 10px;
-            left: 10px;
-            background: rgba(0, 0, 0, 0.7);
-            color: white;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 5px;
-            padding: 8px 12px;
-            font-size: 14px;
+            bottom: 20px;
+            left: 20px;
+            /* Move to bottom left */
+            background: transparent;
+            /* Graph button style: transparent */
+            color: rgba(255, 255, 255, 0.7);
+            /* Subtle white */
+            border: none;
+            /* No border */
+            padding: 8px;
+            font-size: 18px;
+            /* Slightly larger icon */
             cursor: pointer;
-            transition: background-color 0.2s;
+            transition: color 0.2s;
+            z-index: 1000;
         }
 
         #playPauseBtn:hover {
-            background: rgba(0, 0, 0, 0.9);
+            background: transparent;
+            color: white;
+            /* Bright white on hover */
         }
     </style>
     <script>
@@ -70,15 +77,15 @@
 </head>
 
 <body>
-    <button id="playPauseBtn"><i class="fas fa-pause"></i></button>
+    <button id="playPauseBtn"><i class="fas fa-play"></i></button>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
-        let isAutoRotatePaused = false; // kept for backward compatibility with existing code
+        let isAutoRotatePaused = true; // Start paused
         // Distinguish between user-initiated pause and system-initiated pause (e.g., during app/network events)
-        let userPaused = false;
+        let userPaused = true; // Start paused
         let systemPaused = false;
         let pendingSystemResume = false; // set when resume is requested during active interaction
         // Explicit auto spin enable independent of OrbitControls (more robust on Qt WebEngine)
@@ -158,6 +165,7 @@
 
                 // Renderer
                 renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+                renderer.setPixelRatio(window.devicePixelRatio); // Sharpness on high-DPI screens
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setClearColor(0x000000, 0); // Transparent background
                 document.body.appendChild(renderer.domElement);
@@ -175,6 +183,9 @@
                     textureLoader.load(hdPath,
                         function (texture) {
                             console.log("Loaded HD Earth texture");
+                            // Improve texture sharpness at angles
+                            const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                            texture.anisotropy = maxAnisotropy;
                             onComplete(texture);
                         },
                         undefined,
@@ -184,6 +195,8 @@
                             textureLoader.load(sdPath,
                                 function (texture) {
                                     console.log("Loaded SD Earth texture");
+                                    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                                    texture.anisotropy = maxAnisotropy;
                                     onComplete(texture);
                                 },
                                 undefined,
@@ -223,6 +236,8 @@
 
                         // Set initial tilt for better orbit visibility
                         globe.rotation.x = 0.3;
+                        // Focus on US (approx 0.5 radians: 4.7 was Africa, increasing moves West)
+                        globe.rotation.y = 0.5;
 
                         // Cloud layer
                         const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
@@ -658,6 +673,22 @@
                 renderer.render(scene, camera);
                 console.log("Forced render");
 
+                // Auto-center view on the launch site (trajectory start)
+                // "Slightly left of center" means we center the camera on a longitude slightly East of the launch site.
+                if (trajectoryData.trajectory.length > 0) {
+                    const startLon = trajectoryData.trajectory[0].lon;
+                    // Calibration: roughly 4.7 rad is Lon 0 (Africa). Increasing rotation moves view West (decreasing Lon center).
+                    // Formula: rotY = 4.7 - (TargetLon * PI/180)
+                    // We want CenterLon = StartLon + 25 degrees (so point is 25 deg left/West of center)
+                    const offsetDeg = 25;
+                    const targetLon = startLon + offsetDeg;
+                    const targetRot = 4.7 - (targetLon * (Math.PI / 180));
+
+                    // Normalize to 0..2PI just to be clean, though not strictly required
+                    globe.rotation.y = targetRot % (2 * Math.PI);
+                    console.log(`Auto-rotated to ${globe.rotation.y.toFixed(2)} rad for start lon ${startLon}`);
+                }
+
             } catch (error) {
                 console.error("Error in updateTrajectory:", error);
             }
@@ -966,9 +997,18 @@
         })();
 
         // Play/Pause button functionality
+        // Play/Pause button functionality
         document.getElementById('playPauseBtn').addEventListener('click', () => {
             userPaused = !userPaused;
             isAutoRotatePaused = (userPaused || systemPaused);
+
+            // "Actually works": If paused, kill any active momentum immediately
+            if (userPaused) {
+                isInMomentum = false;
+                momentumX = 0;
+                momentumY = 0;
+            }
+
             const button = document.getElementById('playPauseBtn');
             const icon = button.querySelector('i');
             if (isAutoRotatePaused) {
