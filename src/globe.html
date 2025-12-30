@@ -263,6 +263,32 @@
                 renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
                 renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
                 console.log("Event listeners added");
+                
+                // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
+                // We only count non-mouse pointers here to avoid double-handling regular mouse drags.
+                // Moving these into init ensures renderer.domElement is available safely.
+                renderer.domElement.addEventListener('pointerdown', (e) => {
+                    if (e && e.pointerType && e.pointerType !== 'mouse') {
+                        activePointers++;
+                        userInteracting = true;
+                    }
+                });
+                document.addEventListener('pointerup', (e) => {
+                    if (e && e.pointerType && e.pointerType !== 'mouse') {
+                        activePointers = Math.max(0, activePointers - 1);
+                        if (activePointers === 0 && !isMouseDown) {
+                            userInteracting = false;
+                        }
+                    }
+                });
+                document.addEventListener('pointercancel', (e) => {
+                    if (e && e.pointerType && e.pointerType !== 'mouse') {
+                        activePointers = Math.max(0, activePointers - 1);
+                        if (activePointers === 0 && !isMouseDown) {
+                            userInteracting = false;
+                        }
+                    }
+                });
 
                 // Disable in-page context menu (right-click/long-press)
                 try { document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, { passive: false }); } catch(_e) {}
@@ -397,7 +423,12 @@
             __lastRenderTs = performance.now();
         }
 
-        function updateTrajectory(trajectoryData) {            // Remove existing trajectory line
+        function updateTrajectory(trajectoryData) {
+            if (!renderer || !scene || !camera) {
+                console.warn("updateTrajectory called before webgl components were ready");
+                return;
+            }
+            // Remove existing trajectory line
             if (trajectoryLine) {
                 if (globe) globe.remove(trajectoryLine);
                 scene.remove(trajectoryLine);
@@ -562,6 +593,8 @@
                 console.error("Error in updateTrajectory:", error);
             }
         }
+        // Expose function to window as early as possible
+        window.updateTrajectory = updateTrajectory;
 
         // Initialize and start animation, but ensure THREE is available first
         console.log("Starting initialization (waiting for THREE if offline)...");
@@ -575,7 +608,6 @@
         }
 
         // Expose functions to Qt
-        window.updateTrajectory = updateTrajectory;
 
         // If we were offline at start, try to add clouds when we come online
         window.addEventListener('online', function(){
@@ -769,30 +801,6 @@
             if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
         });
 
-        // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
-        // We only count non-mouse pointers here to avoid double-handling regular mouse drags.
-        renderer.domElement.addEventListener('pointerdown', (e) => {
-            if (e && e.pointerType && e.pointerType !== 'mouse') {
-                activePointers++;
-                userInteracting = true;
-            }
-        });
-        document.addEventListener('pointerup', (e) => {
-            if (e && e.pointerType && e.pointerType !== 'mouse') {
-                activePointers = Math.max(0, activePointers - 1);
-                if (activePointers === 0 && !isMouseDown) {
-                    userInteracting = false;
-                }
-            }
-        });
-        document.addEventListener('pointercancel', (e) => {
-            if (e && e.pointerType && e.pointerType !== 'mouse') {
-                activePointers = Math.max(0, activePointers - 1);
-                if (activePointers === 0 && !isMouseDown) {
-                    userInteracting = false;
-                }
-            }
-        });
 
         // Provide guarded hooks for external callers (Qt) to control spin/animation.
         // These respect active user interaction and will resume deterministically.

@@ -205,9 +205,8 @@ Window {
                 spacing: 16
                 width: Math.min(parent.width * 0.8, 700)
 
-                // Logo
                 Image {
-                    source: spacexLogoPath
+                    source: "file:///" + spacexLogoPath
                     width: 240
                     height: 48
                     fillMode: Image.PreserveAspectFit
@@ -333,7 +332,7 @@ Window {
                 }
             }
         }
-        function onUpdateWeather() {
+        function onWeatherChanged() {
             // Only reload weather views if we are in SpaceX mode
             if (backend.mode === "spacex" && typeof weatherSwipe !== 'undefined') {
                 for (var i = 0; i < weatherSwipe.count; i++) {
@@ -359,10 +358,10 @@ Window {
             var trajectoryData = backend.get_launch_trajectory();
             if (trajectoryData) {
                 if (globeView && globeView.runJavaScript) {
-                    globeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                    globeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                 }
                 if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
-                    plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                    plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                 }
             }
         }
@@ -523,7 +522,7 @@ Window {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                         var trajectoryData = backend.get_launch_trajectory();
                                         if (trajectoryData) {
-                                            plotGlobeView.runJavaScript("updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                            plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                         }
                                         // Enforce rounded corners inside the page itself
                                         root._injectRoundedCorners(plotGlobeView, 8)
@@ -1452,7 +1451,7 @@ Window {
                                 Image {
                                     width: parent.width * 0.4  // 40% for map
                                     height: parent.height
-                                    source: model && model.trackMapPath ? model.trackMapPath : ""
+                                    source: model && model.trackMapPath ? "file:///" + model.trackMapPath : ""
                                     visible: !!(model && model.trackMapPath)
                                     fillMode: Image.PreserveAspectFit
                                     asynchronous: true
@@ -1538,6 +1537,7 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
+                        storageName: "youtube_profile"
                         httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
                         // Allow sending Referer headers for YouTube embeds
