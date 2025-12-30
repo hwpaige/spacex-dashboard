@@ -563,28 +563,66 @@
                 trajectoryGroup = new THREE.Group();
 
                 // 1. Trace Core Line (Bright/White)
-                const coreGeometry = new THREE.BufferGeometry().setFromPoints(points);
-                coreGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-                const coreMaterial = new THREE.LineBasicMaterial({
-                    vertexColors: true,
-                    linewidth: 2,
-                    transparent: true,
-                    opacity: 1.0
-                });
-                const coreLine = new THREE.Line(coreGeometry, coreMaterial);
-                trajectoryGroup.add(coreLine);
+                // 1. Trace Core Line using TubeGeometry for thickness
+                const curve = new THREE.CatmullRomCurve3(points);
+                const tubeRadius = 0.003; // Visible thickness
+                const radialSegments = 8;
+                const tubularSegments = points.length * 6; // smoothness
+                const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
 
-                // 2. Outer Glow Line (Thicker, more transparent)
-                const glowGeometry = coreGeometry.clone();
-                const glowMaterial = new THREE.LineBasicMaterial({
+                // Apply vertex colors for gradient (Cyan -> Orange)
+                const count = tubeGeometry.attributes.position.count;
+                const colorArray = new Float32Array(count * 3);
+                const color1 = new THREE.Color(0x00FFFF); // Cyan
+                const color2 = new THREE.Color(0xFF4500); // Orange
+
+                for (let i = 0; i < count; i++) {
+                    // Tube geometry vertices are ordered ring by ring? 
+                    // To imply progress strictly, we can rely on the fact that TubeGeometry generates segments sequentially.
+                    // Rough progress approximation:
+                    const t = i / count;
+                    const c = color1.clone().lerp(color2, t);
+                    colorArray[i * 3] = c.r;
+                    colorArray[i * 3 + 1] = c.g;
+                    colorArray[i * 3 + 2] = c.b;
+                }
+
+                // Better gradient mapping: Map based on UV U-coordinate which TubeGeometry provides
+                // TubeGeometry UVs: u goes along the tube (0..1), v goes around the tube (0..1)
+                const uvs = tubeGeometry.attributes.uv;
+                for (let i = 0; i < count; i++) {
+                    const u = uvs.getX(i); // 0 at start, 1 at end
+                    const c = color1.clone().lerp(color2, u);
+                    colorArray[i * 3] = c.r;
+                    colorArray[i * 3 + 1] = c.g;
+                    colorArray[i * 3 + 2] = c.b;
+                }
+
+                tubeGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3));
+
+                const tubeMaterial = new THREE.MeshBasicMaterial({
                     vertexColors: true,
-                    linewidth: 6,
                     transparent: true,
-                    opacity: 0.4,
-                    blending: THREE.AdditiveBlending
+                    opacity: 0.9,
+                    side: THREE.DoubleSide
                 });
-                const glowLine = new THREE.Line(glowGeometry, glowMaterial);
-                trajectoryGroup.add(glowLine);
+                const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+                trajectoryGroup.add(tubeMesh);
+
+                // 2. Glow effect (slightly larger tube, lower opacity, additive)
+                const glowRadius = tubeRadius * 1.8;
+                const glowGeometry = new THREE.TubeGeometry(curve, tubularSegments, glowRadius, radialSegments, false);
+                glowGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3)); // reuse colors
+                const glowMaterial = new THREE.MeshBasicMaterial({
+                    vertexColors: true,
+                    transparent: true,
+                    opacity: 0.3,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide,
+                    depthWrite: false // Don't occlude the core
+                });
+                const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                trajectoryGroup.add(glowMesh);
 
                 // Add trajectory group as a child of the globe
                 if (globe) {
@@ -639,26 +677,38 @@
                     // Create a group for the orbit to include a glow effect
                     const orbitGroup = new THREE.Group();
 
-                    // 1. Core Orbit Line (Solid Red)
-                    const orbitMaterial = new THREE.LineBasicMaterial({
-                        color: 0xFF3333,
-                        linewidth: 2,
-                        transparent: true,
-                        opacity: 0.9
-                    });
-                    const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-                    orbitGroup.add(orbitLine);
+                    // 1. Core Orbit Line (Solid Red Tube)
+                    // Create curve from points
+                    const orbitCurve = new THREE.CatmullRomCurve3(orbitPoints);
+                    // Close the curve if it loops? Usually orbit_path is a full loop segment, but let's leave open to match points.
+                    orbitCurve.closed = true;
 
-                    // 2. Subtle Glow for Orbit (Additive blending)
-                    const orbitGlowMaterial = new THREE.LineBasicMaterial({
-                        color: 0xFF0000,
-                        linewidth: 4,
+                    const orbitTubeRadius = 0.003;
+                    const orbitSegments = orbitPoints.length * 6;
+
+                    const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, true);
+                    const orbitMat = new THREE.MeshBasicMaterial({
+                        color: 0xFF0000, // Explicit Red
                         transparent: true,
-                        opacity: 0.4,
-                        blending: THREE.AdditiveBlending
+                        opacity: 0.9,
+                        side: THREE.DoubleSide
                     });
-                    const orbitGlow = new THREE.Line(orbitGeometry, orbitGlowMaterial);
-                    orbitGroup.add(orbitGlow);
+                    const orbitMesh = new THREE.Mesh(orbitTubeGeo, orbitMat);
+                    orbitGroup.add(orbitMesh);
+
+                    // 2. Subtle Glow for Orbit
+                    const orbitGlowRadius = orbitTubeRadius * 2.5;
+                    const orbitGlowGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitGlowRadius, 8, true);
+                    const orbitGlowMat = new THREE.MeshBasicMaterial({
+                        color: 0xFF0000,
+                        transparent: true,
+                        opacity: 0.3,
+                        blending: THREE.AdditiveBlending,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    });
+                    const orbitGlowMesh = new THREE.Mesh(orbitGlowGeo, orbitGlowMat);
+                    orbitGroup.add(orbitGlowMesh);
 
                     if (globe) {
                         globe.add(orbitGroup);
