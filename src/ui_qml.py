@@ -1818,10 +1818,21 @@ Window {
                     Layout.maximumWidth: 1500
                     height: 28
                     radius: 14
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                    border.width: 1
+                    color: "transparent" // Color moved to background child
                     clip: false // Allow narrativeTray to expand beyond bounds
+
+                    // Fading background for the ticker bar
+                    Rectangle {
+                        id: tickerBackground
+                        anchors.fill: parent
+                        radius: 14
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
+                        z: 0
+                        // Fade out as tray expands
+                        opacity: 1.0 - Math.min(1.0, narrativeTray.height / 28.0)
+                    }
 
                     // Clipped container for scrolling text
                     Item {
@@ -1938,6 +1949,7 @@ Window {
                             }
 
                             MultiEffect {
+                                id: blurEffect
                                 anchors.fill: parent
                                 source: blurSource
                                 blurEnabled: true
@@ -1947,12 +1959,13 @@ Window {
                             }
 
                             Rectangle {
+                                id: trayBackground
                                 anchors.fill: parent
                                 // Slightly more transparent for better glass look
-                                color: backend.theme === "dark" ? "#881a1e1e" : "#88f8f8f8"
+                                color: backend.theme === "dark" ? "#cc2a2e2e" : "#ccf0f0f0"
                                 radius: 14
                                 border.width: 1
-                                border.color: backend.theme === "dark" ? "#22ffffff" : "#22000000"
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                             }
                         }
                         
@@ -2052,8 +2065,8 @@ Window {
                     spacing: 8
                 Rectangle {
                     width: 28
-                    height: 28
-                    radius: 14
+                    height: 32
+                    radius: 16
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
@@ -2098,8 +2111,8 @@ Window {
                     // WiFi icon
                     Rectangle {
                         width: 28
-                        height: 28
-                        radius: 14
+                        height: 32
+                        radius: 16
                         color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
@@ -2163,14 +2176,291 @@ Window {
                             }
                         }
                     }
+
+                    // Location Selector (Relocated and Restyled)
+                    Rectangle {
+                        id: locationTrigger
+                        width: Math.max(80, locationLabel.implicitWidth + 24)
+                        height: 32
+                        radius: 16
+                        color: locationDrawer.height > 10 ? 
+                               (backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0") : 
+                               (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
+
+                        // Location Drawer (Sliding up from button top)
+                        Popup {
+                            id: locationDrawer
+                            x: 0
+                            width: parent.width
+                            height: 0
+                            y: -height
+                            modal: false
+                            focus: false
+                            visible: height > 0
+                            closePolicy: Popup.NoAutoClose
+                            padding: 0
+                            topPadding: 0
+                            bottomPadding: 0
+                            leftPadding: 0
+                            rightPadding: 0
+                            
+                            property real expandedHeight: 160
+                            
+                            Behavior on height {
+                                NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                            }
+                            
+                            background: Item {
+                                Rectangle {
+                                    anchors.fill: parent
+                                    color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                    radius: 12
+                                    border.width: 1
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+
+                                    // Visual Blending: Flatten BOTTOM corners and hide border when drawer is open
+                                    Rectangle {
+                                        anchors.bottom: parent.bottom
+                                        anchors.left: parent.left
+                                        anchors.right: parent.right
+                                        anchors.leftMargin: 1
+                                        anchors.rightMargin: 1
+                                        height: 12
+                                        color: parent.color
+                                        visible: locationDrawer.height > 10
+                                    }
+                                }
+                            }
+                            
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.leftMargin: 4
+                                anchors.rightMargin: 4
+                                anchors.bottomMargin: 4
+                                anchors.topMargin: 0
+                                spacing: 0
+                                
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 32
+                                    color: "transparent"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: "\uf078"
+                                        font.family: "Font Awesome 5 Free"
+                                        font.pixelSize: 10
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        
+                                        property point startGlobalPos: Qt.point(0, 0)
+                                        property real startHeight: 0
+                                        property bool isDragging: false
+                                        
+                                        onPressed: {
+                                            startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                            startHeight = locationDrawer.height
+                                            isDragging = true
+                                        }
+                                        
+                                        onPositionChanged: {
+                                            if (isDragging && pressed) {
+                                                var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                                var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                                var newHeight = startHeight - deltaY
+                                                newHeight = Math.max(0, Math.min(locationDrawer.expandedHeight, newHeight))
+                                                locationDrawer.height = newHeight
+                                            }
+                                        }
+                                        
+                                        onReleased: {
+                                            isDragging = false
+                                            if (locationDrawer.height < 120) {
+                                                locationDrawer.height = 0
+                                            } else {
+                                                locationDrawer.height = locationDrawer.expandedHeight
+                                            }
+                                        }
+                                        onClicked: locationDrawer.height = 0
+                                    }
+                                }
+                                
+                                ListView {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    clip: true
+                                    model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
+                                    spacing: 2
+                                    delegate: Rectangle {
+                                        width: ListView.view.width
+                                        height: 30
+                                        color: backend.location === modelData ? 
+                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : 
+                                               "transparent"
+                                        radius: 4
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 14
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: backend.location = modelData
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            id: locationLabel
+                            anchors.centerIn: parent
+                            text: backend.location
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                            font.bold: true
+                            // Visual Blending: Flatten TOP corners of button and hide border when drawer is open
+                            Rectangle {
+                                anchors.top: parent.parent.top
+                                anchors.left: parent.parent.left
+                                anchors.right: parent.parent.right
+                                anchors.leftMargin: 1
+                                anchors.rightMargin: 1
+                                height: 12
+                                color: parent.parent.color
+                                visible: locationDrawer.height > 10
+                                z: -1
+                            }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            
+                            property point startGlobalPos: Qt.point(0, 0)
+                            property real startHeight: 0
+                            property bool isDragging: false
+                            property bool moved: false
+                            
+                            onPressed: {
+                                startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                if (locationDrawer.height === 0) locationDrawer.height = 1
+                                startHeight = locationDrawer.height
+                                isDragging = true
+                                moved = false
+                            }
+                            
+                            onPositionChanged: {
+                                if (isDragging && pressed) {
+                                    var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                    var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                    if (Math.abs(deltaY) > 5) moved = true
+                                    var newHeight = startHeight - deltaY
+                                    newHeight = Math.max(0, Math.min(locationDrawer.expandedHeight, newHeight))
+                                    locationDrawer.height = newHeight
+                                }
+                            }
+                            
+                            onReleased: {
+                                isDragging = false
+                                if (moved) {
+                                    if (locationDrawer.height > 40) {
+                                        locationDrawer.height = locationDrawer.expandedHeight
+                                    } else {
+                                        locationDrawer.height = 0
+                                    }
+                                }
+                            }
+                            
+                            onClicked: {
+                                if (!moved) {
+                                    if (locationDrawer.height > 50) {
+                                        locationDrawer.height = 0
+                                    } else {
+                                        locationDrawer.height = locationDrawer.expandedHeight
+                                    }
+                                }
+                            }
+                        }
+                        
+                        ToolTip {
+                            text: "Location: " + backend.location + " (Click or Drag up to change)"
+                            delay: 500
+                        }
+                    }
+
+                    // Theme Toggle Switch (Matched to launch tray toggle)
+                    Rectangle {
+                        id: themeToggle
+                        Layout.preferredWidth: 50
+                        Layout.preferredHeight: 32
+                        radius: 16
+                        color: backend.theme === "dark" ? "#666666" : "#CCCCCC"
+
+                        Text {
+                            text: "\uf185" // Sun
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            color: backend.theme === "light" ? (backend.theme === "dark" ? "white" : "black") : "#888888"
+                            anchors.left: parent.left
+                            anchors.leftMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            opacity: backend.theme === "light" ? 1.0 : 0.5
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
+                        }
+
+                        Text {
+                            text: "\uf186" // Moon
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            color: backend.theme === "dark" ? "white" : "#888888"
+                            anchors.right: parent.right
+                            anchors.rightMargin: 8
+                            anchors.verticalCenter: parent.verticalCenter
+                            opacity: backend.theme === "dark" ? 1.0 : 0.5
+                            Behavior on opacity { NumberAnimation { duration: 200 } }
+                        }
+
+                        Rectangle {
+                            id: themeThumb
+                            width: 26
+                            height: 26
+                            radius: 13
+                            color: backend.theme === "dark" ? "#44ffffff" : "#44000000"
+                            border.color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
+                            border.width: 1
+                            x: backend.theme === "dark" ? parent.width - width - 3 : 3
+                            y: 3
+                            Behavior on x { NumberAnimation { duration: 250; easing.type: Easing.InOutQuad } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: backend.theme = (backend.theme === "dark" ? "light" : "dark")
+                        }
+
+                        ToolTip {
+                            text: backend.theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"
+                            delay: 500
+                        }
+                    }
                 }
 
                 // Launch details tray toggle
                 Rectangle {
                     visible: backend.mode === "spacex"
                     Layout.preferredWidth: 50
-                    Layout.preferredHeight: 28
-                    radius: 14
+                    Layout.preferredHeight: 32
+                    radius: 16
                     color: backend.launchTrayManualMode ?
                         "#FF3838" :
                         (backend.theme === "dark" ? "#666666" : "#CCCCCC")
@@ -2178,9 +2468,9 @@ Window {
                     Behavior on color { ColorAnimation { duration: 200 } }
 
                     Rectangle {
-                        width: 22
-                        height: 22
-                        radius: 11
+                        width: 26
+                        height: 26
+                        radius: 13
                         x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
                         y: 3
                         color: "white"
@@ -2206,114 +2496,26 @@ Window {
 
                 // Right pill (countdown, location, theme) - FIXED WIDTH
                 Rectangle {
-                    Layout.preferredWidth: 400
-                    Layout.maximumWidth: 400
-                    height: 28
-                    radius: 14
+                    Layout.preferredWidth: 120
+                    Layout.maximumWidth: 120
+                    height: 32
+                    radius: 16
                     color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
 
 
-                    Row {
+                    Text {
                         anchors.centerIn: parent
-                        spacing: 8
-
-                        Text {
-                            text: backend.countdown
-                            color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 14
-                            font.family: "D-DIN"
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-
-                        // Location selector
-                        Row {
-                            spacing: 4
-                            Repeater {
-                                model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
-                                Rectangle {
-                                    width: 40
-                                    height: 24
-                                    color: backend.location === modelData ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                    radius: 12
-                                    border.color: backend.location === modelData ?
-                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                    border.width: backend.location === modelData ? 2 : 1
-
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.substring(0, 4)  // Abbreviate: Star, Vand, Cape, Hawt
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 11
-                                        font.family: "D-DIN"
-                                        font.bold: backend.location === modelData
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.location = modelData
-                                    }
-
-                                    ToolTip {
-                                        text: modelData
-                                        delay: 500
-                                    }
-                                }
-                            }
-                        }
-
-                        // Theme selector
-                        Row {
-                            spacing: 4
-                            Repeater {
-                                model: ["Light", "Dark"]
-                                Rectangle {
-                                    width: 45
-                                    height: 24
-                                    color: backend.theme === modelData.toLowerCase() ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                    radius: 12
-                                    border.color: backend.theme === modelData.toLowerCase() ?
-                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                    border.width: backend.theme === modelData.toLowerCase() ? 2 : 1
-
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData === "Light" ? "\uf185" : "\uf186"  // Sun for Light, Moon for Dark
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.theme = modelData.toLowerCase()
-                                    }
-
-                                    ToolTip {
-                                        text: modelData + " Theme"
-                                        delay: 500
-                                    }
-                                }
-                            }
-                        }
+                        text: backend.countdown
+                        color: backend.theme === "dark" ? "white" : "black"
+                        font.pixelSize: 14
+                        font.family: "D-DIN"
+                        font.bold: true
                     }
+
+
+                                
                 }
             }
         }

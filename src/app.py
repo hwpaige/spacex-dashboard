@@ -373,9 +373,32 @@ class Backend(QObject):
         self._isLoading = True
         self._loading_status = "Initializing..."
         self._loading_status = "Initializing..."
-        self._launch_data = {'previous': [], 'upcoming': []}
+        # Try to load initial data from cache to avoid empty UI on first load
+        try:
+            prev = load_launch_cache('previous')
+            up = load_launch_cache('upcoming')
+            self._launch_data = {
+                'previous': prev['data'] if prev else [],
+                'upcoming': up['data'] if up else []
+            }
+        except Exception as e:
+            logger.warning(f"Failed to load initial launch cache: {e}")
+            self._launch_data = {'previous': [], 'upcoming': []}
+
+        try:
+            f1_sched = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
+            f1_drivers = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
+            f1_const = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
+            self._f1_data = {
+                'schedule': f1_sched['data'] if f1_sched else [],
+                'driver_standings': f1_drivers['data'] if f1_drivers else [],
+                'constructor_standings': f1_const['data'] if f1_const else []
+            }
+        except Exception as e:
+            logger.warning(f"Failed to load initial F1 cache: {e}")
+            self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
-        self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
         self._weather_data = {}
         self._tz = pytz.timezone(location_settings[self._location]['timezone'])
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
@@ -669,9 +692,9 @@ class Backend(QObject):
 
             if not connectivity_result:
                 logger.warning("BOOT: No network connectivity detected - staying with seed/runtime cache; will wait for firstOnline signal")
-                # Set up periodic timers; connectivity checks will bring us online and trigger firstOnline
-                self._setup_timers()
-                return
+                # We no longer return here. Proceed to start DataLoader so cached data is processed.
+                # self._setup_timers()
+                # return
 
             # Clear deferred flag if we have connectivity
             logger.info("BOOT: Network connectivity available - clearing deferred flag")
