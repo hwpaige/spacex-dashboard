@@ -142,6 +142,8 @@ __all__ = [
     "sync_remembered_networks",
     "remove_nm_connection",
     "fetch_narratives",
+    "load_theme_settings",
+    "save_theme_settings",
 ]
 
 
@@ -200,6 +202,25 @@ CACHE_REFRESH_INTERVAL_NARRATIVES = 3600    # 1 hour for narratives
 WIFI_KEY_FILE = os.path.join(CACHE_DIR_F1, 'wifi_key.bin')
 REMEMBERED_NETWORKS_FILE = os.path.join(CACHE_DIR_F1, 'remembered_networks.json')
 LAST_CONNECTED_NETWORK_FILE = os.path.join(CACHE_DIR_F1, 'last_connected_network.json')
+THEME_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'theme_settings.json')
+
+def load_theme_settings():
+    """Load theme settings from file."""
+    try:
+        data = load_cache_from_file(THEME_SETTINGS_FILE)
+        if data and 'theme' in data['data']:
+            return data['data']['theme']
+    except Exception as e:
+        logger.warning(f"Failed to load theme settings: {e}")
+    return 'dark'  # Default fallback
+
+def save_theme_settings(new_theme):
+    """Save theme settings to file."""
+    try:
+        data = {'theme': new_theme}
+        save_cache_to_file(THEME_SETTINGS_FILE, data, datetime.now(pytz.UTC))
+    except Exception as e:
+        logger.error(f"Failed to save theme settings: {e}")
 
 # F1 Team colors for visualization
 F1_TEAM_COLORS = {

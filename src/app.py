@@ -122,7 +122,9 @@ from functions import (
     bring_up_nm_connection,
     sync_remembered_networks,
     fetch_narratives,
-    remove_nm_connection
+    remove_nm_connection,
+    load_theme_settings,
+    save_theme_settings
 )
 # DBus imports are now conditional and imported only on Linux
 # import dbus
@@ -363,7 +365,7 @@ class Backend(QObject):
         logger.info("Backend initializing...")
         self._mode = 'spacex'
         self._event_type = 'upcoming'
-        self._theme = 'dark'
+        self._theme = load_theme_settings()
         self._location = 'Starbase'
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'line'  # 'bar' or 'line'
@@ -836,6 +838,7 @@ class Backend(QObject):
     def theme(self, value):
         if self._theme != value:
             self._theme = value
+            save_theme_settings(value)
             self.themeChanged.emit()
 
     @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
