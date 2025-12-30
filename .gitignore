@@ -38,3 +38,5 @@ Thumbs.db
 
 # Persistent cache (outside git repo)
 # F1 data is now cached in ~/.cache/spacex-dashboard/ for better performance
+.idea/dashboard.iml
+.idea/misc.xml

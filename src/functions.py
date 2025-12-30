@@ -546,15 +546,12 @@ def check_wifi_status():
 
 # --- Data fetchers moved from app.py ---
 def fetch_launches():
-    print("DEBUG: fetch_launches called")  # Temporary debug
     logger.info("Fetching SpaceX launch data")
 
     # Check network connectivity before making API calls
-    try:
-        urllib.request.urlopen('http://www.google.com', timeout=5)
-        logger.debug("Network connectivity check passed for launch data")
-    except (urllib.error.URLError, socket.timeout, OSError) as e:
-        logger.warning(f"Network connectivity check failed for launch data: {e}")
+    network_available = test_network_connectivity()
+    if not network_available:
+        logger.warning("Network connectivity check failed for launch data")
         # Return cached data if available
         previous_cache = load_launch_cache('previous')
         upcoming_cache = load_launch_cache('upcoming')
@@ -565,7 +562,7 @@ def fetch_launches():
                 'upcoming': upcoming_cache['data']
             }
         else:
-            logger.error("No cached data available and network is down")
+            logger.error("No cached data available and network is down - returning empty data")
             return {'previous': [], 'upcoming': []}
 
     current_time = datetime.now(pytz.UTC)
@@ -736,7 +733,7 @@ def fetch_narratives():
     """Fetch witty launch narratives from the API with fallback and caching."""
     logger.info("Fetching narratives")
     narratives = []
-    
+
     # Try loading from cache first
     try:
         cache = load_cache_from_file(RUNTIME_CACHE_FILE_NARRATIVES)
@@ -748,16 +745,29 @@ def fetch_narratives():
         logger.warning(f"Failed to load narratives cache: {e}")
 
     # Check network and fetch from API
+    network_available = test_network_connectivity()
+    if not network_available:
+        logger.warning("Network connectivity check failed for narratives")
+        # Fallback to cache if available (even if stale)
+        if cache and cache.get('data'):
+            logger.info("Using stale cached narratives as fallback")
+            return cache['data']
+        # Final fallback to hardcoded descriptions
+        logger.info("Using hardcoded fallback narratives")
+        return LAUNCH_DESCRIPTIONS
+
     try:
-        urllib.request.urlopen('http://www.google.com', timeout=5)
         url = "https://launch-narrative-api-dafccc521fb8.herokuapp.com/recent_launches_narratives"
         logger.info(f"Fetching narratives from API: {url}")
-        
-        # Verify=False to avoid potential SSL cert issues on embedded python envs
-        response = requests.get(url, timeout=10)
+
+        try:
+            response = requests.get(url, timeout=10, verify=True)
+        except Exception as ssl_error:
+            logger.warning(f"SSL verification failed for narratives, trying without verification: {ssl_error}")
+            response = requests.get(url, timeout=10, verify=False)
         response.raise_for_status()
         data = response.json()
-        
+
         # The API returns a dict with 'descriptions' key
         if isinstance(data, dict) and 'descriptions' in data:
             narratives = data['descriptions']
@@ -765,16 +775,16 @@ def fetch_narratives():
                 save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
                 logger.info(f"Fetched and cached {len(narratives)} narratives")
                 return narratives
-        
+
         # Fallback if top-level list (in case API changes back)
         if isinstance(data, list):
             narratives = data
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
             logger.info(f"Fetched and cached {len(narratives)} narratives")
             return narratives
-            
+
         logger.warning(f"Narratives API returned unexpected format: {type(data)}")
-            
+
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
 
@@ -794,11 +804,9 @@ def fetch_f1_data():
     logger.info("Fetching F1 data with optimized caching")
 
     # Check network connectivity before making API calls
-    try:
-        urllib.request.urlopen('http://www.google.com', timeout=5)
-        logger.debug("Network connectivity check passed for F1 data")
-    except (urllib.error.URLError, socket.timeout, OSError) as e:
-        logger.warning(f"Network connectivity check failed for F1 data: {e}")
+    network_available = test_network_connectivity()
+    if not network_available:
+        logger.warning("Network connectivity check failed for F1 data")
         # Return cached data if available
         schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
         drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
@@ -811,7 +819,7 @@ def fetch_f1_data():
                 'constructor_standings': constructors_cache['data']
             }
         else:
-            logger.error("No cached F1 data available and network is down")
+            logger.error("No cached F1 data available and network is down - returning empty data")
             return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
 
     global f1_cache
@@ -1114,11 +1122,9 @@ def fetch_weather(lat, lon, location):
     station_id = metar_stations.get(location, 'KBRO')  # Default to KBRO if not found
 
     # Check network connectivity before making API calls
-    try:
-        urllib.request.urlopen('http://www.google.com', timeout=5)
-        logger.debug("Network connectivity check passed for weather data")
-    except (urllib.error.URLError, socket.timeout, OSError) as e:
-        logger.warning(f"Network connectivity check failed for weather data: {e}")
+    network_available = test_network_connectivity()
+    if not network_available:
+        logger.warning("Network connectivity check failed for weather data")
         # Return fallback data
         logger.info("Returning fallback weather data due to network issues")
         return {
@@ -1551,29 +1557,41 @@ def manage_nm_autoconnect(ssid):
 
 
 def test_network_connectivity(wifi_connected=True):
-    """Check for active network connectivity by trying reliable external hosts"""
+    """Check for active network connectivity (beyond just WiFi connection)"""
     if not wifi_connected:
+        logger.debug("WiFi not connected, skipping network connectivity test")
         return False
-    
+
     test_urls = [
         'http://www.google.com',
         'http://www.cloudflare.com',
         'http://1.1.1.1'
     ]
 
+    logger.debug("Testing network connectivity with multiple endpoints...")
+
     for url in test_urls:
         try:
-            urllib.request.urlopen(url, timeout=3)
+            logger.debug(f"Testing connectivity to {url}")
+            urllib.request.urlopen(url, timeout=5)  # Increased timeout for reliability
+            logger.info(f"Network connectivity confirmed via {url}")
             return True
-        except (urllib.error.URLError, socket.timeout, OSError):
+        except (urllib.error.URLError, socket.timeout, OSError) as e:
+            logger.debug(f"Failed to connect to {url}: {e}")
             continue
 
+    # Fallback DNS test
     try:
+        logger.debug("Testing DNS resolution...")
         socket.gethostbyname('google.com')
+        logger.info("Network connectivity confirmed via DNS")
         return True
-    except socket.gaierror:
-        pass
+    except socket.gaierror as e:
+        logger.debug(f"DNS resolution failed: {e}")
+    except Exception as e:
+        logger.warning(f"Unexpected error during DNS test: {e}")
 
+    logger.warning("All network connectivity tests failed")
     return False
 
 
