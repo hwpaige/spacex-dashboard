@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,9 +15,11 @@
             color: white;
             font-family: Arial, sans-serif;
         }
+
         canvas {
             display: block;
         }
+
         #playPauseBtn {
             position: absolute;
             top: 10px;
@@ -30,6 +33,7 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
+
         #playPauseBtn:hover {
             background: rgba(0, 0, 0, 0.9);
         }
@@ -37,37 +41,38 @@
     <script>
         // Lightweight loader that ensures THREE is available even if we started offline.
         // We avoid hard-failing when there's no network at boot and retry when it comes back.
-        (function(){
-            function injectThree(onReady){
+        (function () {
+            function injectThree(onReady) {
                 if (window.THREE) { onReady && onReady(); return; }
                 try {
                     var s = document.createElement('script');
                     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
                     s.async = true;
-                    s.onload = function(){ onReady && onReady(); };
-                    s.onerror = function(){
+                    s.onload = function () { onReady && onReady(); };
+                    s.onerror = function () {
                         // Retry shortly; also wait for online event
-                        setTimeout(function(){ injectThree(onReady); }, 4000);
+                        setTimeout(function () { injectThree(onReady); }, 4000);
                     };
                     document.head.appendChild(s);
-                } catch(e){
-                    setTimeout(function(){ injectThree(onReady); }, 4000);
+                } catch (e) {
+                    setTimeout(function () { injectThree(onReady); }, 4000);
                 }
             }
             // Expose a boot function used at the bottom of the file
-            window.__ensureThreeAndBoot = function(cb){
+            window.__ensureThreeAndBoot = function (cb) {
                 if (window.THREE) { cb && cb(); return; }
                 injectThree(cb);
                 // Also try again when network comes online
-                window.addEventListener('online', function(){ injectThree(cb); }, { once: true });
+                window.addEventListener('online', function () { injectThree(cb); }, { once: true });
             };
         })();
     </script>
 </head>
+
 <body>
     <button id="playPauseBtn"><i class="fas fa-pause"></i></button>
     <script>
-        let scene, camera, renderer, globe, controls, trajectoryLine, launchMarker;
+        let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
@@ -100,8 +105,8 @@
         const VELOCITY_WINDOW_MS = 140;       // average last ~140 ms of motion
         let recentMoves = [];                 // entries: { t, dt, dxAdj, dy }
 
-        function resetRecentMoves(){ recentMoves = []; }
-        function pushRecentMove(dx, dy, yDirection, dt, now){
+        function resetRecentMoves() { recentMoves = []; }
+        function pushRecentMove(dx, dy, yDirection, dt, now) {
             if (!isFinite(dt) || dt <= 0) return;
             const entry = {
                 t: now,
@@ -118,10 +123,10 @@
             // Keep list reasonably small (safety cap)
             if (recentMoves.length > 20) recentMoves.splice(0, recentMoves.length - 20);
         }
-        function getAveragedVelocity(){
+        function getAveragedVelocity() {
             if (!recentMoves.length) return { vx: 0, vy: 0, mag: 0 };
             let sumDx = 0, sumDy = 0, sumDt = 0;
-            for (const m of recentMoves){
+            for (const m of recentMoves) {
                 sumDx += m.dxAdj;
                 sumDy += m.dy;
                 sumDt += m.dt;
@@ -165,15 +170,52 @@
                 // Earth texture - try multiple paths
                 const textureLoader = new THREE.TextureLoader();
 
-                textureLoader.load(
+                function loadEarthTexture(hdPath, sdPath, onComplete) {
+                    // Try HD first
+                    textureLoader.load(hdPath,
+                        function (texture) {
+                            console.log("Loaded HD Earth texture");
+                            onComplete(texture);
+                        },
+                        undefined,
+                        function (err) {
+                            console.log("HD texture not found, trying SD...");
+                            // Try SD
+                            textureLoader.load(sdPath,
+                                function (texture) {
+                                    console.log("Loaded SD Earth texture");
+                                    onComplete(texture);
+                                },
+                                undefined,
+                                function (err2) {
+                                    console.log("SD texture not found, falling back to procedural");
+                                    // Make sure to call onComplete with null to trigger the blue sphere fallback
+                                    onComplete(null);
+                                }
+                            );
+                        }
+                    );
+                }
+
+                loadEarthTexture(
+                    '../assets/images/earth_texture_hd.jpg',
                     '../assets/images/earth_texture.jpg',
-                    function(texture) {
-                        // Material
-                        const material = new THREE.MeshPhongMaterial({
-                            map: texture,
-                            transparent: true,
-                            opacity: 0.9
-                        });
+                    function (texture) {
+                        let material;
+                        if (texture) {
+                            material = new THREE.MeshPhongMaterial({
+                                map: texture,
+                                transparent: true,
+                                opacity: 0.9
+                            });
+                        } else {
+                            // Fallback: create globe without texture
+                            material = new THREE.MeshPhongMaterial({
+                                color: 0x2233ff,
+                                transparent: true,
+                                opacity: 0.9
+                            });
+                        }
 
                         // Mesh
                         globe = new THREE.Mesh(geometry, material);
@@ -186,7 +228,7 @@
                         const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
                         textureLoader.load(
                             'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
-                            function(cloudTexture) {
+                            function (cloudTexture) {
                                 const cloudMaterial = new THREE.MeshLambertMaterial({
                                     map: cloudTexture,
                                     transparent: true,
@@ -199,7 +241,7 @@
                                 console.log("Cloud layer added");
                             },
                             undefined,
-                            function(error) {
+                            function (error) {
                                 console.error("Error loading cloud texture:", error);
                             }
                         );
@@ -213,34 +255,6 @@
                         scene.add(directionalLight);
 
                         // Start animation
-                        animate();
-                    },
-                    function(progress) {
-                        // Loading progress
-                    },
-                    function(error) {
-                        console.error("Error loading texture:", error);
-                        // Fallback: create globe without texture
-                        const material = new THREE.MeshPhongMaterial({
-                            color: 0x2233ff,
-                            transparent: true,
-                            opacity: 0.9
-                        });
-
-                        globe = new THREE.Mesh(geometry, material);
-                        scene.add(globe);
-
-                        // Set initial tilt for better orbit visibility
-                        globe.rotation.x = 0.3;
-
-                        // Lighting
-                        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
-                        scene.add(ambientLight);
-
-                        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-                        directionalLight.position.set(1, 1, 1);
-                        scene.add(directionalLight);
-
                         animate();
                     }
                 );
@@ -263,7 +277,7 @@
                 renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
                 renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
                 console.log("Event listeners added");
-                
+
                 // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
                 // We only count non-mouse pointers here to avoid double-handling regular mouse drags.
                 // Moving these into init ensures renderer.domElement is available safely.
@@ -291,7 +305,7 @@
                 });
 
                 // Disable in-page context menu (right-click/long-press)
-                try { document.addEventListener('contextmenu', function(e){ e.preventDefault(); }, { passive: false }); } catch(_e) {}
+                try { document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, { passive: false }); } catch (_e) { }
 
             } catch (error) {
                 console.error("Error during initialization:", error);
@@ -428,13 +442,16 @@
                 console.warn("updateTrajectory called before webgl components were ready");
                 return;
             }
-            // Remove existing trajectory line
-            if (trajectoryLine) {
-                if (globe) globe.remove(trajectoryLine);
-                scene.remove(trajectoryLine);
-                trajectoryLine.geometry.dispose();
-                trajectoryLine.material.dispose();
-                console.log("Removed existing trajectory");
+            // Remove existing trajectory group (which contains core and glow lines)
+            if (trajectoryGroup) {
+                if (globe) globe.remove(trajectoryGroup);
+                scene.remove(trajectoryGroup);
+                trajectoryGroup.traverse(child => {
+                    if (child.geometry) child.geometry.dispose();
+                    if (child.material) child.material.dispose();
+                });
+                trajectoryGroup = null;
+                console.log("Removed existing trajectory group");
             }
 
             // Remove existing launch marker
@@ -516,37 +533,74 @@
 
                 console.log("Created", points.length, "3D points");
 
-                // Create trajectory geometry and material
-                const geometry = new THREE.BufferGeometry().setFromPoints(points);
-                const material = new THREE.LineBasicMaterial({
-                    color: 0xff4444,
-                    linewidth: 3,
+                // Create color gradient for the trajectory
+                // REVERSED: From Electric Cyan (#00FFFF) at Start to Fiery Orange (#FF4500) at End
+                const colors = [];
+                const colorStart = new THREE.Color(0x00FFFF);
+                const colorEnd = new THREE.Color(0xFF4500);
+
+                for (let i = 0; i < points.length; i++) {
+                    const t = i / (points.length - 1);
+                    const c = colorStart.clone().lerp(colorEnd, t);
+                    colors.push(c.r, c.g, c.b);
+                }
+
+                trajectoryGroup = new THREE.Group();
+
+                // 1. Trace Core Line (Bright/White)
+                const coreGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                coreGeometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                const coreMaterial = new THREE.LineBasicMaterial({
+                    vertexColors: true,
+                    linewidth: 2,
                     transparent: true,
-                    opacity: 0.8
+                    opacity: 1.0
                 });
+                const coreLine = new THREE.Line(coreGeometry, coreMaterial);
+                trajectoryGroup.add(coreLine);
 
-                // Create trajectory line
-                trajectoryLine = new THREE.Line(geometry, material);
+                // 2. Outer Glow Line (Thicker, more transparent)
+                const glowGeometry = coreGeometry.clone();
+                const glowMaterial = new THREE.LineBasicMaterial({
+                    vertexColors: true,
+                    linewidth: 6,
+                    transparent: true,
+                    opacity: 0.4,
+                    blending: THREE.AdditiveBlending
+                });
+                const glowLine = new THREE.Line(glowGeometry, glowMaterial);
+                trajectoryGroup.add(glowLine);
 
-                // Add trajectory as a child of the globe so it rotates with it
+                // Add trajectory group as a child of the globe
                 if (globe) {
-                    globe.add(trajectoryLine);
-                    console.log("Trajectory line added as child of globe");
+                    globe.add(trajectoryGroup);
+                    console.log("Trajectory group added as child of globe");
                 } else {
-                    scene.add(trajectoryLine);
-                    console.log("Trajectory line added to scene (globe not available)");
+                    scene.add(trajectoryGroup);
+                    console.log("Trajectory group added to scene (globe not available)");
                 }
 
                 // Removed launch site red dot marker per request; keep only the trajectory line
 
-                // Remove previous orbit line if it exists
+                // Remove previous orbit line/group if it exists
                 if (window.currentOrbitLine) {
                     if (globe) globe.remove(window.currentOrbitLine);
                     scene.remove(window.currentOrbitLine);
-                    window.currentOrbitLine.geometry.dispose();
-                    window.currentOrbitLine.material.dispose();
+
+                    // Safely dispose resources whether it's a Line or a Group
+                    if (window.currentOrbitLine.traverse) {
+                        window.currentOrbitLine.traverse(child => {
+                            if (child.geometry) child.geometry.dispose();
+                            if (child.material) child.material.dispose();
+                        });
+                    } else {
+                        // Fallback for simple meshes/lines
+                        if (window.currentOrbitLine.geometry) window.currentOrbitLine.geometry.dispose();
+                        if (window.currentOrbitLine.material) window.currentOrbitLine.material.dispose();
+                    }
+
                     window.currentOrbitLine = null;
-                    console.log("Removed existing orbit line");
+                    console.log("Removed existing orbit line/group");
                 }
 
                 // Draw orbital path if present
@@ -566,23 +620,38 @@
                     });
                     // Use LineSegments for dashed effect
                     const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-                    const orbitMaterial = new THREE.LineDashedMaterial({
-                        color: 0x00ffff,
+
+                    // Create a group for the orbit to include a glow effect
+                    const orbitGroup = new THREE.Group();
+
+                    // 1. Core Orbit Line (Solid Red)
+                    const orbitMaterial = new THREE.LineBasicMaterial({
+                        color: 0xFF3333,
                         linewidth: 2,
-                        dashSize: 0.03,
-                        gapSize: 0.02,
                         transparent: true,
-                        opacity: 0.7
+                        opacity: 0.9
                     });
                     const orbitLine = new THREE.Line(orbitGeometry, orbitMaterial);
-                    orbitLine.computeLineDistances();
+                    orbitGroup.add(orbitLine);
+
+                    // 2. Subtle Glow for Orbit (Additive blending)
+                    const orbitGlowMaterial = new THREE.LineBasicMaterial({
+                        color: 0xFF0000,
+                        linewidth: 4,
+                        transparent: true,
+                        opacity: 0.4,
+                        blending: THREE.AdditiveBlending
+                    });
+                    const orbitGlow = new THREE.Line(orbitGeometry, orbitGlowMaterial);
+                    orbitGroup.add(orbitGlow);
+
                     if (globe) {
-                        globe.add(orbitLine);
+                        globe.add(orbitGroup);
                     } else {
-                        scene.add(orbitLine);
+                        scene.add(orbitGroup);
                     }
-                    window.currentOrbitLine = orbitLine;
-                    console.log("Orbit line added");
+                    window.currentOrbitLine = orbitGroup;
+                    console.log("Orbit group added with glow");
                 }
 
                 // Force a render
@@ -599,18 +668,18 @@
         // Initialize and start animation, but ensure THREE is available first
         console.log("Starting initialization (waiting for THREE if offline)...");
         if (window.__ensureThreeAndBoot) {
-            window.__ensureThreeAndBoot(function(){
-                try { init(); } catch(e) { console.error('Init failed, will retry shortly:', e); setTimeout(function(){ window.__ensureThreeAndBoot(init); }, 4000); }
+            window.__ensureThreeAndBoot(function () {
+                try { init(); } catch (e) { console.error('Init failed, will retry shortly:', e); setTimeout(function () { window.__ensureThreeAndBoot(init); }, 4000); }
             });
         } else {
             // Fallback: try to init directly
-            try { init(); } catch(e) { console.error('Init failed before loader available:', e); }
+            try { init(); } catch (e) { console.error('Init failed before loader available:', e); }
         }
 
         // Expose functions to Qt
 
         // If we were offline at start, try to add clouds when we come online
-        window.addEventListener('online', function(){
+        window.addEventListener('online', function () {
             try {
                 if (!globe) return;
                 if (globe.getObjectByName && !globe.getObjectByName('clouds')) {
@@ -618,7 +687,7 @@
                     const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
                     textureLoader.load(
                         'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
-                        function(cloudTexture) {
+                        function (cloudTexture) {
                             const cloudMaterial = new THREE.MeshLambertMaterial({
                                 map: cloudTexture,
                                 transparent: true,
@@ -632,7 +701,7 @@
                         }
                     );
                 }
-            } catch(e) {
+            } catch (e) {
                 console.warn('Failed to add clouds after going online:', e);
             }
         });
@@ -804,8 +873,8 @@
 
         // Provide guarded hooks for external callers (Qt) to control spin/animation.
         // These respect active user interaction and will resume deterministically.
-        window.clearInteraction = function(){
-            try { if (window.globeAutospinGuard) console.log('[globe] clearInteraction()'); } catch(e){}
+        window.clearInteraction = function () {
+            try { if (window.globeAutospinGuard) console.log('[globe] clearInteraction()'); } catch (e) { }
             activePointers = 0;
             userInteracting = false;
             isInMomentum = false;
@@ -813,39 +882,39 @@
             touchMode = 'none';
             resetRecentMoves();
         };
-        window.resumeSpin = function(){
+        window.resumeSpin = function () {
             if (userInteracting) { pendingSystemResume = true; return; }
             systemPaused = false;
             autoSpinEnabled = true;
             if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             isAutoRotatePaused = (userPaused || systemPaused);
-            try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch(e){}
+            try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch (e) { }
         };
-        window.forceResumeSpin = function(){
+        window.forceResumeSpin = function () {
             window.clearInteraction();
             systemPaused = false;
             autoSpinEnabled = true;
             if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             isAutoRotatePaused = (userPaused || systemPaused);
             pendingSystemResume = false;
-            try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch(e){}
+            try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch (e) { }
         };
-        window.pauseSpin = function(){
+        window.pauseSpin = function () {
             systemPaused = true;
             isAutoRotatePaused = (userPaused || systemPaused);
-            try { if (window.globeAutospinGuard) console.log('[globe] pauseSpin invoked'); } catch(e){}
+            try { if (window.globeAutospinGuard) console.log('[globe] pauseSpin invoked'); } catch (e) { }
         };
-        window.startSpin = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.resumeAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.startAnimation = function(){ if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startSpin = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.resumeAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
 
         // Handle window focus/visibility to avoid "stuck interaction" states and auto-resume when appropriate
-        window.addEventListener('blur', function(){
+        window.addEventListener('blur', function () {
             if (window.globeAutospinGuard) {
                 window.clearInteraction();
             }
         });
-        document.addEventListener('visibilitychange', function(){
+        document.addEventListener('visibilitychange', function () {
             if (document.visibilityState === 'visible') {
                 if (window.globeAutospinGuard) {
                     window.clearInteraction();
@@ -856,7 +925,7 @@
         });
 
         // Inactivity fallback: if marked interacting but no activity and no pointers, clear it
-        setInterval(function(){
+        setInterval(function () {
             try {
                 if (!window.globeAutospinGuard) return;
                 const now = Date.now();
@@ -864,15 +933,15 @@
                     console.log('[globe] clearing stale interaction due to inactivity');
                     window.clearInteraction();
                 }
-            } catch(e){}
+            } catch (e) { }
         }, 1000);
 
         // Visibility instrumentation
-        document.addEventListener('visibilitychange', function(){
-            try { console.log('[globe] visibilitychange:', document.visibilityState); } catch(e){}
+        document.addEventListener('visibilitychange', function () {
+            try { console.log('[globe] visibilitychange:', document.visibilityState); } catch (e) { }
             if (document.visibilityState === 'visible') {
                 // When page becomes visible, allow a small grace then resume if allowed
-                setTimeout(function(){
+                setTimeout(function () {
                     if (!userPaused && window.globeAutospinGuard !== false) {
                         window.resumeSpin();
                     }
@@ -881,16 +950,16 @@
         });
 
         // Self-healing watchdog: if frames stop for >3s while visible, resume
-        (function(){
+        (function () {
             const CHECK_MS = 1000;
             const STALL_MS = 3000;
-            setInterval(function(){
+            setInterval(function () {
                 if (typeof document === 'undefined') return;
                 if (document.visibilityState !== 'visible') return;
                 if (window.globeAutospinGuard === false) return;
                 const now = performance.now();
                 if (now - __lastRenderTs > STALL_MS) {
-                    try { console.log('[globe] watchdog: render stalled, attempting resume'); } catch(e){}
+                    try { console.log('[globe] watchdog: render stalled, attempting resume'); } catch (e) { }
                     window.resumeSpin();
                 }
             }, CHECK_MS);
@@ -910,7 +979,8 @@
         });
 
         // Initial instrumentation
-        try { console.log('[globe] script loaded; awaiting boot'); } catch(e){}
+        try { console.log('[globe] script loaded; awaiting boot'); } catch (e) { }
     </script>
 </body>
+
 </html>
