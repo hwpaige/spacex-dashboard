@@ -2319,6 +2319,18 @@ Window {
                             }
                         }
 
+                        // Visual Blending: Flatten TOP corners of button and hide border when drawer is open
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.leftMargin: 1
+                            anchors.rightMargin: 1
+                            height: 12
+                            color: parent.color
+                            visible: locationDrawer.height > 10
+                        }
+
                         Text {
                             id: locationLabel
                             anchors.centerIn: parent
@@ -2327,18 +2339,6 @@ Window {
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
-                            // Visual Blending: Flatten TOP corners of button and hide border when drawer is open
-                            Rectangle {
-                                anchors.top: parent.parent.top
-                                anchors.left: parent.parent.left
-                                anchors.right: parent.parent.right
-                                anchors.leftMargin: 1
-                                anchors.rightMargin: 1
-                                height: 12
-                                color: parent.parent.color
-                                visible: locationDrawer.height > 10
-                                z: -1
-                            }
                         }
 
                         MouseArea {
