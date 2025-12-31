@@ -16,6 +16,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -2936,20 +2937,26 @@ def setup_dashboard_logging(module_file):
         if not os.access(os.path.dirname(log_file), os.W_OK):
             log_file = os.path.join(os.path.dirname(module_file), 'app.log')
 
+        # Print intention first to verify path logic
+        print(f"ATTEMPTING TO LOG TO: {os.path.abspath(log_file)}")
+
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.FileHandler(log_file, mode='w', encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
-            ]
+            ],
+            force=True
         )
-        # Log the log path immediately to stdout
-        print(f"LOGGING TO: {os.path.abspath(log_file)}")
+        # Log the log path immediately to stdout and logger
+        print(f"LOGGING SETUP COMPLETE. File: {os.path.abspath(log_file)}")
         logger.info(f"LOGGING INITIALIZED: {os.path.abspath(log_file)}")
         return os.path.abspath(log_file)
     except Exception as e:
-        logging.basicConfig(level=logging.INFO)
+        # Fallback to console only if file logging fails
+        print(f"ERROR SETTING UP LOGGING: {e}", file=sys.stderr)
+        logging.basicConfig(level=logging.INFO, force=True)
         return None
 
 def format_qt_message(mode, context, message):
