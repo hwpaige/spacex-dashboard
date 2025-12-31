@@ -627,7 +627,7 @@ Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/qt6/plugins/platforms
 WorkingDirectory=/home/$USER/Desktop/project/src
-ExecStartPre=/bin/bash -c 'nmcli device wifi rescan; timeout 30 bash -c "until nmcli device | grep wifi | grep -q connected; do sleep 2; done"'
+
 ExecStart=python3 app.py
 Restart=always
 RestartSec=5
