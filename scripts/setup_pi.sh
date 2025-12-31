@@ -870,23 +870,15 @@ EOF
     # Ensure firmware loads initramfs at boot (required for Plymouth to appear early)
     local cfg="/boot/firmware/config.txt"
     if [ -f "$cfg" ]; then
-        # Determine the newest initrd that we just copied (prefer /boot/firmware)
-        local initrd_path
-        initrd_path=$(ls -1t /boot/firmware/initrd.img-* 2>/dev/null | head -n1)
-        if [ -z "$initrd_path" ]; then
-            initrd_path=$(ls -1t /boot/initrd.img-* 2>/dev/null | head -n1)
-        fi
-        if [ -n "$initrd_path" ]; then
-            local initrd_file
-            initrd_file=$(basename "$initrd_path")
-            # Remove any existing initramfs lines
-            sed -i '/^initramfs /d' "$cfg"
-            # Add the correct initramfs directive with followkernel
-            echo "initramfs ${initrd_file} followkernel" >> "$cfg"
-            log "✓ Enabled initramfs in config.txt: initramfs ${initrd_file} followkernel"
-        else
-            log "WARNING: Could not find an initrd.img to reference in config.txt"
-        fi
+        # Use the generic initrd.img name to avoid version mismatch after kernel updates
+        # flash-kernel automatically maintains this generic file in /boot/firmware/
+        local initrd_file="initrd.img"
+        
+        # Remove any existing initramfs lines
+        sed -i '/^initramfs /d' "$cfg"
+        # Add the generic initramfs directive with followkernel
+        echo "initramfs ${initrd_file} followkernel" >> "$cfg"
+        log "✓ Enabled initramfs in config.txt: initramfs ${initrd_file} followkernel"
     fi
 
     # Configure kernel command line for Plymouth
