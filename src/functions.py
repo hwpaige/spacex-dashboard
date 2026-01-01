@@ -22,29 +22,54 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timedelta
 
-import numpy as np
 import pytz
 import requests
 import concurrent.futures
 from dateutil.parser import parse
-from track_generator import generate_track_map
 from cryptography.fernet import Fernet
 import http.server
 import socketserver
 import threading
-import pandas as pd
-from plotly_charts import (
-    generate_f1_standings_chart,
-    generate_f1_telemetry_chart,
-    generate_f1_weather_chart,
-    generate_f1_positions_chart,
-    generate_f1_laps_chart
-)
 
 logger = logging.getLogger(__name__)
 
+class BootProfiler:
+    """Helper to track performance of boot operations."""
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(BootProfiler, cls).__new__(cls)
+            cls._instance.events = []
+            cls._instance.start_time = time.time()
+        return cls._instance
+    
+    def mark(self, event_name):
+        """Mark a point in time with a name."""
+        elapsed = time.time() - self.start_time
+        self.events.append((event_name, elapsed))
+        logger.info(f"PROFILER: {event_name} at {elapsed:.3f}s")
+        
+    def get_summary(self):
+        """Get a formatted summary of all tracked events."""
+        summary = ["--- Boot Performance Summary ---"]
+        prev_time = 0
+        for name, timestamp in self.events:
+            duration = timestamp - prev_time
+            summary.append(f"{name:.<40} {timestamp:>6.3f}s (step: {duration:>6.3f}s)")
+            prev_time = timestamp
+        summary.append(f"{'Total Boot Time':.<40} {prev_time:>6.3f}s")
+        return "\n".join(summary)
+
+    def log_summary(self):
+        """Log the summary to the application log."""
+        logger.info("\n" + self.get_summary())
+
+profiler = BootProfiler()
+
 __all__ = [
     # status helpers
+    "BootProfiler",
     "set_loader_status_callback",
     "emit_loader_status",
     # cache io
@@ -186,6 +211,15 @@ os.makedirs(CACHE_DIR_F1, exist_ok=True)
 CACHE_FILE_F1_SCHEDULE = os.path.join(CACHE_DIR_F1, 'f1_schedule_cache.json')
 CACHE_FILE_F1_DRIVERS = os.path.join(CACHE_DIR_F1, 'f1_drivers_cache.json')
 CACHE_FILE_F1_CONSTRUCTORS = os.path.join(CACHE_DIR_F1, 'f1_constructors_cache.json')
+CACHE_FILE_F1_OPENF1_SESSION = os.path.join(CACHE_DIR_F1, 'f1_openf1_session.json')
+CACHE_FILE_F1_WEATHER = os.path.join(CACHE_DIR_F1, 'f1_weather.json')
+CACHE_FILE_F1_POSITIONS = os.path.join(CACHE_DIR_F1, 'f1_positions.json')
+CACHE_FILE_F1_LAPS = os.path.join(CACHE_DIR_F1, 'f1_laps.json')
+CACHE_FILE_F1_STINTS = os.path.join(CACHE_DIR_F1, 'f1_stints.json')
+CACHE_FILE_F1_PITS = os.path.join(CACHE_DIR_F1, 'f1_pits.json')
+CACHE_FILE_F1_TELEMETRY = os.path.join(CACHE_DIR_F1, 'f1_telemetry.json')
+CACHE_FILE_F1_LOCATION = os.path.join(CACHE_DIR_F1, 'f1_location.json')
+CACHE_FILE_F1_TRACK_LAYOUT = os.path.join(CACHE_DIR_F1, 'f1_track_layout.json')
 
 # Runtime (user) cache paths for SpaceX launches. Keep the git-seeded repo cache intact
 # and write incremental updates to the persistent user cache.
@@ -196,6 +230,7 @@ RUNTIME_CACHE_FILE_NARRATIVES = os.path.join(CACHE_DIR_F1, 'narratives_cache.jso
 # Different refresh intervals for different F1 data types
 CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely changes)
 CACHE_REFRESH_INTERVAL_F1_STANDINGS = 3600  # 1 hour for standings (updates frequently)
+CACHE_REFRESH_INTERVAL_F1_OPENF1 = 300      # 5 minutes for live session data
 CACHE_REFRESH_INTERVAL_NARRATIVES = 3600    # 1 hour for narratives
 
 # WiFi and Encryption paths
@@ -341,6 +376,7 @@ def save_cache_to_file(cache_file, data, timestamp):
 def load_launch_cache(kind: str):
     """Load a launch cache for kind in {'previous','upcoming'}.
     Prefer the runtime cache in ~/.cache; fall back to the git-seeded cache under repo /cache.
+    If the runtime cache is missing, seed it from the repo cache.
     Returns a dict: {'data': list, 'timestamp': datetime} or None.
     """
     try:
@@ -355,7 +391,18 @@ def load_launch_cache(kind: str):
             return data
 
         logger.info(f"Runtime {kind} cache unavailable or invalid; falling back to seed cache: {seed_path}")
-        return load_cache_from_file(seed_path)
+        seed_data = load_cache_from_file(seed_path)
+        
+        if seed_data and isinstance(seed_data.get('data'), list):
+            # Seed the runtime cache so it exists for next time
+            try:
+                save_launch_cache(kind, seed_data['data'], seed_data['timestamp'])
+                logger.info(f"Successfully seeded runtime {kind} cache from {seed_path}")
+            except Exception as e:
+                logger.warning(f"Failed to seed runtime {kind} cache: {e}")
+            return seed_data
+            
+        return None
     except Exception as e:
         logger.warning(f"Failed to load {kind} launch cache (runtime/seed): {e}")
         return None
@@ -434,6 +481,7 @@ def parse_metar(raw_metar):
 
 
 def rotate(xy, *, angle):
+    import numpy as np
     """Rotate an array of 2D points by angle (radians) using a standard rotation matrix."""
     rot_mat = np.array([[np.cos(angle), np.sin(angle)],
                         [-np.sin(angle), np.cos(angle)]])
@@ -837,7 +885,134 @@ def fetch_narratives():
 
 
 
+def _get_latest_openf1_session_key():
+    """Find the most recent Race session key from OpenF1."""
+    try:
+        current_year = datetime.now().year
+        # Try current year, then previous if none found
+        for year in [current_year, current_year - 1]:
+            url = f"https://api.openf1.org/v1/sessions?year={year}&session_name=Race"
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                sessions = resp.json()
+                if sessions:
+                    # Filter for 'Race' session_name specifically
+                    race_sessions = [s for s in sessions if s.get('session_name') == 'Race']
+                    if race_sessions:
+                        return race_sessions[-1]['session_key']
+    except Exception as e:
+        logger.error(f"Error getting latest OpenF1 session: {e}")
+    return None
+
+
+def _fetch_openf1_data(session_key, endpoint, params=None):
+    """Generic helper to fetch data from OpenF1 API."""
+    if not session_key:
+        return []
+    
+    url = f"https://api.openf1.org/v1/{endpoint}?session_key={session_key}"
+    if params:
+        for k, v in params.items():
+            url += f"&{k}={v}"
+            
+    try:
+        resp = requests.get(url, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        logger.error(f"Error fetching OpenF1 {endpoint}: {e}")
+    return []
+
+
+def _get_f1_track_layout_points(circuit_name):
+    import numpy as np
+    """Get raw track layout points (x, y) using fastf1 and apply rotation."""
+    try:
+        from track_generator import track_rotations, rotate, circuit_name_mapping
+        import fastf1
+        
+        # Map circuit name
+        rotation_key = circuit_name_mapping.get(circuit_name, circuit_name)
+        
+        # Get data from fastf1
+        year = 2023  # Use a recent year for track data
+        session = fastf1.get_session(year, rotation_key, 'Race')
+        session.load(laps=True, telemetry=False, weather=False, messages=False)
+        
+        fastest_lap = session.laps.pick_fastest()
+        pos = fastest_lap.get_pos_data()
+        
+        track = pos[['X', 'Y']].to_numpy()
+        # Find rotation angle
+        angle_deg = 0.0
+        for name, rot in track_rotations:
+            if name == rotation_key:
+                angle_deg = rot
+                break
+        
+        track_angle = angle_deg / 180 * np.pi
+        rotated_track = rotate(track, angle=track_angle)
+        
+        # Scale to match OpenF1 coordinates if needed (FastF1 is in cm, OpenF1 is usually in something similar or decimeters)
+        # Actually, let's keep it as is and scale in Plotly if needed.
+        
+        return {
+            'x': rotated_track[:, 0].tolist(),
+            'y': rotated_track[:, 1].tolist()
+        }
+    except Exception as e:
+        logger.error(f"Error getting track layout points for {circuit_name}: {e}")
+        return {'x': [], 'y': []}
+
+
+def _process_f1_telemetry_for_map(telemetry, location, circuit_name):
+    import pandas as pd
+    import numpy as np
+    """Merge telemetry and location, and rotate coordinates."""
+    if not telemetry or not location:
+        return []
+        
+    try:
+        df_tel = pd.DataFrame(telemetry)
+        df_loc = pd.DataFrame(location)
+        
+        if df_tel.empty or df_loc.empty:
+            return []
+            
+        # Merge by date
+        df_tel['date'] = pd.to_datetime(df_tel['date'])
+        df_loc['date'] = pd.to_datetime(df_loc['date'])
+        
+        merged = pd.merge_asof(df_tel.sort_values('date'), 
+                               df_loc.sort_values('date'), 
+                               on='date', 
+                               direction='nearest')
+        
+        # Rotate points
+        from track_generator import track_rotations, circuit_name_mapping
+        rotation_key = circuit_name_mapping.get(circuit_name, circuit_name)
+        angle_deg = 0.0
+        for name, rot in track_rotations:
+            if name == rotation_key:
+                angle_deg = rot
+                break
+        track_angle = angle_deg / 180 * np.pi
+        
+        if not merged.empty and 'x' in merged.columns and 'y' in merged.columns:
+            # OpenF1 locations are usually in x, y columns
+            coords = merged[['x', 'y']].to_numpy()
+            rotated_coords = rotate(coords, angle=track_angle)
+            merged['x'] = rotated_coords[:, 0]
+            merged['y'] = rotated_coords[:, 1]
+            
+        return merged.to_dict('records')
+    except Exception as e:
+        logger.error(f"Error processing telemetry for map: {e}")
+        return []
+
+
 def fetch_f1_data():
+    from track_generator import generate_track_map
     """Fetch F1 data with optimized component-based caching."""
     logger.info("Fetching F1 data with optimized caching")
 
@@ -851,10 +1026,42 @@ def fetch_f1_data():
         constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
         if schedule_cache and drivers_cache and constructors_cache:
             logger.info("Returning cached F1 data due to network issues")
+            # Load OpenF1 caches as well
+            weather_cache = load_cache_from_file(CACHE_FILE_F1_WEATHER)
+            positions_cache = load_cache_from_file(CACHE_FILE_F1_POSITIONS)
+            laps_cache = load_cache_from_file(CACHE_FILE_F1_LAPS)
+            telemetry_cache = load_cache_from_file(CACHE_FILE_F1_TELEMETRY)
+            location_cache = load_cache_from_file(CACHE_FILE_F1_LOCATION)
+            track_layout_cache = load_cache_from_file(CACHE_FILE_F1_TRACK_LAYOUT)
+            
+            # Load telemetry and location with driver awareness
+            telemetry_data = []
+            telemetry_driver = None
+            if telemetry_cache:
+                if isinstance(telemetry_cache['data'], dict):
+                    telemetry_data = telemetry_cache['data'].get('telemetry', [])
+                    telemetry_driver = telemetry_cache['data'].get('driver_number')
+                else:
+                    telemetry_data = telemetry_cache['data']
+            
+            location_data = []
+            if location_cache:
+                if isinstance(location_cache['data'], dict):
+                    location_data = location_cache['data'].get('location', [])
+                else:
+                    location_data = location_cache['data']
+
             return {
                 'schedule': schedule_cache['data'],
                 'driver_standings': drivers_cache['data'],
-                'constructor_standings': constructors_cache['data']
+                'constructor_standings': constructors_cache['data'],
+                'weather': weather_cache['data'] if weather_cache else [],
+                'positions': positions_cache['data'] if positions_cache else [],
+                'laps': laps_cache['data'] if laps_cache else [],
+                'telemetry': telemetry_data,
+                'location': location_data,
+                'telemetry_driver_number': telemetry_driver,
+                'track_data': track_layout_cache['data'].get('points', {}) if track_layout_cache else {}
             }
         else:
             logger.error("No cached F1 data available and network is down - returning empty data")
@@ -865,7 +1072,12 @@ def fetch_f1_data():
         return f1_cache
 
     current_time = datetime.now(pytz.UTC)
-    f1_data = {}
+    f1_data = {
+        'weather': [],
+        'positions': [],
+        'laps': [],
+        'telemetry': []
+    }
 
     # Fetch race schedule (infrequently changing)
     schedule_cache_exists = os.path.exists(CACHE_FILE_F1_SCHEDULE)
@@ -1140,6 +1352,138 @@ def fetch_f1_data():
         except Exception as e:
             logger.error(f"Failed to fetch F1 constructor standings: {e}")
             f1_data['constructor_standings'] = []
+
+    # Fetch OpenF1 session data (weather, positions, laps, telemetry)
+    try:
+        session_cache = load_cache_from_file(CACHE_FILE_F1_OPENF1_SESSION)
+        session_key = session_cache['data'].get('session_key') if session_cache else None
+        
+        if not session_key or (current_time - session_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+            session_key = _get_latest_openf1_session_key()
+            if session_key:
+                save_cache_to_file(CACHE_FILE_F1_OPENF1_SESSION, {'session_key': session_key}, current_time)
+
+        if session_key:
+            # Weather
+            weather_cache = load_cache_from_file(CACHE_FILE_F1_WEATHER)
+            if not weather_cache or (current_time - weather_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+                f1_data['weather'] = _fetch_openf1_data(session_key, 'weather')
+                save_cache_to_file(CACHE_FILE_F1_WEATHER, f1_data['weather'], current_time)
+            else:
+                f1_data['weather'] = weather_cache['data']
+
+            # Positions
+            positions_cache = load_cache_from_file(CACHE_FILE_F1_POSITIONS)
+            if not positions_cache or (current_time - positions_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+                f1_data['positions'] = _fetch_openf1_data(session_key, 'position')
+                save_cache_to_file(CACHE_FILE_F1_POSITIONS, f1_data['positions'], current_time)
+            else:
+                f1_data['positions'] = positions_cache['data']
+
+            # Laps
+            laps_cache = load_cache_from_file(CACHE_FILE_F1_LAPS)
+            if not laps_cache or (current_time - laps_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+                f1_data['laps'] = _fetch_openf1_data(session_key, 'laps')
+                save_cache_to_file(CACHE_FILE_F1_LAPS, f1_data['laps'], current_time)
+            else:
+                f1_data['laps'] = laps_cache['data']
+
+            # Stints
+            stints_cache = load_cache_from_file(CACHE_FILE_F1_STINTS)
+            if not stints_cache or (current_time - stints_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+                f1_data['stints'] = _fetch_openf1_data(session_key, 'stints')
+                save_cache_to_file(CACHE_FILE_F1_STINTS, f1_data['stints'], current_time)
+            else:
+                f1_data['stints'] = stints_cache['data']
+
+            # Pit Stops
+            pits_cache = load_cache_from_file(CACHE_FILE_F1_PITS)
+            if not pits_cache or (current_time - pits_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
+                f1_data['pits'] = _fetch_openf1_data(session_key, 'pit')
+                save_cache_to_file(CACHE_FILE_F1_PITS, f1_data['pits'], current_time)
+            else:
+                f1_data['pits'] = pits_cache['data']
+
+            # Determine driver number for telemetry/location (prefer driver with data)
+            driver_num = None
+            
+            # Try to pick from positions (active drivers)
+            if f1_data.get('positions'):
+                try:
+                    # Get the most recent timestamp in the position data
+                    # Filter out entries without a valid date
+                    valid_positions = [p for p in f1_data['positions'] if p.get('date')]
+                    if valid_positions:
+                        latest_pos_entry = max(valid_positions, key=lambda x: x.get('date', '0'))
+                        latest_date = latest_pos_entry.get('date')
+                        # Find who was P1 at that time
+                        leader = next((p.get('driver_number') for p in valid_positions 
+                                     if p.get('date') == latest_date and p.get('position') == 1), None)
+                        if leader:
+                            driver_num = leader
+                            logger.info(f"F1: Selected session leader (Driver {driver_num}) for telemetry")
+                        else:
+                            # Fallback to any driver in the latest position update
+                            driver_num = latest_pos_entry.get('driver_number')
+                            logger.info(f"F1: Selected active driver (Driver {driver_num}) for telemetry")
+                except Exception as e:
+                    logger.debug(f"Error determining driver from positions: {e}")
+            
+            if driver_num is None:
+                # Fallback to session drivers list
+                session_drivers = _fetch_openf1_data(session_key, 'drivers')
+                if session_drivers:
+                    driver_num = session_drivers[0].get('driver_number', 1)
+                    logger.info(f"F1: Selected first available driver (Driver {driver_num}) from session list")
+                else:
+                    driver_num = 1 # Absolute fallback
+                    logger.info(f"F1: Using absolute fallback (Driver {driver_num}) for telemetry")
+
+            # Telemetry (Speed/RPM/etc)
+            telemetry_cache = load_cache_from_file(CACHE_FILE_F1_TELEMETRY)
+            # Cache is valid if it exists, is fresh, and matches the selected driver
+            telemetry_cache_valid = (telemetry_cache and 
+                                   (current_time - telemetry_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_OPENF1 and
+                                   isinstance(telemetry_cache['data'], dict) and 
+                                   telemetry_cache['data'].get('driver_number') == driver_num)
+            
+            if not telemetry_cache_valid:
+                f1_data['telemetry'] = _fetch_openf1_data(session_key, 'car_data', {'driver_number': driver_num})
+                save_cache_to_file(CACHE_FILE_F1_TELEMETRY, {'driver_number': driver_num, 'telemetry': f1_data['telemetry']}, current_time)
+            else:
+                f1_data['telemetry'] = telemetry_cache['data'].get('telemetry', [])
+
+            # Location (X, Y)
+            location_cache = load_cache_from_file(CACHE_FILE_F1_LOCATION)
+            location_cache_valid = (location_cache and 
+                                  (current_time - location_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_OPENF1 and
+                                  isinstance(location_cache['data'], dict) and 
+                                  location_cache['data'].get('driver_number') == driver_num)
+            
+            if not location_cache_valid:
+                f1_data['location'] = _fetch_openf1_data(session_key, 'location', {'driver_number': driver_num})
+                save_cache_to_file(CACHE_FILE_F1_LOCATION, {'driver_number': driver_num, 'location': f1_data['location']}, current_time)
+            else:
+                f1_data['location'] = location_cache['data'].get('location', [])
+
+            f1_data['telemetry_driver_number'] = driver_num
+
+            # Track Layout Data (raw points for Plotly track map)
+            track_layout_cache = load_cache_from_file(CACHE_FILE_F1_TRACK_LAYOUT)
+            # Find the circuit name for the upcoming/current race
+            next_race = get_next_race_info(f1_data['schedule'])
+            circuit_name = next_race.get('circuit_short_name', '') if next_race else ''
+            
+            if circuit_name and (not track_layout_cache or track_layout_cache.get('circuit') != circuit_name):
+                logger.info(f"Fetching raw track layout for {circuit_name}")
+                track_points = _get_f1_track_layout_points(circuit_name)
+                f1_data['track_data'] = track_points
+                save_cache_to_file(CACHE_FILE_F1_TRACK_LAYOUT, {'circuit': circuit_name, 'points': track_points}, current_time)
+            elif track_layout_cache:
+                f1_data['track_data'] = track_layout_cache['data'].get('points', {})
+
+    except Exception as e:
+        logger.error(f"Error fetching OpenF1 data components: {e}")
 
     f1_cache = f1_data
     logger.info("Successfully assembled F1 data from optimized cache")
@@ -1923,6 +2267,18 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
 
 
 def generate_f1_chart_html(f1_data, chart_type, stat_key, theme):
+    profiler.mark("generate_f1_chart_html Start")
+    from plotly_charts import (
+        generate_f1_standings_chart,
+        generate_f1_telemetry_chart,
+        generate_f1_weather_chart,
+        generate_f1_positions_chart,
+        generate_f1_laps_chart,
+        generate_f1_strategy_chart,
+        generate_f1_track_map,
+        generate_f1_wind_polar_chart,
+        generate_f1_track_telemetry_chart
+    )
     """Generate HTML for interactive F1 charts"""
     try:
         if chart_type == 'standings':
@@ -1937,16 +2293,42 @@ def generate_f1_chart_html(f1_data, chart_type, stat_key, theme):
                     'round': 1,
                     'points': float(driver.get(stat_key, 0))
                 })
-            # This logic assumes the plotly_charts functions return the full HTML
             return generate_f1_standings_chart(driver_data, 'line', theme)
         elif chart_type == 'telemetry':
-            return generate_f1_telemetry_chart(theme)
+            telemetry_data = f1_data.get('telemetry', [])
+            driver_num = f1_data.get('telemetry_driver_number')
+            return generate_f1_telemetry_chart(telemetry_data, theme, driver_num)
         elif chart_type == 'weather':
-            return generate_f1_weather_chart(theme)
+            weather_data = f1_data.get('weather', [])
+            return generate_f1_weather_chart(weather_data, theme)
         elif chart_type == 'positions':
-            return generate_f1_positions_chart(theme)
+            positions_data = f1_data.get('positions', [])
+            return generate_f1_positions_chart(positions_data, theme)
         elif chart_type == 'laps':
-            return generate_f1_laps_chart(theme)
+            laps_data = f1_data.get('laps', [])
+            return generate_f1_laps_chart(laps_data, theme)
+        elif chart_type == 'strategy':
+            stints_data = f1_data.get('stints', [])
+            pits_data = f1_data.get('pits', [])
+            return generate_f1_strategy_chart(stints_data, pits_data, theme)
+        elif chart_type == 'track_map':
+            track_data = f1_data.get('track_data', {})
+            return generate_f1_track_map(track_data, theme)
+        elif chart_type == 'wind_polar':
+            weather_data = f1_data.get('weather', [])
+            return generate_f1_wind_polar_chart(weather_data, theme)
+        elif chart_type == 'track_telemetry':
+            track_data = f1_data.get('track_data', {})
+            telemetry = f1_data.get('telemetry', [])
+            location = f1_data.get('location', [])
+            driver_num = f1_data.get('telemetry_driver_number')
+            # Find the circuit name for rotation
+            next_race = get_next_race_info(f1_data.get('schedule', []))
+            circuit_name = next_race.get('circuit_short_name', '') if next_race else ''
+            
+            # Merge and rotate telemetry points
+            merged_telemetry = _process_f1_telemetry_for_map(telemetry, location, circuit_name)
+            return generate_f1_track_telemetry_chart(track_data, merged_telemetry, theme, driver_num)
         else:
             return generate_f1_standings_chart([], 'line', theme)
     except Exception as e:
@@ -1991,6 +2373,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     Get trajectory data for the next upcoming launch.
     Standalone version of Backend.get_launch_trajectory.
     """
+    profiler.mark("get_launch_trajectory_data Start")
     logger.info("get_launch_trajectory_data called")
     
     # If no upcoming launches, try to use recent launches for demo
@@ -2742,7 +3125,7 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
         launches.append(launch)
     return launches
 
-def get_next_race_info(race_schedule, tz_obj):
+def get_next_race_info(race_schedule, tz_obj=None):
     """Find the next race in the schedule."""
     if not race_schedule: return None
     current = datetime.now(pytz.UTC)

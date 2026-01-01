@@ -127,22 +127,22 @@ Window {
         // Resume spin on key backend signals
         backend.launchCacheReady.connect(function(){
             if (backend.wifiConnecting) return;
-            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.updateGlobeTrajectory.connect(function(){
             if (backend.wifiConnecting) return;
-            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.loadingFinished.connect(function(){
             if (backend.wifiConnecting) return;
-            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.firstOnline.connect(function(){
             if (backend.wifiConnecting) return;
-            if (globeView && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         // Keep guard value in sync if changed at runtime
@@ -358,7 +358,7 @@ Window {
             // Update trajectory when data loads
             var trajectoryData = backend.get_launch_trajectory();
             if (trajectoryData) {
-                if (globeView && globeView.runJavaScript) {
+                if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
                     globeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                 }
                 if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
@@ -529,7 +529,7 @@ Window {
                                         plotGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
 
                                         // Enforce rounded corners inside the page itself
-                                        root._injectRoundedCorners(plotGlobeView, 8)
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeView, 8)
                                         // Ensure the plot card globe animation loop starts/resumes on initial load
                                         try {
                                             plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
@@ -717,7 +717,17 @@ Window {
                             spacing: 0
 
                             Text {
-                                text: "F1 Driver Standings Over Time"
+                                text: {
+                                    if (!backend) return "F1 Data"
+                                    switch(backend.f1ChartType) {
+                                        case "standings": return "F1 Driver Standings Over Time"
+                                        case "weather": return "F1 Weather Data"
+                                        case "wind_polar": return "F1 Wind Polar"
+                                        case "telemetry": return "F1 Telemetry"
+                                        case "track_telemetry": return "F1 Track Telemetry"
+                                        default: return "F1 Data"
+                                    }
+                                }
                                 font.pixelSize: 14
                                 font.bold: true
                                 color: backend.theme === "dark" ? "white" : "black"
@@ -727,51 +737,58 @@ Window {
 
                             // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                            WebEngineView {
-                                id: f1ChartView
+                            Loader {
+                                id: f1ChartLoader
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 Layout.margins: 5
-                                layer.enabled: true
-                                layer.smooth: true
-                                backgroundColor: "transparent"
+                                active: backend && backend.mode === "f1"
+                                visible: active
 
-                                // Bind url to chart file URL that updates reactively
-                                url: backend.f1ChartUrl
+                                sourceComponent: WebEngineView {
+                                    id: f1ChartView
+                                    anchors.fill: parent
+                                    layer.enabled: true
+                                    layer.smooth: true
+                                    backgroundColor: "transparent"
 
-                                opacity: showAnimated
+                                    // Bind url to chart file URL that updates reactively
+                                    url: backend.f1ChartUrl
 
-                                property real showAnimated: 0
+                                    opacity: showAnimated
 
-                                Component.onCompleted: showAnimated = 1
+                                    property real showAnimated: 0
 
-                                Behavior on showAnimated {
-                                    NumberAnimation {
-                                        duration: 500
-                                        easing.type: Easing.InOutQuad
+                                    Component.onCompleted: showAnimated = 1
+
+                                    Behavior on showAnimated {
+                                        NumberAnimation {
+                                            duration: 500
+                                            easing.type: Easing.InOutQuad
+                                        }
                                     }
-                                }
 
-                                onLoadingChanged: function(loadRequest) {
-                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        root._injectRoundedCorners(f1ChartView, 8)
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(f1ChartView, 8)
+                                        }
                                     }
-                                }
 
-                                // Staggered reload for F1 view
-                                Connections {
-                                    target: backend
-                                    function onReloadWebContent() {
-                                        f1ReloadTimer.start()
+                                    // Staggered reload for F1 view
+                                    Connections {
+                                        target: backend
+                                        function onReloadWebContent() {
+                                            f1ReloadTimer.start()
+                                        }
                                     }
-                                }
-                                Timer {
-                                    id: f1ReloadTimer
-                                    interval: 5500
-                                    repeat: false
-                                    onTriggered: {
-                                        f1ChartView.reload()
-                                        console.log("F1 chart view reloaded (staggered)")
+                                    Timer {
+                                        id: f1ReloadTimer
+                                        interval: 5500
+                                        repeat: false
+                                        onTriggered: {
+                                            f1ChartView.reload()
+                                            console.log("F1 chart view reloaded (staggered)")
+                                        }
                                     }
                                 }
                             }
@@ -794,9 +811,9 @@ Window {
                                         model: [
                                             {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
                                             {"type": "weather", "icon": "\uf6c4", "tooltip": "Weather Data"},
+                                            {"type": "wind_polar", "icon": "\uf72e", "tooltip": "Wind Polar"},
                                             {"type": "telemetry", "icon": "\uf0e4", "tooltip": "Telemetry"},
-                                            {"type": "positions", "icon": "\uf3c5", "tooltip": "Driver Positions"},
-                                            {"type": "laps", "icon": "\uf2f1", "tooltip": "Lap Times"}
+                                            {"type": "track_telemetry", "icon": "\uf567", "tooltip": "Track Telemetry"}
                                         ]
                                         Rectangle {
                                             Layout.preferredWidth: 40
@@ -842,7 +859,8 @@ Window {
                                             {"type": "wins", "icon": "\uf005", "tooltip": "Wins"}
                                         ]
                                         Rectangle {
-                                            Layout.preferredWidth: 40
+                                            visible: backend.f1ChartType === "standings"
+                                            Layout.preferredWidth: visible ? 40 : 0
                                             Layout.preferredHeight: 28
                                             color: backend.f1ChartStat === modelData.type ?
                                                    (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
@@ -936,57 +954,64 @@ Window {
 
                                     // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                                    WebEngineView {
-                                        id: webView
-                                        objectName: "webView"
+                                    Loader {
+                                        id: webViewLoader
                                         anchors.fill: parent
-                                        // Make the view itself a layer to cooperate with ancestor clipping
-                                        layer.enabled: true
-                                        layer.smooth: true
-                                        // Avoid white square corners by letting parent background show through
-                                        backgroundColor: "transparent"
-                                        url: parent.visible ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
-                                        onUrlChanged: console.log("WebEngineView URL changed to:", url)
-                                        settings.webGLEnabled: true
-                                        settings.accelerated2dCanvasEnabled: true
-                                        settings.allowRunningInsecureContent: true
-                                        settings.javascriptEnabled: true
-                                        settings.localContentCanAccessRemoteUrls: true
-                                        onFullScreenRequested: function(request) {
-                                            request.accept();
-                                            root.visibility = Window.FullScreen
-                                        }
-                                    onLoadingChanged: function(loadRequest) {
-                                            if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                                console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
-                                            } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                                console.log("WebEngineView loaded successfully for", modelData);
-                                                // No rounding injection for Windy to preserve animations
-                                            }
-                                        }
+                                        // Load current item and neighbors for smooth vertical swiping
+                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1
+                                        visible: active
 
-                                        // Staggered reload for weather views
-                                        Connections {
-                                            target: backend
-                                            function onReloadWebContent() {
-                                                // Stagger based on index to prevent freeze
-                                                var delay = 1500 + (index * 500)
-                                                reloadTimer.interval = delay
-                                                reloadTimer.start()
+                                        sourceComponent: WebEngineView {
+                                            id: webView
+                                            objectName: "webView"
+                                            anchors.fill: parent
+                                            // Make the view itself a layer to cooperate with ancestor clipping
+                                            layer.enabled: true
+                                            layer.smooth: true
+                                            // Avoid white square corners by letting parent background show through
+                                            backgroundColor: "transparent"
+                                            url: parent.visible ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                            onUrlChanged: console.log("WebEngineView URL changed to:", url)
+                                            settings.webGLEnabled: true
+                                            settings.accelerated2dCanvasEnabled: true
+                                            settings.allowRunningInsecureContent: true
+                                            settings.javascriptEnabled: true
+                                            settings.localContentCanAccessRemoteUrls: true
+                                            onFullScreenRequested: function(request) {
+                                                request.accept();
+                                                root.visibility = Window.FullScreen
                                             }
-                                        }
-                                        Timer {
-                                            id: reloadTimer
-                                            repeat: false
-                                            onTriggered: {
-                                                if (parent.visible) { // Only reload if visible or about to be? 
-                                                    // Actually, reload all but staggered is safer.
-                                                    webView.reload()
-                                                    console.log("Weather view", index, "reloaded (staggered)")
-                                                } else {
-                                                    // If not visible, just reset URL to force reload when it becomes visible?
-                                                    // Or just reload anyway, staggered.
-                                                    webView.reload()
+                                            onLoadingChanged: function(loadRequest) {
+                                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                                    console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
+                                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                                    console.log("WebEngineView loaded successfully for", modelData);
+                                                    // No rounding injection for Windy to preserve animations
+                                                }
+                                            }
+
+                                            // Staggered reload for weather views
+                                            Connections {
+                                                target: backend
+                                                function onReloadWebContent() {
+                                                    // Stagger based on index to prevent freeze
+                                                    var delay = 1500 + (index * 500)
+                                                    reloadTimer.interval = delay
+                                                    reloadTimer.start()
+                                                }
+                                            }
+                                            Timer {
+                                                id: reloadTimer
+                                                repeat: false
+                                                onTriggered: {
+                                                    if (parent.visible) { // Only reload if visible or about to be? 
+                                                        // Actually, reload all but staggered is safer.
+                                                        webView.reload()
+                                                        console.log("Weather view", index, "reloaded (staggered)")
+                                                    } else {
+                                                        // If not visible, just reload anyway, staggered.
+                                                        webView.reload()
+                                                    }
                                                 }
                                             }
                                         }
@@ -1965,7 +1990,7 @@ Window {
                                 } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                     console.log("YouTube/Map WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
-                                    root._injectRoundedCorners(youtubeView, 8)
+                                    if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
                                     youtubeRetryTimer.stop(); // Stop any pending retries
                                 }
                             }
@@ -4383,7 +4408,7 @@ Window {
                                 zoomFactor: 0.6
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        root._injectRoundedCorners(xComView, 12)
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12)
                                     }
                                 }
 

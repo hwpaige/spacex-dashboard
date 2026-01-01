@@ -1,9 +1,3 @@
-import numpy as np
-import pandas as pd
-import fastf1
-import matplotlib
-matplotlib.use('Agg')  # Use non-interactive backend
-import matplotlib.pyplot as plt
 import os
 
 # Track rotations for F1 circuits
@@ -39,12 +33,19 @@ circuit_name_mapping = {
 
 # Rotation function
 def rotate(xy, *, angle):
+    import numpy as np
     rot_mat = np.array([[np.cos(angle), np.sin(angle)],
                         [-np.sin(angle), np.cos(angle)]])
     return np.matmul(xy, rot_mat)
 
 # Generate track map for a circuit
 def generate_track_map(circuit):
+    import numpy as np
+    import pandas as pd
+    import fastf1
+    import matplotlib
+    matplotlib.use('Agg')  # Use non-interactive backend
+    import matplotlib.pyplot as plt
     # Map circuit name to track_rotations key
     rotation_key = circuit_name_mapping.get(circuit, circuit)
     

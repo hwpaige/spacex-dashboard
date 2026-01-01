@@ -15,17 +15,15 @@ import logging
 from dateutil.parser import parse
 import pytz
 from dateutil.tz import tzlocal
-import pandas as pd
 import time
 import subprocess
 import signal
 import calendar
-from track_generator import generate_track_map
-# Plotly chart generation is now handled in functions.py
 import threading
 import functions as funcs
 from functions import (
     # status helpers
+    profiler,
     set_loader_status_callback,
     emit_loader_status,
     # cache io
@@ -374,11 +372,12 @@ class Backend(QObject):
         self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
         self._f1_chart_type = 'standings'  # 'standings', 'weather', 'telemetry', etc.
         self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
+        self._boot_mode = True
         self._isLoading = True
-        self._loading_status = "Initializing..."
         self._loading_status = "Initializing..."
         # Try to load initial data from cache to avoid empty UI on first load
         try:
+            profiler.mark("Backend: Loading Launch Cache")
             prev = load_launch_cache('previous')
             up = load_launch_cache('upcoming')
             self._launch_data = {
@@ -390,6 +389,7 @@ class Backend(QObject):
             self._launch_data = {'previous': [], 'upcoming': []}
 
         try:
+            profiler.mark("Backend: Loading F1 Cache")
             f1_sched = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
             f1_drivers = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
             f1_const = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
@@ -671,14 +671,23 @@ class Backend(QObject):
 
     def startDataLoader(self):
         """Start the data loading thread after WiFi check completes"""
+        profiler.mark("Backend: startDataLoader")
         logger.info("BOOT: startDataLoader called (legacy path)")
         self.setLoadingStatus("Checking network connectivity…")
         # Legacy path kept for compatibility; avoid time-based gating. We'll kick off background
         # connectivity check and, if online, start immediate data loading. No splash timers.
 
         def _initial_checks_worker():
+            # First, check actual WiFi status to update the UI and inform diagnostic checks
+            try:
+                connected, ssid = check_wifi_status()
+                self.wifiCheckReady.emit(connected, ssid)
+            except Exception as e:
+                logger.error(f"BOOT: Async WiFi check failed: {e}")
+                connected = self._wifi_connected
+
             src_dir = os.path.dirname(__file__)
-            res = perform_bootstrap_diagnostics(src_dir, self._wifi_connected)
+            res = perform_bootstrap_diagnostics(src_dir, connected)
             # Emit results; connected slot will run on the main thread
             try:
                 self.initialChecksReady.emit(*res)
@@ -1139,9 +1148,12 @@ class Backend(QObject):
     @pyqtProperty(str, notify=f1Changed)
     def f1ChartUrl(self):
         """Generate URL for interactive Plotly chart HTML for F1 data"""
-        logging.info("f1ChartUrl property accessed")
+        # During boot, return empty URL to avoid blocking main thread with heavy plotly imports
+        if getattr(self, '_boot_mode', True):
+            return self._get_empty_chart_url()
+            
+        profiler.mark("Property: f1ChartUrl Start")
         chart_type = getattr(self, '_f1_chart_type', 'standings')
-        logging.info(f"F1 chart URL: chart type = {chart_type}")
         
         try:
             stat_key = getattr(self, '_f1_chart_stat', 'points')
@@ -1154,7 +1166,9 @@ class Backend(QObject):
             with open(temp_file, 'w', encoding='utf-8') as f:
                 f.write(html)
 
-            return f'file:///{temp_file.replace("\\", "/")}'
+            res = f'file:///{temp_file.replace("\\", "/")}'
+            profiler.mark("Property: f1ChartUrl End")
+            return res
 
         except Exception as e:
             logging.error(f"F1 chart URL error: {e}")
@@ -1256,6 +1270,15 @@ class Backend(QObject):
         result = get_launch_trajectory_data(upcoming, previous)
         return result
 
+    @pyqtSlot(bool)
+    def setBootMode(self, val):
+        self._boot_mode = bool(val)
+        if not self._boot_mode:
+            profiler.mark("Disabling Boot Mode")
+            logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
+            self.f1Changed.emit()
+            profiler.mark("Boot Mode Disabled (Charts Triggered)")
+
     @pyqtSlot(result=QVariant)
     def get_next_race(self):
         return get_next_race_info(self._f1_data['schedule'], self._tz)
@@ -1303,6 +1326,7 @@ class Backend(QObject):
 
     @pyqtSlot(dict, dict, dict, list)
     def on_data_loaded(self, launch_data, f1_data, weather_data, narratives):
+        profiler.mark("Backend: on_data_loaded Start")
         logger.info("Backend: on_data_loaded called")
         self.setLoadingStatus("Data loaded successfully")
         logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
@@ -2246,6 +2270,7 @@ class Backend(QObject):
             self._network_check_in_progress = False
 
 if __name__ == '__main__':
+    profiler.mark("Main Execution Started")
     # Set console encoding to UTF-8 to handle Unicode characters properly
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
@@ -2300,13 +2325,13 @@ if __name__ == '__main__':
         QApplication.setStyle(fusion_style)
     
     # Start local HTTP server for serving HTML files
+    profiler.mark("Starting HTTP Server")
     server_thread = threading.Thread(target=start_http_server, daemon=True)
     server_thread.start()
     
-    app = QApplication(sys.argv)
-
     # Harden Qt WebEngine against background throttling before initialization
     try:
+        profiler.mark("WebEngine Throttling Setup")
         extra_flags = [
             "--disable-background-timer-throttling",
             "--disable-renderer-backgrounding",
@@ -2332,14 +2357,19 @@ if __name__ == '__main__':
     # Ensure Qt WebEngine QML types are initialized before loading QML
     # This prevents runtime errors where WebEngineView is unknown in QML on some setups
     try:
+        profiler.mark("QtWebEngineQuick Initialize")
         QtWebEngineQuick.initialize()
     except Exception as e:
         # If initialization is redundant or already done via QML import, ignore
         print(f"QtWebEngineQuick.initialize() notice: {e}")
+
+    profiler.mark("QApplication Initialization")
+    app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
     # Load fonts
+    profiler.mark("Loading Fonts")
     font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "D-DIN.ttf")
     if os.path.exists(font_path):
         QFontDatabase.addApplicationFont(font_path)
@@ -2753,14 +2783,13 @@ class ChartItem(QQuickPaintedItem):
 
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
-# Check WiFi status before creating Backend to ensure accurate initial state
-logger.info("BOOT: Checking initial WiFi status before creating Backend...")
-wifi_connected, wifi_ssid = check_wifi_status()
-logger.info(f"BOOT: Initial WiFi check result - connected: {wifi_connected}, SSID: {wifi_ssid}")
-
+# Create Backend immediately with default offline status to speed up UI presentation.
+# Initial WiFi check will run asynchronously to avoid blocking the main thread.
+profiler.mark("Creating Backend")
 logger.info("BOOT: Creating Backend instance...")
-backend = Backend(initial_wifi_connected=wifi_connected, initial_wifi_ssid=wifi_ssid)
-# Now start the data loader after WiFi is stable
+backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
+# Now start the data loader which will kick off background checks
+profiler.mark("Starting Data Loader")
 logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
 # Do not override the status here; startDataLoader already set a meaningful
@@ -2768,6 +2797,7 @@ backend.startDataLoader()
 # call in place could cause the UI to appear stuck on "Backend initialized..."
 # if the background thread hasn't applied subsequent statuses yet.
 
+profiler.mark("Initializing QML Engine")
 engine = QQmlApplicationEngine()
 # Connect QML warnings signal (list of QQmlError objects)
 def _log_qml_warnings(errors):
@@ -2778,6 +2808,7 @@ try:
     engine.warnings.connect(_log_qml_warnings)
 except Exception as _e:
     logger.warning(f"Could not connect engine warnings signal: {_e}")
+profiler.mark("Setting Context Properties")
 context = engine.rootContext()
 context.setContextProperty("backend", backend)
 context.setContextProperty("radarLocations", radar_locations)
@@ -2787,6 +2818,7 @@ context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__),
 context.setContextProperty("f1TeamsPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1_teams').replace('\\', '/'))
 context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
 
+profiler.mark("Preparing URLs")
 globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
 print(f"DEBUG: Globe file path: {globe_file_path}")
 print(f"DEBUG: Globe file exists: {os.path.exists(globe_file_path)}")
@@ -2805,9 +2837,14 @@ context.setContextProperty("videoUrl", "http://localhost:8080/youtube_embed.html
 
 
 from ui_qml import qml_code  # Load QML from external module
+profiler.mark("Engine LoadData Start")
 engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
+profiler.mark("Engine LoadData End")
 if not engine.rootObjects():
     logger.error("QML root object creation failed (see earlier QML errors above).")
     print("QML load failed. Check console for Qt errors.")
     sys.exit(-1)
+profiler.mark("App Startup Complete")
+backend.setBootMode(False)
+profiler.log_summary()
 sys.exit(app.exec())
