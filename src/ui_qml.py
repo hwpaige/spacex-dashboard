@@ -333,25 +333,26 @@ Window {
             }
         }
         function onWeatherChanged() {
-            // Only reload weather views if we are in SpaceX mode
-            if (backend.mode === "spacex" && typeof weatherSwipe !== 'undefined') {
-                for (var i = 0; i < weatherSwipe.count; i++) {
-                    var item = weatherSwipe.itemAt(i);
-                    if (!item) continue;
-                    var container = item.children && item.children.length > 0 ? item.children[0] : null;
-                    var webChild = null;
-                    if (container && container.children && container.children.length > 0) {
-                        for (var c = 0; c < container.children.length; c++) {
-                            var ch = container.children[c];
-                            if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
-                        }
-                    }
-                    if (webChild && webChild.reload) {
-                        try { webChild.reload(); console.log("Weather view", i, "reloaded (updateWeather)"); }
-                        catch (e) { console.log("Weather view", i, "reload failed:", e); }
-                    }
-                }
-            }
+            // Reload loop removed to prevent race condition with radarBaseUrl binding.
+            // Windy widget URL binding now handles updates reliably.
+            // if (backend.mode === "spacex" && typeof weatherSwipe !== 'undefined') {
+            //    for (var i = 0; i < weatherSwipe.count; i++) {
+            //        var item = weatherSwipe.itemAt(i);
+            //        if (!item) continue;
+            //        var container = item.children && item.children.length > 0 ? item.children[0] : null;
+            //        var webChild = null;
+            //        if (container && container.children && container.children.length > 0) {
+            //            for (var c = 0; c < container.children.length; c++) {
+            //                var ch = container.children[c];
+            //                if (ch && ch.reload && ch.url !== undefined) { webChild = ch; break; }
+            //            }
+            //        }
+            //        if (webChild && webChild.reload) {
+            //            try { webChild.reload(); console.log("Weather view", i, "reloaded (updateWeather)"); }
+            //            catch (e) { console.log("Weather view", i, "reload failed:", e); }
+            //        }
+            //    }
+            // }
         }
         function onUpdateGlobeTrajectory() {
             // Update trajectory when data loads
@@ -524,12 +525,22 @@ Window {
                                         if (trajectoryData) {
                                             plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                         }
+                                        // Set initial theme
+                                        plotGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+
                                         // Enforce rounded corners inside the page itself
                                         root._injectRoundedCorners(plotGlobeView, 8)
                                         // Ensure the plot card globe animation loop starts/resumes on initial load
                                         try {
                                             plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
                                         } catch (e) { console.log("Plot globe JS nudge error:", e); }
+                                    }
+                                }
+
+                                Connections {
+                                    target: backend
+                                    function onThemeChanged() {
+                                        plotGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                     }
                                 }
                             }
@@ -934,7 +945,8 @@ Window {
                                         layer.smooth: true
                                         // Avoid white square corners by letting parent background show through
                                         backgroundColor: "transparent"
-                                        url: parent.visible ? radarLocations[backend.location].replace("radar", modelData) : ""
+                                        url: parent.visible ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                        onUrlChanged: console.log("WebEngineView URL changed to:", url)
                                         settings.webGLEnabled: true
                                         settings.accelerated2dCanvasEnabled: true
                                         settings.allowRunningInsecureContent: true
@@ -1301,6 +1313,7 @@ Window {
 
             // Column 3: Launches or Races
             Rectangle {
+                id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -1308,14 +1321,25 @@ Window {
                 radius: 8
                 clip: true
                 visible: !isWindyFullscreen
+                property string launchViewMode: "list"
 
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
 
-                    ListView {
+                    StackLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        currentIndex: launchCard.launchViewMode === "calendar" ? 1 : 0
+                        clip: true
+
+                        // View 0: Existing List View
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+
+                            ListView {
+                        anchors.fill: parent
                         model: backend.eventModel
                         clip: true
                         spacing: 5
@@ -1460,6 +1484,325 @@ Window {
                         }
                     }
 
+                        } // End Item (List Container)
+
+                        // View 1: Swipeable Calendar View
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            visible: parent.currentIndex === 1
+                            
+                            id: calendarViewItem
+                            property var currentMonth: new Date()
+                            
+                            property var popupLaunches: []
+                            property string popupDateString: ""
+
+                            function getMonthName(date) {
+                                return date.toLocaleDateString(Qt.locale(), "MMMM yyyy")
+                            }
+
+                            function getStatusColor(status) {
+                                if (status === 'TBD') return "#FF9800"
+                                if (status === 'Success' || status === 'Go' || status === 'Go for Launch') return "#4CAF50"
+                                return "#F44336"
+                            }
+
+                            function showPopup(launches, dateVal) {
+                                popupLaunches = launches;
+                                popupDateString = Qt.formatDate(dateVal, "MMM d, yyyy");
+                                dayPopup.open();
+                            }
+
+                            Popup {
+                                id: dayPopup
+                                anchors.centerIn: parent
+                                width: Math.min(parent.width * 0.9, 300)
+                                height: Math.min(parent.height * 0.8, 400)
+                                modal: true
+                                focus: true
+                                closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                                
+                                background: Rectangle {
+                                    color: backend.theme === "dark" ? "#2a2e2e" : "#ffffff"
+                                    radius: 12
+                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.width: 1
+                                }
+                                
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    spacing: 2
+                                    
+                                    Text {
+                                        text: calendarViewItem.popupDateString
+                                        font.bold: true
+                                        font.pixelSize: 14
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+                                    
+                                    ListView {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        clip: true
+                                        model: calendarViewItem.popupLaunches
+                                        delegate: Column {
+                                            width: parent.width
+                                            spacing: 1
+                                            padding: 2
+                                            
+                                            Text { 
+                                                width: parent.width
+                                                text: modelData.mission 
+                                                wrapMode: Text.Wrap
+                                                font.bold: true 
+                                                font.pixelSize: 12 
+                                                color: backend.theme === "dark" ? "white" : "black" 
+                                            }
+                                            Text { text: modelData.rocket; font.pixelSize: 12; color: "#999999" }
+                                            Text { text: modelData.time + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                            Row {
+                                                spacing: 5
+                                                Rectangle {
+                                                   width: 10; height: 10; radius: 5
+                                                   color: calendarViewItem.getStatusColor(modelData.status)
+                                                   anchors.verticalCenter: parent.verticalCenter
+                                                }
+                                                Text { text: modelData.status; font.bold: true; font.pixelSize: 12; color: calendarViewItem.getStatusColor(modelData.status) }
+                                            }
+                                            Rectangle { width: parent.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
+                                        }
+                                    }
+                                    
+                                    Button {
+                                        text: "Close"
+                                        Layout.alignment: Qt.AlignHCenter
+                                        onClicked: dayPopup.close()
+                                    }
+                                }
+                            }
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 0
+
+                                // Month Header
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 30
+                                    color: "transparent"
+                                    
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        
+                                        // Previous Month
+                                        Text {
+                                            text: "\uf053"
+                                            font.family: "Font Awesome 5 Free"
+                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                            font.pixelSize: 12
+                                            Layout.preferredWidth: 30
+                                            horizontalAlignment: Text.AlignHCenter
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: calendarSwipe.decrementCurrentIndex()
+                                            }
+                                        }
+
+                                        Text {
+                                            text: calendarViewItem.getMonthName(calendarViewItem.currentMonth)
+                                            font.bold: true
+                                            font.pixelSize: 18
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            Layout.fillWidth: true
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+
+                                        // Next Month
+                                        Text {
+                                            text: "\uf054"
+                                            font.family: "Font Awesome 5 Free"
+                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                            font.pixelSize: 12
+                                            Layout.preferredWidth: 30
+                                            horizontalAlignment: Text.AlignHCenter
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                cursorShape: Qt.PointingHandCursor
+                                                onClicked: calendarSwipe.incrementCurrentIndex()
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                // Days of Week Header
+                                Row {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 20
+                                    Repeater {
+                                        model: ["S", "M", "T", "W", "T", "F", "S"]
+                                        Text {
+                                            width: parent.width / 7
+                                            text: modelData
+                                            font.pixelSize: 10
+                                            color: backend.theme === "dark" ? "#999999" : "#666666"
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
+                                    }
+                                }
+
+                                // Calendar Swipe View
+                                SwipeView {
+                                    id: calendarSwipe
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    clip: true
+                                    
+                                    // Start a few months back to allow history, but center on "today" logically
+                                    // Index 12 will be "current month" (relative offset 0)
+                                    currentIndex: 12
+                                    
+                                    onCurrentIndexChanged: {
+                                        var today = new Date()
+                                        var offset = currentIndex - 12
+                                        var newDate = new Date(today.getFullYear(), today.getMonth() + offset, 1)
+                                        parent.parent.currentMonth = newDate
+                                    }
+
+                                    Repeater {
+                                        model: 25 // Show range of +/- 12 months
+                                        
+                                        Item {
+                                            id: monthPage
+                                            property int monthOffset: index - 12
+                                            property date pageDate: {
+                                                var d = new Date()
+                                                return new Date(d.getFullYear(), d.getMonth() + monthOffset, 1)
+                                            }
+                                            
+                                            // Calculate grid logic
+                                            property int daysInMonth: new Date(pageDate.getFullYear(), pageDate.getMonth() + 1, 0).getDate()
+                                            property int startDayOfWeek: new Date(pageDate.getFullYear(), pageDate.getMonth(), 1).getDay()
+                                            
+                                            GridLayout {
+                                                anchors.fill: parent
+                                                anchors.margins: 5
+                                                columns: 7
+                                                rows: 6
+                                                rowSpacing: 2
+                                                columnSpacing: 2
+                                                
+                                                Repeater {
+                                                    model: 42 // 6 rows * 7 cols
+                                                    
+                                                    Rectangle {
+                                                        Layout.fillWidth: true
+                                                        Layout.fillHeight: true
+                                                        
+                                                        property int dayNum: index - parent.parent.startDayOfWeek + 1
+                                                        property bool isCurrentMonth: dayNum > 0 && dayNum <= parent.parent.daysInMonth
+                                                        property date cellDate: new Date(parent.parent.pageDate.getFullYear(), parent.parent.pageDate.getMonth(), dayNum)
+                                                        
+                                                        color: "transparent"
+                                                        visible: isCurrentMonth
+                                                        
+                                                        // Check for launches (find all on this day)
+                                                        property var dayLaunches: {
+                                                            var list = []
+                                                            if (!isCurrentMonth || !backend || !backend.allLaunchData) return list
+                                                            var dStr = cellDate.toISOString().substring(0,10)
+                                                            var all = backend.allLaunchData
+                                                            var check = function(arr, type) {
+                                                                if(!arr) return;
+                                                                for(var i=0; i<arr.length; i++) {
+                                                                    if(arr[i].date === dStr) {
+                                                                        var l = arr[i]; l.type = type;
+                                                                        list.push(l)
+                                                                    }
+                                                                }
+                                                            }
+                                                            check(all.previous, 'past')
+                                                            check(all.upcoming, 'upcoming')
+                                                            return list
+                                                        }
+                                                        
+                                                        // Selection/Highlight
+                                                        Rectangle {
+                                                            anchors.centerIn: parent
+                                                            width: Math.min(parent.width, parent.height) - 4
+                                                            height: width
+                                                            radius: width/2
+                                                            color: {
+                                                                if (dayLaunches.length > 0) {
+                                                                    return calendarViewItem.getStatusColor(dayLaunches[0].status)
+                                                                }
+                                                                // Today highlight
+                                                                var today = new Date()
+                                                                if (cellDate.toDateString() === today.toDateString()) return backend.theme === "dark" ? "#444" : "#ddd"
+                                                                return "transparent"
+                                                            }
+                                                            opacity: dayLaunches.length > 0 ? 0.2 : 1.0
+                                                            
+                                                            border.color: dayLaunches.length > 0 ? calendarViewItem.getStatusColor(dayLaunches[0].status) : "transparent"
+                                                            border.width: dayLaunches.length > 0 ? 1 : 0
+                                                        }
+
+                                                        // Inner Dots for launches
+                                                        Row {
+                                                            anchors.centerIn: parent
+                                                            anchors.verticalCenterOffset: 6
+                                                            spacing: 2
+                                                            visible: dayLaunches.length > 0
+                                                            
+                                                            Repeater {
+                                                                model: Math.min(dayLaunches.length, 3) // Cap at 3
+                                                                Rectangle {
+                                                                    width: 4; height: 4; radius: 2
+                                                                    color: calendarViewItem.getStatusColor(dayLaunches[index].status)
+                                                                }
+                                                            }
+                                                            // Add small plus if more than 3? No space really.
+                                                        }
+
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            anchors.verticalCenterOffset: -2
+                                                            text: isCurrentMonth ? dayNum : ""
+                                                            font.pixelSize: 12
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            font.bold: dayLaunches.length > 0
+                                                        }
+                                                        
+                                                        // Simple Tooltip logic
+                                                        ToolTip {
+                                                            visible: ma.containsMouse && dayLaunches.length > 0
+                                                            text: dayLaunches.length > 0 ? (dayLaunches.length + " Launch" + (dayLaunches.length > 1 ? "es" : "")) : ""
+                                                            delay: 500
+                                                        }
+                                                        MouseArea {
+                                                            id: ma
+                                                            anchors.fill: parent
+                                                            hoverEnabled: true
+                                                            cursorShape: dayLaunches.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                            onClicked: {
+                                                                if (dayLaunches.length > 0) {
+                                                                    calendarViewItem.showPopup(dayLaunches, cellDate)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } // End StackLayout
+
                     // Launch/Race view buttons container
                     Rectangle {
                         Layout.fillWidth: true
@@ -1476,7 +1819,8 @@ Window {
                             Repeater {
                                 model: backend.mode === "spacex" ? [
                                     {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
-                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"}
+                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"},
+                                    {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"} 
                                 ] : [
                                     {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Races"},
                                     {"type": "past", "icon": "\uf1da", "tooltip": "Past Races"}
@@ -1484,14 +1828,21 @@ Window {
                                 Rectangle {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
-                                    color: backend.eventType === modelData.type ?
+                                    // Highlight if:
+                                    // 1. We are in 'calendar' mode and this button is the calendar button
+                                    // 2. We are in 'list' mode and this button matches backend.eventType (upcoming/past)
+                                    property bool isActive: (modelData.type === "calendar") ? 
+                                                            (launchCard.launchViewMode === "calendar") : 
+                                                            (launchCard.launchViewMode !== "calendar" && backend.eventType === modelData.type)
+                                    
+                                    color: isActive ?
                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
                                     radius: 14
-                                    border.color: backend.eventType === modelData.type ?
+                                    border.color: isActive ?
                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                    border.width: backend.eventType === modelData.type ? 2 : 1
+                                    border.width: isActive ? 2 : 1
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     Behavior on border.color { ColorAnimation { duration: 200 } }
@@ -1508,7 +1859,15 @@ Window {
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
-                                        onClicked: backend.eventType = modelData.type
+
+                                        onClicked: {
+                                            if (modelData.type === "calendar") {
+                                                launchCard.launchViewMode = "calendar"
+                                            } else {
+                                                launchCard.launchViewMode = "list"
+                                                backend.eventType = modelData.type
+                                            }
+                                        }
                                     }
 
                                     ToolTip {
@@ -3977,12 +4336,23 @@ Window {
                                         if (trajectoryData) {
                                             globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
                                         }
+                                        
+                                        // Set initial theme
+                                        globeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+
                                         // Ensure the globe animation loop starts/resumes on initial load
                                         try {
                                             globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Globe animation start failed', e);}})();");
                                         } catch (e) { console.log("Globe JS nudge error:", e); }
                                     } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                         console.log("Globe HTML failed to load:", loadRequest.errorString);
+                                    }
+                                }
+
+                                Connections {
+                                    target: backend
+                                    function onThemeChanged() {
+                                        globeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                     }
                                 }
                             }

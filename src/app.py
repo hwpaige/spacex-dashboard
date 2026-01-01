@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 import logging
 from dateutil.parser import parse
 import pytz
+from dateutil.tz import tzlocal
 import pandas as pd
 import time
 import subprocess
@@ -329,6 +330,7 @@ class Backend(QObject):
     f1Changed = pyqtSignal()
     themeChanged = pyqtSignal()
     locationChanged = pyqtSignal()
+    radarBaseUrlChanged = pyqtSignal()
     eventModelChanged = pyqtSignal()
     wifiNetworksChanged = pyqtSignal()
     wifiConnectedChanged = pyqtSignal()
@@ -402,7 +404,9 @@ class Backend(QObject):
 
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
         self._weather_data = {}
-        self._tz = pytz.timezone(location_settings[self._location]['timezone'])
+        # Initialize radar base URL
+        self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+        self._tz = tzlocal()
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
         self._update_available = False
@@ -939,7 +943,11 @@ class Backend(QObject):
     def location(self, value):
         if self._location != value:
             self._location = value
-            self._tz = pytz.timezone(location_settings[self._location]['timezone'])
+            # self._tz = pytz.timezone(location_settings[self._location]['timezone']) # Using usage system local time instead
+            logger.info(f"Backend: Location changed to {self._location}")
+            # Explicitly update radar URL property on location change
+            self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+            self.radarBaseUrlChanged.emit()
             self.locationChanged.emit()
             self.weatherChanged.emit()
             self.update_event_model()
@@ -1000,6 +1008,11 @@ class Backend(QObject):
             self.get_next_race(), 
             self._tz
         )
+
+    @pyqtProperty(QVariant, notify=launchesChanged)
+    def allLaunchData(self):
+        """Expose all launch data (combined previous and upcoming) for calendar view"""
+        return self._launch_data
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrends(self):
@@ -1223,6 +1236,14 @@ class Backend(QObject):
     @pyqtSlot(result=QVariant)
     def get_upcoming_launches(self):
         return get_upcoming_launches_list(self._launch_data['upcoming'], self._tz)
+
+    @pyqtProperty(str, notify=radarBaseUrlChanged)
+    def radarBaseUrl(self):
+        return self._radar_base_url
+
+    # Replaces getRadarUrl method
+    # @pyqtSlot(str, result=str)
+    # def getRadarUrl(self, location_name):...
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):

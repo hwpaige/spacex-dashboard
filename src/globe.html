@@ -44,6 +44,15 @@
             color: white;
             /* Bright white on hover */
         }
+
+        /* Light Mode Styles */
+        body.light-mode #playPauseBtn {
+            color: rgba(0, 0, 0, 0.7);
+        }
+
+        body.light-mode #playPauseBtn:hover {
+            color: black;
+        }
     </style>
     <script>
         // Lightweight loader that ensures THREE is available even if we started offline.
@@ -235,7 +244,7 @@
                         scene.add(globe);
 
                         // Set initial tilt for better orbit visibility
-                        globe.rotation.x = 0.3;
+                        globe.rotation.x = 0.6;
                         // Focus on US (approx 0.5 radians: 4.7 was Africa, increasing moves West)
                         globe.rotation.y = 0.5;
 
@@ -1070,6 +1079,16 @@
 
         // Initial instrumentation
         try { console.log('[globe] script loaded; awaiting boot'); } catch (e) { }
+
+        // Theme handling
+        window.setTheme = function (theme) {
+            try { console.log('[globe] setTheme:', theme); } catch (e) { }
+            if (theme === 'light') {
+                document.body.classList.add('light-mode');
+            } else {
+                document.body.classList.remove('light-mode');
+            }
+        };
     </script>
 </body>
 
