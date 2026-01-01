@@ -661,6 +661,15 @@ def fetch_launches():
                     break  # No more new launches
                 
                 try:
+                    launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
+                    landing_type = None
+                    landing_location = None
+                    if isinstance(launcher_stage, list) and len(launcher_stage) > 0:
+                        landing = launcher_stage[0].get('landing')
+                        if landing:
+                            landing_type = landing.get('type', {}).get('name')
+                            landing_location = landing.get('location', {}).get('name')
+
                     launch_data = {
                         'id': launch.get('id'),
                         'mission': launch['name'],
@@ -671,7 +680,9 @@ def fetch_launches():
                         'rocket': launch['rocket']['configuration']['name'],
                         'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                         'pad': launch['pad']['name'],
-                        'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
+                        'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
+                        'landing_type': landing_type,
+                        'landing_location': landing_location
                     }
                     new_launches.append(launch_data)
                 except Exception as e:
@@ -714,7 +725,12 @@ def fetch_launches():
     # Load upcoming launches cache
     up_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_UPCOMING)
     upcoming_cache = load_launch_cache('upcoming')
-    if upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING:
+    
+    # Check if cache is valid and has our new fields
+    cache_is_fresh = upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING
+    cache_is_updated = upcoming_cache and upcoming_cache['data'] and 'landing_type' in upcoming_cache['data'][0]
+    
+    if cache_is_fresh and cache_is_updated:
         upcoming_launches = upcoming_cache['data']
         logger.info("Using persistent cached upcoming launches")
         try:
@@ -738,8 +754,18 @@ def fetch_launches():
             response.raise_for_status()
             data = response.json()
             logger.info(f"API response received, status: {response.status_code}")
-            upcoming_launches = [
-                {
+            upcoming_launches = []
+            for launch in data['results']:
+                launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
+                landing_type = None
+                landing_location = None
+                if isinstance(launcher_stage, list) and len(launcher_stage) > 0:
+                    landing = launcher_stage[0].get('landing')
+                    if landing:
+                        landing_type = landing.get('type', {}).get('name')
+                        landing_location = landing.get('location', {}).get('name')
+                
+                upcoming_launches.append({
                     'id': launch.get('id'),
                     'mission': launch['name'],
                     'date': launch['net'].split('T')[0],
@@ -749,9 +775,10 @@ def fetch_launches():
                     'rocket': launch['rocket']['configuration']['name'],
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
-                    'video_url': launch.get('vidURLs', [{}])[0].get('url', '')
-                } for launch in data['results']
-            ]
+                    'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
+                    'landing_type': landing_type,
+                    'landing_location': landing_location
+                })
             save_launch_cache('upcoming', upcoming_launches, current_time)
             logger.info(f"Successfully fetched and saved {len(upcoming_launches)} upcoming launches")
             try:
@@ -2467,8 +2494,9 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         launch_site.get('lat', 0.0)
     )
 
-    ORBIT_CACHE_VERSION = 'v5'
-    cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}"
+    ORBIT_CACHE_VERSION = 'v8'
+    landing_type = next_launch.get('landing_type', 'RTLS')
+    cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}"
     
     traj_cache = {}
     cache_loaded = load_cache_from_file(TRAJECTORY_CACHE_FILE)
@@ -2481,10 +2509,12 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         return {
             'launch_site': cached.get('launch_site', launch_site),
             'trajectory': cached.get('trajectory', []),
+            'booster_trajectory': cached.get('booster_trajectory', []),
             'orbit_path': cached.get('orbit_path', []),
             'orbit': orbit or cached.get('orbit', normalized_orbit),
             'mission': mission_name,
-            'pad': pad
+            'pad': pad,
+            'landing_type': landing_type
         }
 
     logger.info(f"Trajectory cache miss for {cache_key}; generating new trajectory")
@@ -2611,13 +2641,43 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         except Exception as e:
             logger.warning(f"Tangent match failed: {e}")
 
+    # Booster Return Trajectory (RTLS vs ASDS simulation)
+    booster_trajectory = []
+    if trajectory and len(trajectory) > 5:
+        try:
+            # Separation usually around 1/5th of the way to orbit
+            sep_idx = max(2, len(trajectory) // 5)
+            ascent_part = trajectory[:sep_idx+1]
+            sep_point = trajectory[sep_idx]
+
+            l_type = (landing_type or '').upper()
+            if 'ASDS' in l_type or 'DRONE' in l_type:
+                # Droneship landing: continues downrange to a point further along the trajectory
+                # Landing point is typically around 1/3rd of the way along the orbital trajectory
+                landing_idx = min(len(trajectory) - 1, max(sep_idx + 3, len(trajectory) // 3))
+                landing_point = trajectory[landing_idx]
+                
+                # Curve from separation to droneship (suborbital arc)
+                return_part = generate_curved_trajectory(sep_point, landing_point, 15, orbit_type='suborbital')
+                booster_trajectory = ascent_part + return_part
+                logger.info(f"Generated ASDS booster trajectory to index {landing_idx} ({landing_type})")
+            else:
+                # Default RTLS: returns to launch site
+                return_part = generate_curved_trajectory(sep_point, launch_site, 15, orbit_type='suborbital')
+                booster_trajectory = ascent_part + return_part
+                logger.info(f"Generated RTLS booster trajectory back to launch site ({landing_type})")
+        except Exception as e:
+            logger.warning(f"Booster trajectory generation failed: {e}")
+
     result = {
         'launch_site': launch_site,
         'trajectory': trajectory,
+        'booster_trajectory': booster_trajectory,
         'orbit_path': orbit_path,
         'orbit': orbit,
         'mission': mission_name,
-        'pad': pad
+        'pad': pad,
+        'landing_type': landing_type
     }
 
     # Persist to cache
@@ -2625,10 +2685,12 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         traj_cache[cache_key] = {
             'launch_site': launch_site,
             'trajectory': trajectory,
+            'booster_trajectory': booster_trajectory,
             'orbit_path': orbit_path,
             'orbit': normalized_orbit,
             'inclination_deg': assumed_incl,
-            'model': 'v6-tail-on-orbit-centralized'
+            'landing_type': landing_type,
+            'model': 'v8-booster-asds-rtls'
         }
         save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
     except Exception as e:

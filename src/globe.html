@@ -633,6 +633,86 @@
                 const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
                 trajectoryGroup.add(glowMesh);
 
+                // 3. Booster Return Trajectory (Orange)
+                if (trajectoryData.booster_trajectory && trajectoryData.booster_trajectory.length >= 2) {
+                    console.log("Creating booster trajectory with", trajectoryData.booster_trajectory.length, "points");
+                    const boosterPoints = [];
+                    trajectoryData.booster_trajectory.forEach((point, index) => {
+                        const phi = (90 - point.lat) * (Math.PI / 180);
+                        const theta = (point.lon + 180) * (Math.PI / 180);
+
+                        // Booster stays low
+                        const progress = index / (trajectoryData.booster_trajectory.length - 1);
+                        const radius = 1.01 + 0.012 * Math.sin(progress * Math.PI);
+
+                        const x = -(radius * Math.sin(phi) * Math.cos(theta));
+                        const z = radius * Math.sin(phi) * Math.sin(theta);
+                        const y = radius * Math.cos(phi);
+                        boosterPoints.push(new THREE.Vector3(x, y, z));
+                    });
+
+                    const boosterCurve = new THREE.CatmullRomCurve3(boosterPoints);
+                    const boosterTubeGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, 0.0025, 8, false);
+                    const boosterMat = new THREE.MeshBasicMaterial({
+                        color: 0xFFA500, // Orange
+                        transparent: true,
+                        opacity: 0.85,
+                        side: THREE.DoubleSide
+                    });
+                    const boosterMesh = new THREE.Mesh(boosterTubeGeo, boosterMat);
+                    trajectoryGroup.add(boosterMesh);
+
+                    // Booster Glow
+                    const boosterGlowGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, 0.005, 8, false);
+                    const boosterGlowMat = new THREE.MeshBasicMaterial({
+                        color: 0xFFA500,
+                        transparent: true,
+                        opacity: 0.35,
+                        blending: THREE.AdditiveBlending,
+                        side: THREE.DoubleSide,
+                        depthWrite: false
+                    });
+                    const boosterGlowMesh = new THREE.Mesh(boosterGlowGeo, boosterGlowMat);
+                    trajectoryGroup.add(boosterGlowMesh);
+
+                    // Add a small landing pad marker if it's an ASDS or RTLS landing
+                    const isASDS = (trajectoryData.landing_type || '').toUpperCase().includes('ASDS') || 
+                                 (trajectoryData.landing_type || '').toUpperCase().includes('DRONE');
+                    const isRTLS = (trajectoryData.landing_type || '').toUpperCase().includes('RTLS');
+
+                    if (isASDS || isRTLS) {
+                        const lastPoint = boosterPoints[boosterPoints.length - 1];
+                        // Create a small circular pad
+                        const padRadius = isASDS ? 0.008 : 0.006;
+                        const padGeo = new THREE.CircleGeometry(padRadius, 16);
+                        const padMat = new THREE.MeshBasicMaterial({ 
+                            color: isASDS ? 0x00FFFF : 0x00FF00, // Cyan for droneship, Green for RTLS
+                            transparent: true,
+                            opacity: 0.8,
+                            side: THREE.DoubleSide 
+                        });
+                        const pad = new THREE.Mesh(padGeo, padMat);
+                        pad.position.copy(lastPoint);
+                        // Orient pad to face away from earth center (up)
+                        pad.lookAt(lastPoint.clone().multiplyScalar(2));
+                        trajectoryGroup.add(pad);
+                        
+                        // Add a subtle glow to the pad
+                        const padGlowGeo = new THREE.CircleGeometry(padRadius * 1.5, 16);
+                        const padGlowMat = new THREE.MeshBasicMaterial({
+                            color: isASDS ? 0x00FFFF : 0x00FF00,
+                            transparent: true,
+                            opacity: 0.3,
+                            blending: THREE.AdditiveBlending,
+                            side: THREE.DoubleSide
+                        });
+                        const padGlow = new THREE.Mesh(padGlowGeo, padGlowMat);
+                        padGlow.position.copy(lastPoint);
+                        padGlow.lookAt(lastPoint.clone().multiplyScalar(2));
+                        trajectoryGroup.add(padGlow);
+                    }
+                }
+
                 // Add trajectory group as a child of the globe
                 if (globe) {
                     globe.add(trajectoryGroup);
