@@ -2072,7 +2072,7 @@ Window {
                                             anchors.rightMargin: 12
                                             height: 1
                                             color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
-                                            visible: index < ListView.view.count - 1
+                                            visible: ListView.view && index < ListView.view.count - 1
                                         }
                                     }
                                 }
