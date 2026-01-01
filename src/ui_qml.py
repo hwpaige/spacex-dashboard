@@ -3966,6 +3966,7 @@ Window {
             }
 
             // Drag handle at bottom
+            /*
             Rectangle {
                 width: parent.width
                 height: 60  // Reduced height for more compact touch area
@@ -4041,7 +4042,9 @@ Window {
                     }
                 }
             }
+            */
 
+            /*
             ColumnLayout {
                 anchors.fill: parent
                 anchors.topMargin: 10
@@ -4405,6 +4408,7 @@ Window {
                     }
                 }
             }
+            */
         }
 
         }
