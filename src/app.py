@@ -2791,7 +2791,7 @@ globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.ht
 print(f"DEBUG: Globe file path: {globe_file_path}")
 print(f"DEBUG: Globe file exists: {os.path.exists(globe_file_path)}")
 
-earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture_hd.jpg')
+earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
 print(f"DEBUG: Earth texture path: {earth_texture_path}")
 print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
 
