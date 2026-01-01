@@ -2241,8 +2241,8 @@ if __name__ == '__main__':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
             "--disable-web-security --allow-running-insecure-content "
-            "--disable-gpu-sandbox --disable-software-rasterizer "
-            "--disable-gpu-driver-bug-workarounds --no-sandbox"
+            "--disable-software-rasterizer "
+            "--disable-gpu-driver-bug-workarounds"
         )
     elif platform.system() == 'Linux':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (

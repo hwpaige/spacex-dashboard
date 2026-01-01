@@ -731,9 +731,37 @@ def fetch_launches():
 
 
 def fetch_narratives():
-    """Fetch witty launch narratives from the API with fallback and caching."""
+    """Fetch witty launch narratives from the API with fallback and caching, returning structured data."""
     logger.info("Fetching narratives")
     narratives = []
+
+    def parse_narratives(raw_list):
+        """Parse list of strings into list of dicts {date, text}."""
+        parsed = []
+        for item in raw_list:
+            if isinstance(item, dict):
+                # Already parsed?
+                parsed.append(item)
+                continue
+            if not isinstance(item, str):
+                continue
+            
+            # Pattern: "M/D HHMM: Description"
+            # e.g. "7/1 2104: Falcon 9..."
+            match = re.match(r'^(\d{1,2}/\d{1,2}\s+\d{4}):\s*(.*)', item)
+            if match:
+                parsed.append({
+                    'date': match.group(1),
+                    'text': match.group(2),
+                    'full': item
+                })
+            else:
+                parsed.append({
+                    'date': '',
+                    'text': item,
+                    'full': item
+                })
+        return parsed
 
     # Try loading from cache first
     try:
@@ -741,6 +769,9 @@ def fetch_narratives():
         current_time = datetime.now(pytz.UTC)
         if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_NARRATIVES:
             logger.info("Using cached narratives")
+            # Ensure cached data is parsed (upgrading old string cache if needed)
+            if cache['data'] and isinstance(cache['data'][0], str):
+                 return parse_narratives(cache['data'])
             return cache['data']
     except Exception as e:
         logger.warning(f"Failed to load narratives cache: {e}")
@@ -752,10 +783,13 @@ def fetch_narratives():
         # Fallback to cache if available (even if stale)
         if cache and cache.get('data'):
             logger.info("Using stale cached narratives as fallback")
-            return cache['data']
+            data = cache['data']
+            if data and isinstance(data[0], str):
+                return parse_narratives(data)
+            return data
         # Final fallback to hardcoded descriptions
         logger.info("Using hardcoded fallback narratives")
-        return LAUNCH_DESCRIPTIONS
+        return parse_narratives(LAUNCH_DESCRIPTIONS)
 
     try:
         url = "https://launch-narrative-api-dafccc521fb8.herokuapp.com/recent_launches_narratives"
@@ -770,21 +804,21 @@ def fetch_narratives():
         data = response.json()
 
         # The API returns a dict with 'descriptions' key
+        raw_narratives = []
         if isinstance(data, dict) and 'descriptions' in data:
-            narratives = data['descriptions']
-            if isinstance(narratives, list):
-                save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
-                logger.info(f"Fetched and cached {len(narratives)} narratives")
-                return narratives
+            raw_narratives = data['descriptions']
+        # Fallback if top-level list
+        elif isinstance(data, list):
+            raw_narratives = data
+        else:
+            logger.warning(f"Narratives API returned unexpected format: {type(data)}")
 
-        # Fallback if top-level list (in case API changes back)
-        if isinstance(data, list):
-            narratives = data
+        if raw_narratives:
+            # Parse before caching
+            narratives = parse_narratives(raw_narratives)
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
             logger.info(f"Fetched and cached {len(narratives)} narratives")
             return narratives
-
-        logger.warning(f"Narratives API returned unexpected format: {type(data)}")
 
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
@@ -792,11 +826,14 @@ def fetch_narratives():
     # Fallback to cache if available (even if stale)
     if cache and cache.get('data'):
         logger.info("Using stale cached narratives as fallback")
-        return cache['data']
+        data = cache['data']
+        if data and isinstance(data[0], str):
+            return parse_narratives(data)
+        return data
 
     # Final fallback to hardcoded descriptions
     logger.info("Using hardcoded fallback narratives")
-    return LAUNCH_DESCRIPTIONS
+    return parse_narratives(LAUNCH_DESCRIPTIONS)
 
 
 

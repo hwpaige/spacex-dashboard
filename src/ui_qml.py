@@ -5,7 +5,7 @@ import QtQuick.Controls
 import QtQuick.Layouts
 import Charts 1.0
 import QtWebEngine
-import QtQuick.Effects
+
 // Qt5Compat.GraphicalEffects (OpacityMask) removed to avoid hard dependency
 
 Window {
@@ -1830,8 +1830,8 @@ Window {
                         border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
                         z: 0
-                        // Fade out as tray expands
-                        opacity: 1.0 - Math.min(1.0, narrativeTray.height / 28.0)
+                        // Fade out as tray expands (starts fading when tray is 2x ticker height)
+                        opacity: 1.0 - Math.min(1.0, narrativeTray.height / 56.0)
                     }
 
                     // Clipped container for scrolling text
@@ -1842,12 +1842,21 @@ Window {
                         Text {
                             id: tickerText
                             anchors.verticalCenter: parent.verticalCenter
-                            text: backend.launchDescriptions.join(" \\ ")
+                            text: {
+                                var narratives = backend.launchDescriptions
+                                var textList = []
+                                for (var i = 0; i < narratives.length; i++) {
+                                    var item = narratives[i]
+                                    // Use 'full' if object, otherwise use item directly (legacy string)
+                                    textList.push((typeof item === "object" && item.full) ? item.full : item)
+                                }
+                                return textList.join(" \\ ")
+                            }
                             color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
-                            // Fade out as tray expands (stays consistent with ticker height)
-                            opacity: 1.0 - Math.min(1.0, narrativeTray.height / 28.0)
+                            // Fade out as tray expands (starts fading when tray is 2x ticker height)
+                            opacity: 1.0 - Math.min(1.0, narrativeTray.height / 56.0)
 
                             SequentialAnimation on x {
                                 loops: Animation.Infinite
@@ -1921,6 +1930,7 @@ Window {
                         closePolicy: Popup.NoAutoClose
                         
                         property real expandedHeight: 220 // Taller list
+                        opacity: height / expandedHeight // Fade in/out based on drag position
                         
                         Behavior on height {
                             NumberAnimation {
@@ -1930,39 +1940,11 @@ Window {
                         }
                         
                         background: Item {
-                            // Tesla-style real-time blur (Glassmorphism)
-                            ShaderEffectSource {
-                                id: blurSource
-                                sourceItem: centralContent
-                                // Map the tray's global position back to the source item's coordinate space
-                                sourceRect: narrativeTray.height > 0 ? 
-                                            Qt.rect(mapToItem(centralContent, 0, 0).x,
-                                                    mapToItem(centralContent, 0, 0).y,
-                                                    narrativeTray.width,
-                                                    narrativeTray.height) : Qt.rect(0,0,0,0)
-                                live: narrativeTray.visible
-                                hideSource: false
-                                visible: false
-                                // Downsample for "thicker" blur look
-                                textureSize: Qt.size(parent.width / 4, parent.height / 4)
-                                smooth: true
-                            }
-
-                            MultiEffect {
-                                id: blurEffect
-                                anchors.fill: parent
-                                source: blurSource
-                                blurEnabled: true
-                                blur: 1.0
-                                blurMax: 96 // Increased for stronger effect
-                                opacity: 1.0
-                            }
-
                             Rectangle {
                                 id: trayBackground
                                 anchors.fill: parent
-                                // Slightly more transparent for better glass look
-                                color: backend.theme === "dark" ? "#cc2a2e2e" : "#ccf0f0f0"
+                                // 90% opacity (E6 hex)
+                                color: backend.theme === "dark" ? "#e62a2e2e" : "#e6f0f0f0"
                                 radius: 14
                                 border.width: 1
                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
@@ -2029,31 +2011,73 @@ Window {
                             ListView {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.margins: 4
+                                Layout.margins: 0
                                 // Extend right to the bottom edge
-                                Layout.bottomMargin: 2 
+                                Layout.bottomMargin: 0 
                                 Layout.topMargin: 0
                                 clip: true
                                 model: backend.launchDescriptions
-                                spacing: 4
+                                spacing: 0
                                 
-                                delegate: Rectangle {
+                                delegate: Item {
                                     width: ListView.view.width
-                                    height: Math.max(30, narrativeText.implicitHeight + 10)
-                                    color: "transparent"
+                                    height: contentLayout.implicitHeight + 16
                                     
-                                    Text {
-                                        id: narrativeText
-                                        text: modelData
+                                    Rectangle {
                                         anchors.fill: parent
-                                        anchors.margins: 5
-                                        wrapMode: Text.Wrap
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                        font.pixelSize: 12
-                                        font.family: "D-DIN"
-                                        verticalAlignment: Text.AlignVCenter
+                                        color: "transparent"
+                                        
+                                        RowLayout {
+                                            id: contentLayout
+                                            anchors.fill: parent
+                                            anchors.margins: 8
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            spacing: 12
+                                            
+                                            Text {
+                                                id: dateText
+                                                // Handle both structured object and legacy string
+                                                text: (typeof modelData === "object" && modelData.date) ? modelData.date : ""
+                                                visible: text !== ""
+                                                color: backend.theme === "dark" ? "#88ffffff" : "#88000000" // Muted opacity
+                                                font.pixelSize: 13
+                                                font.family: "D-DIN"
+                                                font.bold: true
+                                                Layout.alignment: Qt.AlignTop
+                                                Layout.preferredWidth: implicitWidth
+                                                Layout.fillHeight: true 
+                                            }
+
+                                            Text {
+                                                id: narrativeText
+                                                // Handle both structured object and legacy string
+                                                text: (typeof modelData === "object" && modelData.text) ? modelData.text : modelData
+                                                Layout.fillWidth: true
+                                                Layout.alignment: Qt.AlignTop
+                                                wrapMode: Text.Wrap
+                                                color: backend.theme === "dark" ? "#dddddd" : "#333333"
+                                                font.pixelSize: 13
+                                                font.family: "D-DIN"
+                                                lineHeight: 1.2
+                                            }
+                                        }
+
+                                        // Subtle separator
+                                        Rectangle {
+                                            anchors.bottom: parent.bottom
+                                            anchors.left: parent.left
+                                            anchors.right: parent.right
+                                            anchors.leftMargin: 12
+                                            anchors.rightMargin: 12
+                                            height: 1
+                                            color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
+                                            visible: index < ListView.view.count - 1
+                                        }
                                     }
                                 }
+
+
                             }
                         }
                     }
