@@ -2527,6 +2527,9 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                 return 'GTO'
             if 'suborbital' in label:
                 return 'Suborbital'
+            # Explicit Polar/SSO detection
+            if any(k in label for k in ['polar', 'sso', 'sun-synchronous']):
+                return 'LEO-Polar'
             if 'leo' in label or 'low earth orbit' in label:
                 if 'Vandenberg' in site_name:
                     return 'LEO-Polar'
@@ -2540,10 +2543,11 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     # Resolve an inclination assumption
     def _resolve_inclination_deg(norm_orbit: str, site_name: str, site_lat: float) -> float:
         try:
-            if 'iss' in (orbit or '').lower():
+            label = (orbit or '').lower()
+            if 'iss' in label:
                 return 51.6
-            if norm_orbit == 'LEO-Polar':
-                return 97.0
+            if norm_orbit == 'LEO-Polar' or 'sso' in label or 'sun-synchronous' in label:
+                return 97.5 # Better average for SSO
             if norm_orbit == 'LEO-Equatorial':
                 base = abs(site_lat)
                 return max(20.0, min(60.0, base + 0.5))
