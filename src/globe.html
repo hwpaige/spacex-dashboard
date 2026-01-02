@@ -488,65 +488,26 @@
             }
 
             if (!trajectoryData || !trajectoryData.trajectory || trajectoryData.trajectory.length < 2) {
-                console.log("No valid trajectory data");
+                console.log("No valid trajectory data received:", trajectoryData);
                 return;
             }
 
-            console.log("Creating trajectory with", trajectoryData.trajectory.length, "points");
-            console.log("Orbit path present:", !!trajectoryData.orbit_path, "with", trajectoryData.orbit_path ? trajectoryData.orbit_path.length : 0, "points");
+            console.log("Updating globe trajectory for mission:", trajectoryData.mission);
+            console.log("Trajectory points:", trajectoryData.trajectory.length);
+            console.log("Booster points:", trajectoryData.booster_trajectory ? trajectoryData.booster_trajectory.length : 0);
+            console.log("Landing type:", trajectoryData.landing_type);
 
             try {
-                // Determine a physically sensible visual radius for the orbit based on orbit type.
-                // We cannot draw true scale (e.g., GEO ~ 6.6x Earth radius), so we compress with a cap.
-                const EARTH_RADIUS_KM = 6371.0;
-                function chooseOrbitAltKm(orbitLabel) {
-                    const o = (orbitLabel || '').toString().toLowerCase();
-                    if (o.includes('suborbital')) return 100;            // ~Kármán line
-                    if (o.includes('sso') || o.includes('sun-synchronous')) return 550; // common SSO band
-                    if (o.includes('polar')) return 600;                 // typical polar LEO
-                    if (o.includes('leo')) return 400;                   // ISS-like LEO
-                    if (o.includes('gto') || o.includes('geostationary transfer')) return 20000; // representative altitude
-                    if (o.includes('geo') || o.includes('geostationary')) return 35786; // GEO altitude
-                    if (o.includes('meo') || o.includes('gps')) return 20200; // MEO/GNSS
-                    if (o.includes('heeo') || o.includes('molniya')) return 40000; // highly elliptical apogee representative
-                    return 800; // default LEO-ish
-                }
-                function computeOrbitRadius(orbitLabel) {
-                    const altKm = chooseOrbitAltKm(orbitLabel);
-                    // Visual compression: add relative altitude, capped to +8%
-                    let r = 1.0 + Math.min(altKm / EARTH_RADIUS_KM, 0.08);
-                    // Keep above clouds layer (1.01) with a small margin
-                    if (r < 1.012) r = 1.012;
-                    // Hard safety clamp to avoid drawing too far from globe
-                    if (r > 1.08) r = 1.08;
-                    return r;
-                }
-
-                const orbitLabel = trajectoryData && trajectoryData.orbit ? trajectoryData.orbit : '';
-                const ORBIT_RADIUS = computeOrbitRadius(orbitLabel);
-                const TAIL_ZFIGHT_EPS = 0.0006; // keep trajectory just below orbit line to avoid z-fighting
-                console.log(`Orbit label: '${orbitLabel}' -> visual radius ${ORBIT_RADIUS.toFixed(4)}`);
                 // Create trajectory points from the curved lat/lon data
                 const points = [];
 
-                // Constants to keep visual logic centralized
-                const TRAJ_START_RADIUS = 1.01; // Trajectory slightly above surface at liftoff
-                const TRAJ_BULGE_MAX = 0.02;    // Max additional bulge at mid-arc (will be clamped)
-
                 trajectoryData.trajectory.forEach((point, index) => {
-                    // Convert lat/lon to 3D coordinates on sphere with subtle arc height
+                    // Convert lat/lon to 3D coordinates on sphere
                     const phi = (90 - point.lat) * (Math.PI / 180);
                     const theta = (point.lon + 180) * (Math.PI / 180);
 
-                    // Ensure the tail of the trajectory meets the orbit radius visually.
-                    // We interpolate the base trajectory radius from liftoff to orbit radius,
-                    // and add a small mid-arc bulge that goes to zero at both ends.
-                    const progress = index / (trajectoryData.trajectory.length - 1);
-                    const baseInterp = TRAJ_START_RADIUS + (ORBIT_RADIUS - TRAJ_START_RADIUS) * progress;
-                    const bulge = TRAJ_BULGE_MAX * Math.sin(progress * Math.PI); // 0 at ends, max at middle
-                    let radius = baseInterp + bulge;
-                    // Do not exceed the orbit radius to avoid separation; keep a tiny epsilon below to prevent z-fighting
-                    if (radius > ORBIT_RADIUS - TAIL_ZFIGHT_EPS) radius = ORBIT_RADIUS - TAIL_ZFIGHT_EPS;
+                    // Use the radius provided by the backend, or fallback to 1.012
+                    const radius = (typeof point.r === 'number') ? point.r : 1.012;
 
                     const x = -(radius * Math.sin(phi) * Math.cos(theta));
                     const z = radius * Math.sin(phi) * Math.sin(theta);
@@ -555,26 +516,17 @@
                     points.push(new THREE.Vector3(x, y, z));
                 });
 
-                console.log("Created", points.length, "3D points");
-
                 // Create color gradient for the trajectory
                 // REVERSED: From Electric Cyan (#00FFFF) at Start to Fiery Orange (#FF4500) at End
                 const colors = [];
-                const colorStart = new THREE.Color(0x00FFFF);
-                const colorEnd = new THREE.Color(0xFF4500);
-
-                for (let i = 0; i < points.length; i++) {
-                    const t = i / (points.length - 1);
-                    const c = colorStart.clone().lerp(colorEnd, t);
-                    colors.push(c.r, c.g, c.b);
-                }
+                const color1 = new THREE.Color(0x00FFFF); // Cyan
+                const color2 = new THREE.Color(0xFF4500); // Orange
 
                 trajectoryGroup = new THREE.Group();
 
-                // 1. Trace Core Line (Bright/White)
                 // 1. Trace Core Line using TubeGeometry for thickness
                 const curve = new THREE.CatmullRomCurve3(points);
-                const tubeRadius = 0.003; // Visible thickness
+                const tubeRadius = 0.0035; // Sharp main line
                 const radialSegments = 8;
                 const tubularSegments = points.length * 6; // smoothness
                 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
@@ -582,23 +534,8 @@
                 // Apply vertex colors for gradient (Cyan -> Orange)
                 const count = tubeGeometry.attributes.position.count;
                 const colorArray = new Float32Array(count * 3);
-                const color1 = new THREE.Color(0x00FFFF); // Cyan
-                const color2 = new THREE.Color(0xFF4500); // Orange
-
-                for (let i = 0; i < count; i++) {
-                    // Tube geometry vertices are ordered ring by ring? 
-                    // To imply progress strictly, we can rely on the fact that TubeGeometry generates segments sequentially.
-                    // Rough progress approximation:
-                    const t = i / count;
-                    const c = color1.clone().lerp(color2, t);
-                    colorArray[i * 3] = c.r;
-                    colorArray[i * 3 + 1] = c.g;
-                    colorArray[i * 3 + 2] = c.b;
-                }
-
-                // Better gradient mapping: Map based on UV U-coordinate which TubeGeometry provides
-                // TubeGeometry UVs: u goes along the tube (0..1), v goes around the tube (0..1)
                 const uvs = tubeGeometry.attributes.uv;
+
                 for (let i = 0; i < count; i++) {
                     const u = uvs.getX(i); // 0 at start, 1 at end
                     const c = color1.clone().lerp(color2, u);
@@ -616,6 +553,7 @@
                     side: THREE.DoubleSide
                 });
                 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
+                tubeMesh.renderOrder = 1;
                 trajectoryGroup.add(tubeMesh);
 
                 // 2. Glow effect (slightly larger tube, lower opacity, additive)
@@ -631,6 +569,7 @@
                     depthWrite: false // Don't occlude the core
                 });
                 const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
+                glowMesh.renderOrder = 2;
                 trajectoryGroup.add(glowMesh);
 
                 // 3. Booster Return Trajectory (Orange)
@@ -641,9 +580,8 @@
                         const phi = (90 - point.lat) * (Math.PI / 180);
                         const theta = (point.lon + 180) * (Math.PI / 180);
 
-                        // Booster stays low
-                        const progress = index / (trajectoryData.booster_trajectory.length - 1);
-                        const radius = 1.01 + 0.012 * Math.sin(progress * Math.PI);
+                        // Use radius from backend
+                        const radius = (typeof point.r === 'number') ? point.r : 1.012;
 
                         const x = -(radius * Math.sin(phi) * Math.cos(theta));
                         const z = radius * Math.sin(phi) * Math.sin(theta);
@@ -652,33 +590,69 @@
                     });
 
                     const boosterCurve = new THREE.CatmullRomCurve3(boosterPoints);
-                    const boosterTubeGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, 0.0025, 8, false);
+                    const boosterTubeRadius = 0.005; // Thicker orange booster
+                    const boosterTubeGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterTubeRadius, 8, false);
                     const boosterMat = new THREE.MeshBasicMaterial({
-                        color: 0xFFA500, // Orange
+                        color: 0xFFA500, // Bright Orange
                         transparent: true,
                         opacity: 0.85,
                         side: THREE.DoubleSide
                     });
                     const boosterMesh = new THREE.Mesh(boosterTubeGeo, boosterMat);
+                    boosterMesh.renderOrder = 3; // Ensure it's rendered over the main trajectory if they overlap
                     trajectoryGroup.add(boosterMesh);
 
                     // Booster Glow
-                    const boosterGlowGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, 0.005, 8, false);
+                    const boosterGlowRadius = boosterTubeRadius * 2.0;
+                    const boosterGlowGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterGlowRadius, 8, false);
                     const boosterGlowMat = new THREE.MeshBasicMaterial({
                         color: 0xFFA500,
                         transparent: true,
-                        opacity: 0.35,
+                        opacity: 0.4,
                         blending: THREE.AdditiveBlending,
                         side: THREE.DoubleSide,
                         depthWrite: false
                     });
                     const boosterGlowMesh = new THREE.Mesh(boosterGlowGeo, boosterGlowMat);
+                    boosterGlowMesh.renderOrder = 4;
                     trajectoryGroup.add(boosterGlowMesh);
+
+                    // 4. Separation Point Dot
+                    if (typeof trajectoryData.sep_idx === 'number' && trajectoryData.sep_idx < boosterPoints.length) {
+                        const sepPoint = boosterPoints[trajectoryData.sep_idx];
+                        const dotRadius = 0.007;
+                        const dotGeo = new THREE.SphereGeometry(dotRadius, 16, 16);
+                        const dotMat = new THREE.MeshBasicMaterial({
+                            color: 0xFFFFFF, // Bright White
+                            transparent: true,
+                            opacity: 0.9
+                        });
+                        const dot = new THREE.Mesh(dotGeo, dotMat);
+                        dot.position.copy(sepPoint);
+                        dot.renderOrder = 5;
+                        trajectoryGroup.add(dot);
+
+                        // Separation Dot Glow
+                        const dotGlowGeo = new THREE.SphereGeometry(dotRadius * 1.8, 16, 16);
+                        const dotGlowMat = new THREE.MeshBasicMaterial({
+                            color: 0xFFFFFF,
+                            transparent: true,
+                            opacity: 0.4,
+                            blending: THREE.AdditiveBlending,
+                            depthWrite: false
+                        });
+                        const dotGlow = new THREE.Mesh(dotGlowGeo, dotGlowMat);
+                        dotGlow.position.copy(sepPoint);
+                        dotGlow.renderOrder = 6;
+                        trajectoryGroup.add(dotGlow);
+                        console.log("Added separation dot at index:", trajectoryData.sep_idx);
+                    }
 
                     // Add a small landing pad marker if it's an ASDS or RTLS landing
                     const isASDS = (trajectoryData.landing_type || '').toUpperCase().includes('ASDS') || 
                                  (trajectoryData.landing_type || '').toUpperCase().includes('DRONE');
-                    const isRTLS = (trajectoryData.landing_type || '').toUpperCase().includes('RTLS');
+                    const isRTLS = (trajectoryData.landing_type || '').toUpperCase().includes('RTLS') ||
+                                 (trajectoryData.landing_type || '').toUpperCase().includes('LAUNCH SITE');
 
                     if (isASDS || isRTLS) {
                         const lastPoint = boosterPoints[boosterPoints.length - 1];
@@ -753,8 +727,8 @@
                     trajectoryData.orbit_path.forEach((point, index) => {
                         const phi = (90 - point.lat) * (Math.PI / 180);
                         const theta = (point.lon + 180) * (Math.PI / 180);
-                        // Keep orbit at the computed visual radius for this orbit type
-                        const radius = ORBIT_RADIUS;
+                        // Use radius from backend
+                        const radius = (typeof point.r === 'number') ? point.r : 1.05;
                         const x = -(radius * Math.sin(phi) * Math.cos(theta));
                         const z = radius * Math.sin(phi) * Math.sin(theta);
                         const y = radius * Math.cos(phi);

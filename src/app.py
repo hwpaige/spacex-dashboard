@@ -189,6 +189,8 @@ class EventModel(QAbstractListModel):
     GroupNameRole = Qt.ItemDataRole.UserRole + 17
     LocalTimeRole = Qt.ItemDataRole.UserRole + 18
     TrackMapPathRole = Qt.ItemDataRole.UserRole + 19
+    LandingTypeRole = Qt.ItemDataRole.UserRole + 20
+    LandingLocationRole = Qt.ItemDataRole.UserRole + 21
 
     def __init__(self, data, mode, event_type, tz, parent=None):
         super().__init__(parent)
@@ -246,6 +248,10 @@ class EventModel(QAbstractListModel):
                     return item.get('track_map_path', '')
                 elif role == self.LocalTimeRole:
                     return item.get('localTime', 'TBD')
+                elif role == self.LandingTypeRole:
+                    return item.get('landing_type', '')
+                elif role == self.LandingLocationRole:
+                    return item.get('landing_location', '')
             return None
 
     def roleNames(self):
@@ -269,6 +275,8 @@ class EventModel(QAbstractListModel):
         roles[self.GroupNameRole] = b"groupName"
         roles[self.LocalTimeRole] = b"localTime"
         roles[self.TrackMapPathRole] = b"trackMapPath"
+        roles[self.LandingTypeRole] = b"landingType"
+        roles[self.LandingLocationRole] = b"landingLocation"
         return roles
 
     def update_data(self):
@@ -295,11 +303,13 @@ class DataLoader(QObject):
             try: self.finished.emit(l, f, w, n)
             except RuntimeError: pass
 
+        profiler.mark("DataLoader: Starting full data load")
         # Delegate full load to functions.py
         launch_data, f1_data, weather_data, narratives = perform_full_dashboard_data_load(
             location_settings, 
             status_callback=_safe_emit_status
         )
+        profiler.mark("DataLoader: Full data load complete")
 
         _safe_emit_finished(launch_data, f1_data, weather_data, narratives)
 
@@ -1262,12 +1272,17 @@ class Backend(QObject):
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
         """Get trajectory data for the next upcoming launch"""
-        logger.info("get_launch_trajectory called")
         upcoming = self.get_upcoming_launches()
         previous = self._launch_data.get('previous', [])
         
         # Use the centralized trajectory calculator in functions.py
         result = get_launch_trajectory_data(upcoming, previous)
+        if result and 'booster_trajectory' in result:
+            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points and {len(result['booster_trajectory'])} booster points")
+        elif result:
+            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points (no booster)")
+        else:
+            logger.info("get_launch_trajectory: Returning None")
         return result
 
     @pyqtSlot(bool)
@@ -1336,11 +1351,15 @@ class Backend(QObject):
         self._f1_data = f1_data
         self._weather_data = weather_data
         # Update the EventModel's data reference
+        profiler.mark("Backend: Updating EventModel")
         self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
         self._event_model.update_data()
+        profiler.mark("Backend: EventModel updated")
+        
         # Exit loading state after data is loaded and processed
         self.setLoadingStatus("Application loaded...")
         self._isLoading = False
+        profiler.mark("Backend: Emitting UI update signals Start")
         self.loadingFinished.emit()
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()
@@ -1348,10 +1367,14 @@ class Backend(QObject):
         logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
+        profiler.mark("Backend: Emitting UI update signals End")
 
         # Update trajectory now that data is loaded (debounced) and precompute in background
+        profiler.mark("Backend: Scheduling trajectory recompute")
         self._emit_update_globe_trajectory_debounced()
         self._schedule_trajectory_recompute()
+        profiler.mark("Backend: on_data_loaded End")
+        profiler.log_summary()
         # REDUNDANT RELOAD REMOVED: Data loading should not force a full UI reload.
         # Specific updates like update_charts, update_f1_data etc. are handled below.
         # if self._first_online_emitted and not self._web_reloaded_after_online:

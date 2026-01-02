@@ -200,6 +200,7 @@ def emit_loader_status(message: str):
 CACHE_REFRESH_INTERVAL_PREVIOUS = 86400  # 24 hours for historical data
 CACHE_REFRESH_INTERVAL_UPCOMING = 3600   # 1 hour for upcoming launches
 CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
+CACHE_REFRESH_INTERVAL_WEATHER = 600     # 10 minutes for weather
 TRAJECTORY_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'trajectory_cache.json')
 CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
 CACHE_FILE_PREVIOUS_BACKUP = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache_backup.json')
@@ -226,6 +227,7 @@ CACHE_FILE_F1_TRACK_LAYOUT = os.path.join(CACHE_DIR_F1, 'f1_track_layout.json')
 RUNTIME_CACHE_FILE_PREVIOUS = os.path.join(CACHE_DIR_F1, 'previous_launches_cache.json')
 RUNTIME_CACHE_FILE_UPCOMING = os.path.join(CACHE_DIR_F1, 'upcoming_launches_cache.json')
 RUNTIME_CACHE_FILE_NARRATIVES = os.path.join(CACHE_DIR_F1, 'narratives_cache.json')
+CACHE_FILE_WEATHER = os.path.join(CACHE_DIR_F1, 'weather_cache.json')
 
 # Different refresh intervals for different F1 data types
 CACHE_REFRESH_INTERVAL_F1_SCHEDULE = 86400  # 24 hours for race schedule (rarely changes)
@@ -488,6 +490,44 @@ def rotate(xy, *, angle):
     return np.matmul(xy, rot_mat)
 
 
+def _ang_dist_deg(a, b):
+    """Calculate the angular distance between two points in degrees."""
+    lat1 = math.radians(a['lat']); lon1 = math.radians(a['lon'])
+    lat2 = math.radians(b['lat']); lon2 = math.radians(b['lon'])
+    h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2
+    return math.degrees(2 * math.atan2(math.sqrt(h), math.sqrt(max(1e-12, 1-h))))
+
+def _bearing_deg(lat1, lon1, lat2, lon2):
+    """Calculate the initial bearing from point 1 to point 2 in degrees."""
+    phi1 = math.radians(lat1); phi2 = math.radians(lat2); dlon = math.radians(lon2-lon1)
+    return (math.degrees(math.atan2(math.sin(dlon)*math.cos(phi2), math.cos(phi1)*math.sin(phi2)-math.sin(phi1)*math.cos(phi2)*math.cos(dlon))) + 360) % 360
+
+def choose_orbit_alt_km(orbit_label):
+    """Estimate a physically sensible visual altitude for a given orbit type."""
+    o = (orbit_label or '').lower()
+    if 'suborbital' in o: return 150            # SpaceX boosters go to ~150km
+    if 'sso' in o or 'sun-synchronous' in o: return 550
+    if 'polar' in o: return 600
+    if 'leo' in o or 'low earth orbit' in o: return 400
+    if 'gto' in o or 'geostationary transfer' in o: return 20000
+    if 'geo' in o or 'geostationary' in o: return 35786
+    if 'meo' in o or 'gps' in o: return 20200
+    if 'heeo' in o or 'molniya' in o: return 40000
+    return 800
+
+def compute_orbit_radius(orbit_label):
+    """Compute the visual radius (1.0 = surface) for a given orbit type."""
+    EARTH_RADIUS_KM = 6371.0
+    alt_km = choose_orbit_alt_km(orbit_label)
+    # Visual compression: add relative altitude, capped to +8%
+    r = 1.0 + min(alt_km / EARTH_RADIUS_KM, 0.08)
+    # Keep above clouds layer (1.01) with a small margin
+    if r < 1.012: r = 1.012
+    # Hard safety clamp to avoid drawing too far from globe
+    if r > 1.08: r = 1.08
+    return r
+
+
 # --- System/network helpers moved from app.py ---
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
@@ -621,18 +661,22 @@ def fetch_launches():
     # Load previous launches (prefer runtime; keep git seed intact)
     prev_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_PREVIOUS)
     previous_cache = load_launch_cache('previous')
-    if previous_cache:
+    
+    # Use cache if fresh enough
+    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_PREVIOUS:
         previous_launches = previous_cache['data']
-        logger.info(f"Loaded {len(previous_launches)} previous launches from cache")
+        logger.info(f"Using fresh historical launch cache ({len(previous_launches)} launches)")
+    elif previous_cache:
+        previous_launches = previous_cache['data']
+        logger.info(f"Historical launch cache stale or refresh forced; checking for updates...")
         try:
-            emit_loader_status("Loading SpaceX launch history from cache…")
+            emit_loader_status("Checking for new SpaceX launches…")
         except Exception:
             pass
         
         # Check for new launches to add (only recent ones)
         try:
             logger.info("Checking for new launches to add...")
-            current_year = current_time.year
             url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&limit=50'
             
             try:
@@ -1965,12 +2009,25 @@ def manage_nm_autoconnect(ssid):
         logger.error(f"Error managing NM autoconnect: {e}")
 
 
+# --- Network connectivity state cache to avoid repeated slow tests during boot ---
+_network_last_result = None
+_network_last_check_time = 0
+NETWORK_CHECK_TTL = 30  # seconds
+
 def test_network_connectivity(wifi_connected=True):
     """Check for active network connectivity (beyond just WiFi connection)"""
+    global _network_last_result, _network_last_check_time
+    
     if not wifi_connected:
         logger.debug("WiFi not connected, skipping network connectivity test")
         return False
 
+    now = time.time()
+    if _network_last_result is not None and (now - _network_last_check_time) < NETWORK_CHECK_TTL:
+        logger.debug(f"Returning cached network connectivity result: {_network_last_result}")
+        return _network_last_result
+
+    profiler.mark("test_network_connectivity Start")
     test_urls = [
         'http://www.google.com',
         'http://www.cloudflare.com',
@@ -1979,29 +2036,38 @@ def test_network_connectivity(wifi_connected=True):
 
     logger.debug("Testing network connectivity with multiple endpoints...")
 
+    result = False
     for url in test_urls:
         try:
             logger.debug(f"Testing connectivity to {url}")
             urllib.request.urlopen(url, timeout=5)  # Increased timeout for reliability
             logger.info(f"Network connectivity confirmed via {url}")
-            return True
+            result = True
+            break
         except (urllib.error.URLError, socket.timeout, OSError) as e:
             logger.debug(f"Failed to connect to {url}: {e}")
             continue
 
-    # Fallback DNS test
-    try:
-        logger.debug("Testing DNS resolution...")
-        socket.gethostbyname('google.com')
-        logger.info("Network connectivity confirmed via DNS")
-        return True
-    except socket.gaierror as e:
-        logger.debug(f"DNS resolution failed: {e}")
-    except Exception as e:
-        logger.warning(f"Unexpected error during DNS test: {e}")
+    if not result:
+        # Fallback DNS test
+        try:
+            logger.debug("Testing DNS resolution...")
+            socket.gethostbyname('google.com')
+            logger.info("Network connectivity confirmed via DNS")
+            result = True
+        except socket.gaierror as e:
+            logger.debug(f"DNS resolution failed: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error during DNS test: {e}")
 
-    logger.warning("All network connectivity tests failed")
-    return False
+    _network_last_result = result
+    _network_last_check_time = now
+    profiler.mark(f"test_network_connectivity End (Result: {result})")
+    
+    if not result:
+        logger.warning("All network connectivity tests failed")
+    
+    return result
 
 
 def get_git_version_info(src_dir):
@@ -2414,7 +2480,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                     'mission': launch.get('mission', 'Unknown'),
                     'pad': launch.get('pad', 'Cape Canaveral'),
                     'orbit': launch.get('orbit', 'LEO'),
-                    'net': launch.get('net', '')
+                    'net': launch.get('net', ''),
+                    'landing_type': launch.get('landing_type')
                 } for launch in recent_launches]
                 logger.info(f"Using {len(display_launches)} recent launches for demo")
 
@@ -2494,8 +2561,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         launch_site.get('lat', 0.0)
     )
 
-    ORBIT_CACHE_VERSION = 'v8'
-    landing_type = next_launch.get('landing_type', 'RTLS')
+    ORBIT_CACHE_VERSION = 'v10-sep-dot'
+    landing_type = next_launch.get('landing_type')
     cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}"
     
     traj_cache = {}
@@ -2510,6 +2577,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'launch_site': cached.get('launch_site', launch_site),
             'trajectory': cached.get('trajectory', []),
             'booster_trajectory': cached.get('booster_trajectory', []),
+            'sep_idx': cached.get('sep_idx'),
             'orbit_path': cached.get('orbit_path', []),
             'orbit': orbit or cached.get('orbit', normalized_orbit),
             'mission': mission_name,
@@ -2518,6 +2586,18 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         }
 
     logger.info(f"Trajectory cache miss for {cache_key}; generating new trajectory")
+
+    def get_radius(progress, target_radius, offset=0.0):
+        """Calculate visual radius with bulge for a given progress (0-1)."""
+        TRAJ_START_RADIUS = 1.012  # Slightly higher to ensure visibility
+        TRAJ_BULGE_MAX = 0.025     # Slightly more bulge for better 3D look
+        base_interp = TRAJ_START_RADIUS + (target_radius - TRAJ_START_RADIUS) * progress
+        bulge = TRAJ_BULGE_MAX * math.sin(progress * math.pi)
+        radius = base_interp + bulge + offset
+        # Keep a tiny margin below target to avoid z-fighting with orbit line
+        if radius > target_radius - 0.0006 + offset:
+            radius = target_radius - 0.0006 + offset
+        return radius
 
     def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default', end_bearing_deg=None):
         points = []
@@ -2544,21 +2624,29 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         else:
             mid_lat = (start_lat + end_lat) / 2
             mid_lon = (start_lon + end_lon) / 2
+            dist = _ang_dist_deg(start_point, end_point)
+            
+            # Scale control point offset based on distance
+            offset = max(5, min(30, dist * 0.4))
+            
             if orbit_type == 'polar':
-                control_lat = max(-85.0, mid_lat - 20)
-                control_lon = mid_lon - 20
+                control_lat = max(-85.0, mid_lat - offset)
+                control_lon = mid_lon - offset/2
             elif orbit_type == 'equatorial':
-                control_lat = mid_lat + 15
-                control_lon = mid_lon + 30
+                # Aim more towards equator
+                target_equator_lat = 0
+                control_lat = (mid_lat + target_equator_lat) / 2
+                control_lon = mid_lon + offset
             elif orbit_type == 'gto':
-                control_lat = mid_lat + 25
-                control_lon = mid_lon + 60
+                control_lat = mid_lat + offset
+                control_lon = mid_lon + offset * 2
             elif orbit_type == 'suborbital':
-                control_lat = mid_lat + 10
-                control_lon = mid_lon + 15
+                # Suborbital/Booster return needs a tighter arc
+                control_lat = mid_lat + offset/4
+                control_lon = mid_lon + offset/4
             else:
-                control_lat = mid_lat + 20
-                control_lon = mid_lon + 45
+                control_lat = mid_lat + offset
+                control_lon = mid_lon + offset * 1.5
 
         for i in range(num_points + 1):
             t = i / num_points
@@ -2593,21 +2681,12 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             points.append({'lat': math.degrees(math.atan2(z, max(1e-12, math.hypot(x, y)))), 'lon': (math.degrees(math.atan2(y, x)) + 180) % 360 - 180})
         return points
 
-    def _ang_dist_deg(a, b):
-        lat1 = math.radians(a['lat']); lon1 = math.radians(a['lon'])
-        lat2 = math.radians(b['lat']); lon2 = math.radians(b['lon'])
-        h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2
-        return math.degrees(2 * math.atan2(math.sqrt(h), math.sqrt(max(1e-12, 1-h))))
-
-    def _bearing_deg(lat1, lon1, lat2, lon2):
-        phi1 = math.radians(lat1); phi2 = math.radians(lat2); dlon = math.radians(lon2-lon1)
-        return (math.degrees(math.atan2(math.sin(dlon)*math.cos(phi2), math.cos(phi1)*math.sin(phi2)-math.sin(phi1)*math.cos(phi2)*math.cos(dlon))) + 360) % 360
-
     # Main generation
     if normalized_orbit == 'LEO-Polar':
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] - 30, 'lon': launch_site['lon'] - 10}, 20, orbit_type='polar')
     elif normalized_orbit == 'LEO-Equatorial':
-        trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'], 'lon': launch_site['lon'] + 120}, 35, orbit_type='equatorial')
+        # Target a point closer to the equator
+        trajectory = generate_curved_trajectory(launch_site, {'lat': 0, 'lon': launch_site['lon'] + 100}, 35, orbit_type='equatorial')
     elif normalized_orbit == 'GTO':
         trajectory = generate_curved_trajectory(launch_site, {'lat': 0, 'lon': launch_site['lon'] + 150}, 30, orbit_type='gto')
     elif normalized_orbit == 'Suborbital':
@@ -2615,7 +2694,10 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     else:
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
 
+    target_r = compute_orbit_radius(orbit)
     orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 360)
+    for p in orbit_path:
+        p['r'] = target_r
     
     # Tangent- and position-match
     if trajectory and orbit_path:
@@ -2641,31 +2723,70 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         except Exception as e:
             logger.warning(f"Tangent match failed: {e}")
 
-    # Booster Return Trajectory (RTLS vs ASDS simulation)
+    # Add radii to main trajectory
+    for i, p in enumerate(trajectory):
+        progress = i / (len(trajectory) - 1)
+        p['r'] = get_radius(progress, target_r)
+
+    # Booster Return Trajectory (RTLS vs ASDS vs Expendable simulation)
     booster_trajectory = []
+    sep_idx = None
     if trajectory and len(trajectory) > 5:
         try:
             # Separation usually around 1/5th of the way to orbit
             sep_idx = max(2, len(trajectory) // 5)
-            ascent_part = trajectory[:sep_idx+1]
-            sep_point = trajectory[sep_idx]
+            # Create booster ascent with a tiny radius offset to ensure it's visible outside main trajectory
+            ascent_part = []
+            for i, p in enumerate(trajectory[:sep_idx+1]):
+                bp = p.copy()
+                # Apply a subtle 0.001 offset (approx 6km) to keep booster visible
+                bp['r'] = (bp.get('r') or 1.012) + 0.001
+                ascent_part.append(bp)
+                
+            sep_point = ascent_part[-1]
+            sep_radius = sep_point['r']
 
             l_type = (landing_type or '').upper()
-            if 'ASDS' in l_type or 'DRONE' in l_type:
+            l_loc = (next_launch.get('landing_location') or '').upper()
+            combined_landing_info = f"{l_type} {l_loc}"
+            
+            if any(k in combined_landing_info for k in ['ASDS', 'DRONE', 'SHIP', 'OCISLY', 'JRTI', 'ASOG']):
                 # Droneship landing: continues downrange to a point further along the trajectory
-                # Landing point is typically around 1/3rd of the way along the orbital trajectory
                 landing_idx = min(len(trajectory) - 1, max(sep_idx + 3, len(trajectory) // 3))
                 landing_point = trajectory[landing_idx]
+                return_part = generate_curved_trajectory(sep_point, landing_point, 20, orbit_type='suborbital')
                 
-                # Curve from separation to droneship (suborbital arc)
+                # Add radius to return part (ballistic arc)
+                for i, p in enumerate(return_part):
+                    prog = i / (len(return_part) - 1)
+                    # Parabolic arc from sep_radius to 1.01, peaking at sep_radius + 0.02
+                    p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.02 * math.sin(prog * math.pi)
+                
+                booster_trajectory = ascent_part + return_part[1:]
+                logger.info(f"Generated ASDS booster trajectory (info: {combined_landing_info})")
+            elif any(k in combined_landing_info for k in ['RTLS', 'LAUNCH SITE', 'CATCH', 'TOWER', 'LZ-1', 'LZ-2', 'LZ-4']):
+                # RTLS/Catch: returns to launch site
+                return_part = generate_curved_trajectory(sep_point, launch_site, 25, orbit_type='suborbital')
+                for i, p in enumerate(return_part):
+                    prog = i / (len(return_part) - 1)
+                    # Higher arc for RTLS boostback (~300km peak)
+                    p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.03 * math.sin(prog * math.pi)
+                
+                booster_trajectory = ascent_part + return_part[1:]
+                logger.info(f"Generated RTLS/Catch booster trajectory (info: {combined_landing_info})")
+            elif any(k in combined_landing_info for k in ['OCEAN', 'SPLASHDOWN']):
+                landing_idx = min(len(trajectory) - 1, max(sep_idx + 2, len(trajectory) // 4))
+                landing_point = trajectory[landing_idx]
                 return_part = generate_curved_trajectory(sep_point, landing_point, 15, orbit_type='suborbital')
-                booster_trajectory = ascent_part + return_part
-                logger.info(f"Generated ASDS booster trajectory to index {landing_idx} ({landing_type})")
+                for i, p in enumerate(return_part):
+                    prog = i / (len(return_part) - 1)
+                    p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.015 * math.sin(prog * math.pi)
+                booster_trajectory = ascent_part + return_part[1:]
+                logger.info(f"Generated Ocean splashdown booster trajectory (type: {landing_type})")
             else:
-                # Default RTLS: returns to launch site
-                return_part = generate_curved_trajectory(sep_point, launch_site, 15, orbit_type='suborbital')
-                booster_trajectory = ascent_part + return_part
-                logger.info(f"Generated RTLS booster trajectory back to launch site ({landing_type})")
+                # Expendable/Unknown: only show ascent, but still visible due to radius offset
+                booster_trajectory = ascent_part
+                logger.info(f"Generated ascent-only booster trajectory for unknown/expendable type: {landing_type}")
         except Exception as e:
             logger.warning(f"Booster trajectory generation failed: {e}")
 
@@ -2673,6 +2794,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         'launch_site': launch_site,
         'trajectory': trajectory,
         'booster_trajectory': booster_trajectory,
+        'sep_idx': sep_idx,
         'orbit_path': orbit_path,
         'orbit': orbit,
         'mission': mission_name,
@@ -2686,11 +2808,12 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'launch_site': launch_site,
             'trajectory': trajectory,
             'booster_trajectory': booster_trajectory,
+            'sep_idx': sep_idx,
             'orbit_path': orbit_path,
             'orbit': normalized_orbit,
             'inclination_deg': assumed_incl,
             'landing_type': landing_type,
-            'model': 'v8-booster-asds-rtls'
+            'model': 'v10-sep-dot-optimized'
         }
         save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
     except Exception as e:
@@ -3310,7 +3433,20 @@ def get_nmcli_profiles():
         return []
 
 def fetch_weather_for_all_locations(locations_config):
-    """Fetch weather for all configured locations in parallel."""
+    """Fetch weather for all configured locations in parallel with caching."""
+    profiler.mark("fetch_weather_for_all_locations Start")
+    
+    # Try loading from cache first
+    try:
+        cache = load_cache_from_file(CACHE_FILE_WEATHER)
+        current_time = datetime.now(pytz.UTC)
+        if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_WEATHER:
+            logger.info("Using cached weather data for all locations")
+            profiler.mark("fetch_weather_for_all_locations End (Cache Hit)")
+            return cache['data']
+    except Exception as e:
+        logger.warning(f"Failed to load weather cache: {e}")
+
     weather_data = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(locations_config), 4)) as executor:
         future_to_location = {
@@ -3328,10 +3464,20 @@ def fetch_weather_for_all_locations(locations_config):
                     'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
                     'wind_direction': 90, 'cloud_cover': 50
                 }
+    
+    # Save to cache
+    try:
+        save_cache_to_file(CACHE_FILE_WEATHER, weather_data, datetime.now(pytz.UTC))
+        logger.info("Saved fresh weather data to cache")
+    except Exception as e:
+        logger.warning(f"Failed to save weather cache: {e}")
+
+    profiler.mark("fetch_weather_for_all_locations End (Cache Miss)")
     return weather_data
 
 def perform_full_dashboard_data_load(locations_config, status_callback=None):
     """Orchestrate parallel fetch of launches, F1, and weather data."""
+    profiler.mark("perform_full_dashboard_data_load Start")
     def _emit(msg):
         if status_callback:
             try: status_callback(msg)
@@ -3342,35 +3488,59 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # Launch data
         def _fetch_l():
-            try: return fetch_launches()
-            except: return {'previous': [], 'upcoming': []}
+            profiler.mark("Thread: Fetch Launches Start")
+            try: 
+                res = fetch_launches()
+                profiler.mark("Thread: Fetch Launches End")
+                return res
+            except: 
+                profiler.mark("Thread: Fetch Launches Failed")
+                return {'previous': [], 'upcoming': []}
         
         # F1 data
         def _fetch_f1():
+            profiler.mark("Thread: Fetch F1 Start")
             _emit("Checking F1 caches and schedule…")
-            try: return fetch_f1_data()
-            except: return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
+            try: 
+                res = fetch_f1_data()
+                profiler.mark("Thread: Fetch F1 End")
+                return res
+            except: 
+                profiler.mark("Thread: Fetch F1 Failed")
+                return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
             
         # Weather data
         def _fetch_w():
+            profiler.mark("Thread: Fetch Weather Start")
             _emit("Getting live weather for locations…")
-            return fetch_weather_for_all_locations(locations_config)
+            res = fetch_weather_for_all_locations(locations_config)
+            profiler.mark("Thread: Fetch Weather End")
+            return res
             
         # Narratives
         def _fetch_n():
+            profiler.mark("Thread: Fetch Narratives Start")
             _emit("Fetching launch narratives…")
-            return fetch_narratives()
+            res = fetch_narratives()
+            profiler.mark("Thread: Fetch Narratives End")
+            return res
 
         f_launch = executor.submit(_fetch_l)
         f_f1 = executor.submit(_fetch_f1)
         f_weather = executor.submit(_fetch_w)
         f_narratives = executor.submit(_fetch_n)
         
+        profiler.mark("Waiting for data threads...")
         launch_data = f_launch.result()
+        profiler.mark("Launch data received")
         f1_data = f_f1.result()
+        profiler.mark("F1 data received")
         weather_data = f_weather.result()
+        profiler.mark("Weather data received")
         narratives = f_narratives.result()
+        profiler.mark("Narratives received")
 
+    profiler.mark("perform_full_dashboard_data_load End")
     _emit("Data loading complete")
     return launch_data, f1_data, weather_data, narratives
 

@@ -1404,6 +1404,10 @@ Window {
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
                                 }
+                                Row { spacing: 5; visible: !!(model && model.landingType)
+                                    Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.pixelSize: 12; color: "#999999" }
+                                }
                                 Text { text: ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
                                 Text { text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
                             }
@@ -4302,6 +4306,58 @@ Window {
                                                 color: backend.theme === "dark" ? "white" : "black"
                                                 Layout.fillWidth: true
                                                 visible: !!launchTray.nextLaunch
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            visible: launchTray.nextLaunch && launchTray.nextLaunch.landing_type
+                                            Text {
+                                                text: "🛬"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LANDING:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch && launchTray.nextLaunch.landing_type ? launchTray.nextLaunch.landing_type.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
+                                            }
+                                        }
+
+                                        RowLayout {
+                                            spacing: 8
+                                            visible: launchTray.nextLaunch && launchTray.nextLaunch.landing_location
+                                            Text {
+                                                text: "📍"
+                                                font.pixelSize: 14
+                                                color: backend.theme === "dark" ? "black" : "white"
+                                                Layout.preferredWidth: 20
+                                            }
+                                            Text {
+                                                text: "LOC:"
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                font.letterSpacing: 0.5
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.preferredWidth: 120
+                                            }
+                                            Text {
+                                                text: launchTray.nextLaunch && launchTray.nextLaunch.landing_location ? launchTray.nextLaunch.landing_location.toUpperCase() : ""
+                                                font.pixelSize: 14
+                                                font.weight: Font.Medium
+                                                color: backend.theme === "dark" ? "white" : "black"
+                                                Layout.fillWidth: true
                                             }
                                         }
 
