@@ -933,6 +933,8 @@ Window {
                             layer.smooth: true
                             interactive: true
                             currentIndex: 1
+                            property int loadedMask: (1 << 1)
+                            onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
 
                         Component.onCompleted: {
                             console.log("SwipeView completed, count:", count);
@@ -957,8 +959,8 @@ Window {
                                     Loader {
                                         id: webViewLoader
                                         anchors.fill: parent
-                                        // Load current item and neighbors for smooth vertical swiping
-                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1
+                                        // Load current item and neighbors for smooth vertical swiping if they have been visited
+                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1 && (weatherSwipe.loadedMask & (1 << index))
                                         visible: active
 
                                         sourceComponent: WebEngineView {
