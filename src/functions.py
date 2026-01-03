@@ -136,7 +136,6 @@ __all__ = [
     "get_max_value_from_series",
     "get_next_launch_info",
     "get_upcoming_launches_list",
-    "get_next_race_info",
     "initialize_all_weather",
     "get_best_wifi_reconnection_candidate",
     "calculate_chart_interval",
@@ -1189,8 +1188,12 @@ def save_last_connected_network(ssid):
 
 # --- HTTP Server Helper ---
 
+HTTP_SERVER_PORT = 8080
+HTTP_SERVER_READY = threading.Event()
+
 def start_http_server():
     """Start a simple HTTP server for the globe and other web content"""
+    global HTTP_SERVER_PORT
     # Set directory to serve from (src directory where app.py / functions.py live)
     src_dir = os.path.dirname(__file__)
 
@@ -1224,9 +1227,12 @@ def start_http_server():
     # Try to start server on port 8080, then try alternative ports if busy
     for attempt_port in [8080, 8081, 8082, 8083, 8084]:
         try:
+            # Note: We use "" to bind to all interfaces, but 127.0.0.1 is used for local access
             with socketserver.TCPServer(("", attempt_port), handler) as httpd:
                 # Allow address reuse to prevent "address already in use" errors
                 httpd.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                HTTP_SERVER_PORT = attempt_port
+                HTTP_SERVER_READY.set()
                 logger.info(f"Serving HTTP on port {attempt_port} from {src_dir}")
                 httpd.serve_forever()
         except OSError as e:
@@ -1429,14 +1435,10 @@ _network_last_result = None
 _network_last_check_time = 0
 NETWORK_CHECK_TTL = 30  # seconds
 
-def test_network_connectivity(wifi_connected=True):
+def test_network_connectivity():
     """Check for active network connectivity (beyond just WiFi connection)"""
     global _network_last_result, _network_last_check_time
     
-    if not wifi_connected:
-        logger.debug("WiFi not connected, skipping network connectivity test")
-        return False
-
     now = time.time()
     if _network_last_result is not None and (now - _network_last_check_time) < NETWORK_CHECK_TTL:
         logger.debug(f"Returning cached network connectivity result: {_network_last_result}")
@@ -2847,7 +2849,7 @@ def get_update_progress_summary(log_path):
 def perform_bootstrap_diagnostics(src_dir, wifi_connected_state=True, skip_update_check=False):
     """Perform bootstrap network and update checks. Update check can be skipped to avoid boot delay."""
     profiler.mark("perform_bootstrap_diagnostics Start")
-    connectivity_result = test_network_connectivity(wifi_connected_state)
+    connectivity_result = test_network_connectivity()
     update_available = False
     current_info = {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
     latest_info = {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}

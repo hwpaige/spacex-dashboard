@@ -1570,7 +1570,7 @@ Window {
                                 Rectangle {
                                     id: nsfBtn
                                     // Load via local wrapper page to match existing youtube_embed.html approach
-                                    property string nsfStarbaseUrl: "http://localhost:8080/youtube_embed_nsf.html"
+                                    property string nsfStarbaseUrl: "http://localhost:" + backend.httpPort + "/youtube_embed_nsf.html"
                                     // Compare as strings to match Windy/plot highlight logic reliably
                                     property bool selected: String(root.currentVideoUrl) === nsfStarbaseUrl
                                     Layout.preferredWidth: 40

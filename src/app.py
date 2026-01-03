@@ -801,6 +801,10 @@ class Backend(QObject):
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
 
+    @pyqtProperty(int)
+    def httpPort(self):
+        return funcs.HTTP_SERVER_PORT
+
     @pyqtProperty(str, notify=modeChanged)
     def mode(self):
         return self._mode
@@ -1873,7 +1877,7 @@ class Backend(QObject):
         def _worker():
             try:
                 # Use the imported test_network_connectivity helper
-                is_online = test_network_connectivity(self._wifi_connected)
+                is_online = test_network_connectivity()
                 QTimer.singleShot(0, lambda: self._apply_connectivity_result(is_online))
             except Exception as e:
                 logger.debug(f"Connectivity check worker error: {e}")
@@ -2086,7 +2090,7 @@ class Backend(QObject):
         self.updateDialogRequested.emit()
     def check_network_connectivity(self):
         """Check if we have active network connectivity (beyond just WiFi connection)"""
-        return test_network_connectivity(self._wifi_connected)
+        return test_network_connectivity()
 
     # --- Non-blocking network connectivity check helpers ---
     def _start_network_connectivity_check_async(self):
@@ -2098,10 +2102,10 @@ class Backend(QObject):
 
             self._network_check_in_progress = True
 
-            def _worker(expected_wifi_connected):
+            def _worker():
                 try:
                     # Perform the potentially blocking check off the UI thread
-                    result = self.check_network_connectivity() if expected_wifi_connected else False
+                    result = self.check_network_connectivity()
                 except Exception as e:
                     logger.debug(f"Background network check error: {e}")
                     result = False
@@ -2132,10 +2136,7 @@ class Backend(QObject):
                     logger.debug(f"Failed to schedule result application on main thread: {e}; applying directly")
                     _apply()
 
-            # Snapshot wifi connected state to avoid race in worker
-            expected_wifi_connected = self._wifi_connected
-
-            threading.Thread(target=_worker, args=(expected_wifi_connected,), daemon=True).start()
+            threading.Thread(target=_worker, daemon=True).start()
         except Exception as e:
             logger.debug(f"Failed to start background network check: {e}")
             self._network_check_in_progress = False
@@ -2663,10 +2664,11 @@ backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
 profiler.mark("Starting Data Loader")
 logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
-# Do not override the status here; startDataLoader already set a meaningful
-# initial message (e.g., "Checking network connectivity..."). Leaving this
-# call in place could cause the UI to appear stuck on "Backend initialized..."
-# if the background thread hasn't applied subsequent statuses yet.
+    
+# Wait for HTTP server to bind to a port before continuing with QML engine setup
+# to ensure context properties like videoUrl have the correct port.
+if not funcs.HTTP_SERVER_READY.wait(timeout=5.0):
+    logger.warning("HTTP server did not signal ready within timeout; using default port 8080")
 
 profiler.mark("Initializing QML Engine")
 engine = QQmlApplicationEngine()
@@ -2704,7 +2706,7 @@ print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", "http://localhost:8080/youtube_embed.html")
+context.setContextProperty("videoUrl", f"http://localhost:{funcs.HTTP_SERVER_PORT}/youtube_embed.html")
 
 
 from ui_qml import qml_code  # Load QML from external module
