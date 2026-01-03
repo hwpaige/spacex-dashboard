@@ -2212,6 +2212,9 @@ if __name__ == '__main__':
             # Keep GPU fast paths if available
             "--enable-zero-copy",
             "--ignore-gpu-blocklist",
+            # Allow automatic fullscreen and playback without user gesture
+            "--no-user-gesture-required-for-fullscreen",
+            "--autoplay-policy=no-user-gesture-required",
         ]
         existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
         to_add = []

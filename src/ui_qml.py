@@ -33,6 +33,7 @@ Window {
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
+    property bool autoFullScreen: false
     // Track the currently selected YouTube URL for the video card.
     // Initialized to the default playlist URL provided by the backend context property.
     property url currentVideoUrl: videoUrl
@@ -1448,7 +1449,7 @@ Window {
                             settings.pluginsEnabled: true
                             settings.javascriptCanOpenWindows: false
                             settings.javascriptCanAccessClipboard: false
-                            settings.allowWindowActivationFromJavaScript: false
+                            settings.allowWindowActivationFromJavaScript: true
                             onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                             onLoadingChanged: function(loadRequest) {
                                 if (loadRequest.status === WebEngineView.LoadFailedStatus) {
@@ -1475,10 +1476,37 @@ Window {
                                     } else {
                                         console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
                                     }
+                                    root.autoFullScreen = false;
                                 } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                     console.log("YouTube WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
                                     if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
+                                    
+                                    // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
+                                    // We only apply this to X.com (Twitter) streams as requested.
+                                    var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || loadRequest.url.toString().indexOf("twitter.com") !== -1;
+                                    if (root.autoFullScreen && isX) {
+                                        // X.com needs a bit of time to initialize its player, so we retry a few times.
+                                        youtubeView.runJavaScript("(function(){" +
+                                            "var attempts = 0;" +
+                                            "var tryFS = function() {" +
+                                            "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                            "  if(el && el.requestFullscreen) {" +
+                                            "    el.requestFullscreen().catch(function(e){" +
+                                            "      if(++attempts < 10) setTimeout(tryFS, 1000);" +
+                                            "      else console.log('Auto-fullscreen failed:', e);" +
+                                            "    });" +
+                                            "  } else if (el && el.webkitRequestFullscreen) {" +
+                                            "    el.webkitRequestFullscreen();" +
+                                            "  } else if (++attempts < 10) {" +
+                                            "    setTimeout(tryFS, 1000);" +
+                                            "  }" +
+                                            "};" +
+                                            "tryFS();" +
+                                        "})()");
+                                    }
+                                    root.autoFullScreen = false;
+                                    
                                     youtubeRetryTimer.stop(); // Stop any pending retries
                                 }
                             }
@@ -1628,7 +1656,30 @@ Window {
                                         cursorShape: backend.liveLaunchUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
                                             if (backend.liveLaunchUrl !== "") {
+                                                var isSame = (String(root.currentVideoUrl) === String(backend.liveLaunchUrl));
                                                 root.currentVideoUrl = backend.liveLaunchUrl
+                                                if (isSame) {
+                                                    // If already on the live URL, just trigger fullscreen again with a few retries
+                                                    youtubeView.runJavaScript("(function(){" +
+                                                        "var attempts = 0;" +
+                                                        "var tryFS = function() {" +
+                                                        "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                                        "  if(el && el.requestFullscreen) {" +
+                                                        "    el.requestFullscreen().catch(function(e){" +
+                                                        "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
+                                                        "      else console.log('Manual auto-fullscreen failed:', e);" +
+                                                        "    });" +
+                                                        "  } else if (el && el.webkitRequestFullscreen) {" +
+                                                        "    el.webkitRequestFullscreen();" +
+                                                        "  } else if (++attempts < 5) {" +
+                                                        "    setTimeout(tryFS, 1000);" +
+                                                        "  }" +
+                                                        "};" +
+                                                        "tryFS();" +
+                                                    "})()");
+                                                } else {
+                                                    root.autoFullScreen = true
+                                                }
                                             }
                                         }
                                     }

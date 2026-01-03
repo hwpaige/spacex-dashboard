@@ -617,7 +617,7 @@ User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
@@ -658,7 +658,7 @@ Wants=network-online.target
 Type=simple
 User=$USER
 Environment=QT_QPA_PLATFORM=eglfs
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
 Restart=always
@@ -1416,7 +1416,7 @@ matchbox-window-manager -use_titlebar no -use_cursor no &
 # Set environment variables
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows\"
+export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"

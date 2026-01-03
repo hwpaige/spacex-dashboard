@@ -2679,6 +2679,7 @@ def setup_dashboard_environment():
             "--disable-gpu-sandbox --disable-software-rasterizer "
             "--disable-gpu-driver-bug-workarounds --no-sandbox "
             "--autoplay-policy=no-user-gesture-required "
+            "--no-user-gesture-required-for-fullscreen "
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         )
     elif platform.system() == 'Linux':
@@ -2689,6 +2690,7 @@ def setup_dashboard_environment():
             "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
             "--disable-gpu-driver-bug-workarounds "
             "--autoplay-policy=no-user-gesture-required "
+            "--no-user-gesture-required-for-fullscreen "
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         )
     else:
