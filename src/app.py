@@ -387,6 +387,7 @@ class Backend(QObject):
         self._weather_data = {}
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+        self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
         self._tz = tzlocal()
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
@@ -1231,8 +1232,8 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.eventModelChanged.emit()
 
-    @pyqtSlot(dict, dict, dict, list)
-    def on_data_loaded(self, launch_data, f1_data, weather_data, narratives):
+    @pyqtSlot(dict, dict, list)
+    def on_data_loaded(self, launch_data, weather_data, narratives):
         profiler.mark("Backend: on_data_loaded Start")
         logger.info("Backend: on_data_loaded called")
         self.setLoadingStatus("Data loaded successfully")
@@ -1241,7 +1242,7 @@ class Backend(QObject):
         self._launch_data = launch_data
         self._launch_descriptions = narratives
         self._update_live_launch_url()
-        self._f1_data = f1_data
+        # self._f1_data is now initialized in __init__ and not updated here as it's currently missing from loader
         self._weather_data = weather_data
         # Update the EventModel's data reference
         profiler.mark("Backend: Updating EventModel")
