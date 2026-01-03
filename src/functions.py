@@ -633,6 +633,23 @@ def check_wifi_status():
         logger.error(f"Error in check_wifi_status: {e}")
         return False, ""
 
+def fetch_launch_details(launch_id):
+    """Fetch detailed information for a single launch to get vidURLs."""
+    if not launch_id:
+        return None
+    url = f"https://ll.thespacedevs.com/2.0.0/launch/{launch_id}/"
+    logger.info(f"Fetching details for launch {launch_id}")
+    try:
+        try:
+            response = requests.get(url, timeout=10, verify=True)
+        except Exception:
+            response = requests.get(url, timeout=10, verify=False)
+        response.raise_for_status()
+        return response.json()
+    except Exception as e:
+        logger.warning(f"Failed to fetch launch details for {launch_id}: {e}")
+        return None
+
 # --- Data fetchers moved from app.py ---
 def fetch_launches():
     logger.info("Fetching SpaceX launch data")
@@ -725,6 +742,7 @@ def fetch_launches():
                         'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                         'pad': launch['pad']['name'],
                         'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
+                        'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
                         'landing_type': landing_type,
                         'landing_location': landing_location
                     }
@@ -762,8 +780,8 @@ def fetch_launches():
         else:
             logger.error("Both main and backup caches are unavailable, using fallback data")
             previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?si=rvwtzwj_URqw2dtK&controls=0&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY'},
-                {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': ''},
+                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?si=rvwtzwj_URqw2dtK&controls=0&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY', 'x_video_url': ''},
+                {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': '', 'x_video_url': ''},
             ]
 
     # Load upcoming launches cache
@@ -820,6 +838,7 @@ def fetch_launches():
                     'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
                     'pad': launch['pad']['name'],
                     'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
+                    'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
                     'landing_type': landing_type,
                     'landing_location': landing_location
                 })
@@ -845,6 +864,30 @@ def fetch_launches():
             else:
                 logger.warning("No cached upcoming launches available; proceeding with empty list")
                 upcoming_launches = []
+
+    # Identify closest launches and fetch their details for x_video_url to ensure we have the latest livestream link
+    if network_available:
+        try:
+            # Candidates are the most recent previous launch and the next upcoming launch
+            candidates = []
+            if previous_launches:
+                candidates.append(previous_launches[0])
+            if upcoming_launches:
+                candidates.append(upcoming_launches[0])
+                
+            for candidate in candidates:
+                launch_id = candidate.get('id')
+                if launch_id:
+                    details = fetch_launch_details(launch_id)
+                    if details:
+                        vid_urls = details.get('vidURLs', [])
+                        # Search for x.com or twitter.com in the video URLs
+                        x_url = next((v['url'] for v in vid_urls if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), '')
+                        if x_url:
+                            candidate['x_video_url'] = x_url
+                            logger.info(f"Updated x_video_url for {candidate.get('mission')} to {x_url}")
+        except Exception as e:
+            logger.warning(f"Error updating closest launch X URLs: {e}")
 
     return {'previous': previous_launches, 'upcoming': upcoming_launches}
 
@@ -3324,6 +3367,40 @@ def get_next_race_info(race_schedule, tz_obj=None):
         next_r = min(upcoming, key=lambda x: parse(x['date_start']))
         return next_r
     return None
+
+def get_closest_x_video_url(launch_data):
+    """Find the X.com livestream URL of the launch closest to current time."""
+    if not launch_data:
+        return ""
+    
+    current_time = datetime.now(pytz.UTC)
+    previous = launch_data.get('previous', [])
+    upcoming = launch_data.get('upcoming', [])
+    
+    all_launches = previous + upcoming
+    closest_url = ""
+    min_diff = float('inf')
+    
+    for launch in all_launches:
+        x_url = launch.get('x_video_url')
+        if not x_url:
+            continue
+            
+        try:
+            launch_net = parse(launch['net'])
+            if launch_net.tzinfo is None:
+                launch_net = pytz.UTC.localize(launch_net)
+            else:
+                launch_net = launch_net.astimezone(pytz.UTC)
+                
+            diff = abs((current_time - launch_net).total_seconds())
+            if diff < min_diff:
+                min_diff = diff
+                closest_url = x_url
+        except Exception:
+            continue
+            
+    return closest_url
 
 def initialize_all_weather(locations_config):
     """Fetch initial weather for all configured locations."""

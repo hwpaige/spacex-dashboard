@@ -122,6 +122,7 @@ from functions import (
     sync_remembered_networks,
     fetch_narratives,
     remove_nm_connection,
+    get_closest_x_video_url,
     load_theme_settings,
     save_theme_settings
 )
@@ -355,6 +356,7 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    liveLaunchUrlChanged = pyqtSignal()
     # Globe spin/watchdog feature flag
     globeAutospinGuardChanged = pyqtSignal()
     # WiFi scanning progress notify (for UI spinner)
@@ -397,6 +399,8 @@ class Backend(QObject):
         except Exception as e:
             logger.warning(f"Failed to load initial launch cache: {e}")
             self._launch_data = {'previous': [], 'upcoming': []}
+        
+        self._live_launch_url = get_closest_x_video_url(self._launch_data)
 
         try:
             profiler.mark("Backend: Loading F1 Cache")
@@ -1033,6 +1037,10 @@ class Backend(QObject):
         """Expose all launch data (combined previous and upcoming) for calendar view"""
         return self._launch_data
 
+    @pyqtProperty(str, notify=liveLaunchUrlChanged)
+    def liveLaunchUrl(self):
+        return self._live_launch_url
+
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrends(self):
         current_year = datetime.now(pytz.UTC).year
@@ -1329,9 +1337,16 @@ class Backend(QObject):
     def update_time(self):
         self.timeChanged.emit()
 
+    def _update_live_launch_url(self):
+        new_live_url = get_closest_x_video_url(self._launch_data)
+        if new_live_url != getattr(self, '_live_launch_url', ''):
+            self._live_launch_url = new_live_url
+            self.liveLaunchUrlChanged.emit()
+
     @pyqtSlot()
     def update_countdown(self):
         # Update countdown every second and re-evaluate tray visibility
+        self._update_live_launch_url()
         self.countdownChanged.emit()
         self.launchTrayVisibilityChanged.emit()
 
@@ -1348,6 +1363,7 @@ class Backend(QObject):
         logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
         self._launch_descriptions = narratives
+        self._update_live_launch_url()
         self._f1_data = f1_data
         self._weather_data = weather_data
         # Update the EventModel's data reference
@@ -1391,6 +1407,7 @@ class Backend(QObject):
         logger.info("BOOT: Loading cached launch data...")
         # Load cached data if available, otherwise use empty data
         self._launch_data = self._load_cached_launch_data()
+        self._update_live_launch_url()
         logger.info("BOOT: Loading cached F1 data...")
         self._f1_data = self._load_cached_f1_data()
         logger.info("BOOT: Loading cached weather data...")
@@ -1431,6 +1448,7 @@ class Backend(QObject):
                 'previous': (prev_cache.get('data') if prev_cache else []) or [],
                 'upcoming': (up_cache.get('data') if up_cache else []) or []
             }
+            self._update_live_launch_url()
             # Update EventModel immediately
             self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
             self._event_model.update_data()
@@ -1634,6 +1652,7 @@ class Backend(QObject):
         """Handle launch data update completion"""
         self._launch_data = launch_data
         self._launch_descriptions = narratives
+        self._update_live_launch_url()
         self._launch_trends_cache.clear()  # Clear cache when data updates
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()

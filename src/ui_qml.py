@@ -2120,25 +2120,35 @@ Window {
                                     ToolTip { text: "NSF Starbase Live"; delay: 500 }
                                 }
 
-                                // Placeholder for current launch livestream (disabled)
+                                // Live button for current launch livestream (X.com)
                                 Rectangle {
+                                    id: liveBtn
+                                    property bool selected: (backend.liveLaunchUrl !== "" && String(root.currentVideoUrl) === backend.liveLaunchUrl)
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
-                                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                                    border.width: 1
-                                    opacity: 0.6
+                                    color: selected ? "#FF0000" : (backend.liveLaunchUrl !== "" ? "#CC0000" : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
+                                    border.color: selected ? "white" : (backend.liveLaunchUrl !== "" ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                    border.width: selected ? 2 : 1
+                                    opacity: backend.liveLaunchUrl !== "" ? 1.0 : 0.6
 
                                     Text {
                                         anchors.centerIn: parent
                                         text: "LIVE"
-                                        font.pixelSize: 14
+                                        font.pixelSize: 10
                                         font.bold: true
-                                        color: backend.theme === "dark" ? "#bbbbbb" : "#666666"
+                                        color: "white"
                                     }
-                                    MouseArea { anchors.fill: parent; enabled: false }
-                                    ToolTip { text: "Placeholder – will switch to the current launch livestream"; delay: 400 }
+                                    MouseArea { 
+                                        anchors.fill: parent
+                                        cursorShape: backend.liveLaunchUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        onClicked: {
+                                            if (backend.liveLaunchUrl !== "") {
+                                                root.currentVideoUrl = backend.liveLaunchUrl
+                                            }
+                                        }
+                                    }
+                                    ToolTip { text: backend.liveLaunchUrl !== "" ? "Switch to current launch livestream (X.com)" : "No live stream available"; delay: 400 }
                                 }
                             }
                         }
