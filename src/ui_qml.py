@@ -446,7 +446,7 @@ Window {
                     Item {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        visible: !!(backend && backend.mode === "spacex")
+                        visible: !!backend
 
                         ColumnLayout {
                             anchors.fill: parent
@@ -536,7 +536,7 @@ Window {
                         Layout.maximumHeight: plotCard.plotCardShowsGlobe ? 0 : 30
                         Layout.alignment: Qt.AlignTop
                         color: "transparent"
-                        visible: backend && backend.mode === "spacex" && !plotCard.plotCardShowsGlobe
+                        visible: backend && !plotCard.plotCardShowsGlobe
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -650,7 +650,7 @@ Window {
                     Rectangle {
                         id: globeOverlayToggle
                         parent: plotCard
-                        visible: backend && backend.mode === "spacex" && plotCard.plotCardShowsGlobe
+                        visible: backend && plotCard.plotCardShowsGlobe
                         x: plotCard.toggleAbsX
                         y: plotCard.toggleAbsY
                         width: 40
@@ -838,228 +838,6 @@ Window {
                         }
                     }
 
-                    // F1 Leaderboards
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend && backend.mode === "f1"
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 0
-                            spacing: 0
-
-                        // Standings List
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Layout.margins: 5
-                            color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
-                            radius: 8
-                            border.color: backend.theme === "dark" ? "#404040" : "#e0e0e0"
-                            border.width: 1
-
-                            GridView {
-                                id: standingsGrid
-                                anchors.fill: parent
-                                anchors.margins: 5
-                                model: backend.f1StandingsType === "drivers" ?
-                                       backend.driverStandings.slice(0, 20) :
-                                       backend.constructorStandings.slice(0, 10)
-                                clip: true
-                                cellWidth: (width - 10) / 2  // 2 columns accounting for margins
-                                cellHeight: 22  // Slightly more compact
-                                flow: GridView.TopToBottom  // Fill columns top to bottom
-
-                                delegate: Rectangle {
-                                    width: standingsGrid.cellWidth - 2
-                                    height: 18  // Match cell height minus margins
-                                    color: "transparent"
-
-                                    Rectangle {
-                                        anchors.fill: parent
-                                        anchors.margins: 1
-                                        color: index % 2 === 0 ?
-                                               (backend.theme === "dark" ? "#404040" : "#f8f8f8") :
-                                               (backend.theme === "dark" ? "#353535" : "#ffffff")
-                                        radius: 4
-                                        border.color: backend.theme === "dark" ? "#555555" : "#e8e8e8"
-                                        border.width: 1
-
-                                        // Position number - always same color
-                                        Text {
-                                            width: 16
-                                            height: parent.height - 1
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 1
-                                            verticalAlignment: Text.AlignVCenter
-                                            horizontalAlignment: Text.AlignCenter
-                                            text: modelData.position
-                                            font.pixelSize: 7
-                                            font.bold: true
-                                            color: backend.theme === "dark" ? "#ffffff" : "#333333"
-                                        }
-
-                                        Row {
-                                            spacing: 2
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            anchors.left: parent.left
-                                            anchors.leftMargin: 18  // Leave space for position number
-                                            anchors.right: parent.right
-                                            anchors.rightMargin: 40  // Leave space for points
-
-                                            // Team logo
-                                            Image {
-                                                width: 14
-                                                height: 14
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                source: {
-                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
-
-                                                    // Normalize team name for lookup
-                                                    var normalizedTeamName = teamName.toLowerCase();
-                                                    var lookupName = normalizedTeamName;
-                                                    
-                                                    // Map raw API names to standard names
-                                                    var nameMapping = {
-                                                        "mclaren formula 1 team": "McLaren",
-                                                        "red bull racing": "Red Bull",
-                                                        "mercedes formula 1 team": "Mercedes",
-                                                        "scuderia ferrari": "Ferrari",
-                                                        "williams racing": "Williams",
-                                                        "rb f1 team": "AlphaTauri",
-                                                        "sauber f1 team": "Alfa Romeo",
-                                                        "haas f1 team": "Haas F1 Team",
-                                                        "aston martin f1 team": "Aston Martin",
-                                                        "alpine f1 team": "Alpine"
-                                                    };
-                                                    
-                                                    if (nameMapping[normalizedTeamName]) {
-                                                        lookupName = nameMapping[normalizedTeamName];
-                                                    }
-
-                                                    var teamLogos = {
-                                                        "Mercedes": "file:///" + f1TeamsPath + "/mercedes.svg",
-                                                        "Red Bull": "file:///" + f1TeamsPath + "/red_bull.svg",
-                                                        "Ferrari": "file:///" + f1TeamsPath + "/ferrari.svg",
-                                                        "McLaren": "file:///" + f1TeamsPath + "/mclaren.svg",
-                                                        "Alpine": "file:///" + f1TeamsPath + "/alpine.svg",
-                                                        "Aston Martin": "file:///" + f1TeamsPath + "/aston_martin.svg",
-                                                        "Williams": "file:///" + f1TeamsPath + "/williams.svg",
-                                                        "Alfa Romeo": "file:///" + f1TeamsPath + "/alfa_romeo.svg",
-                                                        "Haas F1 Team": "file:///" + f1TeamsPath + "/haas.svg",
-                                                        "AlphaTauri": "file:///" + f1TeamsPath + "/alpha_tauri.svg"
-                                                    };
-                                                    var logo = teamLogos[lookupName];
-                                                    return logo || "";
-                                                }
-                                                fillMode: Image.PreserveAspectFit
-                                                visible: source !== ""
-                                            }
-
-                                            // Driver/Constructor name
-                                            Text {
-                                                text: backend.f1StandingsType === "drivers" ?
-                                                      (modelData.Driver.givenName + " " + modelData.Driver.familyName) :
-                                                      modelData.Constructor.name
-                                                font.pixelSize: 8
-                                                font.bold: true
-                                                color: backend.theme === "dark" ? "#ffffff" : "#333333"
-                                                Layout.fillWidth: true
-                                                elide: Text.ElideRight
-                                            }
-
-                                            // Team color indicator
-                                            Rectangle {
-                                                width: 12
-                                                height: 12
-                                                anchors.verticalCenter: parent.verticalCenter
-                                                color: {
-                                                    var teamName = modelData.Constructor ? modelData.Constructor.name : "Unknown";
-                                                    return color || "#FF0000";
-                                                }
-                                                radius: 2
-                                                border.color: backend.theme === "dark" ? "#666666" : "#cccccc"
-                                                border.width: 1
-                                            }
-                                        }
-
-                                        // Points - positioned at far right
-                                        Text {
-                                            anchors.right: parent.right
-                                            anchors.rightMargin: 2
-                                            anchors.verticalCenter: parent.verticalCenter
-                                            text: modelData.points + " pts"
-                                            font.pixelSize: 7
-                                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                                            font.bold: true
-                                            width: 35
-                                            horizontalAlignment: Text.AlignRight
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        // Standings type selector buttons container
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.preferredHeight: 30
-                            Layout.maximumHeight: 30
-                            Layout.alignment: Qt.AlignTop
-                            color: "transparent"
-                            visible: backend && backend.mode === "f1"
-
-                            RowLayout {
-                                anchors.centerIn: parent
-                                spacing: 6
-
-                                // Standings type buttons
-                                Repeater {
-                                    model: [
-                                        {"type": "drivers", "icon": "\uf1b9", "tooltip": "Driver Standings"},
-                                        {"type": "constructors", "icon": "\uf085", "tooltip": "Constructor Standings"}
-                                    ]
-                                    Rectangle {
-                                        Layout.preferredWidth: 40
-                                        Layout.preferredHeight: 28
-                                        color: backend.f1StandingsType === modelData.type ?
-                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                               (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                        radius: 14
-                                        border.color: backend.f1StandingsType === modelData.type ?
-                                                     (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                     (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                        border.width: backend.f1StandingsType === modelData.type ? 2 : 1
-
-                                        Behavior on color { ColorAnimation { duration: 200 } }
-                                        Behavior on border.color { ColorAnimation { duration: 200 } }
-                                        Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: modelData.icon
-                                            font.pixelSize: 14
-                                            font.family: "Font Awesome 5 Free"
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: backend.f1StandingsType = modelData.type
-                                        }
-
-                                        ToolTip {
-                                            text: modelData.tooltip
-                                            delay: 500
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
 
                     // Weather view buttons container
                     Rectangle {
@@ -1068,7 +846,7 @@ Window {
                         Layout.maximumHeight: 30
                         Layout.alignment: Qt.AlignTop
                         color: "transparent"
-                        visible: backend && backend.mode === "spacex"
+                        visible: !!backend
 
                         RowLayout {
                             anchors.centerIn: parent
@@ -1160,7 +938,7 @@ Window {
 
                         delegate: Item {
                             width: ListView.view.width
-                            height: model && model.isGroup ? 30 : (backend.mode === "spacex" ? launchColumn.height + 20 : (backend.mode === "f1" ? Math.max(80, 40 + (model && model.sessions && model.sessions.length ? model.sessions.length * 30 : 0)) : 40))
+                            height: model && model.isGroup ? 30 : launchColumn.height + 20
 
                             Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
 
@@ -1178,7 +956,7 @@ Window {
                                 anchors.left: parent.left; anchors.leftMargin: 10
                                 anchors.right: parent.right; anchors.rightMargin: 10
                                 spacing: 5
-                                visible: !!(model && !model.isGroup && backend.mode === "spacex" && typeof model === 'object')
+                                visible: !!(model && !model.isGroup && typeof model === 'object')
 
                                 Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 12; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
                                 Row { spacing: 5
@@ -1220,85 +998,6 @@ Window {
                                 }
                             }
 
-                            Row {
-                                anchors.fill: parent; anchors.margins: 10
-                                visible: !!(model && !model.isGroup && backend.mode === "f1" && typeof model === 'object')
-                                spacing: 10
-                                
-                                Column {
-                                    width: parent.width * 0.6  // 60% for text
-                                    spacing: 5
-                                    
-                                    // Race header with flag and name
-                                    Row {
-                                        spacing: 8
-                                        Image {
-                                            source: model && model.countryName ? backend.getCountryFlag(model.countryName) : ""
-                                            width: 24
-                                            height: 18
-                                            visible: backend && backend.mode === "f1" && source !== ""
-                                        }
-                                        Text {
-                                            text: model && model.countryName && !backend.getCountryFlag(model.countryName) ? '🏁' : ''
-                                            font.pixelSize: 16
-                                            visible: backend && backend.mode === "f1" && text !== ''
-                                        }
-                                        Text { 
-                                            text: model && model.meetingName ? model.meetingName : ''; 
-                                            color: backend.theme === "dark" ? "white" : "black"; 
-                                            font.pixelSize: 14; 
-                                            font.bold: true
-                                        }
-                                    }
-                                    
-                                    // Circuit info
-                                    Text { text: model && model.circuitShortName ? model.circuitShortName : ""; color: "#999999"; font.pixelSize: 12 }
-                                    Text { text: model && model.location ? model.location : ""; color: "#999999"; font.pixelSize: 12 }
-                                    
-                                    // Sessions list
-                                    Column {
-                                        spacing: 2
-                                        visible: backend && backend.mode === "f1"
-                                        
-                                        property var raceSessions: model ? (model.sessions || []) : []
-                                        
-                                        Repeater {
-                                            model: parent.raceSessions
-                                            delegate: Row {
-                                                spacing: 8
-                                                visible: !!(modelData && typeof modelData === 'object' && modelData.session_name && modelData.date_start)
-                                                Text { 
-                                                    text: "\uf017"; 
-                                                    font.family: "Font Awesome 5 Free"; 
-                                                    font.pixelSize: 10; 
-                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#666666";
-                                                    anchors.verticalCenter: parent.verticalCenter
-                                                }
-                                                Text { 
-                                                    text: (modelData && modelData.session_name ? modelData.session_name : "") + ": " + (modelData && modelData.date_start ? Qt.formatDateTime(new Date(modelData.date_start), "MMM dd yyyy, hh:mm") + " UTC" : ""); 
-                                                    color: (modelData && modelData.session_type === "Race") ? "#FF4444" : (modelData && modelData.session_type === "Qualifying") ? "#FFAA00" : "#999999"; 
-                                                    font.pixelSize: 11;
-                                                    font.bold: !!(modelData && modelData.session_type === "Race");
-                                                    anchors.verticalCenter: parent.verticalCenter;
-                                                    width: 200;  // Smaller since space is limited
-                                                    wrapMode: Text.Wrap;
-                                                    maximumLineCount: 2;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                                
-                                // Track map
-                                Image {
-                                    width: parent.width * 0.4  // 40% for map
-                                    height: parent.height
-                                    source: model && model.trackMapPath ? "file:///" + model.trackMapPath : ""
-                                    visible: !!(model && model.trackMapPath)
-                                    fillMode: Image.PreserveAspectFit
-                                    asynchronous: true
-                                }
-                            }
                         }
                     }
 
@@ -1621,27 +1320,23 @@ Window {
                         }
                     } // End StackLayout
 
-                    // Launch/Race view buttons container
+                    // Launch view buttons container
                     Rectangle {
                         Layout.fillWidth: true
                         Layout.preferredHeight: 30
                         Layout.maximumHeight: 30
                         Layout.alignment: Qt.AlignTop
                         color: "transparent"
-                        visible: backend && (backend.mode === "spacex" || backend.mode === "f1")
 
                         RowLayout {
                             anchors.centerIn: parent
                             spacing: 6
 
                             Repeater {
-                                model: backend.mode === "spacex" ? [
+                                model: [
                                     {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
                                     {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"},
                                     {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"} 
-                                ] : [
-                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Races"},
-                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Races"}
                                 ]
                                 Rectangle {
                                     Layout.preferredWidth: 40
@@ -1743,7 +1438,7 @@ Window {
                             layer.enabled: true
                             layer.smooth: true
                             backgroundColor: "transparent"
-                            url: parent.visible ? (backend.mode === "spacex" ? root.currentVideoUrl : (nextRace && nextRace.circuit_short_name && circuitCoords[nextRace.circuit_short_name] ? "https://www.openstreetmap.org/export/embed.html?bbox=" + (circuitCoords[nextRace.circuit_short_name].lon - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat - 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lon + 0.01) + "," + (circuitCoords[nextRace.circuit_short_name].lat + 0.01) + "&layer=mapnik&marker=" + circuitCoords[nextRace.circuit_short_name].lat + "," + circuitCoords[nextRace.circuit_short_name].lon : "")) : ""
+                            url: parent.visible ? root.currentVideoUrl : ""
                             settings.webGLEnabled: true
                             settings.accelerated2dCanvasEnabled: true
                             settings.allowRunningInsecureContent: true
@@ -1757,7 +1452,7 @@ Window {
                             onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
                             onLoadingChanged: function(loadRequest) {
                                 if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                    console.log("YouTube/Map WebEngineView load failed:", loadRequest.errorString);
+                                    console.log("YouTube WebEngineView load failed:", loadRequest.errorString);
                                     console.log("Error code:", loadRequest.errorCode);
                                     console.log("Error domain:", loadRequest.errorDomain);
 
@@ -1781,7 +1476,7 @@ Window {
                                         console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
                                     }
                                 } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                    console.log("YouTube/Map WebEngineView loaded successfully");
+                                    console.log("YouTube WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
                                     if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
                                     youtubeRetryTimer.stop(); // Stop any pending retries
@@ -1822,7 +1517,7 @@ Window {
                             id: youtubeOverlay
                             anchors.fill: parent
                             z: 2
-                            visible: backend && backend.mode === "spacex" && !isWindyFullscreen
+                            visible: backend && !isWindyFullscreen
 
                             RowLayout {
                                 id: youtubePills
@@ -2345,48 +2040,6 @@ Window {
                             }
                         }
                     }
-                    // Mode selector - F1/SpaceX toggle
-                    Row {
-                        spacing: 4
-                        Repeater {
-                            model: ["F1", "SpaceX"]
-                            Rectangle {
-                                width: 50
-                                height: 32
-                                color: backend.mode === modelData.toLowerCase() ?
-                                       (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                       (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                radius: 16
-                                border.color: backend.mode === modelData.toLowerCase() ?
-                                             (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                             (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                border.width: backend.mode === modelData.toLowerCase() ? 2 : 1
-
-                                Behavior on color { ColorAnimation { duration: 200 } }
-                                Behavior on border.color { ColorAnimation { duration: 200 } }
-                                Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData === "F1" ? "\uf1b9" : "\uf135"  // Car for F1, Rocket for SpaceX
-                                    color: backend.theme === "dark" ? "white" : "black"
-                                    font.pixelSize: 16
-                                    font.family: "Font Awesome 5 Free"
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: backend.mode = modelData.toLowerCase()
-                                }
-
-                                ToolTip {
-                                    text: modelData === "F1" ? "Formula 1 Dashboard" : "SpaceX Dashboard"
-                                    delay: 500
-                                }
-                            }
-                        }
-                    }
 
                     // Location Selector (Relocated and Restyled)
                     Rectangle {
@@ -2668,7 +2321,7 @@ Window {
 
                 // Launch details tray toggle
                 Rectangle {
-                    visible: backend.mode === "spacex"
+                    visible: true
                     Layout.preferredWidth: 50
                     Layout.preferredHeight: 32
                     radius: 16

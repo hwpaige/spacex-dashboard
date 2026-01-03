@@ -386,7 +386,7 @@ class Backend(QObject):
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
         self._tz = tzlocal()
-        self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
+        self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
         self._launch_trends_cache = {}  # Cache for launch trends series
         self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
