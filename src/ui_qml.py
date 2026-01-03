@@ -13,7 +13,7 @@ Window {
     visible: true
     width: 1480
     height: 320
-    title: "SpaceX/F1 Dashboard"
+    title: "SpaceX Dashboard"
     onActiveChanged: {
         if (active) {
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
@@ -310,28 +310,10 @@ Window {
     }
 
     // Alignment guide rectangle removed
-
     // Cache expensive / repeated lookups
-    property var nextRace: backend.get_next_race()
-    Timer { interval: 60000; running: true; repeat: true; onTriggered: nextRace = backend.get_next_race() }
-
+    
     Connections {
         target: backend
-        function onModeChanged() {
-            if (backend.mode === "f1") {
-                nextRace = backend.get_next_race()
-            }
-        }
-        function onF1Changed() {
-            if (backend.mode === "f1") {
-                nextRace = backend.get_next_race()
-                // Reload F1 chart view to show fresh data
-                if (typeof f1ChartView !== 'undefined' && f1ChartView.reload) {
-                    f1ChartView.reload()
-                    console.log("F1 chart view reloaded (f1Changed)")
-                }
-            }
-        }
         function onWeatherChanged() {
             // Reload loop removed to prevent race condition with radarBaseUrl binding.
             // Windy widget URL binding now handles updates reliably.
@@ -704,205 +686,10 @@ Window {
 
                         ToolTip { text: "Show Plot"; delay: 500 }
                     }
-
-                    // F1 Driver Points Chart
-                    Item {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        visible: backend && backend.mode === "f1"
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 0
-                            spacing: 0
-
-                            Text {
-                                text: {
-                                    if (!backend) return "F1 Data"
-                                    switch(backend.f1ChartType) {
-                                        case "standings": return "F1 Driver Standings Over Time"
-                                        case "weather": return "F1 Weather Data"
-                                        case "wind_polar": return "F1 Wind Polar"
-                                        case "telemetry": return "F1 Telemetry"
-                                        case "track_telemetry": return "F1 Track Telemetry"
-                                        default: return "F1 Data"
-                                    }
-                                }
-                                font.pixelSize: 14
-                                font.bold: true
-                                color: backend.theme === "dark" ? "white" : "black"
-                                Layout.alignment: Qt.AlignHCenter
-                                Layout.margins: 1
-                            }
-
-                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
-
-                            Loader {
-                                id: f1ChartLoader
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                Layout.margins: 5
-                                active: backend && backend.mode === "f1"
-                                visible: active
-
-                                sourceComponent: WebEngineView {
-                                    id: f1ChartView
-                                    anchors.fill: parent
-                                    layer.enabled: true
-                                    layer.smooth: true
-                                    backgroundColor: "transparent"
-
-                                    // Bind url to chart file URL that updates reactively
-                                    url: backend.f1ChartUrl
-
-                                    opacity: showAnimated
-
-                                    property real showAnimated: 0
-
-                                    Component.onCompleted: showAnimated = 1
-
-                                    Behavior on showAnimated {
-                                        NumberAnimation {
-                                            duration: 500
-                                            easing.type: Easing.InOutQuad
-                                        }
-                                    }
-
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(f1ChartView, 8)
-                                        }
-                                    }
-
-                                    // Staggered reload for F1 view
-                                    Connections {
-                                        target: backend
-                                        function onReloadWebContent() {
-                                            f1ReloadTimer.start()
-                                        }
-                                    }
-                                    Timer {
-                                        id: f1ReloadTimer
-                                        interval: 5500
-                                        repeat: false
-                                        onTriggered: {
-                                            f1ChartView.reload()
-                                            console.log("F1 chart view reloaded (staggered)")
-                                        }
-                                    }
-                                }
-                            }
-
-                            // F1 Stat selector buttons container
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.preferredHeight: 30
-                                Layout.maximumHeight: 30
-                                Layout.alignment: Qt.AlignTop
-                                color: "transparent"
-                                visible: backend && backend.mode === "f1"
-
-                                RowLayout {
-                                    anchors.centerIn: parent
-                                    spacing: 6
-
-                                    // Chart category buttons
-                                    Repeater {
-                                        model: [
-                                            {"type": "standings", "icon": "\uf091", "tooltip": "Driver Standings"},
-                                            {"type": "weather", "icon": "\uf6c4", "tooltip": "Weather Data"},
-                                            {"type": "wind_polar", "icon": "\uf72e", "tooltip": "Wind Polar"},
-                                            {"type": "telemetry", "icon": "\uf0e4", "tooltip": "Telemetry"},
-                                            {"type": "track_telemetry", "icon": "\uf567", "tooltip": "Track Telemetry"}
-                                        ]
-                                        Rectangle {
-                                            Layout.preferredWidth: 40
-                                            Layout.preferredHeight: 28
-                                            color: backend.f1ChartType === modelData.type ?
-                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                            radius: 14
-                                            border.color: backend.f1ChartType === modelData.type ?
-                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                            border.width: backend.f1ChartType === modelData.type ? 2 : 1
-
-                                            Behavior on color { ColorAnimation { duration: 200 } }
-                                            Behavior on border.color { ColorAnimation { duration: 200 } }
-                                            Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: modelData.icon
-                                                font.pixelSize: 14
-                                                font.family: "Font Awesome 5 Free"
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: backend.f1ChartType = modelData.type
-                                            }
-
-                                            ToolTip {
-                                                text: modelData.tooltip
-                                                delay: 500
-                                            }
-                                        }
-                                    }
-
-                                    // Stat type buttons
-                                    Repeater {
-                                        model: [
-                                            {"type": "points", "icon": "\uf091", "tooltip": "Points"},
-                                            {"type": "wins", "icon": "\uf005", "tooltip": "Wins"}
-                                        ]
-                                        Rectangle {
-                                            visible: backend.f1ChartType === "standings"
-                                            Layout.preferredWidth: visible ? 40 : 0
-                                            Layout.preferredHeight: 28
-                                            color: backend.f1ChartStat === modelData.type ?
-                                                   (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                                   (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                            radius: 14
-                                            border.color: backend.f1ChartStat === modelData.type ?
-                                                         (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                         (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
-                                            border.width: backend.f1ChartStat === modelData.type ? 2 : 1
-
-                                            Behavior on color { ColorAnimation { duration: 200 } }
-                                            Behavior on border.color { ColorAnimation { duration: 200 } }
-                                            Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                            Text {
-                                                anchors.centerIn: parent
-                                                text: modelData.icon
-                                                font.pixelSize: 14
-                                                font.family: "Font Awesome 5 Free"
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: backend.f1ChartStat = modelData.type
-                                            }
-
-                                            ToolTip {
-                                                text: modelData.tooltip
-                                                delay: 500
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
             }
 
-            // Column 2: Radar or Race Calendar
+            // Column 2: Radar
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -924,7 +711,7 @@ Window {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             anchors.margins: 10
-                            visible: backend && backend.mode === "spacex"
+                            visible: !!backend
                             orientation: Qt.Vertical
                             // Do not clip; allow Windy WebGL to render freely
                             clip: false

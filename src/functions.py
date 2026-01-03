@@ -2772,7 +2772,7 @@ def get_launch_tray_visibility_state(launch_data, mode):
 
     return False
 
-def get_countdown_string(launch_data, f1_schedule, mode, next_launch, next_race, tz_obj):
+def get_countdown_string(launch_data, mode, next_launch, tz_obj):
     """Generate a formatted countdown string for the dashboard."""
     if mode == 'spacex':
         upcoming = launch_data.get('upcoming', [])

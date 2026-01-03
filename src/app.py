@@ -35,7 +35,6 @@ from functions import (
     # network/system helpers
     check_wifi_status,
     fetch_launches,
-    fetch_f1_data,
     fetch_weather,
     get_encryption_key,
     encrypt_password,
@@ -48,7 +47,6 @@ from functions import (
     start_http_server,
     # parsing/math helpers
     parse_metar,
-    rotate,
     # CACHE_REFRESH constants
     CACHE_REFRESH_INTERVAL_PREVIOUS,
     CACHE_REFRESH_INTERVAL_UPCOMING,
@@ -60,17 +58,12 @@ from functions import (
     CACHE_FILE_PREVIOUS,
     CACHE_FILE_PREVIOUS_BACKUP,
     CACHE_FILE_UPCOMING,
-    CACHE_DIR_F1,
-    CACHE_FILE_F1_SCHEDULE,
-    CACHE_FILE_F1_DRIVERS,
-    CACHE_FILE_F1_CONSTRUCTORS,
     RUNTIME_CACHE_FILE_PREVIOUS,
     RUNTIME_CACHE_FILE_UPCOMING,
     WIFI_KEY_FILE,
     REMEMBERED_NETWORKS_FILE,
     LAST_CONNECTED_NETWORK_FILE,
     # data constants
-    F1_TEAM_COLORS,
     location_settings,
     radar_locations,
     circuit_coords,
@@ -79,30 +72,20 @@ from functions import (
     test_network_connectivity,
     get_git_version_info,
     check_github_for_updates,
-    get_country_flag_url,
     get_launch_trends_series,
-    generate_f1_chart_html,
     get_launch_trajectory_data,
     group_event_data,
     LAUNCH_DESCRIPTIONS,
-    normalize_team_name,
     check_wifi_interface,
     get_wifi_interface_info,
     get_wifi_debug_info,
     start_update_script,
-    get_f1_driver_points_chart,
-    get_f1_constructor_points_chart,
-    get_f1_driver_points_series,
-    get_f1_constructor_points_series,
-    get_f1_driver_standings_over_time_series,
-    get_empty_chart_url,
     generate_month_labels_for_days,
     connect_to_wifi_nmcli,
     connect_to_wifi_worker,
     get_max_value_from_series,
     get_next_launch_info,
     get_upcoming_launches_list,
-    get_next_race_info,
     initialize_all_weather,
     get_best_wifi_reconnection_candidate,
     calculate_chart_interval,
@@ -291,7 +274,7 @@ class EventModel(QAbstractListModel):
         self.endResetModel()
 
 class DataLoader(QObject):
-    finished = pyqtSignal(dict, dict, dict, list)
+    finished = pyqtSignal(dict, dict, list)
     statusUpdate = pyqtSignal(str)
 
     def run(self):
@@ -300,19 +283,19 @@ class DataLoader(QObject):
             try: self.statusUpdate.emit(msg)
             except RuntimeError: pass
 
-        def _safe_emit_finished(l, f, w, n):
-            try: self.finished.emit(l, f, w, n)
+        def _safe_emit_finished(l, f, w):
+            try: self.finished.emit(l, f, w)
             except RuntimeError: pass
 
         profiler.mark("DataLoader: Starting full data load")
         # Delegate full load to functions.py
-        launch_data, f1_data, weather_data, narratives = perform_full_dashboard_data_load(
+        launch_data, weather_data, narratives = perform_full_dashboard_data_load(
             location_settings, 
             status_callback=_safe_emit_status
         )
         profiler.mark("DataLoader: Full data load complete")
 
-        _safe_emit_finished(launch_data, f1_data, weather_data, narratives)
+        _safe_emit_finished(launch_data, weather_data, narratives)
 
 class LaunchUpdater(QObject):
     finished = pyqtSignal(dict, list)
@@ -381,9 +364,6 @@ class Backend(QObject):
         self._location = 'Starbase'
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'line'  # 'bar' or 'line'
-        self._f1_chart_stat = 'points'  # 'points', 'wins', etc.
-        self._f1_chart_type = 'standings'  # 'standings', 'weather', 'telemetry', etc.
-        self._f1_standings_type = 'drivers'  # 'drivers' or 'constructors'
         self._boot_mode = True
         self._isLoading = True
         self._loading_status = "Initializing..."
@@ -401,21 +381,6 @@ class Backend(QObject):
             self._launch_data = {'previous': [], 'upcoming': []}
         
         self._live_launch_url = get_closest_x_video_url(self._launch_data)
-
-        try:
-            profiler.mark("Backend: Loading F1 Cache")
-            f1_sched = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
-            f1_drivers = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
-            f1_const = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
-            self._f1_data = {
-                'schedule': f1_sched['data'] if f1_sched else [],
-                'driver_standings': f1_drivers['data'] if f1_drivers else [],
-                'constructor_standings': f1_const['data'] if f1_const else []
-            }
-        except Exception as e:
-            logger.warning(f"Failed to load initial F1 cache: {e}")
-            self._f1_data = {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
-
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
         self._weather_data = {}
         # Initialize radar base URL
@@ -1024,11 +989,9 @@ class Backend(QObject):
     @pyqtProperty(str, notify=countdownChanged)
     def countdown(self):
         return get_countdown_string(
-            self._launch_data, 
-            self._f1_data.get('schedule', []), 
+            self._launch_data,
             self._mode, 
-            self.get_next_launch(), 
-            self.get_next_race(), 
+            self.get_next_launch(),
             self._tz
         )
 
@@ -1092,120 +1055,6 @@ class Backend(QObject):
             current_month
         )
         return series
-
-    @pyqtProperty(list, notify=f1Changed)
-    def driverStandings(self):
-        return self._f1_data['driver_standings']
-
-    @pyqtProperty(list, notify=f1Changed)
-    def raceCalendar(self):
-        return sorted(self._f1_data['schedule'], key=lambda x: parse(x['date_start']))
-
-    @pyqtProperty(list, notify=f1Changed)
-    def constructorStandings(self):
-        return self._f1_data['constructor_standings']
-
-    @pyqtProperty(QVariant, notify=f1Changed)
-    def driverPointsChart(self):
-        return get_f1_driver_points_chart(self._f1_data['driver_standings'])
-
-    @pyqtProperty(QVariant, notify=f1Changed)
-    def constructorPointsChart(self):
-        return get_f1_constructor_points_chart(self._f1_data['constructor_standings'])
-
-    @pyqtProperty(QVariant, notify=f1Changed)
-    def driverPointsSeries(self):
-        return get_f1_driver_points_series(self._f1_data['driver_standings'], getattr(self, '_f1_chart_stat', 'points'))
-
-    @pyqtProperty(QVariant, notify=f1Changed)
-    def constructorPointsSeries(self):
-        return get_f1_constructor_points_series(self._f1_data['constructor_standings'], getattr(self, '_f1_chart_stat', 'points'))
-
-    @pyqtProperty(QVariant, notify=f1Changed)
-    def driverStandingsOverTimeSeries(self):
-        return get_f1_driver_standings_over_time_series(self._f1_data['driver_standings'], getattr(self, '_f1_chart_stat', 'points'))
-
-    @pyqtProperty(list, notify=f1Changed)
-    def driverNames(self):
-        standings = self._f1_data['driver_standings']
-        if not standings:
-            return []
-        
-        # Get top 10 drivers
-        top_drivers = standings[:10]
-        return [f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}" for driver in top_drivers]
-
-    @pyqtProperty(list, notify=f1Changed)
-    def constructorNames(self):
-        standings = self._f1_data['constructor_standings']
-        if not standings:
-            return []
-        
-        # Get top 10 constructors
-        top_constructors = standings[:10]
-        return [constructor['Constructor']['name'] for constructor in top_constructors]
-
-    @pyqtProperty(float, notify=f1Changed)
-    def driverPointsMaxValue(self):
-        return float(get_max_value_from_series(self.driverPointsSeries))
-
-    @pyqtProperty(float, notify=f1Changed)
-    def constructorPointsMaxValue(self):
-        return float(get_max_value_from_series(self.constructorPointsSeries))
-
-    @pyqtProperty(str, notify=f1Changed)
-    def f1ChartType(self):
-        return getattr(self, '_f1_chart_type', 'standings')
-
-    @f1ChartType.setter
-    def f1ChartType(self, value):
-        if self._f1_chart_type != value:
-            self._f1_chart_type = value
-            self.f1Changed.emit()
-
-    @pyqtProperty(str, notify=f1Changed)
-    def f1ChartUrl(self):
-        """Generate URL for interactive Plotly chart HTML for F1 data"""
-        # During boot, return empty URL to avoid blocking main thread with heavy plotly imports
-        if getattr(self, '_boot_mode', True):
-            return self._get_empty_chart_url()
-            
-        profiler.mark("Property: f1ChartUrl Start")
-        chart_type = getattr(self, '_f1_chart_type', 'standings')
-        
-        try:
-            stat_key = getattr(self, '_f1_chart_stat', 'points')
-            theme = getattr(self, '_theme', 'dark')
-            html = generate_f1_chart_html(self._f1_data, chart_type, stat_key, theme)
-
-            import tempfile
-            import os
-            temp_file = os.path.join(tempfile.gettempdir(), 'f1_chart.html')
-            with open(temp_file, 'w', encoding='utf-8') as f:
-                f.write(html)
-
-            res = f'file:///{temp_file.replace("\\", "/")}'
-            profiler.mark("Property: f1ChartUrl End")
-            return res
-
-        except Exception as e:
-            logging.error(f"F1 chart URL error: {e}")
-            return self._get_empty_chart_url()
-
-    def _get_empty_chart_url(self):
-        """Return URL for empty chart state"""
-        return get_empty_chart_url(getattr(self, '_theme', 'dark'))
-
-
-    @pyqtProperty(str, notify=f1Changed)
-    def f1StandingsType(self):
-        return getattr(self, '_f1_standings_type', 'drivers')
-
-    @f1StandingsType.setter
-    def f1StandingsType(self, value):
-        if self._f1_standings_type != value:
-            self._f1_standings_type = value
-            self.f1Changed.emit()
 
     @pyqtProperty(bool, notify=updateAvailableChanged)
     def updateAvailable(self):
@@ -1301,10 +1150,6 @@ class Backend(QObject):
             logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
             self.f1Changed.emit()
             profiler.mark("Boot Mode Disabled (Charts Triggered)")
-
-    @pyqtSlot(result=QVariant)
-    def get_next_race(self):
-        return get_next_race_info(self._f1_data['schedule'], self._tz)
 
     def initialize_weather(self):
         return initialize_all_weather(location_settings)
@@ -1408,8 +1253,6 @@ class Backend(QObject):
         # Load cached data if available, otherwise use empty data
         self._launch_data = self._load_cached_launch_data()
         self._update_live_launch_url()
-        logger.info("BOOT: Loading cached F1 data...")
-        self._f1_data = self._load_cached_f1_data()
         logger.info("BOOT: Loading cached weather data...")
         self._weather_data = self._load_cached_weather_data()
 
@@ -1590,42 +1433,6 @@ class Backend(QObject):
             logger.warning(f"Backend: Failed to load cached launch data: {e}")
         logger.info("Backend: No cached launch data available")
         return {'previous': [], 'upcoming': []}
-
-    def _load_cached_f1_data(self):
-        """Load cached F1 data for offline mode"""
-        try:
-            schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
-            drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
-            constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
-            
-            schedule = schedule_cache['data'] if schedule_cache else []
-            driver_standings = drivers_cache['data'] if drivers_cache else []
-            constructor_standings = constructors_cache['data'] if constructors_cache else []
-            
-            # Normalize driver standings
-            for standing in driver_standings:
-                if 'Constructor' in standing and 'name' in standing['Constructor']:
-                    original_name = standing['Constructor']['name']
-                    normalized_name = normalize_team_name(original_name)
-                    standing['Constructor']['name'] = normalized_name
-            
-            # Normalize constructor standings  
-            for standing in constructor_standings:
-                if 'Constructor' in standing and 'name' in standing['Constructor']:
-                    original_name = standing['Constructor']['name']
-                    normalized_name = normalize_team_name(original_name)
-                    standing['Constructor']['name'] = normalized_name
-            
-            logger.info("Backend: Loaded and normalized cached F1 data for offline mode")
-            return {
-                'schedule': schedule,
-                'driver_standings': driver_standings,
-                'constructor_standings': constructor_standings
-            }
-        except Exception as e:
-            logger.warning(f"Backend: Failed to load cached F1 data: {e}")
-        logger.info("Backend: No cached F1 data available")
-        return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
 
     def _load_cached_weather_data(self):
         """Load cached/default weather data for offline mode"""
@@ -2096,12 +1903,6 @@ class Backend(QObject):
     def getWifiDebugInfo(self):
         """Get comprehensive WiFi debugging information"""
         return get_wifi_debug_info()
-
-    @pyqtSlot(str, result=str)
-    def getCountryFlag(self, country_name):
-        """Get flag icon path for a country name"""
-        assets_dir = os.path.join(os.path.dirname(__file__), "..", "assets")
-        return get_country_flag_url(country_name, assets_dir)
 
     @pyqtSlot()
     def runUpdateScript(self):
