@@ -348,6 +348,8 @@ class Backend(QObject):
     wifiScanResultsReady = pyqtSignal(list)
     # Emitted by background boot worker to deliver results to main thread
     initialChecksReady = pyqtSignal(bool, bool, dict, dict)
+    # Background update result from boot worker (moved out of critical path)
+    initialUpdateCheckReady = pyqtSignal(bool, dict)
     # Update progress UI signals
     updatingInProgressChanged = pyqtSignal()
     updatingInProgressChanged = pyqtSignal()
@@ -470,8 +472,9 @@ class Backend(QObject):
         # Route background boot results back to the main thread
         try:
             self.initialChecksReady.connect(self._apply_initial_checks_results)
+            self.initialUpdateCheckReady.connect(self._apply_initial_update_result)
         except Exception as _e:
-            logger.debug(f"Could not connect initialChecksReady signal: {_e}")
+            logger.debug(f"Could not connect boot result signals: {_e}")
         # Connect Wi‑Fi scan results signal (ensures UI-thread application)
         try:
             self.wifiScanResultsReady.connect(self._apply_wifi_scan_results)
@@ -666,12 +669,25 @@ class Backend(QObject):
                 connected = self._wifi_connected
 
             src_dir = os.path.dirname(__file__)
-            res = perform_bootstrap_diagnostics(src_dir, connected)
+            # Run bootstrap diagnostics WITHOUT blocking for update check to speed up data loading
+            res = perform_bootstrap_diagnostics(src_dir, connected, skip_update_check=True)
             # Emit results; connected slot will run on the main thread
             try:
                 self.initialChecksReady.emit(*res)
             except Exception as e:
                 logger.error(f"BOOT: Failed to emit initialChecksReady: {e}")
+
+            # NOW, perform update check in the background if we have connectivity,
+            # so it doesn't block the DataLoader from starting.
+            if res[0]: # connectivity_result
+                try:
+                    logger.info("BOOT: Starting background update check...")
+                    current_info = res[2]
+                    current_hash = current_info.get('hash', '')
+                    has_update, latest_info = check_github_for_updates(current_hash)
+                    self.initialUpdateCheckReady.emit(has_update, latest_info or {})
+                except Exception as e:
+                    logger.debug(f"BOOT: Background update check failed: {e}")
 
         threading.Thread(target=_initial_checks_worker, daemon=True).start()
         # Return immediately; UI remains responsive while checks run. No guard timers.
@@ -680,6 +696,7 @@ class Backend(QObject):
     def _apply_initial_checks_results(self, connectivity_result, update_available, current_info, latest_info):
         """Apply initial check results on the main (Qt) thread."""
         try:
+            # Note: update_available and latest_info might be defaults if skip_update_check was used
             self.updateAvailable = update_available
             self._current_version_info = current_info
             self._latest_version_info = latest_info
@@ -711,6 +728,17 @@ class Backend(QObject):
             self._setup_timers()
         except Exception as e:
             logger.error(f"BOOT: Failed to apply initial checks results on main thread: {e}")
+
+    @pyqtSlot(bool, dict)
+    def _apply_initial_update_result(self, update_available, latest_info):
+        """Apply the result of the background boot-time update check."""
+        try:
+            self.updateAvailable = update_available
+            if latest_info:
+                self._latest_version_info = latest_info
+            logger.info(f"BOOT: Background update check finished (update_available={update_available})")
+        except Exception as e:
+            logger.error(f"BOOT: Failed to apply background update result: {e}")
 
     @pyqtSlot()
     def _on_initial_checks_guard_timeout(self):

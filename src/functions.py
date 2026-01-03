@@ -1455,7 +1455,7 @@ def test_network_connectivity(wifi_connected=True):
     for url in test_urls:
         try:
             logger.debug(f"Testing connectivity to {url}")
-            urllib.request.urlopen(url, timeout=5)  # Increased timeout for reliability
+            urllib.request.urlopen(url, timeout=3)  # Reduced timeout for faster boot
             logger.info(f"Network connectivity confirmed via {url}")
             result = True
             break
@@ -1506,22 +1506,36 @@ def get_git_version_info(src_dir):
 
 
 def check_github_for_updates(current_hash, repo_owner="hwpaige", repo_name="spacex-dashboard"):
-    """Check if a newer version is available on GitHub"""
+    """Check if a newer version is available on GitHub using urllib for better boot performance."""
+    profiler.mark("check_github_for_updates Start")
     try:
         api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/master"
-        response = requests.get(api_url, timeout=10)
-        if response.status_code == 200:
-            latest = response.json()
-            latest_hash = latest['sha']
-            return latest_hash != current_hash, {
-                'hash': latest_hash,
-                'short_hash': latest_hash[:8],
-                'message': latest['commit']['message'],
-                'author': latest['commit']['author']['name'],
-                'date': latest['commit']['author']['date']
-            }
+        # Use urllib.request with a short timeout to avoid GIL contention during boot
+        req = urllib.request.Request(api_url, headers={'User-Agent': 'SpaceX-Dashboard-App'})
+        logger.info(f"Checking for updates at {api_url}...")
+        with urllib.request.urlopen(req, timeout=3) as response:
+            if response.status == 200:
+                latest = json.loads(response.read().decode())
+                latest_hash = latest['sha']
+                profiler.mark("check_github_for_updates End (Success)")
+                logger.info(f"Update check successful. Latest hash: {latest_hash[:8]}")
+                return latest_hash != current_hash, {
+                    'hash': latest_hash,
+                    'short_hash': latest_hash[:8],
+                    'message': latest['commit']['message'],
+                    'author': latest['commit']['author']['name'],
+                    'date': latest['commit']['author']['date']
+                }
+            else:
+                logger.warning(f"GitHub update check returned status {response.status}")
+    except urllib.error.URLError as e:
+        logger.info(f"GitHub update check network error (possibly offline): {e}")
+    except socket.timeout:
+        logger.info("GitHub update check timed out after 3 seconds")
     except Exception as e:
-        logger.error(f"Error checking GitHub updates: {e}")
+        logger.info(f"GitHub update check failed: {type(e).__name__}: {e}")
+    
+    profiler.mark("check_github_for_updates End (Fail/Timeout)")
     return False, None
 
 def connect_to_wifi_worker(ssid, password, wifi_interface=None):
@@ -2830,8 +2844,9 @@ def get_update_progress_summary(log_path):
         pass
     return "Updating…"
 
-def perform_bootstrap_diagnostics(src_dir, wifi_connected_state=True):
-    """Perform bootstrap network and update checks in parallel."""
+def perform_bootstrap_diagnostics(src_dir, wifi_connected_state=True, skip_update_check=False):
+    """Perform bootstrap network and update checks. Update check can be skipped to avoid boot delay."""
+    profiler.mark("perform_bootstrap_diagnostics Start")
     connectivity_result = test_network_connectivity(wifi_connected_state)
     update_available = False
     current_info = {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
@@ -2841,13 +2856,14 @@ def perform_bootstrap_diagnostics(src_dir, wifi_connected_state=True):
         current_info = get_git_version_info(src_dir) or current_info
     except: pass
 
-    if connectivity_result:
+    if connectivity_result and not skip_update_check:
         try:
             current_hash = current_info.get('hash', '')
             update_available, latest_info = check_github_for_updates(current_hash)
             latest_info = latest_info or current_info
         except: pass
 
+    profiler.mark("perform_bootstrap_diagnostics End")
     return connectivity_result, update_available, current_info, latest_info
 
 def disconnect_from_wifi(wifi_interface=None):
