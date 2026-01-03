@@ -81,11 +81,9 @@ __all__ = [
     # network/system helpers
     "check_wifi_status",
     "fetch_launches",
-    "fetch_f1_data",
     "fetch_weather",
     # parsing/math helpers
     "parse_metar",
-    "rotate",
     # exported constants
     "CACHE_REFRESH_INTERVAL_PREVIOUS",
     "CACHE_REFRESH_INTERVAL_UPCOMING",
@@ -124,25 +122,15 @@ __all__ = [
     "test_network_connectivity",
     "get_git_version_info",
     "check_github_for_updates",
-    "get_country_flag_url",
     "connect_to_wifi_worker",
     "get_launch_trends_series",
-    "generate_f1_chart_html",
     "get_launch_trajectory_data",
     "group_event_data",
     "LAUNCH_DESCRIPTIONS",
-    "normalize_team_name",
     "check_wifi_interface",
     "get_wifi_interface_info",
     "get_wifi_debug_info",
     "start_update_script",
-    "get_f1_driver_points_chart",
-    "get_f1_constructor_points_chart",
-    "get_f1_driver_points_series",
-    "get_f1_constructor_points_series",
-    "get_f1_driver_standings_over_time_series",
-    "get_empty_chart_html",
-    "get_empty_chart_url",
     "generate_month_labels_for_days",
     "connect_to_wifi_nmcli",
     "get_max_value_from_series",
@@ -480,15 +468,6 @@ def parse_metar(raw_metar):
         'wind_direction': wind_direction,
         'cloud_cover': cloud_cover
     }
-
-
-def rotate(xy, *, angle):
-    import numpy as np
-    """Rotate an array of 2D points by angle (radians) using a standard rotation matrix."""
-    rot_mat = np.array([[np.cos(angle), np.sin(angle)],
-                        [-np.sin(angle), np.cos(angle)]])
-    return np.matmul(xy, rot_mat)
-
 
 def _ang_dist_deg(a, b):
     """Calculate the angular distance between two points in degrees."""
@@ -996,613 +975,6 @@ def fetch_narratives():
     # Final fallback to hardcoded descriptions
     logger.info("Using hardcoded fallback narratives")
     return parse_narratives(LAUNCH_DESCRIPTIONS)
-
-
-
-def _get_latest_openf1_session_key():
-    """Find the most recent Race session key from OpenF1."""
-    try:
-        current_year = datetime.now().year
-        # Try current year, then previous if none found
-        for year in [current_year, current_year - 1]:
-            url = f"https://api.openf1.org/v1/sessions?year={year}&session_name=Race"
-            resp = requests.get(url, timeout=5)
-            if resp.status_code == 200:
-                sessions = resp.json()
-                if sessions:
-                    # Filter for 'Race' session_name specifically
-                    race_sessions = [s for s in sessions if s.get('session_name') == 'Race']
-                    if race_sessions:
-                        return race_sessions[-1]['session_key']
-    except Exception as e:
-        logger.error(f"Error getting latest OpenF1 session: {e}")
-    return None
-
-
-def _fetch_openf1_data(session_key, endpoint, params=None):
-    """Generic helper to fetch data from OpenF1 API."""
-    if not session_key:
-        return []
-    
-    url = f"https://api.openf1.org/v1/{endpoint}?session_key={session_key}"
-    if params:
-        for k, v in params.items():
-            url += f"&{k}={v}"
-            
-    try:
-        resp = requests.get(url, timeout=10)
-        if resp.status_code == 200:
-            return resp.json()
-    except Exception as e:
-        logger.error(f"Error fetching OpenF1 {endpoint}: {e}")
-    return []
-
-
-def _get_f1_track_layout_points(circuit_name):
-    import numpy as np
-    """Get raw track layout points (x, y) using fastf1 and apply rotation."""
-    try:
-        from track_generator import track_rotations, rotate, circuit_name_mapping
-        import fastf1
-        
-        # Map circuit name
-        rotation_key = circuit_name_mapping.get(circuit_name, circuit_name)
-        
-        # Get data from fastf1
-        year = 2023  # Use a recent year for track data
-        session = fastf1.get_session(year, rotation_key, 'Race')
-        session.load(laps=True, telemetry=False, weather=False, messages=False)
-        
-        fastest_lap = session.laps.pick_fastest()
-        pos = fastest_lap.get_pos_data()
-        
-        track = pos[['X', 'Y']].to_numpy()
-        # Find rotation angle
-        angle_deg = 0.0
-        for name, rot in track_rotations:
-            if name == rotation_key:
-                angle_deg = rot
-                break
-        
-        track_angle = angle_deg / 180 * np.pi
-        rotated_track = rotate(track, angle=track_angle)
-        
-        # Scale to match OpenF1 coordinates if needed (FastF1 is in cm, OpenF1 is usually in something similar or decimeters)
-        # Actually, let's keep it as is and scale in Plotly if needed.
-        
-        return {
-            'x': rotated_track[:, 0].tolist(),
-            'y': rotated_track[:, 1].tolist()
-        }
-    except Exception as e:
-        logger.error(f"Error getting track layout points for {circuit_name}: {e}")
-        return {'x': [], 'y': []}
-
-
-def _process_f1_telemetry_for_map(telemetry, location, circuit_name):
-    import pandas as pd
-    import numpy as np
-    """Merge telemetry and location, and rotate coordinates."""
-    if not telemetry or not location:
-        return []
-        
-    try:
-        df_tel = pd.DataFrame(telemetry)
-        df_loc = pd.DataFrame(location)
-        
-        if df_tel.empty or df_loc.empty:
-            return []
-            
-        # Merge by date
-        df_tel['date'] = pd.to_datetime(df_tel['date'])
-        df_loc['date'] = pd.to_datetime(df_loc['date'])
-        
-        merged = pd.merge_asof(df_tel.sort_values('date'), 
-                               df_loc.sort_values('date'), 
-                               on='date', 
-                               direction='nearest')
-        
-        # Rotate points
-        from track_generator import track_rotations, circuit_name_mapping
-        rotation_key = circuit_name_mapping.get(circuit_name, circuit_name)
-        angle_deg = 0.0
-        for name, rot in track_rotations:
-            if name == rotation_key:
-                angle_deg = rot
-                break
-        track_angle = angle_deg / 180 * np.pi
-        
-        if not merged.empty and 'x' in merged.columns and 'y' in merged.columns:
-            # OpenF1 locations are usually in x, y columns
-            coords = merged[['x', 'y']].to_numpy()
-            rotated_coords = rotate(coords, angle=track_angle)
-            merged['x'] = rotated_coords[:, 0]
-            merged['y'] = rotated_coords[:, 1]
-            
-        return merged.to_dict('records')
-    except Exception as e:
-        logger.error(f"Error processing telemetry for map: {e}")
-        return []
-
-
-def fetch_f1_data():
-    from track_generator import generate_track_map
-    """Fetch F1 data with optimized component-based caching."""
-    logger.info("Fetching F1 data with optimized caching")
-
-    # Check network connectivity before making API calls
-    network_available = test_network_connectivity()
-    if not network_available:
-        logger.warning("Network connectivity check failed for F1 data")
-        # Return cached data if available
-        schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
-        drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
-        constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
-        if schedule_cache and drivers_cache and constructors_cache:
-            logger.info("Returning cached F1 data due to network issues")
-            # Load OpenF1 caches as well
-            weather_cache = load_cache_from_file(CACHE_FILE_F1_WEATHER)
-            positions_cache = load_cache_from_file(CACHE_FILE_F1_POSITIONS)
-            laps_cache = load_cache_from_file(CACHE_FILE_F1_LAPS)
-            telemetry_cache = load_cache_from_file(CACHE_FILE_F1_TELEMETRY)
-            location_cache = load_cache_from_file(CACHE_FILE_F1_LOCATION)
-            track_layout_cache = load_cache_from_file(CACHE_FILE_F1_TRACK_LAYOUT)
-            
-            # Load telemetry and location with driver awareness
-            telemetry_data = []
-            telemetry_driver = None
-            if telemetry_cache:
-                if isinstance(telemetry_cache['data'], dict):
-                    telemetry_data = telemetry_cache['data'].get('telemetry', [])
-                    telemetry_driver = telemetry_cache['data'].get('driver_number')
-                else:
-                    telemetry_data = telemetry_cache['data']
-            
-            location_data = []
-            if location_cache:
-                if isinstance(location_cache['data'], dict):
-                    location_data = location_cache['data'].get('location', [])
-                else:
-                    location_data = location_cache['data']
-
-            return {
-                'schedule': schedule_cache['data'],
-                'driver_standings': drivers_cache['data'],
-                'constructor_standings': constructors_cache['data'],
-                'weather': weather_cache['data'] if weather_cache else [],
-                'positions': positions_cache['data'] if positions_cache else [],
-                'laps': laps_cache['data'] if laps_cache else [],
-                'telemetry': telemetry_data,
-                'location': location_data,
-                'telemetry_driver_number': telemetry_driver,
-                'track_data': track_layout_cache['data'].get('points', {}) if track_layout_cache else {}
-            }
-        else:
-            logger.error("No cached F1 data available and network is down - returning empty data")
-            return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
-
-    global f1_cache
-    if f1_cache:
-        return f1_cache
-
-    current_time = datetime.now(pytz.UTC)
-    f1_data = {
-        'weather': [],
-        'positions': [],
-        'laps': [],
-        'telemetry': []
-    }
-
-    # Fetch race schedule (infrequently changing)
-    schedule_cache_exists = os.path.exists(CACHE_FILE_F1_SCHEDULE)
-    schedule_cache = load_cache_from_file(CACHE_FILE_F1_SCHEDULE)
-    if schedule_cache and (current_time - schedule_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_SCHEDULE:
-        f1_data['schedule'] = schedule_cache['data']
-        logger.info("Using cached F1 schedule data")
-        try:
-            emit_loader_status("Loading F1 schedule from cache…")
-        except Exception:
-            pass
-    else:
-        logger.info("Fetching fresh F1 schedule data")
-        try:
-            emit_loader_status("Fetching F1 race schedule…")
-        except Exception:
-            pass
-        try:
-            url = f"https://f1api.dev/api/current"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            logger.info(f"F1 API response keys: {list(data.keys())}")
-            races = data.get('races', [])
-            meetings = []
-
-            for race in races:
-                meeting = {
-                    "circuit_short_name": race['circuit']['circuitName'],
-                    "location": race['circuit']['city'],
-                    "country_name": race['circuit']['country'],
-                    "meeting_name": race['raceName'],
-                    "year": data['season'],
-                    "round": race['round'],
-                    "laps": race['laps'],
-                    "winner": race.get('winner', {}),
-                    "teamWinner": race.get('teamWinner', {}),
-                    "fast_lap": race.get('fast_lap', {})
-                }
-
-                # Parse sessions
-                sessions = []
-                schedule = race['schedule']
-                session_name_map = {
-                    "fp1": "Practice 1",
-                    "fp2": "Practice 2",
-                    "fp3": "Practice 3",
-                    "qualy": "Qualifying",
-                    "sprintQualy": "Sprint Qualifying",
-                    "sprintRace": "Sprint",
-                    "race": "Race"
-                }
-
-                for session_key, session_data in schedule.items():
-                    if session_data and session_data.get('date'):
-                        sessions.append({
-                            "location": meeting['location'],
-                            "date_start": f"{session_data['date']}T{session_data.get('time', '00:00:00')}",
-                            "session_type": "Practice" if "fp" in session_key else ("Qualifying" if "qualy" in session_key else "Race"),
-                            "session_name": session_name_map.get(session_key, session_key),
-                            "country_name": meeting['country_name'],
-                            "circuit_short_name": meeting['circuit_short_name'],
-                            "year": meeting['year']
-                        })
-
-                meeting['sessions'] = sorted(sessions, key=lambda x: parse(x['date_start']))
-
-                # Generate track map (notify splash; add "for the first time" on first render)
-                circuit_name = race['circuit']['circuitName']
-                tracks_dir = os.path.join(os.path.dirname(__file__), '..', 'cache', 'tracks')
-                safe_circuit_name = circuit_name.replace('|', '-').replace('/', '-').replace('\\', '-').replace(':', '-').replace('*', '-').replace('?', '-').replace('"', '-').replace('<', '-').replace('>', '-')
-                png_expected = os.path.join(tracks_dir, f"{safe_circuit_name}_track.png")
-                try:
-                    if os.path.exists(png_expected):
-                        emit_loader_status(f"Loading track map for {circuit_name}…")
-                    else:
-                        emit_loader_status(f"Generating track map for {circuit_name} for the first time…")
-                except Exception:
-                    pass
-                track_map_path = generate_track_map(circuit_name)
-                # Sanitize circuit name for filename (same as in track_generator.py)
-                meeting['track_map_path'] = f'file:///{os.path.join(os.path.dirname(__file__), "..", "cache", "tracks", f"{safe_circuit_name}_track.png")}' if track_map_path else ''
-
-                if sessions:
-                    # Use the race session date as the primary date for sorting
-                    race_session = next((s for s in sessions if s['session_type'] == 'Race'), None)
-                    if race_session:
-                        meeting['date_start'] = race_session['date_start']
-                    else:
-                        meeting['date_start'] = min(s['date_start'] for s in sessions)
-                meetings.append(meeting)
-
-            f1_data['schedule'] = meetings
-            save_cache_to_file(CACHE_FILE_F1_SCHEDULE, meetings, current_time)
-            logger.info(f"Cached F1 schedule with {len(meetings)} races")
-            try:
-                suffix = " for the first time" if not schedule_cache_exists else ""
-                emit_loader_status(f"Saving F1 schedule to cache{suffix}…")
-            except Exception:
-                pass
-
-        except Exception as e:
-            logger.error(f"Failed to fetch F1 schedule: {e}")
-            f1_data['schedule'] = []
-
-    # Fetch driver standings (frequently changing)
-    drivers_cache_existed = os.path.exists(CACHE_FILE_F1_DRIVERS)
-    drivers_cache = load_cache_from_file(CACHE_FILE_F1_DRIVERS)
-    if drivers_cache and (current_time - drivers_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
-        f1_data['driver_standings'] = drivers_cache['data']
-        logger.info("Using cached F1 driver standings")
-        try:
-            emit_loader_status("Loading F1 driver standings from cache…")
-        except Exception:
-            pass
-    else:
-        logger.info("Fetching fresh F1 driver standings")
-        try:
-            emit_loader_status("Fetching F1 driver standings…")
-        except Exception:
-            pass
-        try:
-            url = "https://f1api.dev/api/current/drivers-championship"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            driver_standings = data.get('drivers_championship', [])
-
-            # Normalize to expected format
-            for standing in driver_standings:
-                if 'driver' in standing and 'Driver' not in standing:
-                    standing['Driver'] = {
-                        'givenName': standing['driver']['name'],
-                        'familyName': standing['driver']['surname'],
-                        'driverId': standing['driverId'],
-                        'nationality': standing['driver']['nationality'],
-                        'code': standing['driver']['shortName']
-                    }
-                if 'team' in standing and 'Constructor' not in standing:
-                    # Normalize team name to standard format
-                    api_team_name = standing['team']['teamName']
-                    api_team_name_lower = api_team_name.lower()
-                    normalized_team_name = api_team_name  # Default to original if no mapping found
-                    
-                    # Map API team names to standard names
-                    team_name_mapping = {
-                        'mclaren formula 1 team': 'McLaren',
-                        'red bull racing': 'Red Bull',
-                        'mercedes formula 1 team': 'Mercedes',
-                        'scuderia ferrari': 'Ferrari',
-                        'williams racing': 'Williams',
-                        'rb f1 team': 'AlphaTauri',
-                        'sauber f1 team': 'Alfa Romeo',
-                        'haas f1 team': 'Haas F1 Team',
-                        'aston martin f1 team': 'Aston Martin',
-                        'alpine f1 team': 'Alpine',
-                        # Keep old mappings as fallbacks
-                        'mercedes-amg petronas f1 team': 'Mercedes',
-                        'oracle red bull racing': 'Red Bull',
-                        'scuderia ferrari hp': 'Ferrari', 
-                        'mclaren f1 team': 'McLaren',
-                        'bwt alpine f1 team': 'Alpine',
-                        'aston martin aramco cognizant f1 team': 'Aston Martin',
-                        'alfa romeo f1 team stake': 'Alfa Romeo',
-                        'moneygram haas f1 team': 'Haas F1 Team',
-                        'visa cash app rb f1 team': 'AlphaTauri',
-                        # Fallback mappings for shorter names
-                        'mercedes': 'Mercedes',
-                        'red bull': 'Red Bull',
-                        'ferrari': 'Ferrari',
-                        'mclaren': 'McLaren',
-                        'alpine': 'Alpine',
-                        'aston martin': 'Aston Martin',
-                        'williams': 'Williams',
-                        'alfa romeo': 'Alfa Romeo',
-                        'haas': 'Haas F1 Team',
-                        'rb': 'AlphaTauri',
-                        'alphatauri': 'AlphaTauri'
-                    }
-                    normalized_team_name = team_name_mapping.get(api_team_name_lower, api_team_name)
-                    standing['Constructor'] = {
-                        'name': normalized_team_name
-                    }
-
-            f1_data['driver_standings'] = driver_standings
-            save_cache_to_file(CACHE_FILE_F1_DRIVERS, driver_standings, current_time)
-            logger.info(f"Cached F1 driver standings with {len(driver_standings)} drivers")
-            try:
-                suffix = " for the first time" if not drivers_cache_existed else ""
-                emit_loader_status(f"Saving driver standings to cache{suffix}…")
-            except Exception:
-                pass
-
-        except Exception as e:
-            logger.error(f"Failed to fetch F1 driver standings: {e}")
-            f1_data['driver_standings'] = []
-
-    # Fetch constructor standings (frequently changing)
-    constructors_cache_existed = os.path.exists(CACHE_FILE_F1_CONSTRUCTORS)
-    constructors_cache = load_cache_from_file(CACHE_FILE_F1_CONSTRUCTORS)
-    if constructors_cache and (current_time - constructors_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_STANDINGS:
-        f1_data['constructor_standings'] = constructors_cache['data']
-        logger.info("Using cached F1 constructor standings")
-        try:
-            emit_loader_status("Loading F1 constructor standings from cache…")
-        except Exception:
-            pass
-    else:
-        logger.info("Fetching fresh F1 constructor standings")
-        try:
-            emit_loader_status("Fetching F1 constructor standings…")
-        except Exception:
-            pass
-        try:
-            url = "https://f1api.dev/api/current/constructors-championship"
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            constructor_standings = data.get('constructors_championship', [])
-
-            # Normalize to expected format
-            for standing in constructor_standings:
-                if 'team' in standing and 'Constructor' not in standing:
-                    api_team_name = standing['team']['teamName']
-                    api_team_name_lower = api_team_name.lower()
-                    team_name_mapping = {
-                        'mclaren formula 1 team': 'McLaren',
-                        'red bull racing': 'Red Bull',
-                        'mercedes formula 1 team': 'Mercedes',
-                        'scuderia ferrari': 'Ferrari',
-                        'williams racing': 'Williams',
-                        'rb f1 team': 'AlphaTauri',
-                        'sauber f1 team': 'Alfa Romeo',
-                        'haas f1 team': 'Haas F1 Team',
-                        'aston martin f1 team': 'Aston Martin',
-                        'alpine f1 team': 'Alpine',
-                        # Keep old mappings as fallbacks
-                        'mercedes-amg petronas f1 team': 'Mercedes',
-                        'oracle red bull racing': 'Red Bull',
-                        'scuderia ferrari hp': 'Ferrari', 
-                        'mclaren f1 team': 'McLaren',
-                        'bwt alpine f1 team': 'Alpine',
-                        'aston martin aramco cognizant f1 team': 'Aston Martin',
-                        'alfa romeo f1 team stake': 'Alfa Romeo',
-                        'moneygram haas f1 team': 'Haas F1 Team',
-                        'visa cash app rb f1 team': 'AlphaTauri',
-                        # Fallback mappings for shorter names
-                        'mercedes': 'Mercedes',
-                        'red bull': 'Red Bull',
-                        'ferrari': 'Ferrari',
-                        'mclaren': 'McLaren',
-                        'alpine': 'Alpine',
-                        'aston martin': 'Aston Martin',
-                        'williams': 'Williams',
-                        'alfa romeo': 'Alfa Romeo',
-                        'haas': 'Haas F1 Team',
-                        'rb': 'AlphaTauri',
-                        'alphatauri': 'AlphaTauri'
-                    }
-                    normalized_team_name = team_name_mapping.get(api_team_name_lower, api_team_name)
-                    standing['Constructor'] = {'name': normalized_team_name}
-
-            f1_data['constructor_standings'] = constructor_standings
-            save_cache_to_file(CACHE_FILE_F1_CONSTRUCTORS, constructor_standings, current_time)
-            logger.info(f"Cached F1 constructor standings with {len(constructor_standings)} teams")
-            try:
-                suffix = " for the first time" if not constructors_cache_existed else ""
-                emit_loader_status(f"Saving constructor standings to cache{suffix}…")
-            except Exception:
-                pass
-
-        except Exception as e:
-            logger.error(f"Failed to fetch F1 constructor standings: {e}")
-            f1_data['constructor_standings'] = []
-
-    # Fetch OpenF1 session data (weather, positions, laps, telemetry)
-    try:
-        session_cache = load_cache_from_file(CACHE_FILE_F1_OPENF1_SESSION)
-        session_key = session_cache['data'].get('session_key') if session_cache else None
-        
-        if not session_key or (current_time - session_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-            session_key = _get_latest_openf1_session_key()
-            if session_key:
-                save_cache_to_file(CACHE_FILE_F1_OPENF1_SESSION, {'session_key': session_key}, current_time)
-
-        if session_key:
-            # Weather
-            weather_cache = load_cache_from_file(CACHE_FILE_F1_WEATHER)
-            if not weather_cache or (current_time - weather_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-                f1_data['weather'] = _fetch_openf1_data(session_key, 'weather')
-                save_cache_to_file(CACHE_FILE_F1_WEATHER, f1_data['weather'], current_time)
-            else:
-                f1_data['weather'] = weather_cache['data']
-
-            # Positions
-            positions_cache = load_cache_from_file(CACHE_FILE_F1_POSITIONS)
-            if not positions_cache or (current_time - positions_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-                f1_data['positions'] = _fetch_openf1_data(session_key, 'position')
-                save_cache_to_file(CACHE_FILE_F1_POSITIONS, f1_data['positions'], current_time)
-            else:
-                f1_data['positions'] = positions_cache['data']
-
-            # Laps
-            laps_cache = load_cache_from_file(CACHE_FILE_F1_LAPS)
-            if not laps_cache or (current_time - laps_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-                f1_data['laps'] = _fetch_openf1_data(session_key, 'laps')
-                save_cache_to_file(CACHE_FILE_F1_LAPS, f1_data['laps'], current_time)
-            else:
-                f1_data['laps'] = laps_cache['data']
-
-            # Stints
-            stints_cache = load_cache_from_file(CACHE_FILE_F1_STINTS)
-            if not stints_cache or (current_time - stints_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-                f1_data['stints'] = _fetch_openf1_data(session_key, 'stints')
-                save_cache_to_file(CACHE_FILE_F1_STINTS, f1_data['stints'], current_time)
-            else:
-                f1_data['stints'] = stints_cache['data']
-
-            # Pit Stops
-            pits_cache = load_cache_from_file(CACHE_FILE_F1_PITS)
-            if not pits_cache or (current_time - pits_cache['timestamp']).total_seconds() > CACHE_REFRESH_INTERVAL_F1_OPENF1:
-                f1_data['pits'] = _fetch_openf1_data(session_key, 'pit')
-                save_cache_to_file(CACHE_FILE_F1_PITS, f1_data['pits'], current_time)
-            else:
-                f1_data['pits'] = pits_cache['data']
-
-            # Determine driver number for telemetry/location (prefer driver with data)
-            driver_num = None
-            
-            # Try to pick from positions (active drivers)
-            if f1_data.get('positions'):
-                try:
-                    # Get the most recent timestamp in the position data
-                    # Filter out entries without a valid date
-                    valid_positions = [p for p in f1_data['positions'] if p.get('date')]
-                    if valid_positions:
-                        latest_pos_entry = max(valid_positions, key=lambda x: x.get('date', '0'))
-                        latest_date = latest_pos_entry.get('date')
-                        # Find who was P1 at that time
-                        leader = next((p.get('driver_number') for p in valid_positions 
-                                     if p.get('date') == latest_date and p.get('position') == 1), None)
-                        if leader:
-                            driver_num = leader
-                            logger.info(f"F1: Selected session leader (Driver {driver_num}) for telemetry")
-                        else:
-                            # Fallback to any driver in the latest position update
-                            driver_num = latest_pos_entry.get('driver_number')
-                            logger.info(f"F1: Selected active driver (Driver {driver_num}) for telemetry")
-                except Exception as e:
-                    logger.debug(f"Error determining driver from positions: {e}")
-            
-            if driver_num is None:
-                # Fallback to session drivers list
-                session_drivers = _fetch_openf1_data(session_key, 'drivers')
-                if session_drivers:
-                    driver_num = session_drivers[0].get('driver_number', 1)
-                    logger.info(f"F1: Selected first available driver (Driver {driver_num}) from session list")
-                else:
-                    driver_num = 1 # Absolute fallback
-                    logger.info(f"F1: Using absolute fallback (Driver {driver_num}) for telemetry")
-
-            # Telemetry (Speed/RPM/etc)
-            telemetry_cache = load_cache_from_file(CACHE_FILE_F1_TELEMETRY)
-            # Cache is valid if it exists, is fresh, and matches the selected driver
-            telemetry_cache_valid = (telemetry_cache and 
-                                   (current_time - telemetry_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_OPENF1 and
-                                   isinstance(telemetry_cache['data'], dict) and 
-                                   telemetry_cache['data'].get('driver_number') == driver_num)
-            
-            if not telemetry_cache_valid:
-                f1_data['telemetry'] = _fetch_openf1_data(session_key, 'car_data', {'driver_number': driver_num})
-                save_cache_to_file(CACHE_FILE_F1_TELEMETRY, {'driver_number': driver_num, 'telemetry': f1_data['telemetry']}, current_time)
-            else:
-                f1_data['telemetry'] = telemetry_cache['data'].get('telemetry', [])
-
-            # Location (X, Y)
-            location_cache = load_cache_from_file(CACHE_FILE_F1_LOCATION)
-            location_cache_valid = (location_cache and 
-                                  (current_time - location_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_F1_OPENF1 and
-                                  isinstance(location_cache['data'], dict) and 
-                                  location_cache['data'].get('driver_number') == driver_num)
-            
-            if not location_cache_valid:
-                f1_data['location'] = _fetch_openf1_data(session_key, 'location', {'driver_number': driver_num})
-                save_cache_to_file(CACHE_FILE_F1_LOCATION, {'driver_number': driver_num, 'location': f1_data['location']}, current_time)
-            else:
-                f1_data['location'] = location_cache['data'].get('location', [])
-
-            f1_data['telemetry_driver_number'] = driver_num
-
-            # Track Layout Data (raw points for Plotly track map)
-            track_layout_cache = load_cache_from_file(CACHE_FILE_F1_TRACK_LAYOUT)
-            # Find the circuit name for the upcoming/current race
-            next_race = get_next_race_info(f1_data['schedule'])
-            circuit_name = next_race.get('circuit_short_name', '') if next_race else ''
-            
-            if circuit_name and (not track_layout_cache or track_layout_cache.get('circuit') != circuit_name):
-                logger.info(f"Fetching raw track layout for {circuit_name}")
-                track_points = _get_f1_track_layout_points(circuit_name)
-                f1_data['track_data'] = track_points
-                save_cache_to_file(CACHE_FILE_F1_TRACK_LAYOUT, {'circuit': circuit_name, 'points': track_points}, current_time)
-            elif track_layout_cache:
-                f1_data['track_data'] = track_layout_cache['data'].get('points', {})
-
-    except Exception as e:
-        logger.error(f"Error fetching OpenF1 data components: {e}")
-
-    f1_cache = f1_data
-    logger.info("Successfully assembled F1 data from optimized cache")
-    return f1_data
-
 
 def fetch_weather(lat, lon, location):
     logger.info(f"Fetching METAR weather data for {location}")
@@ -2152,40 +1524,6 @@ def check_github_for_updates(current_hash, repo_owner="hwpaige", repo_name="spac
         logger.error(f"Error checking GitHub updates: {e}")
     return False, None
 
-
-def get_country_flag_url(country_name, assets_dir):
-    """Get or download a country flag SVG URL"""
-    code_map = {
-        'Australia': 'au', 'Austria': 'at', 'Azerbaijan': 'az', 'Bahrain': 'bh',
-        'Belgium': 'be', 'Brazil': 'br', 'Canada': 'ca', 'China': 'cn',
-        'France': 'fr', 'Germany': 'de', 'Great Britain': 'gb', 'Hungary': 'hu',
-        'Italy': 'it', 'Japan': 'jp', 'Mexico': 'mx', 'Monaco': 'mc',
-        'Netherlands': 'nl', 'Portugal': 'pt', 'Qatar': 'qa', 'Russia': 'ru',
-        'Saudi Arabia': 'sa', 'Singapore': 'sg', 'South Korea': 'kr', 'Spain': 'es',
-        'Turkey': 'tr', 'UAE': 'ae', 'United Arab Emirates': 'ae', 'UK': 'gb',
-        'United Kingdom': 'gb', 'United States': 'us', 'USA': 'us', 'Vietnam': 'vn'
-    }
-    code = code_map.get(country_name)
-    if not code: return ""
-    
-    flags_dir = os.path.join(assets_dir, "images", "flags")
-    os.makedirs(flags_dir, exist_ok=True)
-    flag_path = os.path.join(flags_dir, f"{code}.svg")
-    
-    if not os.path.exists(flag_path):
-        try:
-            url = f"https://flagicons.lipis.dev/flags/4x3/{code}.svg"
-            resp = requests.get(url, timeout=5)
-            resp.raise_for_status()
-            with open(flag_path, 'wb') as f:
-                f.write(resp.content)
-        except Exception as e:
-            logger.warning(f"Failed to download flag for {country_name}: {e}")
-            return ""
-    
-    return f"file:///{flag_path.replace('\\', '/')}"
-
-
 def connect_to_wifi_worker(ssid, password, wifi_interface=None):
     """
     Worker function to connect to WiFi on Windows or Linux.
@@ -2400,109 +1738,6 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
             'values': df_pivot[rocket].tolist()
         })
     return all_months, data
-
-
-def generate_f1_chart_html(f1_data, chart_type, stat_key, theme):
-    profiler.mark("generate_f1_chart_html Start")
-    from plotly_charts import (
-        generate_f1_standings_chart,
-        generate_f1_telemetry_chart,
-        generate_f1_weather_chart,
-        generate_f1_positions_chart,
-        generate_f1_laps_chart,
-        generate_f1_strategy_chart,
-        generate_f1_track_map,
-        generate_f1_wind_polar_chart,
-        generate_f1_track_telemetry_chart
-    )
-    """Generate HTML for interactive F1 charts"""
-    try:
-        if chart_type == 'standings':
-            standings = f1_data.get('driver_standings', [])
-            if not standings: return _get_empty_chart_html(theme)
-            
-            driver_data = []
-            for driver in standings[:10]:
-                d_name = f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}"
-                driver_data.append({
-                    'driver': d_name,
-                    'round': 1,
-                    'points': float(driver.get(stat_key, 0))
-                })
-            return generate_f1_standings_chart(driver_data, 'line', theme)
-        elif chart_type == 'telemetry':
-            telemetry_data = f1_data.get('telemetry', [])
-            driver_num = f1_data.get('telemetry_driver_number')
-            return generate_f1_telemetry_chart(telemetry_data, theme, driver_num)
-        elif chart_type == 'weather':
-            weather_data = f1_data.get('weather', [])
-            return generate_f1_weather_chart(weather_data, theme)
-        elif chart_type == 'positions':
-            positions_data = f1_data.get('positions', [])
-            return generate_f1_positions_chart(positions_data, theme)
-        elif chart_type == 'laps':
-            laps_data = f1_data.get('laps', [])
-            return generate_f1_laps_chart(laps_data, theme)
-        elif chart_type == 'strategy':
-            stints_data = f1_data.get('stints', [])
-            pits_data = f1_data.get('pits', [])
-            return generate_f1_strategy_chart(stints_data, pits_data, theme)
-        elif chart_type == 'track_map':
-            track_data = f1_data.get('track_data', {})
-            return generate_f1_track_map(track_data, theme)
-        elif chart_type == 'wind_polar':
-            weather_data = f1_data.get('weather', [])
-            return generate_f1_wind_polar_chart(weather_data, theme)
-        elif chart_type == 'track_telemetry':
-            track_data = f1_data.get('track_data', {})
-            telemetry = f1_data.get('telemetry', [])
-            location = f1_data.get('location', [])
-            driver_num = f1_data.get('telemetry_driver_number')
-            # Find the circuit name for rotation
-            next_race = get_next_race_info(f1_data.get('schedule', []))
-            circuit_name = next_race.get('circuit_short_name', '') if next_race else ''
-            
-            # Merge and rotate telemetry points
-            merged_telemetry = _process_f1_telemetry_for_map(telemetry, location, circuit_name)
-            return generate_f1_track_telemetry_chart(track_data, merged_telemetry, theme, driver_num)
-        else:
-            return generate_f1_standings_chart([], 'line', theme)
-    except Exception as e:
-        logger.error(f"Error generating F1 chart HTML: {e}")
-        return _get_empty_chart_html(theme)
-
-
-def _get_empty_chart_html(theme):
-    """Return HTML for empty chart state"""
-    bg_color = 'rgba(42,46,46,1)' if theme == 'dark' else 'rgba(240,240,240,1)'
-    text_color = 'white' if theme == 'dark' else 'black'
-
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0;
-                padding: 20px;
-                background-color: {bg_color};
-                color: {text_color};
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                height: 100vh;
-                text-align: center;
-            }}
-        </style>
-    </head>
-    <body>
-        <div>
-            <h3>No F1 Data Available</h3>
-            <p>Please check your internet connection and try again.</p>
-        </div>
-    </body>
-    """
 
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
@@ -2924,37 +2159,6 @@ def group_event_data(data, mode, event_type, timezone_obj):
             if earlier_launches:
                 grouped.append({'group': 'Earlier'})
                 grouped.extend(earlier_launches)
-    else:
-        # data is expected to be a list of races
-        races = data
-        if event_type == 'upcoming':
-            races = sorted(races, key=lambda x: parse(x['date_start']) if x.get('date_start') else datetime.max.replace(tzinfo=pytz.UTC))
-            today_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() == today]
-            this_week_races = [r for r in races if today < parse(r['date_start']).replace(tzinfo=pytz.UTC).date() <= this_week_end]
-            later_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() > this_week_end]
-            if today_races:
-                grouped.append({'group': "Today's Races 🏎️"})
-                grouped.extend(today_races)
-            if this_week_races:
-                grouped.append({'group': 'This Week'})
-                grouped.extend(this_week_races)
-            if later_races:
-                grouped.append({'group': 'Later'})
-                grouped.extend(later_races)
-        else:
-            races = sorted(races, key=lambda x: parse(x['date_start']) if x.get('date_start') else datetime.min.replace(tzinfo=pytz.UTC), reverse=True)
-            today_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() == today]
-            last_week_races = [r for r in races if last_week_start <= parse(r['date_start']).replace(tzinfo=pytz.UTC).date() < today]
-            earlier_races = [r for r in races if parse(r['date_start']).replace(tzinfo=pytz.UTC).date() < last_week_start]
-            if today_races:
-                grouped.append({'group': 'Today'})
-                grouped.extend(today_races)
-            if last_week_races:
-                grouped.append({'group': 'Last Week'})
-                grouped.extend(last_week_races)
-            if earlier_races:
-                grouped.append({'group': 'Earlier'})
-                grouped.extend(earlier_races)
     
     return grouped
 
@@ -2996,45 +2200,6 @@ LAUNCH_DESCRIPTIONS = [
     "9/14 2213: Falcon 9 from SLC-40 propels Northrop Grumman Cygnus XL to ISS; booster lands at LZ-2, cargo en route without incident.",
     "9/18 0930: Falcon 9 from SLC-40 flings 28 Starlinks to LEO; delta-v spotless, booster recovery monotonous."
 ]
-
-def normalize_team_name(api_team_name):
-    """Normalize F1 team names from API to shorter dashboard-friendly versions."""
-    if not api_team_name:
-        return api_team_name
-    api_team_name_lower = api_team_name.lower()
-    team_name_mapping = {
-        'mclaren formula 1 team': 'McLaren',
-        'red bull racing': 'Red Bull',
-        'mercedes formula 1 team': 'Mercedes',
-        'scuderia ferrari': 'Ferrari',
-        'williams racing': 'Williams',
-        'rb f1 team': 'AlphaTauri',
-        'sauber f1 team': 'Alfa Romeo',
-        'haas f1 team': 'Haas F1 Team',
-        'aston martin f1 team': 'Aston Martin',
-        'alpine f1 team': 'Alpine',
-        'mercedes-amg petronas f1 team': 'Mercedes',
-        'oracle red bull racing': 'Red Bull',
-        'scuderia ferrari hp': 'Ferrari', 
-        'mclaren f1 team': 'McLaren',
-        'bwt alpine f1 team': 'Alpine',
-        'aston martin aramco cognizant f1 team': 'Aston Martin',
-        'alfa romeo f1 team stake': 'Alfa Romeo',
-        'moneygram haas f1 team': 'Haas F1 Team',
-        'visa cash app rb f1 team': 'AlphaTauri',
-        'mercedes': 'Mercedes',
-        'red bull': 'Red Bull',
-        'ferrari': 'Ferrari',
-        'mclaren': 'McLaren',
-        'alpine': 'Alpine',
-        'aston martin': 'Aston Martin',
-        'williams': 'Williams',
-        'alfa romeo': 'Alfa Romeo',
-        'haas': 'Haas F1 Team',
-        'rb': 'AlphaTauri',
-        'alphatauri': 'AlphaTauri'
-    }
-    return team_name_mapping.get(api_team_name_lower, api_team_name)
 
 def check_wifi_interface():
     """Check if WiFi interface is available and log status."""
@@ -3100,31 +2265,31 @@ def get_wifi_debug_info():
     try:
         debug_info = ["=== WiFi Debug Information ==="]
         debug_info.append(f"Platform: {platform.system()} {platform.release()}")
-        
+
         if platform.system() == 'Linux':
             for service in ['NetworkManager', 'wpa_supplicant']:
                 try:
                     res = subprocess.run(['systemctl', 'status', service], capture_output=True, text=True, timeout=5)
                     debug_info.append(f"\n{service} Status:\n{res.stdout}")
                 except: debug_info.append(f"\n{service} Status: Unable to check")
-            
+
             try:
                 res = subprocess.run(['nmcli', 'device', 'status'], capture_output=True, text=True, timeout=5)
                 debug_info.append(f"\nDevice Status:\n{res.stdout}")
             except: debug_info.append("\nDevice Status: nmcli not available")
-            
+
             try:
                 res = subprocess.run(['nmcli', 'device', 'wifi', 'list'], capture_output=True, text=True, timeout=10)
                 debug_info.append(f"\nWiFi Networks:\n{res.stdout}")
             except: debug_info.append("\nWiFi Networks: Unable to scan")
-            
+
             try:
                 res = subprocess.run(['nmcli', 'connection', 'show', '--active'], capture_output=True, text=True, timeout=5)
                 debug_info.append(f"\nActive Connections:\n{res.stdout}")
             except: debug_info.append("\nActive Connections: Unable to check")
         else:
             debug_info.append("\nDetailed debug info currently only supported on Linux.")
-            
+
         return "\n".join(debug_info)
     except Exception as e:
         return f"Error getting WiFi debug info: {e}"
@@ -3133,7 +2298,7 @@ def start_update_script(script_path):
     """Start the update script in a detached process."""
     if not os.path.exists(script_path):
         return False, f"Update script not found at {script_path}"
-    
+
     try:
         if platform.system() == 'Linux':
             log_path = '/tmp/spacex-dashboard-update.log'
@@ -3141,10 +2306,10 @@ def start_update_script(script_path):
                 log_file = open(log_path, 'ab', buffering=0)
             except:
                 log_file = subprocess.DEVNULL
-            
+
             child_env = os.environ.copy()
             child_env['KEEP_APP_RUNNING'] = '1'
-            
+
             proc = subprocess.Popen(
                 ['/bin/bash', script_path],
                 stdout=log_file,
@@ -3166,116 +2331,6 @@ def start_update_script(script_path):
     except Exception as e:
         return False, str(e)
 
-def get_f1_driver_points_chart(standings):
-    """Transform F1 driver standings into chart-ready format."""
-    if not standings:
-        return []
-    top_drivers = standings[:10]
-    data = []
-    for driver in top_drivers:
-        name = f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}"
-        data.append({
-            'label': name,
-            'value': float(driver.get('points', 0))
-        })
-    return data
-
-def get_f1_constructor_points_chart(standings):
-    """Transform F1 constructor standings into chart-ready format."""
-    if not standings:
-        return []
-    top_constructors = standings[:10]
-    data = []
-    for constructor in top_constructors:
-        data.append({
-            'label': constructor['Constructor']['name'],
-            'value': float(constructor.get('points', 0))
-        })
-    return data
-
-def get_f1_driver_points_series(standings, stat_key='points'):
-    """Transform F1 driver standings into line series format."""
-    if not standings:
-        return []
-    top_drivers = standings[:10]
-    values = [float(driver.get(stat_key, 0)) for driver in top_drivers]
-    return [{'label': stat_key.title(), 'values': values}]
-
-def get_f1_constructor_points_series(standings, stat_key='points'):
-    """Transform F1 constructor standings into line series format."""
-    if not standings:
-        return []
-    top_constructors = standings[:10]
-    values = [float(constructor.get(stat_key, 0)) for constructor in top_constructors]
-    return [{'label': stat_key.title(), 'values': values}]
-
-def get_f1_driver_standings_over_time_series(standings, stat_key='points'):
-    """Group drivers by team and create points series."""
-    if not standings:
-        return []
-    
-    top_drivers = standings[:10]
-    series_data = []
-    team_drivers = {}
-    
-    for driver in top_drivers:
-        team_id = driver.get('teamId', 'unknown')
-        if team_id not in team_drivers:
-            team_drivers[team_id] = []
-        team_drivers[team_id].append(driver)
-    
-    for team_id, drivers in team_drivers.items():
-        team_color = F1_TEAM_COLORS.get(team_id, '#808080')
-        for driver in drivers:
-            name = f"{driver['Driver']['givenName']} {driver['Driver']['familyName']}"
-            series_data.append({
-                'label': name,
-                'values': [float(driver.get(stat_key, 0))],
-                'color': team_color,
-                'team': driver.get('Constructor', {}).get('name', team_id)
-            })
-    return series_data
-
-def get_empty_chart_html(theme='dark'):
-    """Return HTML for an empty chart state."""
-    bg_color = 'rgba(42,46,46,1)' if theme == 'dark' else 'rgba(240,240,240,1)'
-    text_color = 'white' if theme == 'dark' else 'black'
-    return f"""
-    <!DOCTYPE html>
-    <html>
-    <head>
-        <style>
-            body {{
-                margin: 0; padding: 20px;
-                background-color: {bg_color}; color: {text_color};
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-                display: flex; align-items: center; justify-content: center;
-                height: 100vh; text-align: center;
-            }}
-        </style>
-    </head>
-    <body>
-        <div>
-            <h3>No F1 Data Available</h3>
-            <p>Please check your internet connection and try again.</p>
-        </div>
-    </body>
-    </html>
-    """
-
-def get_empty_chart_url(theme='dark'):
-    """Generate a temporary file URL for an empty chart."""
-    try:
-        html = get_empty_chart_html(theme)
-        import tempfile
-        temp_file = os.path.join(tempfile.gettempdir(), f'f1_chart_empty_{theme}.html')
-        with open(temp_file, 'w', encoding='utf-8') as f:
-            f.write(html)
-        return f'file:///{temp_file.replace("\\", "/")}'
-    except Exception as e:
-        logger.error(f"Error creating empty chart URL: {e}")
-        return ""
-
 def generate_month_labels_for_days(year=None):
     """Generate month labels for daily data points."""
     if year is None:
@@ -3293,14 +2348,14 @@ def connect_to_wifi_nmcli(ssid, password=None, wifi_device=None):
     """Connect to WiFi using nmcli (Linux). Returns (success, error_or_output)."""
     if platform.system() != 'Linux':
         return False, "nmcli only supported on Linux"
-    
+
     try:
         # Rescan
         rescan_cmd = ['nmcli', 'device', 'wifi', 'rescan']
         if wifi_device: rescan_cmd.extend(['ifname', wifi_device])
         subprocess.run(rescan_cmd, capture_output=True, timeout=10)
         time.sleep(4)
-        
+
         # Connect
         import shlex
         if password:
@@ -3308,11 +2363,11 @@ def connect_to_wifi_nmcli(ssid, password=None, wifi_device=None):
         else:
             cmd = f'nmcli device wifi connect {shlex.quote(ssid)}'
         if wifi_device: cmd += f' ifname {wifi_device}'
-        
+
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
             return False, result.stderr.strip()
-            
+
         # Set autoconnect
         manage_nm_autoconnect(ssid)
         return True, result.stdout.strip()
@@ -3357,49 +2412,38 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
         launches.append(launch)
     return launches
 
-def get_next_race_info(race_schedule, tz_obj=None):
-    """Find the next race in the schedule."""
-    if not race_schedule: return None
-    current = datetime.now(pytz.UTC)
-    upcoming = [r for r in race_schedule if parse(r['date_start']).replace(tzinfo=pytz.UTC) > current]
-    if upcoming:
-        # Ergast returns schedule sorted by date generally, but min() is safer
-        next_r = min(upcoming, key=lambda x: parse(x['date_start']))
-        return next_r
-    return None
-
 def get_closest_x_video_url(launch_data):
     """Find the X.com livestream URL of the launch closest to current time."""
     if not launch_data:
         return ""
-    
+
     current_time = datetime.now(pytz.UTC)
     previous = launch_data.get('previous', [])
     upcoming = launch_data.get('upcoming', [])
-    
+
     all_launches = previous + upcoming
     closest_url = ""
     min_diff = float('inf')
-    
+
     for launch in all_launches:
         x_url = launch.get('x_video_url')
         if not x_url:
             continue
-            
+
         try:
             launch_net = parse(launch['net'])
             if launch_net.tzinfo is None:
                 launch_net = pytz.UTC.localize(launch_net)
             else:
                 launch_net = launch_net.astimezone(pytz.UTC)
-                
+
             diff = abs((current_time - launch_net).total_seconds())
             if diff < min_diff:
                 min_diff = diff
                 closest_url = x_url
         except Exception:
             continue
-            
+
     return closest_url
 
 def initialize_all_weather(locations_config):
@@ -3426,28 +2470,28 @@ def get_best_wifi_reconnection_candidate(remembered_networks, visible_networks, 
     """
     # Build a set of visible SSIDs for fast lookup
     visible_ssids = {net.get('ssid') for net in visible_networks if net.get('ssid')}
-    
+
     # 1. Filter remembered networks to only those currently visible and having passwords
     candidates = [n for n in remembered_networks if n.get('ssid') in visible_ssids and n.get('password')]
-    
+
     if candidates:
         # Most recent first (assuming remembered_networks is sorted or has timestamps)
         return {'type': 'direct', 'ssid': candidates[0]['ssid'], 'password': candidates[0]['password']}
-    
+
     # 2. If no direct matches with passwords, check NM profiles on Linux
     if nm_profiles:
         for n in remembered_networks:
             target_ssid = n.get('ssid')
             if not target_ssid: continue
-            
+
             # Match by SSID or by name
             matched = next((p for p in nm_profiles if p.get('ssid') == target_ssid), None)
             if matched is None:
                 matched = next((p for p in nm_profiles if p.get('name') == target_ssid), None)
-            
+
             if matched:
                 return {'type': 'nmcli', 'ssid': target_ssid, 'profile_name': matched['name']}
-                
+
     return None
 
 def calculate_chart_interval(max_value):
@@ -3484,24 +2528,24 @@ def filter_and_sort_wifi_networks(raw_networks):
                     seen_ssids[ssid] = network
             except Exception:
                 if prev is None: seen_ssids[ssid] = network
-    
+
     return sorted(list(seen_ssids.values()), key=lambda x: int(x.get('signal', -100)), reverse=True)
 
 def get_nmcli_profiles():
     """Fetch WiFi connection profiles from nmcli on Linux."""
     if platform.system() != 'Linux':
         return []
-        
+
     try:
         nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
         if nmcli_check.returncode != 0:
             return []
-            
+
         list_conns = subprocess.run(['nmcli', '-t', '-f', 'NAME,TYPE,802-11-wireless.ssid', 'connection', 'show'],
                                     capture_output=True, text=True, timeout=5)
         if list_conns.returncode != 0:
             return []
-            
+
         profiles = []
         for line in list_conns.stdout.strip().split('\n'):
             if not line: continue
@@ -3516,7 +2560,7 @@ def get_nmcli_profiles():
 def fetch_weather_for_all_locations(locations_config):
     """Fetch weather for all configured locations in parallel with caching."""
     profiler.mark("fetch_weather_for_all_locations Start")
-    
+
     # Try loading from cache first
     try:
         cache = load_cache_from_file(CACHE_FILE_WEATHER)
@@ -3531,7 +2575,7 @@ def fetch_weather_for_all_locations(locations_config):
     weather_data = {}
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(locations_config), 4)) as executor:
         future_to_location = {
-            executor.submit(fetch_weather, settings['lat'], settings['lon'], location): location 
+            executor.submit(fetch_weather, settings['lat'], settings['lon'], location): location
             for location, settings in locations_config.items()
         }
         for future in concurrent.futures.as_completed(future_to_location):
@@ -3545,7 +2589,7 @@ def fetch_weather_for_all_locations(locations_config):
                     'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
                     'wind_direction': 90, 'cloud_cover': 50
                 }
-    
+
     # Save to cache
     try:
         save_cache_to_file(CACHE_FILE_WEATHER, weather_data, datetime.now(pytz.UTC))
@@ -3565,31 +2609,19 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
             except: pass
 
     _emit("Checking launch cache and fetching SpaceX data…")
-    
+
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # Launch data
         def _fetch_l():
             profiler.mark("Thread: Fetch Launches Start")
-            try: 
+            try:
                 res = fetch_launches()
                 profiler.mark("Thread: Fetch Launches End")
                 return res
-            except: 
+            except:
                 profiler.mark("Thread: Fetch Launches Failed")
                 return {'previous': [], 'upcoming': []}
-        
-        # F1 data
-        def _fetch_f1():
-            profiler.mark("Thread: Fetch F1 Start")
-            _emit("Checking F1 caches and schedule…")
-            try: 
-                res = fetch_f1_data()
-                profiler.mark("Thread: Fetch F1 End")
-                return res
-            except: 
-                profiler.mark("Thread: Fetch F1 Failed")
-                return {'schedule': [], 'driver_standings': [], 'constructor_standings': []}
-            
+
         # Weather data
         def _fetch_w():
             profiler.mark("Thread: Fetch Weather Start")
@@ -3597,7 +2629,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
             res = fetch_weather_for_all_locations(locations_config)
             profiler.mark("Thread: Fetch Weather End")
             return res
-            
+
         # Narratives
         def _fetch_n():
             profiler.mark("Thread: Fetch Narratives Start")
@@ -3607,15 +2639,12 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
             return res
 
         f_launch = executor.submit(_fetch_l)
-        f_f1 = executor.submit(_fetch_f1)
         f_weather = executor.submit(_fetch_w)
         f_narratives = executor.submit(_fetch_n)
-        
+
         profiler.mark("Waiting for data threads...")
         launch_data = f_launch.result()
         profiler.mark("Launch data received")
-        f1_data = f_f1.result()
-        profiler.mark("F1 data received")
         weather_data = f_weather.result()
         profiler.mark("Weather data received")
         narratives = f_narratives.result()
@@ -3623,7 +2652,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
 
     profiler.mark("perform_full_dashboard_data_load End")
     _emit("Data loading complete")
-    return launch_data, f1_data, weather_data, narratives
+    return launch_data, weather_data, narratives
 
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
@@ -3651,7 +2680,7 @@ def setup_dashboard_environment():
 
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
     os.environ["QSG_RHI_BACKEND"] = "gl"
-    
+
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
@@ -3665,7 +2694,7 @@ def setup_dashboard_logging(module_file):
         if not os.path.exists(log_dir):
             try: os.makedirs(log_dir, exist_ok=True)
             except: log_dir = os.path.dirname(module_file)
-            
+
         log_file = os.path.join(log_dir, 'app.log')
         if not os.access(os.path.dirname(log_file), os.W_OK):
             log_file = os.path.join(os.path.dirname(module_file), 'app.log')
@@ -3712,11 +2741,11 @@ def get_launch_tray_visibility_state(launch_data, mode):
     """Determine if the launch tray should be visible based on launch data."""
     if mode != 'spacex':
         return False
-        
+
     upcoming = launch_data.get('upcoming')
     if not upcoming:
         return False
-        
+
     current_time = datetime.now(pytz.UTC)
     try:
         # Sort upcoming launches by time
@@ -3785,22 +2814,6 @@ def get_countdown_string(launch_data, f1_schedule, mode, next_launch, next_race,
             return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
         except Exception:
             return "T- Error"
-    else:
-        # F1 Countdown
-        if not next_race:
-            return "No upcoming races"
-        try:
-            race_time = parse(next_race['date_start']).replace(tzinfo=pytz.UTC)
-            current_time = datetime.now(pytz.UTC)
-            delta = race_time - current_time
-            total_seconds = int(max(delta.total_seconds(), 0)) # seconds includes days but capped at 1 day
-            # Use delta.days and delta.seconds separately
-            days = delta.days
-            hours, remainder = divmod(delta.seconds, 3600)
-            minutes, seconds = divmod(remainder, 60)
-            return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s to {next_race['country_name']}"
-        except Exception:
-            return "T- Race Error"
 
 def get_update_progress_summary(log_path):
     """Read the last few lines of the update log to provide a status update."""
@@ -3851,7 +2864,7 @@ def disconnect_from_wifi(wifi_interface=None):
                 if result.returncode == 0:
                     return True, "Disconnected (nmcli)"
             except: pass
-            
+
             # Fallback for Linux
             if not wifi_interface: wifi_interface = get_wifi_interface()
             try:
@@ -3934,7 +2947,7 @@ def sync_remembered_networks(networks, ssid, timestamp, password=None):
             break
     if not found:
         networks.append({'ssid': ssid, 'password': password, 'last_connected': timestamp})
-    
+
     # Sort by recency
     networks.sort(key=lambda x: x.get('last_connected', 0), reverse=True)
     return networks
@@ -3947,7 +2960,7 @@ def remove_nm_connection(ssid_or_name):
         # First, try to find a connection matching the SSID or name
         result = subprocess.run(['nmcli', '-t', '-f', 'NAME,802-11-wireless.ssid', 'connection', 'show'],
                               capture_output=True, text=True, timeout=5)
-        
+
         target_name = None
         if result.returncode == 0:
             for line in result.stdout.strip().split('\n'):
@@ -3958,15 +2971,15 @@ def remove_nm_connection(ssid_or_name):
                     if ssid == ssid_or_name or name == ssid_or_name:
                         target_name = name
                         break
-        
+
         if not target_name:
             # Fallback to assuming the input IS the name
             target_name = ssid_or_name
-            
+
         logger.info(f"Attempting to delete NM connection profile: '{target_name}'")
         del_res = subprocess.run(['nmcli', 'connection', 'delete', 'id', target_name],
                                 capture_output=True, text=True, timeout=10)
-        
+
         if del_res.returncode == 0:
             logger.info(f"Successfully deleted NM profile: {target_name}")
             return True, del_res.stdout.strip()
