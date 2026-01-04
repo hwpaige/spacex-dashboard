@@ -1861,7 +1861,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
 
     ORBIT_CACHE_VERSION = 'v10-sep-dot'
     landing_type = next_launch.get('landing_type')
-    cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}"
+    landing_loc = next_launch.get('landing_location')
+    cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}:{landing_loc}"
     
     traj_cache = {}
     cache_loaded = load_cache_from_file(TRAJECTORY_CACHE_FILE)
@@ -1880,7 +1881,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'orbit': orbit or cached.get('orbit', normalized_orbit),
             'mission': mission_name,
             'pad': pad,
-            'landing_type': landing_type
+            'landing_type': landing_type,
+            'landing_location': cached.get('landing_location', next_launch.get('landing_location'))
         }
 
     logger.info(f"Trajectory cache miss for {cache_key}; generating new trajectory")
@@ -2048,7 +2050,11 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             l_loc = (next_launch.get('landing_location') or '').upper()
             combined_landing_info = f"{l_type} {l_loc}"
             
-            if any(k in combined_landing_info for k in ['ASDS', 'DRONE', 'SHIP', 'OCISLY', 'JRTI', 'ASOG']):
+            # Expanded detection for ASDS and RTLS
+            asds_keywords = ['ASDS', 'DRONE', 'SHIP', 'OCISLY', 'JRTI', 'ASOG', 'GRAVITAS', 'INSTRUCTIONS', 'STILL LOVE YOU']
+            rtls_keywords = ['RTLS', 'LAUNCH SITE', 'CATCH', 'TOWER', 'LZ', 'LANDING ZONE']
+            
+            if any(k in combined_landing_info for k in asds_keywords):
                 # Droneship landing: continues downrange to a point further along the trajectory
                 landing_idx = min(len(trajectory) - 1, max(sep_idx + 3, len(trajectory) // 3))
                 landing_point = trajectory[landing_idx]
@@ -2062,7 +2068,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                 
                 booster_trajectory = ascent_part + return_part[1:]
                 logger.info(f"Generated ASDS booster trajectory (info: {combined_landing_info})")
-            elif any(k in combined_landing_info for k in ['RTLS', 'LAUNCH SITE', 'CATCH', 'TOWER', 'LZ-1', 'LZ-2', 'LZ-4']):
+            elif any(k in combined_landing_info for k in rtls_keywords):
                 # RTLS/Catch: returns to launch site
                 return_part = generate_curved_trajectory(sep_point, launch_site, 25, orbit_type='suborbital')
                 for i, p in enumerate(return_part):
@@ -2097,7 +2103,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         'orbit': orbit,
         'mission': mission_name,
         'pad': pad,
-        'landing_type': landing_type
+        'landing_type': landing_type,
+        'landing_location': next_launch.get('landing_location')
     }
 
     # Persist to cache
@@ -2111,6 +2118,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'orbit': normalized_orbit,
             'inclination_deg': assumed_incl,
             'landing_type': landing_type,
+            'landing_location': next_launch.get('landing_location'),
             'model': 'v10-sep-dot-optimized'
         }
         save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))

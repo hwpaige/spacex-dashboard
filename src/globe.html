@@ -649,10 +649,23 @@
                     }
 
                     // Add a small landing pad marker if it's an ASDS or RTLS landing
-                    const isASDS = (trajectoryData.landing_type || '').toUpperCase().includes('ASDS') || 
-                                 (trajectoryData.landing_type || '').toUpperCase().includes('DRONE');
-                    const isRTLS = (trajectoryData.landing_type || '').toUpperCase().includes('RTLS') ||
-                                 (trajectoryData.landing_type || '').toUpperCase().includes('LAUNCH SITE');
+                    const combinedInfo = ((trajectoryData.landing_type || '') + ' ' + (trajectoryData.landing_location || '')).toUpperCase();
+                    const isASDS = combinedInfo.includes('ASDS') || 
+                                 combinedInfo.includes('DRONE') ||
+                                 combinedInfo.includes('SHIP') ||
+                                 combinedInfo.includes('OCISLY') ||
+                                 combinedInfo.includes('JRTI') ||
+                                 combinedInfo.includes('ASOG') ||
+                                 combinedInfo.includes('GRAVITAS') ||
+                                 combinedInfo.includes('INSTRUCTIONS') ||
+                                 combinedInfo.includes('STILL LOVE YOU');
+                                 
+                    const isRTLS = combinedInfo.includes('RTLS') ||
+                                 combinedInfo.includes('LAUNCH SITE') ||
+                                 combinedInfo.includes('LANDING ZONE') ||
+                                 combinedInfo.includes('LZ-') ||
+                                 combinedInfo.includes('CATCH') ||
+                                 combinedInfo.includes('TOWER');
 
                     if (isASDS || isRTLS) {
                         const lastPoint = boosterPoints[boosterPoints.length - 1];
