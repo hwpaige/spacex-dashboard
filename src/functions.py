@@ -83,7 +83,6 @@ __all__ = [
     "fetch_launches",
     "fetch_weather",
     # parsing/math helpers
-    "parse_metar",
     # exported constants
     "CACHE_REFRESH_INTERVAL_PREVIOUS",
     "CACHE_REFRESH_INTERVAL_UPCOMING",
@@ -91,15 +90,11 @@ __all__ = [
     "CACHE_REFRESH_INTERVAL_F1_SCHEDULE",
     "CACHE_REFRESH_INTERVAL_F1_STANDINGS",
     "TRAJECTORY_CACHE_FILE",
-    "CACHE_FILE_PREVIOUS",
-    "CACHE_FILE_PREVIOUS_BACKUP",
-    "CACHE_FILE_UPCOMING",
     "CACHE_DIR_F1",
     "CACHE_FILE_F1_SCHEDULE",
     "CACHE_FILE_F1_DRIVERS",
     "CACHE_FILE_F1_CONSTRUCTORS",
-    "RUNTIME_CACHE_FILE_PREVIOUS",
-    "RUNTIME_CACHE_FILE_UPCOMING",
+    "RUNTIME_CACHE_FILE_LAUNCHES",
     "RUNTIME_CACHE_FILE_NARRATIVES",
     "WIFI_KEY_FILE",
     "REMEMBERED_NETWORKS_FILE",
@@ -184,14 +179,13 @@ def emit_loader_status(message: str):
 
 
 # --- Cache paths and constants (UI-agnostic) ---
-CACHE_REFRESH_INTERVAL_PREVIOUS = 86400  # 24 hours for historical data
-CACHE_REFRESH_INTERVAL_UPCOMING = 3600   # 1 hour for upcoming launches
+LAUNCH_API_BASE_URL = "https://launch-narrative-api-dafccc521fb8.herokuapp.com"
+CACHE_REFRESH_INTERVAL_PREVIOUS = 600   # 10 minutes (matches API)
+CACHE_REFRESH_INTERVAL_UPCOMING = 600   # 10 minutes (matches API)
 CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
-CACHE_REFRESH_INTERVAL_WEATHER = 600     # 10 minutes for weather
+CACHE_REFRESH_INTERVAL_WEATHER = 300     # 5 minutes (matches API)
+CACHE_REFRESH_INTERVAL_NARRATIVES = 900 # 15 minutes
 TRAJECTORY_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'trajectory_cache.json')
-CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
-CACHE_FILE_PREVIOUS_BACKUP = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache_backup.json')
-CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), '..', 'cache', 'upcoming_launches_cache.json')
 
 # Cache for F1 data - persistent location outside git repo
 CACHE_DIR_F1 = os.path.expanduser('~/.cache/spacex-dashboard')  # Persistent cache directory
@@ -211,8 +205,7 @@ CACHE_FILE_F1_TRACK_LAYOUT = os.path.join(CACHE_DIR_F1, 'f1_track_layout.json')
 
 # Runtime (user) cache paths for SpaceX launches. Keep the git-seeded repo cache intact
 # and write incremental updates to the persistent user cache.
-RUNTIME_CACHE_FILE_PREVIOUS = os.path.join(CACHE_DIR_F1, 'previous_launches_cache.json')
-RUNTIME_CACHE_FILE_UPCOMING = os.path.join(CACHE_DIR_F1, 'upcoming_launches_cache.json')
+RUNTIME_CACHE_FILE_LAUNCHES = os.path.join(CACHE_DIR_F1, 'launches_cache.json')
 RUNTIME_CACHE_FILE_NARRATIVES = os.path.join(CACHE_DIR_F1, 'narratives_cache.json')
 CACHE_FILE_WEATHER = os.path.join(CACHE_DIR_F1, 'weather_cache.json')
 
@@ -361,112 +354,49 @@ def save_cache_to_file(cache_file, data, timestamp):
         logger.warning(f"Failed to save cache to {cache_file}: {e}")
 
 
-# Helpers for launch caches that prefer the runtime cache but fall back to the git seed
+# Helpers for launch caches that use a single combined runtime cache
 def load_launch_cache(kind: str):
-    """Load a launch cache for kind in {'previous','upcoming'}.
-    Prefer the runtime cache in ~/.cache; fall back to the git-seeded cache under repo /cache.
-    If the runtime cache is missing, seed it from the repo cache.
+    """Load a launch cache for kind in {'previous','upcoming'} from the combined cache.
     Returns a dict: {'data': list, 'timestamp': datetime} or None.
     """
     try:
         if kind not in ('previous', 'upcoming'):
             raise ValueError("kind must be 'previous' or 'upcoming'")
-        runtime_path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
-        seed_path = CACHE_FILE_PREVIOUS if kind == 'previous' else CACHE_FILE_UPCOMING
-
-        data = load_cache_from_file(runtime_path)
-        if data and isinstance(data.get('data'), list):
-            logger.info(f"Loaded {kind} launches from runtime cache: {runtime_path}")
-            return data
-
-        logger.info(f"Runtime {kind} cache unavailable or invalid; falling back to seed cache: {seed_path}")
-        seed_data = load_cache_from_file(seed_path)
         
-        if seed_data and isinstance(seed_data.get('data'), list):
-            # Seed the runtime cache so it exists for next time
-            try:
-                save_launch_cache(kind, seed_data['data'], seed_data['timestamp'])
-                logger.info(f"Successfully seeded runtime {kind} cache from {seed_path}")
-            except Exception as e:
-                logger.warning(f"Failed to seed runtime {kind} cache: {e}")
-            return seed_data
-            
+        data = load_cache_from_file(RUNTIME_CACHE_FILE_LAUNCHES)
+        if data and isinstance(data.get('data'), dict):
+            kind_data = data['data'].get(kind)
+            if isinstance(kind_data, list):
+                return {'data': kind_data, 'timestamp': data['timestamp']}
+        
         return None
     except Exception as e:
-        logger.warning(f"Failed to load {kind} launch cache (runtime/seed): {e}")
+        logger.warning(f"Failed to load {kind} launch cache: {e}")
         return None
 
 
 def save_launch_cache(kind: str, data_list: list, timestamp=None):
-    """Save launches to runtime cache only (keep seed intact)."""
+    """Save kind-specific launches into the combined runtime cache."""
     try:
         if kind not in ('previous', 'upcoming'):
             raise ValueError("kind must be 'previous' or 'upcoming'")
-        path = RUNTIME_CACHE_FILE_PREVIOUS if kind == 'previous' else RUNTIME_CACHE_FILE_UPCOMING
-        ts = timestamp or datetime.now(pytz.UTC)
-        save_cache_to_file(path, data_list, ts)
-        logger.info(f"Saved {len(data_list)} {kind} launches to runtime cache: {path}")
+        
+        # Load existing combined cache or create new
+        combined = load_cache_from_file(RUNTIME_CACHE_FILE_LAUNCHES)
+        if combined and isinstance(combined.get('data'), dict):
+            launch_data = combined['data']
+            combined_ts = combined['timestamp']
+        else:
+            launch_data = {'upcoming': [], 'previous': []}
+            combined_ts = timestamp or datetime.now(pytz.UTC)
+            
+        launch_data[kind] = data_list
+        ts = timestamp or combined_ts
+        save_cache_to_file(RUNTIME_CACHE_FILE_LAUNCHES, launch_data, ts)
     except Exception as e:
         logger.warning(f"Failed to save {kind} launch cache: {e}")
 
 
-def parse_metar(raw_metar):
-    """
-    Parse METAR string to extract weather data
-    Returns dict with temperature_c, temperature_f, wind_speed_ms, wind_speed_kts, wind_direction, cloud_cover
-    """
-    import re
-
-    # Default values
-    temperature_c = 25
-    wind_speed_kts = 0
-    wind_direction = 0
-    cloud_cover = 0
-
-    try:
-        # Extract temperature (format: 25/20 where first is temp, second is dewpoint)
-        temp_match = re.search(r'(\d{1,3})/', raw_metar)
-        if temp_match:
-            temperature_c = int(temp_match.group(1))
-            # Convert M (minus) prefix for negative temperatures
-            if raw_metar[temp_match.start()-1] == 'M':
-                temperature_c = -temperature_c
-
-        # Extract wind (format: 12010KT or 12010G15KT)
-        wind_match = re.search(r'(\d{3})(\d{2,3})(?:G\d{2,3})?KT', raw_metar)
-        if wind_match:
-            wind_direction = int(wind_match.group(1))
-            wind_speed_kts = int(wind_match.group(2))
-
-        # Estimate cloud cover based on cloud types
-        if 'SKC' in raw_metar or 'CLR' in raw_metar:
-            cloud_cover = 0  # Clear
-        elif 'FEW' in raw_metar:
-            cloud_cover = 25  # Few clouds
-        elif 'SCT' in raw_metar:
-            cloud_cover = 50  # Scattered
-        elif 'BKN' in raw_metar:
-            cloud_cover = 75  # Broken
-        elif 'OVC' in raw_metar:
-            cloud_cover = 100  # Overcast
-        else:
-            cloud_cover = 50  # Default to partly cloudy if no cloud info
-
-    except Exception as e:
-        logger.warning(f"Error parsing METAR data '{raw_metar}': {e}")
-
-    # Convert to required format
-    temperature_f = temperature_c * 9 / 5 + 32
-    wind_speed_ms = wind_speed_kts * 0.514444  # Convert knots to m/s
-
-    return {
-        'temperature_c': temperature_c,
-        'temperature_f': temperature_f,
-        'wind_speed_ms': wind_speed_ms,
-        'wind_speed_kts': wind_speed_kts,
-        'wind_direction': wind_direction,
-        'cloud_cover': cloud_cover
-    }
 
 def _ang_dist_deg(a, b):
     """Calculate the angular distance between two points in degrees."""
@@ -612,295 +542,120 @@ def check_wifi_status():
         return False, ""
 
 def fetch_launch_details(launch_id):
-    """Fetch detailed information for a single launch to get vidURLs."""
+    """Fetch detailed information for a single launch to get full data (v2.3.0) via proxy."""
     if not launch_id:
         return None
-    url = f"https://ll.thespacedevs.com/2.0.0/launch/{launch_id}/"
-    logger.info(f"Fetching details for launch {launch_id}")
+    url = f"{LAUNCH_API_BASE_URL}/launch_details/{launch_id}"
+    logger.info(f"Fetching details for launch {launch_id} via proxy")
     try:
-        try:
-            response = requests.get(url, timeout=10, verify=True)
-        except Exception:
-            response = requests.get(url, timeout=10, verify=False)
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         return response.json()
     except Exception as e:
         logger.warning(f"Failed to fetch launch details for {launch_id}: {e}")
         return None
 
+def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
+    """Helper to parse raw API launch data into the dashboard's internal format."""
+    launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
+    landing_type = None
+    landing_location = None
+    if isinstance(launcher_stage, list) and len(launcher_stage) > 0:
+        landing = launcher_stage[0].get('landing')
+        if landing:
+            landing_type = landing.get('type', {}).get('name')
+            # In v2.3.0 mode=detailed, the key is often 'landing_location' instead of 'location'
+            landing_location = landing.get('landing_location', {}).get('name')
+            if not landing_location:
+                landing_location = landing.get('location', {}).get('name')
+    
+    return {
+        'id': launch.get('id'),
+        'mission': launch.get('name', 'Unknown'),
+        'date': launch.get('net').split('T')[0] if launch.get('net') else 'TBD',
+        'time': launch.get('net').split('T')[1].split('Z')[0] if launch.get('net') and 'T' in launch.get('net') else 'TBD',
+        'net': launch.get('net'),
+        'status': launch.get('status', {}).get('name', 'Unknown'),
+        'rocket': launch.get('rocket', {}).get('configuration', {}).get('name', 'Unknown'),
+        'orbit': launch.get('mission', {}).get('orbit', {}).get('name', 'Unknown') if launch.get('mission') else 'Unknown',
+        'pad': launch.get('pad', {}).get('name', 'Unknown'),
+        'video_url': launch.get('vidURLs', [{}])[0].get('url', '') if launch.get('vidURLs') else '',
+        'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), '') if launch.get('vidURLs') else '',
+        'landing_type': landing_type,
+        'landing_location': landing_location,
+        'is_detailed': is_detailed
+    }
+
 # --- Data fetchers moved from app.py ---
 def fetch_launches():
-    logger.info("Fetching SpaceX launch data")
+    """Fetch SpaceX launch data (upcoming and previous) from the new API."""
+    logger.info("Fetching SpaceX launch data from new API")
+    
+    # Try loading from combined cache first
+    try:
+        cache = load_cache_from_file(RUNTIME_CACHE_FILE_LAUNCHES)
+        current_time = datetime.now(pytz.UTC)
+        if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING:
+            logger.info("Using fresh combined launch cache")
+            return cache['data']
+    except Exception as e:
+        logger.warning(f"Failed to load combined launch cache: {e}")
 
-    # Check network connectivity before making API calls
+    # Check network connectivity
     network_available = test_network_connectivity()
     if not network_available:
-        logger.warning("Network connectivity check failed for launch data")
-        # Return cached data if available
-        previous_cache = load_launch_cache('previous')
-        upcoming_cache = load_launch_cache('upcoming')
-        if previous_cache and upcoming_cache:
-            logger.info("Returning cached launch data due to network issues")
-            return {
-                'previous': previous_cache['data'],
-                'upcoming': upcoming_cache['data']
-            }
-        else:
-            logger.error("No cached data available and network is down - returning empty data")
-            return {'previous': [], 'upcoming': []}
+        if cache and cache.get('data'):
+            logger.info("Using stale combined launch cache (offline)")
+            return cache['data']
+        # Deep fallback to kind-specific caches
+        prev = load_launch_cache('previous')
+        up = load_launch_cache('upcoming')
+        return {
+            'previous': prev['data'] if prev else [],
+            'upcoming': up['data'] if up else []
+        }
 
-    current_time = datetime.now(pytz.UTC)
-    current_date_str = current_time.strftime('%Y-%m-%d')
-    current_year = current_time.year
-
-    # Load previous launches (prefer runtime; keep git seed intact)
-    prev_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_PREVIOUS)
-    previous_cache = load_launch_cache('previous')
-    
-    # Use cache if fresh enough
-    if previous_cache and (current_time - previous_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_PREVIOUS:
-        previous_launches = previous_cache['data']
-        logger.info(f"Using fresh historical launch cache ({len(previous_launches)} launches)")
-    elif previous_cache:
-        previous_launches = previous_cache['data']
-        logger.info(f"Historical launch cache stale or refresh forced; checking for updates...")
-        try:
-            emit_loader_status("Checking for new SpaceX launches…")
-        except Exception:
-            pass
+    try:
+        emit_loader_status("Fetching SpaceX launch data…")
+        url = f"{LAUNCH_API_BASE_URL}/launches"
+        response = requests.get(url, timeout=15)
+        response.raise_for_status()
+        data = response.json()
         
-        # Check for new launches to add (only recent ones)
-        try:
-            logger.info("Checking for new launches to add...")
-            url = f'https://ll.thespacedevs.com/2.0.0/launch/previous/?lsp__name=SpaceX&net__gte={current_year}-01-01&limit=50'
-            
-            try:
-                response = requests.get(url, timeout=10, verify=True)
-            except Exception as ssl_error:
-                logger.warning(f"SSL verification failed, trying without verification: {ssl_error}")
-                response = requests.get(url, timeout=10, verify=False)
-            response.raise_for_status()
-            data = response.json()
-            
-            # Get the most recent launch date from cache
-            if previous_launches:
-                cache_dates = [launch['net'] for launch in previous_launches if launch.get('net')]
-                if cache_dates:
-                    latest_cache_date = max(cache_dates)
-                    logger.info(f"Latest cached launch: {latest_cache_date}")
-                else:
-                    latest_cache_date = None
-            else:
-                latest_cache_date = None
-            
-            new_launches = []
-            for launch in data['results']:
-                launch_net = launch['net']
-                if latest_cache_date and launch_net <= latest_cache_date:
-                    break  # No more new launches
-                
-                try:
-                    launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
-                    landing_type = None
-                    landing_location = None
-                    if isinstance(launcher_stage, list) and len(launcher_stage) > 0:
-                        landing = launcher_stage[0].get('landing')
-                        if landing:
-                            landing_type = landing.get('type', {}).get('name')
-                            landing_location = landing.get('location', {}).get('name')
-
-                    launch_data = {
-                        'id': launch.get('id'),
-                        'mission': launch['name'],
-                        'date': launch['net'].split('T')[0],
-                        'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
-                        'net': launch['net'],
-                        'status': launch['status']['name'],
-                        'rocket': launch['rocket']['configuration']['name'],
-                        'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
-                        'pad': launch['pad']['name'],
-                        'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
-                        'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
-                        'landing_type': landing_type,
-                        'landing_location': landing_location
-                    }
-                    new_launches.append(launch_data)
-                except Exception as e:
-                    logger.warning(f"Skipping launch {launch.get('name', 'Unknown')} due to error: {e}")
-                    continue
-            
-            if new_launches:
-                # Add new launches to the beginning (most recent first)
-                previous_launches = new_launches + previous_launches
-                save_launch_cache('previous', previous_launches, current_time)
-                logger.info(f"Added {len(new_launches)} new launches to cache")
-                # Status reflecting first-time cache creation
-                try:
-                    suffix = " for the first time" if not prev_cache_existed_before else ""
-                    emit_loader_status(f"Updating SpaceX launch history cache{suffix}…")
-                except Exception:
-                    pass
-            else:
-                logger.info("No new launches to add")
-                
-        except Exception as e:
-            logger.warning(f"Failed to check for new launches: {e}")
-            
-    else:
-        # Try backup cache if main cache is corrupted/missing
-        logger.warning("Main previous launches cache not found or corrupted, trying backup...")
-        backup_cache = load_cache_from_file(CACHE_FILE_PREVIOUS_BACKUP)
-        if backup_cache:
-            previous_launches = backup_cache['data']
-            logger.info(f"Loaded {len(previous_launches)} previous launches from backup cache")
-            # Save backup as main cache
-            save_launch_cache('previous', previous_launches, current_time)
-        else:
-            logger.error("Both main and backup caches are unavailable, using fallback data")
-            previous_launches = [
-                {'mission': 'Starship Flight 7', 'date': '2025-01-15', 'time': '12:00:00', 'net': '2025-01-15T12:00:00Z', 'status': 'Success', 'rocket': 'Starship', 'orbit': 'Suborbital', 'pad': 'Starbase', 'video_url': 'https://www.youtube.com/embed/videoseries?si=rvwtzwj_URqw2dtK&controls=0&list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY', 'x_video_url': ''},
-                {'mission': 'Crew-10', 'date': '2025-03-14', 'time': '09:00:00', 'net': '2025-03-14T09:00:00Z', 'status': 'Success', 'rocket': 'Falcon 9', 'orbit': 'Low Earth Orbit', 'pad': 'LC-39A', 'video_url': '', 'x_video_url': ''},
-            ]
-
-    # Load upcoming launches cache
-    up_cache_existed_before = os.path.exists(RUNTIME_CACHE_FILE_UPCOMING)
-    upcoming_cache = load_launch_cache('upcoming')
-    
-    # Check if cache is valid and has our new fields
-    cache_is_fresh = upcoming_cache and (current_time - upcoming_cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_UPCOMING
-    cache_is_updated = upcoming_cache and upcoming_cache['data'] and 'landing_type' in upcoming_cache['data'][0]
-    
-    if cache_is_fresh and cache_is_updated:
-        upcoming_launches = upcoming_cache['data']
-        logger.info("Using persistent cached upcoming launches")
-        try:
-            emit_loader_status("Loading upcoming launches from cache…")
-        except Exception:
-            pass
-    else:
-        try:
-            logger.info("Fetching fresh upcoming launches from API")
-            try:
-                emit_loader_status("Fetching upcoming SpaceX launches…")
-            except Exception:
-                pass
-            url = 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=50'
-            logger.info(f"API URL: {url}")
-            try:
-                response = requests.get(url, timeout=10, verify=True)
-            except Exception as ssl_error:
-                logger.warning(f"SSL verification failed for upcoming launches, trying without verification: {ssl_error}")
-                response = requests.get(url, timeout=10, verify=False)
-            response.raise_for_status()
-            data = response.json()
-            logger.info(f"API response received, status: {response.status_code}")
-            upcoming_launches = []
-            for launch in data['results']:
-                launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
-                landing_type = None
-                landing_location = None
-                if isinstance(launcher_stage, list) and len(launcher_stage) > 0:
-                    landing = launcher_stage[0].get('landing')
-                    if landing:
-                        landing_type = landing.get('type', {}).get('name')
-                        landing_location = landing.get('location', {}).get('name')
-                
-                upcoming_launches.append({
-                    'id': launch.get('id'),
-                    'mission': launch['name'],
-                    'date': launch['net'].split('T')[0],
-                    'time': launch['net'].split('T')[1].split('Z')[0] if 'T' in launch['net'] else 'TBD',
-                    'net': launch['net'],
-                    'status': launch['status']['name'],
-                    'rocket': launch['rocket']['configuration']['name'],
-                    'orbit': launch['mission']['orbit']['name'] if launch['mission'] and 'orbit' in launch['mission'] else 'Unknown',
-                    'pad': launch['pad']['name'],
-                    'video_url': launch.get('vidURLs', [{}])[0].get('url', ''),
-                    'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
-                    'landing_type': landing_type,
-                    'landing_location': landing_location
-                })
-            save_launch_cache('upcoming', upcoming_launches, current_time)
-            logger.info(f"Successfully fetched and saved {len(upcoming_launches)} upcoming launches")
-            try:
-                suffix = " for the first time" if not up_cache_existed_before else ""
-                emit_loader_status(f"Saving upcoming launches to cache{suffix}…")
-            except Exception:
-                pass
-        except Exception as e:
-            logger.error(f"LL2 API error for upcoming launches: {e}")
-            logger.error(f"Exception type: {type(e)}")
-            import traceback
-            logger.error(f"Traceback: {traceback.format_exc()}")
-            # Fallback to cached upcoming launches if available, even if stale
-            cache_fallback = load_launch_cache('upcoming')
-            if cache_fallback and cache_fallback.get('data'):
-                upcoming_launches = cache_fallback['data']
-                logger.warning(
-                    f"Using cached upcoming launches due to API failure; count={len(upcoming_launches)}"
-                )
-            else:
-                logger.warning("No cached upcoming launches available; proceeding with empty list")
-                upcoming_launches = []
-
-    # Identify closest launches and fetch their details for x_video_url to ensure we have the latest livestream link
-    if network_available:
-        try:
-            # Candidates are the most recent previous launch and the next upcoming launch
-            candidates = []
-            if previous_launches:
-                candidates.append(previous_launches[0])
-            if upcoming_launches:
-                candidates.append(upcoming_launches[0])
-                
-            for candidate in candidates:
-                launch_id = candidate.get('id')
-                if launch_id:
-                    details = fetch_launch_details(launch_id)
-                    if details:
-                        vid_urls = details.get('vidURLs', [])
-                        # Search for x.com or twitter.com in the video URLs
-                        x_url = next((v['url'] for v in vid_urls if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), '')
-                        if x_url:
-                            candidate['x_video_url'] = x_url
-                            logger.info(f"Updated x_video_url for {candidate.get('mission')} to {x_url}")
-        except Exception as e:
-            logger.warning(f"Error updating closest launch X URLs: {e}")
-
-    return {'previous': previous_launches, 'upcoming': upcoming_launches}
+        launch_data = {
+            'upcoming': data.get('upcoming', []),
+            'previous': data.get('previous', [])
+        }
+        
+        save_cache_to_file(RUNTIME_CACHE_FILE_LAUNCHES, launch_data, datetime.now(pytz.UTC))
+        logger.info(f"Fetched and cached {len(launch_data['upcoming'])} upcoming and {len(launch_data['previous'])} previous launches")
+        return launch_data
+    except Exception as e:
+        logger.error(f"Failed to fetch launches from new API: {e}")
+        if cache and cache.get('data'):
+            return cache['data']
+        return {'previous': [], 'upcoming': []}
 
 
 def fetch_narratives():
-    """Fetch witty launch narratives from the API with fallback and caching, returning structured data."""
-    logger.info("Fetching narratives")
-    narratives = []
-
+    """Fetch witty launch narratives from the new API."""
+    logger.info("Fetching narratives from new API")
+    
     def parse_narratives(raw_list):
         """Parse list of strings into list of dicts {date, text}."""
         parsed = []
         for item in raw_list:
             if isinstance(item, dict):
-                # Already parsed?
                 parsed.append(item)
                 continue
             if not isinstance(item, str):
                 continue
             
-            # Pattern: "M/D HHMM: Description"
-            # e.g. "7/1 2104: Falcon 9..."
             match = re.match(r'^(\d{1,2}/\d{1,2}\s+\d{4}):\s*(.*)', item)
             if match:
-                parsed.append({
-                    'date': match.group(1),
-                    'text': match.group(2),
-                    'full': item
-                })
+                parsed.append({'date': match.group(1), 'text': match.group(2), 'full': item})
             else:
-                parsed.append({
-                    'date': '',
-                    'text': item,
-                    'full': item
-                })
+                parsed.append({'date': '', 'text': item, 'full': item})
         return parsed
 
     # Try loading from cache first
@@ -909,127 +664,49 @@ def fetch_narratives():
         current_time = datetime.now(pytz.UTC)
         if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_NARRATIVES:
             logger.info("Using cached narratives")
-            # Ensure cached data is parsed (upgrading old string cache if needed)
-            if cache['data'] and isinstance(cache['data'][0], str):
-                 return parse_narratives(cache['data'])
             return cache['data']
     except Exception as e:
         logger.warning(f"Failed to load narratives cache: {e}")
 
-    # Check network and fetch from API
-    network_available = test_network_connectivity()
-    if not network_available:
-        logger.warning("Network connectivity check failed for narratives")
-        # Fallback to cache if available (even if stale)
+    # Check network
+    if not test_network_connectivity():
         if cache and cache.get('data'):
-            logger.info("Using stale cached narratives as fallback")
-            data = cache['data']
-            if data and isinstance(data[0], str):
-                return parse_narratives(data)
-            return data
-        # Final fallback to hardcoded descriptions
-        logger.info("Using hardcoded fallback narratives")
+            return cache['data']
         return parse_narratives(LAUNCH_DESCRIPTIONS)
 
     try:
-        url = "https://launch-narrative-api-dafccc521fb8.herokuapp.com/recent_launches_narratives"
-        logger.info(f"Fetching narratives from API: {url}")
-
-        try:
-            response = requests.get(url, timeout=10, verify=True)
-        except Exception as ssl_error:
-            logger.warning(f"SSL verification failed for narratives, trying without verification: {ssl_error}")
-            response = requests.get(url, timeout=10, verify=False)
+        url = f"{LAUNCH_API_BASE_URL}/recent_launches_narratives"
+        response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
 
-        # The API returns a dict with 'descriptions' key
-        raw_narratives = []
-        if isinstance(data, dict) and 'descriptions' in data:
-            raw_narratives = data['descriptions']
-        # Fallback if top-level list
-        elif isinstance(data, list):
-            raw_narratives = data
-        else:
-            logger.warning(f"Narratives API returned unexpected format: {type(data)}")
-
+        raw_narratives = data.get('descriptions', [])
         if raw_narratives:
-            # Parse before caching
             narratives = parse_narratives(raw_narratives)
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
-            logger.info(f"Fetched and cached {len(narratives)} narratives")
             return narratives
 
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
 
-    # Fallback to cache if available (even if stale)
     if cache and cache.get('data'):
-        logger.info("Using stale cached narratives as fallback")
-        data = cache['data']
-        if data and isinstance(data[0], str):
-            return parse_narratives(data)
-        return data
-
-    # Final fallback to hardcoded descriptions
-    logger.info("Using hardcoded fallback narratives")
+        return cache['data']
     return parse_narratives(LAUNCH_DESCRIPTIONS)
 
 def fetch_weather(lat, lon, location):
-    logger.info(f"Fetching METAR weather data for {location}")
-
-    # METAR station mappings - closest weather stations for each location
-    metar_stations = {
-        'Starbase': 'KBRO',  # Brownsville International Airport
-        'Vandy': 'KVBG',    # Vandenberg Space Force Base
-        'Cape': 'KMLB',     # Melbourne International Airport (closest to Kennedy Space Center)
-        'Hawthorne': 'KHHR' # Hawthorne Municipal Airport
-    }
-
-    station_id = metar_stations.get(location, 'KBRO')  # Default to KBRO if not found
-
-    # Check network connectivity before making API calls
-    network_available = test_network_connectivity()
-    if not network_available:
-        logger.warning("Network connectivity check failed for weather data")
-        # Return fallback data
-        logger.info("Returning fallback weather data due to network issues")
-        return {
-            'temperature_c': 25,
-            'temperature_f': 77,
-            'wind_speed_ms': 5,
-            'wind_speed_kts': 9.7,
-            'wind_direction': 90,
-            'cloud_cover': 50
-        }
-
+    """Fetch weather for a single location from the new API."""
+    logger.info(f"Fetching weather for {location} via new API")
     try:
-        # Use Aviation Weather Center METAR API
-        url = f"https://aviationweather.gov/api/data/metar?ids={station_id}&format=raw"
+        url = f"{LAUNCH_API_BASE_URL}/weather/{location}"
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        raw_metar = response.text.strip()
-
-        if not raw_metar:
-            raise ValueError(f"No METAR data received for station {station_id}")
-
-        logger.info(f"Successfully fetched METAR data for {location} from {station_id}: {raw_metar}")
-
-        # Parse METAR data
-        parsed_data = parse_metar(raw_metar)
-
-        time.sleep(1)  # Avoid rate limiting
-        return parsed_data
-
+        return response.json()
     except Exception as e:
-        logger.error(f"METAR API error for {location} (station {station_id}): {e}")
+        logger.warning(f"Failed to fetch weather for {location}: {e}")
         return {
-            'temperature_c': 25,
-            'temperature_f': 77,
-            'wind_speed_ms': 5,
-            'wind_speed_kts': 9.7,
-            'wind_direction': 90,
-            'cloud_cover': 50
+            'temperature_c': 25, 'temperature_f': 77,
+            'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
+            'wind_direction': 90, 'cloud_cover': 50
         }
 
 
@@ -1859,7 +1536,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         launch_site.get('lat', 0.0)
     )
 
-    ORBIT_CACHE_VERSION = 'v10-sep-dot'
+    ORBIT_CACHE_VERSION = 'v230-hybrid-ro'
     landing_type = next_launch.get('landing_type')
     landing_loc = next_launch.get('landing_location')
     cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}:{landing_loc}"
@@ -2066,7 +1743,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                     # Parabolic arc from sep_radius to 1.01, peaking at sep_radius + 0.02
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.02 * math.sin(prog * math.pi)
                 
-                booster_trajectory = ascent_part + return_part[1:]
+                booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated ASDS booster trajectory (info: {combined_landing_info})")
             elif any(k in combined_landing_info for k in rtls_keywords):
                 # RTLS/Catch: returns to launch site
@@ -2076,7 +1754,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                     # Higher arc for RTLS boostback (~300km peak)
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.03 * math.sin(prog * math.pi)
                 
-                booster_trajectory = ascent_part + return_part[1:]
+                booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated RTLS/Catch booster trajectory (info: {combined_landing_info})")
             elif any(k in combined_landing_info for k in ['OCEAN', 'SPLASHDOWN']):
                 landing_idx = min(len(trajectory) - 1, max(sep_idx + 2, len(trajectory) // 4))
@@ -2085,12 +1764,14 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                 for i, p in enumerate(return_part):
                     prog = i / (len(return_part) - 1)
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.015 * math.sin(prog * math.pi)
-                booster_trajectory = ascent_part + return_part[1:]
+                booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated Ocean splashdown booster trajectory (type: {landing_type})")
             else:
-                # Expendable/Unknown: only show ascent, but still visible due to radius offset
-                booster_trajectory = ascent_part
-                logger.info(f"Generated ascent-only booster trajectory for unknown/expendable type: {landing_type}")
+                # Expendable/Unknown: no return trajectory to show
+                booster_trajectory = []
+                sep_idx = None
+                logger.info(f"Skipping booster trajectory for unknown/expendable type: {landing_type}")
         except Exception as e:
             logger.warning(f"Booster trajectory generation failed: {e}")
 
@@ -2410,10 +2091,28 @@ def get_max_value_from_series(series):
             all_vals.append(float(s['value']))
     return int(max(all_vals)) if all_vals else 0
 
+def is_launch_finished(status):
+    """Check if a launch status indicates it has completed (Success or Failure)."""
+    if not status:
+        return False
+    s = str(status).lower()
+    return any(keyword in s for keyword in ['success', 'failure', 'successful', 'complete'])
+
 def get_next_launch_info(upcoming_launches, tz_obj):
     """Find and format the next upcoming launch."""
     current_time = datetime.now(pytz.UTC)
-    valid_launches = [l for l in upcoming_launches if l.get('time') != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
+    valid_launches = []
+    for l in upcoming_launches:
+        if l.get('time') == 'TBD': continue
+        try:
+            lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+            is_finished = is_launch_finished(l.get('status'))
+            # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
+            if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
+                valid_launches.append(l)
+        except Exception:
+            continue
+            
     if valid_launches:
         next_l = min(valid_launches, key=lambda x: parse(x['net']))
         launch = next_l.copy()
@@ -2426,7 +2125,18 @@ def get_next_launch_info(upcoming_launches, tz_obj):
 def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
     """Sort and format a list of upcoming launches."""
     current_time = datetime.now(pytz.UTC)
-    valid_launches = [l for l in upcoming_launches if l.get('time') != 'TBD' and parse(l['net']).replace(tzinfo=pytz.UTC) > current_time]
+    valid_launches = []
+    for l in upcoming_launches:
+        if l.get('time') == 'TBD': continue
+        try:
+            lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+            is_finished = is_launch_finished(l.get('status'))
+            # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
+            if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
+                valid_launches.append(l)
+        except Exception:
+            continue
+
     launches = []
     for l in sorted(valid_launches, key=lambda x: parse(x['net']))[:limit]:
         launch = l.copy()
@@ -2472,20 +2182,7 @@ def get_closest_x_video_url(launch_data):
 
 def initialize_all_weather(locations_config):
     """Fetch initial weather for all configured locations."""
-    weather_data = {}
-    for location, settings in locations_config.items():
-        try:
-            weather = fetch_weather(settings['lat'], settings['lon'], location)
-            weather_data[location] = weather
-        except Exception as e:
-            logger.error(f"Failed to initialize weather for {location}: {e}")
-            # Fallback data
-            weather_data[location] = {
-                'temperature_c': 25, 'temperature_f': 77,
-                'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
-                'wind_direction': 90, 'cloud_cover': 50
-            }
-    return weather_data
+    return fetch_weather_for_all_locations(locations_config)
 
 def get_best_wifi_reconnection_candidate(remembered_networks, visible_networks, nm_profiles=None):
     """
@@ -2582,7 +2279,7 @@ def get_nmcli_profiles():
         return []
 
 def fetch_weather_for_all_locations(locations_config):
-    """Fetch weather for all configured locations in parallel with caching."""
+    """Fetch weather for all configured locations from the new unified API."""
     profiler.mark("fetch_weather_for_all_locations Start")
 
     # Try loading from cache first
@@ -2596,33 +2293,31 @@ def fetch_weather_for_all_locations(locations_config):
     except Exception as e:
         logger.warning(f"Failed to load weather cache: {e}")
 
-    weather_data = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(locations_config), 4)) as executor:
-        future_to_location = {
-            executor.submit(fetch_weather, settings['lat'], settings['lon'], location): location
-            for location, settings in locations_config.items()
-        }
-        for future in concurrent.futures.as_completed(future_to_location):
-            location = future_to_location[future]
-            try:
-                weather_data[location] = future.result()
-            except Exception as e:
-                logger.warning(f"Failed to fetch weather for {location}: {e}")
-                weather_data[location] = {
-                    'temperature_c': 25, 'temperature_f': 77,
-                    'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
-                    'wind_direction': 90, 'cloud_cover': 50
-                }
+    # Check network connectivity
+    if not test_network_connectivity():
+        if cache and cache.get('data'):
+            return cache['data']
+        return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
-    # Save to cache
     try:
+        emit_loader_status("Fetching global weather data…")
+        url = f"{LAUNCH_API_BASE_URL}/weather_all"
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        
+        weather_data = data.get('weather', {})
+        
+        # Save to cache
         save_cache_to_file(CACHE_FILE_WEATHER, weather_data, datetime.now(pytz.UTC))
-        logger.info("Saved fresh weather data to cache")
+        logger.info(f"Fetched and cached weather for {len(weather_data)} locations")
+        profiler.mark("fetch_weather_for_all_locations End (API Success)")
+        return weather_data
     except Exception as e:
-        logger.warning(f"Failed to save weather cache: {e}")
-
-    profiler.mark("fetch_weather_for_all_locations End (Cache Miss)")
-    return weather_data
+        logger.error(f"Failed to fetch weather from new API: {e}")
+        if cache and cache.get('data'):
+            return cache['data']
+        return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
 def perform_full_dashboard_data_load(locations_config, status_callback=None):
     """Orchestrate parallel fetch of launches, F1, and weather data."""
@@ -2792,8 +2487,9 @@ def get_launch_tray_visibility_state(launch_data, mode):
         if current_time <= launch_time <= current_time + timedelta(hours=1):
             return True
 
-        # Ongoing/post‑T0: keep tray visible while status != Success
-        if launch_time <= current_time and (launch.get('status') or '').lower() != 'success':
+        # Ongoing/post‑T0: keep tray visible if it just launched and isn't finished yet (2 hour window)
+        is_finished = is_launch_finished(launch.get('status'))
+        if launch_time <= current_time <= launch_time + timedelta(hours=2) and not is_finished:
             return True
 
     return False
@@ -2803,6 +2499,7 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
     if mode == 'spacex':
         upcoming = launch_data.get('upcoming', [])
         try:
+            # Sort upcoming launches by time
             upcoming_sorted = sorted(
                 [l for l in upcoming if l.get('time') != 'TBD' and l.get('net')],
                 key=lambda x: parse(x['net'])
@@ -2811,14 +2508,15 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
             upcoming_sorted = upcoming
 
         now_utc = datetime.now(pytz.UTC)
-        # Check for ongoing/just-launched
+        # Check for ongoing/just-launched (within 2 hours of T0 and not finished)
         for l in upcoming_sorted:
             try:
                 lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
             except Exception:
                 continue
-            status = (l.get('status') or '').lower()
-            if lt_utc <= now_utc and status != 'success':
+            
+            is_finished = is_launch_finished(l.get('status'))
+            if lt_utc <= now_utc <= lt_utc + timedelta(hours=2) and not is_finished:
                 delta = datetime.now(tz_obj) - lt_utc.astimezone(tz_obj)
                 total_seconds = int(max(delta.total_seconds(), 0))
                 days, rem = divmod(total_seconds, 86400)

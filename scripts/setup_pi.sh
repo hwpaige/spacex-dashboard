@@ -532,7 +532,7 @@ echo 'Testing internet connectivity...'
 ping -c 3 8.8.8.8 2>/dev/null && echo 'Internet connectivity OK' || echo 'No internet connectivity'
 echo ''
 echo 'Testing SpaceX API...'
-curl -s --max-time 10 'https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5' | head -c 200 && echo -e '\nAPI reachable' || echo 'API unreachable'
+curl -s --max-time 10 'https://launch-narrative-api-dafccc521fb8.herokuapp.com/launches' | head -c 200 && echo -e '\nAPI reachable' || echo 'API unreachable'
 echo ''
 echo 'Testing Python requests to API with SSL debugging...'
 python3 -c \"
@@ -540,12 +540,12 @@ import requests
 import ssl
 print('SSL version:', ssl.OPENSSL_VERSION)
 try:
-    response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=True)
+    response = requests.get('https://launch-narrative-api-dafccc521fb8.herokuapp.com/launches', timeout=10, verify=True)
     print('SSL verified request successful:', response.status_code)
 except Exception as e:
     print('SSL verified request failed:', str(e))
     try:
-        response = requests.get('https://ll.thespacedevs.com/2.0.0/launch/upcoming/?lsp__name=SpaceX&limit=5', timeout=10, verify=False)
+        response = requests.get('https://launch-narrative-api-dafccc521fb8.herokuapp.com/launches', timeout=10, verify=False)
         print('Non-SSL request successful:', response.status_code)
     except Exception as e2:
         print('Non-SSL request also failed:', str(e2))

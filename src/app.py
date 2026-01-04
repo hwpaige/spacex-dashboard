@@ -46,7 +46,6 @@ from functions import (
     save_last_connected_network,
     start_http_server,
     # parsing/math helpers
-    parse_metar,
     # CACHE_REFRESH constants
     CACHE_REFRESH_INTERVAL_PREVIOUS,
     CACHE_REFRESH_INTERVAL_UPCOMING,
@@ -55,11 +54,7 @@ from functions import (
     CACHE_REFRESH_INTERVAL_F1_STANDINGS,
     # CACHE_FILE constants
     TRAJECTORY_CACHE_FILE,
-    CACHE_FILE_PREVIOUS,
-    CACHE_FILE_PREVIOUS_BACKUP,
-    CACHE_FILE_UPCOMING,
-    RUNTIME_CACHE_FILE_PREVIOUS,
-    RUNTIME_CACHE_FILE_UPCOMING,
+    RUNTIME_CACHE_FILE_LAUNCHES,
     WIFI_KEY_FILE,
     REMEMBERED_NETWORKS_FILE,
     LAST_CONNECTED_NETWORK_FILE,
@@ -309,6 +304,17 @@ class WeatherUpdater(QObject):
     def run(self):
         weather_data = fetch_weather_for_all_locations(location_settings)
         self.finished.emit(weather_data)
+
+class NextLaunchUpdater(QObject):
+    finished = pyqtSignal(dict)
+    def __init__(self, launch_id):
+        super().__init__()
+        self.launch_id = launch_id
+    def run(self):
+        # Use v2.3.0 detailed mode
+        detailed_data = funcs.fetch_launch_details(self.launch_id)
+        if detailed_data:
+            self.finished.emit(detailed_data)
 
 class Backend(QObject):
     modeChanged = pyqtSignal()
@@ -789,6 +795,11 @@ class Backend(QObject):
         self.update_check_timer.timeout.connect(self.check_for_updates_periodic)
         self.update_check_timer.start(21600000)  # 6 hours
 
+        # Near-real-time update for next launch - check every 60 seconds
+        self.next_launch_timer = QTimer(self)
+        self.next_launch_timer.timeout.connect(self.update_next_launch_periodic)
+        self.next_launch_timer.start(60000)  # 1 minute
+
     @pyqtSlot()
     def check_for_updates_periodic(self):
         """Periodic update check in background"""
@@ -1250,6 +1261,74 @@ class Backend(QObject):
         self._launch_updater.finished.connect(self._on_launches_updated)
         self._launch_updater_thread.started.connect(self._launch_updater.run)
         self._launch_updater_thread.start()
+
+    @pyqtSlot()
+    def update_next_launch_periodic(self):
+        """Update only the next upcoming launch data in near real-time (v2.3.0 detailed)"""
+        if not self.networkConnected or self._mode != 'spacex':
+            return
+
+        # Skip if either updater is already running to avoid overlaps
+        if (hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning()) or \
+           (hasattr(self, '_next_launch_updater_thread') and self._next_launch_updater_thread.isRunning()):
+            return
+
+        next_launch = self.get_next_launch()
+        if not next_launch or not next_launch.get('id'):
+            return
+
+        logger.info(f"Backend: Near-real-time update for next launch {next_launch['id']}")
+        self._next_launch_updater = NextLaunchUpdater(next_launch['id'])
+        self._next_launch_updater_thread = QThread()
+        self._next_launch_updater.moveToThread(self._next_launch_updater_thread)
+        self._next_launch_updater.finished.connect(self._on_next_launch_updated)
+        self._next_launch_updater_thread.started.connect(self._next_launch_updater.run)
+        
+        # Cleanup
+        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.quit)
+        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.deleteLater)
+        self._next_launch_updater_thread.finished.connect(self._next_launch_updater_thread.deleteLater)
+        
+        self._next_launch_updater_thread.start()
+
+    @pyqtSlot(dict)
+    def _on_next_launch_updated(self, detailed_data):
+        """Handle the result of a single-launch detailed fetch."""
+        if not detailed_data or not self._launch_data:
+            return
+
+        upcoming = self._launch_data.get('upcoming', [])
+        if not upcoming:
+            return
+
+        # Verify ID still matches our current 'next' launch
+        if upcoming[0].get('id') != detailed_data.get('id'):
+            return
+
+        # Parse detailed data and update the first item in the list
+        parsed_data = funcs.parse_launch_data(detailed_data, is_detailed=True)
+        
+        # Only update and notify if something changed (like status)
+        if upcoming[0] != parsed_data:
+            logger.info(f"Backend: Next launch status/data changed! Status: {parsed_data.get('status')}")
+            upcoming[0] = parsed_data
+            
+            # Persist the update to disk cache so it's available after restart
+            try:
+                save_launch_cache('upcoming', upcoming)
+                logger.info("Backend: Persisted next launch update to disk cache")
+            except Exception as e:
+                logger.warning(f"Backend: Failed to persist next launch update to cache: {e}")
+
+            self._update_live_launch_url()
+            self.launchesChanged.emit()
+            self.launchTrayVisibilityChanged.emit()
+            # Update the model to refresh UI list/pill
+            if hasattr(self, '_event_model'):
+                self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
+                self._event_model.update_data()
+            else:
+                self.update_event_model()
 
     def update_time(self):
         self.timeChanged.emit()
