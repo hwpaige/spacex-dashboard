@@ -359,6 +359,7 @@ def load_launch_cache(kind: str):
     """Load a launch cache for kind in {'previous','upcoming'} from the combined cache.
     Returns a dict: {'data': list, 'timestamp': datetime} or None.
     """
+    profiler.mark(f"load_launch_cache Start ({kind})")
     try:
         if kind not in ('previous', 'upcoming'):
             raise ValueError("kind must be 'previous' or 'upcoming'")
@@ -367,16 +368,20 @@ def load_launch_cache(kind: str):
         if data and isinstance(data.get('data'), dict):
             kind_data = data['data'].get(kind)
             if isinstance(kind_data, list):
+                profiler.mark(f"load_launch_cache End ({kind}: Success)")
                 return {'data': kind_data, 'timestamp': data['timestamp']}
         
+        profiler.mark(f"load_launch_cache End ({kind}: Empty/Fail)")
         return None
     except Exception as e:
         logger.warning(f"Failed to load {kind} launch cache: {e}")
+        profiler.mark(f"load_launch_cache End ({kind}: Exception)")
         return None
 
 
 def save_launch_cache(kind: str, data_list: list, timestamp=None):
     """Save kind-specific launches into the combined runtime cache."""
+    profiler.mark(f"save_launch_cache Start ({kind})")
     try:
         if kind not in ('previous', 'upcoming'):
             raise ValueError("kind must be 'previous' or 'upcoming'")
@@ -393,8 +398,10 @@ def save_launch_cache(kind: str, data_list: list, timestamp=None):
         launch_data[kind] = data_list
         ts = timestamp or combined_ts
         save_cache_to_file(RUNTIME_CACHE_FILE_LAUNCHES, launch_data, ts)
+        profiler.mark(f"save_launch_cache End ({kind})")
     except Exception as e:
         logger.warning(f"Failed to save {kind} launch cache: {e}")
+        profiler.mark(f"save_launch_cache End ({kind}: Exception)")
 
 
 
@@ -439,6 +446,7 @@ def compute_orbit_radius(orbit_label):
 # --- System/network helpers moved from app.py ---
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
+    profiler.mark("check_wifi_status Start")
     try:
         is_windows = platform.system() == 'Windows'
         logger.info(f"BOOT: Checking WiFi status on {platform.system()} platform")
@@ -473,6 +481,7 @@ def check_wifi_status():
                         logger.info(f"BOOT: Windows WiFi SSID found: '{current_ssid}'")
 
             logger.info(f"BOOT: Windows WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
+            profiler.mark(f"check_wifi_status End (Windows: {connected})")
             return connected, current_ssid
         else:
             logger.debug("BOOT: Using Linux WiFi checking methods")
@@ -536,9 +545,11 @@ def check_wifi_status():
                 except: pass
 
             logger.info(f"BOOT: Linux WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
+            profiler.mark(f"check_wifi_status End (Linux: {connected})")
             return connected, current_ssid
     except Exception as e:
         logger.error(f"Error in check_wifi_status: {e}")
+        profiler.mark("check_wifi_status End (Error)")
         return False, ""
 
 def fetch_launch_details(launch_id):
@@ -639,6 +650,7 @@ def fetch_launches():
 
 def fetch_narratives():
     """Fetch witty launch narratives from the new API."""
+    profiler.mark("fetch_narratives Start")
     logger.info("Fetching narratives from new API")
     
     def parse_narratives(raw_list):
@@ -676,18 +688,22 @@ def fetch_narratives():
 
     try:
         url = f"{LAUNCH_API_BASE_URL}/recent_launches_narratives"
+        profiler.mark("fetch_narratives: API Request Start")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         data = response.json()
+        profiler.mark("fetch_narratives: API Request End")
 
         raw_narratives = data.get('descriptions', [])
         if raw_narratives:
             narratives = parse_narratives(raw_narratives)
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
+            profiler.mark("fetch_narratives End (Success)")
             return narratives
 
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
+        profiler.mark("fetch_narratives End (Error)")
 
     if cache and cache.get('data'):
         return cache['data']
@@ -695,14 +711,19 @@ def fetch_narratives():
 
 def fetch_weather(lat, lon, location):
     """Fetch weather for a single location from the new API."""
+    profiler.mark(f"fetch_weather Start ({location})")
     logger.info(f"Fetching weather for {location} via new API")
     try:
         url = f"{LAUNCH_API_BASE_URL}/weather/{location}"
+        profiler.mark(f"fetch_weather: Request Start ({location})")
         response = requests.get(url, timeout=10)
         response.raise_for_status()
-        return response.json()
+        res_json = response.json()
+        profiler.mark(f"fetch_weather End ({location}: Success)")
+        return res_json
     except Exception as e:
         logger.warning(f"Failed to fetch weather for {location}: {e}")
+        profiler.mark(f"fetch_weather End ({location}: Error)")
         return {
             'temperature_c': 25, 'temperature_f': 77,
             'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
@@ -786,6 +807,7 @@ def get_wifi_interface():
 
 def load_remembered_networks(key=None):
     """Load remembered WiFi networks from file"""
+    profiler.mark("load_remembered_networks Start")
     try:
         if os.path.exists(REMEMBERED_NETWORKS_FILE):
             if key is None:
@@ -800,10 +822,13 @@ def load_remembered_networks(key=None):
                         network['last_connected'] = 0
                 # Sort by most recent first (desc)
                 networks.sort(key=lambda n: n.get('last_connected', 0), reverse=True)
+                profiler.mark("load_remembered_networks End (Success)")
                 return networks
+        profiler.mark("load_remembered_networks End (Not Found)")
         return []
     except Exception as e:
         logger.error(f"Error loading remembered networks: {e}")
+        profiler.mark("load_remembered_networks End (Error)")
         return []
 
 
@@ -835,12 +860,17 @@ def save_remembered_networks(remembered_networks, key=None):
 
 def load_last_connected_network():
     """Load the last connected network from file"""
+    profiler.mark("load_last_connected_network Start")
     try:
         if os.path.exists(LAST_CONNECTED_NETWORK_FILE):
             with open(LAST_CONNECTED_NETWORK_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
+                res = json.load(f)
+                profiler.mark("load_last_connected_network End (Success)")
+                return res
+        profiler.mark("load_last_connected_network End (Not Found)")
     except Exception as e:
         logger.error(f"Error loading last connected network: {e}")
+        profiler.mark("load_last_connected_network End (Error)")
     return None
 
 
@@ -1111,69 +1141,75 @@ def manage_nm_autoconnect(ssid):
 _network_last_result = None
 _network_last_check_time = 0
 NETWORK_CHECK_TTL = 30  # seconds
+_network_check_lock = threading.Lock()
 
 def test_network_connectivity():
     """Check for active network connectivity (beyond just WiFi connection)"""
     global _network_last_result, _network_last_check_time
     
-    now = time.time()
-    if _network_last_result is not None and (now - _network_last_check_time) < NETWORK_CHECK_TTL:
-        logger.debug(f"Returning cached network connectivity result: {_network_last_result}")
-        return _network_last_result
+    with _network_check_lock:
+        now = time.time()
+        if _network_last_result is not None and (now - _network_last_check_time) < NETWORK_CHECK_TTL:
+            logger.debug(f"Returning cached network connectivity result: {_network_last_result}")
+            return _network_last_result
 
-    profiler.mark("test_network_connectivity Start")
-    test_urls = [
-        'http://www.google.com',
-        'http://www.cloudflare.com',
-        'http://1.1.1.1'
-    ]
+        profiler.mark("test_network_connectivity Start")
+        test_urls = [
+            'http://www.google.com',
+            'http://www.cloudflare.com',
+            'http://1.1.1.1'
+        ]
 
-    logger.debug("Testing network connectivity with multiple endpoints...")
+        logger.debug("Testing network connectivity with multiple endpoints...")
 
-    result = False
-    for url in test_urls:
-        try:
-            logger.debug(f"Testing connectivity to {url}")
-            urllib.request.urlopen(url, timeout=3)  # Reduced timeout for faster boot
-            logger.info(f"Network connectivity confirmed via {url}")
-            result = True
-            break
-        except (urllib.error.URLError, socket.timeout, OSError) as e:
-            logger.debug(f"Failed to connect to {url}: {e}")
-            continue
+        result = False
+        for url in test_urls:
+            try:
+                logger.debug(f"Testing connectivity to {url}")
+                urllib.request.urlopen(url, timeout=3)  # Reduced timeout for faster boot
+                logger.info(f"Network connectivity confirmed via {url}")
+                result = True
+                break
+            except (urllib.error.URLError, socket.timeout, OSError) as e:
+                logger.debug(f"Failed to connect to {url}: {e}")
+                continue
 
-    if not result:
-        # Fallback DNS test
-        try:
-            logger.debug("Testing DNS resolution...")
-            socket.gethostbyname('google.com')
-            logger.info("Network connectivity confirmed via DNS")
-            result = True
-        except socket.gaierror as e:
-            logger.debug(f"DNS resolution failed: {e}")
-        except Exception as e:
-            logger.warning(f"Unexpected error during DNS test: {e}")
+        if not result:
+            # Fallback DNS test
+            try:
+                logger.debug("Testing DNS resolution...")
+                socket.gethostbyname('google.com')
+                logger.info("Network connectivity confirmed via DNS")
+                result = True
+            except socket.gaierror as e:
+                logger.debug(f"DNS resolution failed: {e}")
+            except Exception as e:
+                logger.warning(f"Unexpected error during DNS test: {e}")
 
-    _network_last_result = result
-    _network_last_check_time = now
-    profiler.mark(f"test_network_connectivity End (Result: {result})")
-    
-    if not result:
-        logger.warning("All network connectivity tests failed")
-    
-    return result
+        _network_last_result = result
+        _network_last_check_time = now
+        profiler.mark(f"test_network_connectivity End (Result: {result})")
+        
+        if not result:
+            logger.warning("All network connectivity tests failed")
+        
+        return result
 
 
 def get_git_version_info(src_dir):
     """Get summarized git version info (hash and message)"""
+    profiler.mark("get_git_version_info Start")
     try:
         res_hash = subprocess.run(['git', 'rev-parse', 'HEAD'], capture_output=True, text=True, cwd=src_dir)
-        if res_hash.returncode != 0: return None
+        if res_hash.returncode != 0:
+            profiler.mark("get_git_version_info End (Fail: git rev-parse)")
+            return None
         commit_hash = res_hash.stdout.strip()
 
         res_msg = subprocess.run(['git', 'log', '-1', '--pretty=format:%s', commit_hash], capture_output=True, text=True, cwd=src_dir)
         commit_message = res_msg.stdout.strip() if res_msg.returncode == 0 else "Unknown"
 
+        profiler.mark("get_git_version_info End (Success)")
         return {
             'hash': commit_hash,
             'short_hash': commit_hash[:8],
@@ -1397,40 +1433,63 @@ def _get_linux_wifi_security_type(ssid, interface):
 
 
 def get_launch_trends_series(launches, chart_view_mode, current_year, current_month):
-    """Process launch data into series for charting"""
-    import pandas as pd
-    df = pd.DataFrame(launches)
-    if df.empty:
-        return [], []
-        
-    df['date'] = pd.to_datetime(df['date'])
-    df = df[df['date'].dt.year == current_year]
+    """Process launch data into series for charting using plain Python (no pandas for better performance)"""
+    profiler.mark("get_launch_trends_series Start")
     rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
-    df = df[df['rocket'].isin(rocket_types)]
-    df['month'] = df['date'].dt.to_period('M').astype(str)
-    
-    df_grouped = df.groupby(['month', 'rocket']).size().reset_index(name='Launches')
-    df_pivot = df_grouped.pivot(index='month', columns='rocket', values='Launches').fillna(0)
-    
-    # Ensure all months up to current are present
     all_months = [f"{current_year}-{m:02d}" for m in range(1, current_month + 1)]
-    df_pivot = df_pivot.reindex(all_months, fill_value=0)
     
-    for col in rocket_types:
-        if col not in df_pivot.columns:
-            df_pivot[col] = 0
+    # Initialize counts: { month: { rocket: count } }
+    counts = {m: {r: 0 for r in rocket_types} for m in all_months}
+    
+    for launch in launches:
+        date_str = launch.get('date')
+        if not date_str or date_str == 'TBD':
+            continue
             
-    if chart_view_mode == 'cumulative':
-        for col in rocket_types:
-            df_pivot[col] = df_pivot[col].cumsum()
+        try:
+            # Assuming date format is YYYY-MM-DD
+            year = int(date_str[:4])
+            if year != current_year:
+                continue
+            month_idx = int(date_str[5:7])
+            if month_idx > current_month:
+                continue
             
-    data = []
+            month_key = f"{current_year}-{month_idx:02d}"
+            rocket = launch.get('rocket', 'Unknown')
+            
+            # Match rocket types (partial match for flexibility)
+            matched_rocket = None
+            for rt in rocket_types:
+                if rt.lower() in rocket.lower():
+                    matched_rocket = rt
+                    break
+            
+            if matched_rocket and month_key in counts:
+                counts[month_key][matched_rocket] += 1
+        except (ValueError, IndexError):
+            continue
+
+    # Prepare series data
+    series = []
     for rocket in rocket_types:
-        data.append({
+        values = []
+        cumulative = 0
+        for m in all_months:
+            val = counts[m][rocket]
+            if chart_view_mode == 'cumulative':
+                cumulative += val
+                values.append(cumulative)
+            else:
+                values.append(val)
+        
+        series.append({
             'label': rocket,
-            'values': df_pivot[rocket].tolist()
+            'values': values
         })
-    return all_months, data
+    
+    profiler.mark("get_launch_trends_series End")
+    return all_months, series
 
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
@@ -1808,11 +1867,16 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
 
     return result
 
+# Global date parsing cache to avoid redundant expensive calls across different modules
+_DATE_PARSE_CACHE = {}
+
 def group_event_data(data, mode, event_type, timezone_obj):
     """
     Group and filter launch or race event data by date range (Today, This Week, Later, etc.).
     UI-agnostic logic extracted from EventModel.update_data.
     """
+    global _DATE_PARSE_CACHE
+    profiler.mark(f"group_event_data Start (mode={mode}, type={event_type})")
     today = datetime.now(pytz.UTC).date()
     this_week_end = today + timedelta(days=7)
     last_week_start = today - timedelta(days=7)
@@ -1821,26 +1885,64 @@ def group_event_data(data, mode, event_type, timezone_obj):
     if mode == 'spacex':
         # data is expected to be a dict with 'upcoming' and 'previous' keys
         launches = data.get('upcoming' if event_type == 'upcoming' else 'previous', [])
+        logger.info(f"group_event_data: Processing {len(launches)} launches")
         
-        # Add local time to each launch
+        # Pre-parse dates and add local time to each launch to avoid redundant expensive calls
         processed_launches = []
+        
+        def _get_parsed_dt(net_str):
+            if not net_str: return None
+            if net_str not in _DATE_PARSE_CACHE:
+                try:
+                    dt = parse(net_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=pytz.UTC)
+                    else:
+                        dt = dt.astimezone(pytz.UTC)
+                    _DATE_PARSE_CACHE[net_str] = dt
+                except Exception:
+                    _DATE_PARSE_CACHE[net_str] = None
+            return _DATE_PARSE_CACHE[net_str]
+
         for l in launches:
             launch = l.copy()
             net = launch.get('net', '') or launch.get('date_start', '')
-            if net:
+            dt = _get_parsed_dt(net)
+            if dt:
                 try:
-                    launch['localTime'] = parse(net).astimezone(timezone_obj).strftime('%Y-%m-%d %H:%M:%S')
+                    # Cache the local time string
+                    launch['_parsed_dt'] = dt
+                    launch['localTime'] = dt.astimezone(timezone_obj).strftime('%Y-%m-%d %H:%M:%S')
                 except Exception:
                     launch['localTime'] = 'TBD'
+                    launch['_parsed_dt'] = None
             else:
                 launch['localTime'] = 'TBD'
+                launch['_parsed_dt'] = None
             processed_launches.append(launch)
         
         if event_type == 'upcoming':
-            launches = sorted(processed_launches, key=lambda x: parse(x['net']) if x.get('net') else datetime.max.replace(tzinfo=pytz.UTC))
-            today_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() == today]
-            this_week_launches = [l for l in launches if today < parse(l['net']).replace(tzinfo=pytz.UTC).date() <= this_week_end]
-            later_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() > this_week_end]
+            # Use the pre-parsed datetime for sorting and filtering
+            launches_sorted = sorted(processed_launches, key=lambda x: x.get('_parsed_dt') or datetime.max.replace(tzinfo=pytz.UTC))
+            
+            today_launches = []
+            this_week_launches = []
+            later_launches = []
+            
+            for l in launches_sorted:
+                dt = l.get('_parsed_dt')
+                if not dt:
+                    later_launches.append(l)
+                    continue
+                
+                l_date = dt.date()
+                if l_date == today:
+                    today_launches.append(l)
+                elif today < l_date <= this_week_end:
+                    this_week_launches.append(l)
+                elif l_date > this_week_end:
+                    later_launches.append(l)
+            
             if today_launches:
                 grouped.append({'group': "Today's Launches 🚀"})
                 grouped.extend(today_launches)
@@ -1851,10 +1953,26 @@ def group_event_data(data, mode, event_type, timezone_obj):
                 grouped.append({'group': 'Later'})
                 grouped.extend(later_launches)
         else:
-            launches = sorted(processed_launches, key=lambda x: parse(x['net']) if x.get('net') else datetime.min.replace(tzinfo=pytz.UTC), reverse=True)
-            today_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() == today]
-            last_week_launches = [l for l in launches if last_week_start <= parse(l['net']).replace(tzinfo=pytz.UTC).date() < today]
-            earlier_launches = [l for l in launches if parse(l['net']).replace(tzinfo=pytz.UTC).date() < last_week_start]
+            launches_sorted = sorted(processed_launches, key=lambda x: x.get('_parsed_dt') or datetime.min.replace(tzinfo=pytz.UTC), reverse=True)
+            
+            today_launches = []
+            last_week_launches = []
+            earlier_launches = []
+            
+            for l in launches_sorted:
+                dt = l.get('_parsed_dt')
+                if not dt:
+                    earlier_launches.append(l)
+                    continue
+                
+                l_date = dt.date()
+                if l_date == today:
+                    today_launches.append(l)
+                elif last_week_start <= l_date < today:
+                    last_week_launches.append(l)
+                elif l_date < last_week_start:
+                    earlier_launches.append(l)
+            
             if today_launches:
                 grouped.append({'group': "Today's Launches 🚀"})
                 grouped.extend(today_launches)
@@ -1865,6 +1983,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
                 grouped.append({'group': 'Earlier'})
                 grouped.extend(earlier_launches)
     
+    profiler.mark(f"group_event_data End (grouped count: {len(grouped)})")
     return grouped
 
 LAUNCH_DESCRIPTIONS = [
@@ -2320,7 +2439,7 @@ def fetch_weather_for_all_locations(locations_config):
         return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
 def perform_full_dashboard_data_load(locations_config, status_callback=None):
-    """Orchestrate parallel fetch of launches, F1, and weather data."""
+    """Orchestrate parallel fetch of launches, narratives, and weather data."""
     profiler.mark("perform_full_dashboard_data_load Start")
     def _emit(msg):
         if status_callback:

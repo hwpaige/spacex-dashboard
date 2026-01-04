@@ -259,14 +259,17 @@ class EventModel(QAbstractListModel):
         return roles
 
     def update_data(self):
+        profiler.mark(f"EventModel: update_data Start ({self._mode}, {self._event_type})")
         self.beginResetModel()
         try:
             # Delegate logic to UI-agnostic helper in functions.py
+            profiler.mark(f"EventModel: Calling group_event_data ({self._mode})")
             self._grouped_data = group_event_data(self._data, self._mode, self._event_type, self._tz)
         except Exception as e:
             logger.error(f"EventModel: Failed to update data: {e}")
             self._grouped_data = []
         self.endResetModel()
+        profiler.mark(f"EventModel: update_data End (count: {len(self._grouped_data)})")
 
 class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, list)
@@ -295,14 +298,18 @@ class DataLoader(QObject):
 class LaunchUpdater(QObject):
     finished = pyqtSignal(dict, list)
     def run(self):
+        profiler.mark("LaunchUpdater: Starting update")
         launch_data = fetch_launches()
         narratives = fetch_narratives()
+        profiler.mark("LaunchUpdater: Update complete")
         self.finished.emit(launch_data, narratives)
 
 class WeatherUpdater(QObject):
     finished = pyqtSignal(dict)
     def run(self):
+        profiler.mark("WeatherUpdater: Starting update")
         weather_data = fetch_weather_for_all_locations(location_settings)
+        profiler.mark("WeatherUpdater: Update complete")
         self.finished.emit(weather_data)
 
 class NextLaunchUpdater(QObject):
@@ -311,8 +318,10 @@ class NextLaunchUpdater(QObject):
         super().__init__()
         self.launch_id = launch_id
     def run(self):
+        profiler.mark(f"NextLaunchUpdater: Starting update ({self.launch_id})")
         # Use v2.3.0 detailed mode
         detailed_data = funcs.fetch_launch_details(self.launch_id)
+        profiler.mark(f"NextLaunchUpdater: Update complete ({self.launch_id})")
         if detailed_data:
             self.finished.emit(detailed_data)
 
@@ -325,7 +334,7 @@ class Backend(QObject):
     launchesChanged = pyqtSignal()
     chartViewModeChanged = pyqtSignal()
     chartTypeChanged = pyqtSignal()
-    f1Changed = pyqtSignal()
+    f1Changed = pyqtSignal() # Kept for potential future use or to avoid breaking QML bindings if they exist but weren't found
     themeChanged = pyqtSignal()
     locationChanged = pyqtSignal()
     radarBaseUrlChanged = pyqtSignal()
@@ -359,7 +368,6 @@ class Backend(QObject):
     initialUpdateCheckReady = pyqtSignal(bool, dict)
     # Update progress UI signals
     updatingInProgressChanged = pyqtSignal()
-    updatingInProgressChanged = pyqtSignal()
     updatingStatusChanged = pyqtSignal()
     # Signal for thread-safe WiFi status updates
     wifiCheckReady = pyqtSignal(bool, str)
@@ -376,28 +384,35 @@ class Backend(QObject):
         self._boot_mode = True
         self._isLoading = True
         self._loading_status = "Initializing..."
+        self._online_load_in_progress = False
         # Try to load initial data from cache to avoid empty UI on first load
         try:
-            profiler.mark("Backend: Loading Launch Cache")
+            profiler.mark("Backend: Loading Launch Cache Start")
             prev = load_launch_cache('previous')
             up = load_launch_cache('upcoming')
             self._launch_data = {
                 'previous': prev['data'] if prev else [],
                 'upcoming': up['data'] if up else []
             }
+            profiler.mark("Backend: Loading Launch Cache End")
         except Exception as e:
             logger.warning(f"Failed to load initial launch cache: {e}")
             self._launch_data = {'previous': [], 'upcoming': []}
         
+        profiler.mark("Backend: get_closest_x_video_url Start")
         self._live_launch_url = get_closest_x_video_url(self._launch_data)
+        profiler.mark("Backend: get_closest_x_video_url End")
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
         self._weather_data = {}
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
         self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
         self._tz = tzlocal()
+        profiler.mark("Backend: Initializing EventModel Start")
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
+        profiler.mark("Backend: Initializing EventModel End")
         self._launch_trends_cache = {}  # Cache for launch trends series
+        self._launches_by_date_cache = None # Cache for date-indexed launches
         self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
         self._last_update_check = None  # Track when updates were last checked
@@ -503,6 +518,8 @@ class Backend(QObject):
         # Boot guard timer placeholder
         self._initial_checks_guard_timer = None
         
+        self._timers_initialized = False
+        
         # Safety timer: if we don't get online data within 5s, dismiss splash and show cached data
         self._loading_timeout_timer = QTimer(self)
         self._loading_timeout_timer.setSingleShot(True)
@@ -607,6 +624,12 @@ class Backend(QObject):
             QTimer.singleShot(1500, _boot_autoreconnect)
         except Exception as _e:
             logger.debug(f"Failed to set boot-time auto-reconnect timer: {_e}")
+
+        logger.info("Backend initialization complete")
+        logger.info(f"Initial theme: {self._theme}")
+        logger.info(f"Initial location: {self._location}")
+        logger.info(f"Initial time: {self.currentTime}")
+        logger.info(f"Initial countdown: {self.countdown}")
 
     @pyqtSlot(str, str)
     def add_remembered_network(self, ssid, password):
@@ -715,22 +738,31 @@ class Backend(QObject):
     @pyqtSlot(bool, bool, dict, dict)
     def _apply_initial_checks_results(self, connectivity_result, update_available, current_info, latest_info):
         """Apply initial check results on the main (Qt) thread."""
+        profiler.mark("Backend: _apply_initial_checks_results Start")
         try:
             # Note: update_available and latest_info might be defaults if skip_update_check was used
             self.updateAvailable = update_available
             self._current_version_info = current_info
             self._latest_version_info = latest_info
 
-            if not connectivity_result:
+            if connectivity_result:
+                # If we have connectivity, stop the timeout timer as we're now definitely loading real data
+                try:
+                    if self._loading_timeout_timer.isActive():
+                        self._loading_timeout_timer.stop()
+                        logger.info("BOOT: Connectivity confirmed, stopped loading timeout timer")
+                except Exception:
+                    pass
+                self._online_load_in_progress = True
+                # Clear deferred flag if we have connectivity
+                logger.info("BOOT: Network connectivity available - clearing deferred flag")
+                self._data_loading_deferred = False
+                self.setLoadingStatus("Loading SpaceX launch data...")
+            else:
                 logger.warning("BOOT: No network connectivity detected - staying with seed/runtime cache; will wait for firstOnline signal")
                 # We no longer return here. Proceed to start DataLoader so cached data is processed.
                 # self._setup_timers()
                 # return
-
-            # Clear deferred flag if we have connectivity
-            logger.info("BOOT: Network connectivity available - clearing deferred flag")
-            self._data_loading_deferred = False
-            self.setLoadingStatus("Loading SpaceX launch data...")
 
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader...")
@@ -746,8 +778,10 @@ class Backend(QObject):
                 logger.info("BOOT: DataLoader already exists")
 
             self._setup_timers()
+            profiler.mark("Backend: _apply_initial_checks_results End")
         except Exception as e:
             logger.error(f"BOOT: Failed to apply initial checks results on main thread: {e}")
+            profiler.mark("Backend: _apply_initial_checks_results Error")
 
     @pyqtSlot(bool, dict)
     def _apply_initial_update_result(self, update_available, latest_info):
@@ -767,6 +801,12 @@ class Backend(QObject):
 
     def _setup_timers(self):
         """Set up all the periodic timers"""
+        profiler.mark("Backend: _setup_timers Start")
+        if self._timers_initialized:
+            logger.debug("Timers already initialized; skipping")
+            profiler.mark("Backend: _setup_timers Skip")
+            return
+        self._timers_initialized = True
         logger.info("Setting up timers...")
         # Timers
         self.weather_timer = QTimer(self)
@@ -799,32 +839,12 @@ class Backend(QObject):
         self.next_launch_timer = QTimer(self)
         self.next_launch_timer.timeout.connect(self.update_next_launch_periodic)
         self.next_launch_timer.start(60000)  # 1 minute
+        profiler.mark("Backend: _setup_timers End")
 
     @pyqtSlot()
     def check_for_updates_periodic(self):
         """Periodic update check in background"""
-        def _worker():
-            try:
-                # Use a background thread for the network request
-                update_available = self.check_for_updates()
-                QTimer.singleShot(0, lambda: self._apply_update_result(update_available))
-            except Exception as e:
-                logger.debug(f"Periodic update check failure: {e}")
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _apply_update_result(self, update_available):
-        """Apply update result on main thread"""
-        self.updateAvailable = update_available
-        logger.info(f"Periodic update check result: {update_available}")
-        
-    # ...existing code...
-        
-        logger.info("Backend initialization complete")
-        logger.info(f"Initial theme: {self._theme}")
-        logger.info(f"Initial location: {self._location}")
-        logger.info(f"Initial time: {self.currentTime}")
-        logger.info(f"Initial countdown: {self.countdown}")
+        self.checkForUpdatesNow()
 
     @pyqtProperty(int)
     def httpPort(self):
@@ -862,6 +882,7 @@ class Backend(QObject):
         if self._chart_view_mode != value:
             self._chart_view_mode = value
             self.chartViewModeChanged.emit()
+            self._clear_launch_caches()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
             self.launchTrayVisibilityChanged.emit()
@@ -875,6 +896,7 @@ class Backend(QObject):
         if self._chart_type != value:
             self._chart_type = value
             self.chartTypeChanged.emit()
+            self._clear_launch_caches()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
             self.launchTrayVisibilityChanged.emit()
@@ -1083,45 +1105,90 @@ class Backend(QObject):
         """Expose all launch data (combined previous and upcoming) for calendar view"""
         return self._launch_data
 
+    @pyqtProperty(QVariant, notify=launchesChanged)
+    def launchesByDate(self):
+        """Returns a mapping of date strings to lists of launches for optimized calendar lookups"""
+        # Internal caching to avoid repeated O(N) traversals
+        if hasattr(self, '_launches_by_date_cache') and self._launches_by_date_cache is not None:
+            return self._launches_by_date_cache
+            
+        mapping = {}
+        for l in self._launch_data.get('previous', []):
+            d = l.get('date')
+            if d:
+                if d not in mapping: mapping[d] = []
+                l_typed = l.copy()
+                l_typed['type'] = 'past'
+                mapping[d].append(l_typed)
+                
+        for l in self._launch_data.get('upcoming', []):
+            d = l.get('date')
+            if d:
+                if d not in mapping: mapping[d] = []
+                l_typed = l.copy()
+                l_typed['type'] = 'upcoming'
+                mapping[d].append(l_typed)
+        
+        self._launches_by_date_cache = mapping
+        return mapping
+
     @pyqtProperty(str, notify=liveLaunchUrlChanged)
     def liveLaunchUrl(self):
         return self._live_launch_url
 
-    @pyqtProperty(QVariant, notify=launchesChanged)
-    def launchTrends(self):
+    def _get_launch_trends_data(self):
+        """Helper to get launch trends data with internal caching to avoid redundant calls."""
         current_year = datetime.now(pytz.UTC).year
         current_month = datetime.now(pytz.UTC).month
+        
+        # Cache key includes year, month, and view mode
+        cache_key = f"{current_year}_{current_month}_{self._chart_view_mode}"
+        
+        # Use content-based signature instead of id() for better cache hits across reloads
+        prev_launches = self._launch_data.get('previous', [])
+        data_sig = f"{len(prev_launches)}"
+        if prev_launches:
+            # Use first and last item IDs/nets as a heuristic for data identity
+            data_sig += f"_{prev_launches[0].get('id','0')}_{prev_launches[-1].get('id','0')}"
+        
+        if (self._launch_trends_cache.get('key') == cache_key and 
+            self._launch_trends_cache.get('data_sig') == data_sig):
+            return self._launch_trends_cache['data']
+            
+        profiler.mark("Backend: _get_launch_trends_data Recomputing")
         months, series = get_launch_trends_series(
-            self._launch_data['previous'],
+            prev_launches,
             self._chart_view_mode,
             current_year,
             current_month
         )
-        return {'months': months, 'series': series}
+        
+        data = {
+            'months': months,
+            'series': series,
+            'max_value': get_max_value_from_series(series)
+        }
+        
+        self._launch_trends_cache = {
+            'key': cache_key,
+            'data_sig': data_sig,
+            'data': data
+        }
+        profiler.mark("Backend: _get_launch_trends_data End (Recomputed)")
+        return data
+
+    @pyqtProperty(QVariant, notify=launchesChanged)
+    def launchTrends(self):
+        data = self._get_launch_trends_data()
+        return {'months': data['months'], 'series': data['series']}
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrendsMonths(self):
-        current_year = datetime.now(pytz.UTC).year
-        current_month = datetime.now(pytz.UTC).month
-        months, _ = get_launch_trends_series(
-            self._launch_data['previous'],
-            self._chart_view_mode,
-            current_year,
-            current_month
-        )
-        return months
+        return self._get_launch_trends_data()['months']
 
     @pyqtProperty(int, notify=launchesChanged)
     def launchTrendsMaxValue(self):
-        current_year = datetime.now(pytz.UTC).year
-        current_month = datetime.now(pytz.UTC).month
-        _, series = get_launch_trends_series(
-            self._launch_data['previous'],
-            self._chart_view_mode,
-            current_year,
-            current_month
-        )
-        return get_max_value_from_series(series)
+        return self._get_launch_trends_data()['max_value']
 
     def _generate_month_labels_for_days(self):
         """Generate month labels for daily data points"""
@@ -1129,15 +1196,7 @@ class Backend(QObject):
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrendsSeries(self):
-        current_year = datetime.now(pytz.UTC).year
-        current_month = datetime.now(pytz.UTC).month
-        _, series = get_launch_trends_series(
-            self._launch_data['previous'],
-            self._chart_view_mode,
-            current_year,
-            current_month
-        )
-        return series
+        return self._get_launch_trends_data()['series']
 
     @pyqtProperty(bool, notify=updateAvailableChanged)
     def updateAvailable(self):
@@ -1231,7 +1290,6 @@ class Backend(QObject):
         if not self._boot_mode:
             profiler.mark("Disabling Boot Mode")
             logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
-            self.f1Changed.emit()
             profiler.mark("Boot Mode Disabled (Charts Triggered)")
 
     def initialize_weather(self):
@@ -1357,10 +1415,10 @@ class Backend(QObject):
         logger.info("Backend: on_data_loaded called")
         self.setLoadingStatus("Data loaded successfully")
         logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
-        logging.info("Data loaded - updating F1 chart")
         self._launch_data = launch_data
         self._launch_descriptions = narratives
         self._update_live_launch_url()
+        self._clear_launch_caches()
         # self._f1_data is now initialized in __init__ and not updated here as it's currently missing from loader
         self._weather_data = weather_data
         # Update the EventModel's data reference
@@ -1376,8 +1434,6 @@ class Backend(QObject):
         self.loadingFinished.emit()
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()
-        self.f1Changed.emit()
-        logging.info("F1 changed signal emitted")
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
         profiler.mark("Backend: Emitting UI update signals End")
@@ -1400,16 +1456,22 @@ class Backend(QObject):
 
     def _on_loading_timeout(self):
         """Handle loading timeout when no network connectivity is available"""
+        profiler.mark("Backend: _on_loading_timeout Start")
+        if not self._isLoading or getattr(self, '_online_load_in_progress', False):
+            profiler.mark("Backend: _on_loading_timeout Skip (Not Loading or Online Load Started)")
+            return
         logger.info("BOOT: Loading timeout reached (deprecated) — offline path retained for compatibility")
         logger.info("BOOT: Loading cached launch data...")
         # Load cached data if available, otherwise use empty data
         self._launch_data = self._load_cached_launch_data()
         self._update_live_launch_url()
+        self._clear_launch_caches()
         logger.info("BOOT: Loading cached weather data...")
         self._weather_data = self._load_cached_weather_data()
 
         # Update the EventModel's data reference
         logger.info(f"BOOT: Updating EventModel data (mode: {self._mode})")
+        profiler.mark("Backend: _on_loading_timeout Updating EventModel")
         self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
         self._event_model.update_data()
 
@@ -1421,7 +1483,6 @@ class Backend(QObject):
         try:
             self.launchesChanged.emit()
             self.launchTrayVisibilityChanged.emit()
-            self.f1Changed.emit()
             self.weatherChanged.emit()
             self.eventModelChanged.emit()
             # Update trajectory now that cached data is applied
@@ -1430,35 +1491,53 @@ class Backend(QObject):
         except Exception as _e:
             logger.debug(f"BOOT: Error emitting offline refresh signals: {_e}")
         logger.info("BOOT: Offline mode activated - app should now show cached data")
+        profiler.mark("Backend: _on_loading_timeout End")
 
     def _seed_bootstrap(self):
         """Apply cached (runtime or git-seeded) data immediately and exit splash.
         This is signal-based and avoids any time-based waits."""
+        profiler.mark("Backend: _seed_bootstrap Start")
         try:
             self.setLoadingStatus("Loading cached SpaceX data…")
-            # Load launches from runtime cache, falling back to seed
-            prev_cache = load_launch_cache('previous')
-            up_cache = load_launch_cache('upcoming')
-            self._launch_data = {
-                'previous': (prev_cache.get('data') if prev_cache else []) or [],
-                'upcoming': (up_cache.get('data') if up_cache else []) or []
-            }
+            
+            # Optimization: Use already loaded data if available, avoid redundant I/O
+            if not self._launch_data.get('previous') and not self._launch_data.get('upcoming'):
+                profiler.mark("Backend: _seed_bootstrap Loading Cache")
+                # Load launches from runtime cache, falling back to seed
+                prev_cache = load_launch_cache('previous')
+                up_cache = load_launch_cache('upcoming')
+                self._launch_data = {
+                    'previous': (prev_cache.get('data') if prev_cache else []) or [],
+                    'upcoming': (up_cache.get('data') if up_cache else []) or []
+                }
+            
             self._update_live_launch_url()
+            self._clear_launch_caches()
             # Update EventModel immediately
+            profiler.mark("Backend: _seed_bootstrap Updating EventModel")
             self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
             self._event_model.update_data()
 
-            # Notify UI of ready cache
+            profiler.mark("Backend: _seed_bootstrap Emitting Signals Start")
             try:
+                profiler.mark("Backend: _seed_bootstrap emitting launchCacheReady")
                 self.launchCacheReady.emit()
             except Exception:
                 pass
+            
+            profiler.mark("Backend: _seed_bootstrap emitting launchesChanged Start")
             self.launchesChanged.emit()
+            profiler.mark("Backend: _seed_bootstrap emitting launchesChanged End")
+            
+            profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged Start")
             self.launchTrayVisibilityChanged.emit()
+            profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged End")
+            
+            profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged Start")
             self.eventModelChanged.emit()
-            # Update trajectory now that we have at least cached data
-            self._emit_update_globe_trajectory_debounced()
-            self._schedule_trajectory_recompute()
+            profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged End")
+            
+            profiler.mark("Backend: _seed_bootstrap Emitting Signals End")
             # Update trajectory now that we have at least cached data
             self._emit_update_globe_trajectory_debounced()
             self._schedule_trajectory_recompute()
@@ -1468,8 +1547,10 @@ class Backend(QObject):
             # self._isLoading = False
             # self.loadingFinished.emit()
             logger.info("BOOT: Seed/runtime cache applied; waiting for network or timeout to dismiss splash")
+            profiler.mark("Backend: _seed_bootstrap End")
         except Exception as e:
             logger.error(f"Seed bootstrap failed: {e}")
+            profiler.mark("Backend: _seed_bootstrap Error")
 
     def _start_data_loading_online(self):
         """Start DataLoader immediately (no guard timers), used when firstOnline fires."""
@@ -1606,13 +1687,18 @@ class Backend(QObject):
         self.thread.quit()
         self.thread.wait()
 
+    def _clear_launch_caches(self):
+        """Clear all internal caches derived from launch data"""
+        self._launch_trends_cache.clear()
+        self._launches_by_date_cache = None
+
     @pyqtSlot(dict, list)
     def _on_launches_updated(self, launch_data, narratives):
         """Handle launch data update completion"""
         self._launch_data = launch_data
         self._launch_descriptions = narratives
         self._update_live_launch_url()
-        self._launch_trends_cache.clear()  # Clear cache when data updates
+        self._clear_launch_caches()
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()
         self.update_event_model()
@@ -1987,32 +2073,6 @@ class Backend(QObject):
         except Exception as e:
             logger.error(f"Failed to apply WiFi status: {e}")
 
-    def _start_network_connectivity_check_async(self):
-        """Perform a background internet connectivity check"""
-        if getattr(self, '_network_check_in_progress', False):
-            return
-            
-        self._network_check_in_progress = True
-        
-        def _worker():
-            try:
-                # Use the imported test_network_connectivity helper
-                is_online = test_network_connectivity()
-                QTimer.singleShot(0, lambda: self._apply_connectivity_result(is_online))
-            except Exception as e:
-                logger.debug(f"Connectivity check worker error: {e}")
-            finally:
-                self._network_check_in_progress = False
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def _apply_connectivity_result(self, is_online):
-        """Apply the results of the background connectivity check"""
-        if self._network_connected != is_online:
-            logger.info(f"Network connectivity status changed: {is_online}")
-            self._network_connected = is_online
-            try: self.networkConnectedChanged.emit()
-            except: pass
 
     def _resume_data_loading(self):
         """Resume or start data loading once connection is detected"""
@@ -2261,126 +2321,6 @@ class Backend(QObject):
             logger.debug(f"Failed to start background network check: {e}")
             self._network_check_in_progress = False
 
-if __name__ == '__main__':
-    profiler.mark("Main Execution Started")
-    # Set console encoding to UTF-8 to handle Unicode characters properly
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
-    if hasattr(sys.stderr, 'reconfigure'):
-        sys.stderr.reconfigure(encoding='utf-8')
-    
-    logger.info("BOOT: Starting SpaceX Dashboard application...")
-    logger.info(f"BOOT: Python version: {sys.version}")
-    logger.info(f"BOOT: Platform: {platform.system()} {platform.release()}")
-    logger.info(f"BOOT: Qt version available: {QApplication.instance() is None}")
-    
-    # Force hardware acceleration for Qt and Chromium
-    if platform.system() == 'Windows':
-        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
-            "--disable-web-security --allow-running-insecure-content "
-            "--disable-software-rasterizer "
-            "--disable-gpu-driver-bug-workarounds"
-        )
-    elif platform.system() == 'Linux':
-        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
-            "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
-            "--disable-web-security --allow-running-insecure-content"
-        )
-    else:
-        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
-            "--disable-web-security --allow-running-insecure-content "
-            "--disable-gpu-sandbox"
-        )
-    os.environ["QT_LOGGING_RULES"] = "qt5ct.debug=false;qt.webenginecontext=true"
-    
-    # Set platform-specific Qt platform plugin
-    if platform.system() == 'Windows':
-        os.environ["QT_QPA_PLATFORM"] = "windows"
-        os.environ["QT_OPENGL"] = "desktop"  # Use desktop OpenGL on Windows
-    elif platform.system() == 'Linux':
-        # Raspberry Pi / Linux settings - use hardware acceleration with Mesa
-        os.environ["QT_QPA_PLATFORM"] = "xcb"
-        # Remove QSG_RHI_BACKEND override - let Qt choose best backend (GL with Mesa)
-        os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl" # Use EGL for hardware acceleration
-        # LIBGL_ALWAYS_SOFTWARE is already set to "0" earlier for hardware rendering
-        print("Linux platform detected - using hardware acceleration with Mesa drivers")
-    else:
-        os.environ["QSG_RHI_BACKEND"] = "gl"  # Default to OpenGL for other platforms
-    
-    # Set style to Fusion to ensure compatibility
-    os.environ["QT_QUICK_CONTROLS_STYLE"] = "Fusion"
-    fusion_style = QStyleFactory.create("Fusion")
-    if fusion_style:
-        QApplication.setStyle(fusion_style)
-    
-    # Start local HTTP server for serving HTML files
-    profiler.mark("Starting HTTP Server")
-    server_thread = threading.Thread(target=start_http_server, daemon=True)
-    server_thread.start()
-    
-    # Harden Qt WebEngine against background throttling before initialization
-    try:
-        profiler.mark("WebEngine Throttling Setup")
-        extra_flags = [
-            "--disable-background-timer-throttling",
-            "--disable-renderer-backgrounding",
-            "--disable-backgrounding-occluded-windows",
-            # Keep GPU fast paths if available
-            "--enable-zero-copy",
-            "--ignore-gpu-blocklist",
-            # Allow automatic fullscreen and playback without user gesture
-            "--no-user-gesture-required-for-fullscreen",
-            "--autoplay-policy=no-user-gesture-required",
-        ]
-        existing_flags = os.environ.get('QTWEBENGINE_CHROMIUM_FLAGS', '')
-        to_add = []
-        for f in extra_flags:
-            if f not in existing_flags:
-                to_add.append(f)
-        if to_add:
-            combined = (existing_flags + ' ' + ' '.join(to_add)).strip()
-            os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = combined
-            logger.info(f"Applied QTWEBENGINE_CHROMIUM_FLAGS: {combined}")
-        else:
-            logger.info("QTWEBENGINE_CHROMIUM_FLAGS already contain required anti-throttling flags")
-    except Exception as _e:
-        logger.warning(f"Failed to apply QTWEBENGINE_CHROMIUM_FLAGS: {_e}")
-
-    # Ensure Qt WebEngine QML types are initialized before loading QML
-    # This prevents runtime errors where WebEngineView is unknown in QML on some setups
-    try:
-        profiler.mark("QtWebEngineQuick Initialize")
-        QtWebEngineQuick.initialize()
-    except Exception as e:
-        # If initialization is redundant or already done via QML import, ignore
-        print(f"QtWebEngineQuick.initialize() notice: {e}")
-
-    profiler.mark("QApplication Initialization")
-    app = QApplication(sys.argv)
-    if platform.system() != 'Windows':
-        app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
-
-    # Load fonts
-    profiler.mark("Loading Fonts")
-    font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "D-DIN.ttf")
-    if os.path.exists(font_path):
-        QFontDatabase.addApplicationFont(font_path)
-
-    # Load Font Awesome (assuming you place 'Font-Awesome.otf' in assets; download from fontawesome.com if needed)
-    fa_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "Font Awesome 5 Free-Solid-900.otf")
-    if os.path.exists(fa_path):
-        font_id = QFontDatabase.addApplicationFont(fa_path)
-        if font_id == -1:
-            logger.error("Failed to load Font Awesome font")
-        else:
-            logger.info(f"Font Awesome loaded successfully with ID: {font_id}")
-            families = QFontDatabase.applicationFontFamilies(font_id)
-            logger.info(f"Available font families: {families}")
-    else:
-        logger.error(f"Font Awesome font not found at: {fa_path}")
 
 class ChartItem(QQuickPaintedItem):
     def __init__(self, parent=None):
@@ -2464,6 +2404,7 @@ class ChartItem(QQuickPaintedItem):
         if not self._series:
             return
 
+        profiler.mark("ChartItem: paint Start")
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         width = self.width()
@@ -2597,6 +2538,8 @@ class ChartItem(QQuickPaintedItem):
             self._draw_line_chart(painter, width, height, margin, colors, actual_max)
         elif self._chart_type == "area":
             self._draw_area_chart(painter, width, height, margin, colors, actual_max)
+        
+        profiler.mark("ChartItem: paint End")
 
     def _draw_bar_chart(self, painter, width, height, margin, colors, actual_max):
         if not self._months:
@@ -2775,72 +2718,93 @@ class ChartItem(QQuickPaintedItem):
             # Draw final sharp outline
             painter.setPen(QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPolygon(points)
+        
+        profiler.mark("ChartItem: paint End")
 
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
-# Create Backend immediately with default offline status to speed up UI presentation.
-# Initial WiFi check will run asynchronously to avoid blocking the main thread.
-profiler.mark("Creating Backend")
-logger.info("BOOT: Creating Backend instance...")
-backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
-# Now start the data loader which will kick off background checks
-profiler.mark("Starting Data Loader")
-logger.info("BOOT: Starting data loader...")
-backend.startDataLoader()
+if __name__ == '__main__':
+    profiler.mark("Main Execution Started")
+    # Set console encoding to UTF-8 to handle Unicode characters properly
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
     
-# Removed blocking wait for HTTP server to speed up initialization.
-# videoUrl context property will be updated dynamically in Backend.
-# if not funcs.HTTP_SERVER_READY.wait(timeout=5.0):
-#     logger.warning("HTTP server did not signal ready within timeout; using default port 8080")
+    logger.info("BOOT: Starting SpaceX Dashboard application...")
+    
+    # Start local HTTP server for serving HTML files
+    profiler.mark("Starting HTTP Server")
+    server_thread = threading.Thread(target=start_http_server, daemon=True)
+    server_thread.start()
+    
+    # Ensure Qt WebEngine QML types are initialized before loading QML
+    try:
+        profiler.mark("QtWebEngineQuick Initialize")
+        QtWebEngineQuick.initialize()
+    except Exception as e:
+        print(f"QtWebEngineQuick.initialize() notice: {e}")
 
-profiler.mark("Initializing QML Engine")
-engine = QQmlApplicationEngine()
-# Connect QML warnings signal (list of QQmlError objects)
-def _log_qml_warnings(errors):
-    for e in errors:
-        msg = format_qt_message(None, None, e.toString())
-        if msg: logger.error(f"QML warning: {msg}")
-try:
-    engine.warnings.connect(_log_qml_warnings)
-except Exception as _e:
-    logger.warning(f"Could not connect engine warnings signal: {_e}")
-profiler.mark("Setting Context Properties")
-context = engine.rootContext()
-context.setContextProperty("backend", backend)
-context.setContextProperty("radarLocations", radar_locations)
-context.setContextProperty("circuitCoords", circuit_coords)
-context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
-context.setContextProperty("f1LogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1-logo.png').replace('\\', '/'))
-context.setContextProperty("f1TeamsPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'f1_teams').replace('\\', '/'))
-context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
+    profiler.mark("QApplication Initialization")
+    app = QApplication(sys.argv)
+    if platform.system() != 'Windows':
+        app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
-profiler.mark("Preparing URLs")
-globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
-print(f"DEBUG: Globe file path: {globe_file_path}")
-print(f"DEBUG: Globe file exists: {os.path.exists(globe_file_path)}")
+    # Load fonts
+    profiler.mark("Loading Fonts")
+    font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "D-DIN.ttf")
+    if os.path.exists(font_path):
+        QFontDatabase.addApplicationFont(font_path)
 
-earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
-print(f"DEBUG: Earth texture path: {earth_texture_path}")
-print(f"DEBUG: Earth texture exists: {os.path.exists(earth_texture_path)}")
+    fa_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "Font Awesome 5 Free-Solid-900.otf")
+    if os.path.exists(fa_path):
+        QFontDatabase.addApplicationFont(fa_path)
 
-youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
-print(f"DEBUG: YouTube HTML path: {youtube_html_path}")
-print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
+    # Create Backend immediately with default offline status to speed up UI presentation.
+    # Initial WiFi check will run asynchronously to avoid blocking the main thread.
+    profiler.mark("Creating Backend")
+    logger.info("BOOT: Creating Backend instance...")
+    backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
+    # Now start the data loader which will kick off background checks
+    profiler.mark("Starting Data Loader")
+    logger.info("BOOT: Starting data loader...")
+    backend.startDataLoader()
+    
+    profiler.mark("Initializing QML Engine")
+    engine = QQmlApplicationEngine()
+    # Connect QML warnings signal (list of QQmlError objects)
+    def _log_qml_warnings(errors):
+        for e in errors:
+            msg = format_qt_message(None, None, e.toString())
+            if msg: logger.error(f"QML warning: {msg}")
+    try:
+        engine.warnings.connect(_log_qml_warnings)
+    except Exception as _e:
+        logger.warning(f"Could not connect engine warnings signal: {_e}")
+    profiler.mark("Setting Context Properties")
+    context = engine.rootContext()
+    context.setContextProperty("backend", backend)
+    context.setContextProperty("radarLocations", radar_locations)
+    context.setContextProperty("circuitCoords", circuit_coords)
+    context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
+    context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
 
-context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
-print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-# context.setContextProperty("videoUrl", f"http://localhost:{funcs.HTTP_SERVER_PORT}/youtube_embed.html")
+    profiler.mark("Preparing URLs")
+    globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
+    earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
+    youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
 
+    context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 
-from ui_qml import qml_code  # Load QML from external module
-profiler.mark("Engine LoadData Start")
-engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
-profiler.mark("Engine LoadData End")
-if not engine.rootObjects():
-    logger.error("QML root object creation failed (see earlier QML errors above).")
-    print("QML load failed. Check console for Qt errors.")
-    sys.exit(-1)
-profiler.mark("App Startup Complete")
-backend.setBootMode(False)
-profiler.log_summary()
-sys.exit(app.exec())
+    from ui_qml import qml_code  # Load QML from external module
+    profiler.mark("Engine LoadData Start")
+    engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
+    profiler.mark("Engine LoadData End")
+    if not engine.rootObjects():
+        logger.error("QML root object creation failed (see earlier QML errors above).")
+        print("QML load failed. Check console for Qt errors.")
+        sys.exit(-1)
+    profiler.mark("App Startup Complete")
+    backend.setBootMode(False)
+    profiler.log_summary()
+    sys.exit(app.exec())

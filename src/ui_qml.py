@@ -1035,11 +1035,12 @@ Window {
 
                         } // End Item (List Container)
 
-                        // View 1: Swipeable Calendar View
-                        Item {
+                        // View 1: Swipeable Calendar View (Loaded Lazily)
+                        Loader {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            visible: parent.currentIndex === 1
+                            active: launchCard.launchViewMode === "calendar"
+                            sourceComponent: Item {
                             
                             id: calendarViewItem
                             property var currentMonth: new Date()
@@ -1218,7 +1219,7 @@ Window {
                                         var today = new Date()
                                         var offset = currentIndex - 12
                                         var newDate = new Date(today.getFullYear(), today.getMonth() + offset, 1)
-                                        parent.parent.currentMonth = newDate
+                                        calendarViewItem.currentMonth = newDate
                                     }
 
                                     Repeater {
@@ -1258,24 +1259,11 @@ Window {
                                                         color: "transparent"
                                                         visible: isCurrentMonth
                                                         
-                                                        // Check for launches (find all on this day)
+                                                        // Check for launches (optimized via backend mapping)
                                                         property var dayLaunches: {
-                                                            var list = []
-                                                            if (!isCurrentMonth || !backend || !backend.allLaunchData) return list
+                                                            if (!isCurrentMonth || !backend || !backend.launchesByDate) return []
                                                             var dStr = cellDate.toISOString().substring(0,10)
-                                                            var all = backend.allLaunchData
-                                                            var check = function(arr, type) {
-                                                                if(!arr) return;
-                                                                for(var i=0; i<arr.length; i++) {
-                                                                    if(arr[i].date === dStr) {
-                                                                        var l = arr[i]; l.type = type;
-                                                                        list.push(l)
-                                                                    }
-                                                                }
-                                                            }
-                                                            check(all.previous, 'past')
-                                                            check(all.upcoming, 'upcoming')
-                                                            return list
+                                                            return backend.launchesByDate[dStr] || []
                                                         }
                                                         
                                                         // Selection/Highlight
@@ -1349,6 +1337,7 @@ Window {
                                     }
                                 }
                             }
+                        }
                         }
                     } // End StackLayout
 
