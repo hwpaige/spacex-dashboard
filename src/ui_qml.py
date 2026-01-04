@@ -35,8 +35,8 @@ Window {
     property bool isWindyFullscreen: false
     property bool autoFullScreen: false
     // Track the currently selected YouTube URL for the video card.
-    // Initialized to the default playlist URL provided by the backend context property.
-    property url currentVideoUrl: videoUrl
+    // Initialized to the default playlist URL provided by the backend.
+    property url currentVideoUrl: backend ? backend.videoUrl : ""
 
     // Alignment guide removed after calibration; margins are now fixed below.
 
@@ -86,6 +86,15 @@ Window {
                 if (!(backend && backend.wifiConnecting)) {
                     try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch(e){}
                 }
+            }
+        }
+    }
+
+    Connections {
+        target: backend
+        function onVideoUrlChanged() {
+            if (root.currentVideoUrl.toString() === "" || root.currentVideoUrl.toString().indexOf("youtube_embed.html") !== -1) {
+                root.currentVideoUrl = backend.videoUrl
             }
         }
     }
@@ -485,45 +494,60 @@ Window {
                             // Globe view (reuses the upcoming launch tray globe)
                             // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                            WebEngineView {
+                            Item {
                                 id: plotGlobeView
                                 // Ensure the globe view fills all available space in the layout
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 visible: plotCard.plotCardShowsGlobe
-                                url: globeUrl
-                                // Transparent so the card's color shows through rounded edges after DOM rounding
-                                backgroundColor: "transparent"
-                                zoomFactor: 1.0
-                                layer.enabled: true
-                                layer.smooth: true
-                                settings.javascriptCanAccessClipboard: false
-                                settings.allowWindowActivationFromJavaScript: false
-                                // Disable any default context menu (long-press/right-click)
-                                onContextMenuRequested: function(request) { request.accepted = true }
-
-                                onLoadingChanged: function(loadRequest) {
-                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        var trajectoryData = backend.get_launch_trajectory();
-                                        if (trajectoryData) {
-                                            plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                                        }
-                                        // Set initial theme
-                                        plotGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-
-                                        // Enforce rounded corners inside the page itself
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeView, 8)
-                                        // Ensure the plot card globe animation loop starts/resumes on initial load
-                                        try {
-                                            plotGlobeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
-                                        } catch (e) { console.log("Plot globe JS nudge error:", e); }
-                                    }
+                                property bool _loaded: false
+                                function runJavaScript(script) {
+                                    if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
                                 }
+                                Loader {
+                                    id: plotGlobeLoader
+                                    anchors.fill: parent
+                                    active: plotCard.plotCardShowsGlobe || plotGlobeView._loaded
+                                    sourceComponent: WebEngineView {
+                                        id: plotGlobeViewInner
+                                        // Ensure the globe view fills all available space in the layout
+                                        anchors.fill: parent
+                                        url: globeUrl
+                                        // Transparent so the card's color shows through rounded edges after DOM rounding
+                                        backgroundColor: "transparent"
+                                        zoomFactor: 1.0
+                                        layer.enabled: true
+                                        layer.smooth: true
+                                        settings.javascriptCanAccessClipboard: false
+                                        settings.allowWindowActivationFromJavaScript: false
+                                        // Disable any default context menu (long-press/right-click)
+                                        onContextMenuRequested: function(request) { request.accepted = true }
 
-                                Connections {
-                                    target: backend
-                                    function onThemeChanged() {
-                                        plotGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                        onLoadingChanged: function(loadRequest) {
+                                            if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                                plotGlobeView._loaded = true;
+                                                var trajectoryData = backend.get_launch_trajectory();
+                                                if (trajectoryData) {
+                                                    plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                                }
+                                                // Set initial theme
+                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+
+                                                // Enforce rounded corners inside the page itself
+                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
+                                                // Ensure the plot card globe animation loop starts/resumes on initial load
+                                                try {
+                                                    plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
+                                                } catch (e) { console.log("Plot globe JS nudge error:", e); }
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: backend
+                                            function onThemeChanged() {
+                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -722,6 +746,13 @@ Window {
                             interactive: true
                             currentIndex: 1
                             property int loadedMask: (1 << 1)
+                            // Auto-load all weather views after a short delay to speed up transitions
+                            Timer {
+                                interval: 5000
+                                running: true
+                                repeat: false
+                                onTriggered: weatherSwipe.loadedMask = (1 << 6) - 1
+                            }
                             onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
 
                         Component.onCompleted: {
@@ -3427,6 +3458,13 @@ Window {
             property color expandedColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
             property string tMinus: ""
 
+            Connections {
+                target: backend
+                function onCountdownChanged() {
+                    launchTray.tMinus = backend.countdown;
+                }
+            }
+
             Timer {
                 interval: 1000  // Update every second for testing
                 running: true
@@ -3906,7 +3944,8 @@ Window {
                                 id: globeView
                                 anchors.fill: parent
                                 anchors.margins: 0
-                                url: globeUrl
+                                property bool _active: false
+                                url: _active ? globeUrl : ""
                                 backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                 zoomFactor: 1.0
                                 settings.javascriptCanAccessClipboard: false
@@ -3942,6 +3981,12 @@ Window {
                                         globeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                     }
                                 }
+                                Timer {
+                                    interval: 3000
+                                    running: true
+                                    repeat: false
+                                    onTriggered: globeView._active = true
+                                }
                             }
                         }
 
@@ -3963,7 +4008,8 @@ Window {
                                 layer.enabled: true
                                 layer.smooth: true
                                 backgroundColor: "transparent"
-                                url: "https://x.com/SpaceX"
+                                property bool _active: false
+                                url: _active ? "https://x.com/SpaceX" : ""
                                 zoomFactor: 0.6
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
@@ -3975,7 +4021,7 @@ Window {
                                 Connections {
                                     target: backend
                                     function onReloadWebContent() {
-                                        xComReloadTimer.start()
+                                        if (xComView._active) xComReloadTimer.start()
                                     }
                                 }
                                 Timer {
@@ -3986,6 +4032,12 @@ Window {
                                         xComView.reload()
                                         console.log("x.com view reloaded (staggered)")
                                     }
+                                }
+                                Timer {
+                                    interval: 8000
+                                    running: true
+                                    repeat: false
+                                    onTriggered: xComView._active = true
                                 }
                             }
                         }

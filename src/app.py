@@ -340,6 +340,7 @@ class Backend(QObject):
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
+    videoUrlChanged = pyqtSignal()
     # Globe spin/watchdog feature flag
     globeAutospinGuardChanged = pyqtSignal()
     # WiFi scanning progress notify (for UI spinner)
@@ -434,6 +435,13 @@ class Backend(QObject):
         self._update_log_path = '/tmp/spacex-dashboard-update.log' if platform.system() == 'Linux' else None
         self._updater_pid = None  # PID of detached update script for cancellation on Linux
 
+        # Initialize videoUrl to a safe default while HTTP server starts
+        self._video_url = ""
+        self._http_ready_timer = QTimer(self)
+        self._http_ready_timer.setInterval(100)
+        self._http_ready_timer.timeout.connect(self._check_http_server_ready)
+        self._http_ready_timer.start()
+
         # DataLoader will be started after WiFi check in main startup
         self.loader = None
         self.thread = None
@@ -456,6 +464,11 @@ class Backend(QObject):
             self._trajectory_emit_timer.setInterval(120)
         except Exception:
             pass
+
+        self._time_timer = QTimer(self)
+        self._time_timer.setInterval(1000)
+        self._time_timer.timeout.connect(self.update_time)
+        self._time_timer.start()
 
         def _on_traj_timer():
             try:
@@ -956,6 +969,20 @@ class Backend(QObject):
             logger.debug(f"Update log polling failed: {e}")
             # Keep previous status; try again later
 
+    def _check_http_server_ready(self):
+        """Check if the local HTTP server is ready and update videoUrl."""
+        if funcs.HTTP_SERVER_READY.is_set():
+            self._video_url = f"http://localhost:{funcs.HTTP_SERVER_PORT}/youtube_embed.html"
+            logger.info(f"BOOT: HTTP server ready on port {funcs.HTTP_SERVER_PORT}, videoUrl set to {self._video_url}")
+            self.videoUrlChanged.emit()
+            if self._http_ready_timer:
+                self._http_ready_timer.stop()
+                self._http_ready_timer = None
+
+    @pyqtProperty(str, notify=videoUrlChanged)
+    def videoUrl(self):
+        return self._video_url
+
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
         return self._location
@@ -964,13 +991,25 @@ class Backend(QObject):
     def location(self, value):
         if self._location != value:
             self._location = value
-            # self._tz = pytz.timezone(location_settings[self._location]['timezone']) # Using usage system local time instead
+            # Update timezone based on location
+            if self._location in location_settings:
+                tz_name = location_settings[self._location].get('timezone', 'UTC')
+                try:
+                    self._tz = pytz.timezone(tz_name)
+                    logger.info(f"Backend: Timezone updated to {tz_name} for {self._location}")
+                except Exception as e:
+                    logger.error(f"Backend: Failed to set timezone {tz_name}: {e}")
+                    self._tz = tzlocal()
+            else:
+                self._tz = tzlocal()
+
             logger.info(f"Backend: Location changed to {self._location}")
             # Explicitly update radar URL property on location change
             self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
             self.radarBaseUrlChanged.emit()
             self.locationChanged.emit()
             self.weatherChanged.emit()
+            self.update_countdown() # Triggers countdownChanged and launchTrayVisibilityChanged
             self.update_event_model()
 
     @pyqtProperty(str, notify=locationChanged)
@@ -1230,6 +1269,7 @@ class Backend(QObject):
 
     def update_event_model(self):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
+        self.timeChanged.emit()  # Ensure time updates when timezone changes
         self.eventModelChanged.emit()
 
     @pyqtSlot(dict, dict, list)
@@ -2669,10 +2709,10 @@ profiler.mark("Starting Data Loader")
 logger.info("BOOT: Starting data loader...")
 backend.startDataLoader()
     
-# Wait for HTTP server to bind to a port before continuing with QML engine setup
-# to ensure context properties like videoUrl have the correct port.
-if not funcs.HTTP_SERVER_READY.wait(timeout=5.0):
-    logger.warning("HTTP server did not signal ready within timeout; using default port 8080")
+# Removed blocking wait for HTTP server to speed up initialization.
+# videoUrl context property will be updated dynamically in Backend.
+# if not funcs.HTTP_SERVER_READY.wait(timeout=5.0):
+#     logger.warning("HTTP server did not signal ready within timeout; using default port 8080")
 
 profiler.mark("Initializing QML Engine")
 engine = QQmlApplicationEngine()
@@ -2710,7 +2750,7 @@ print(f"DEBUG: YouTube HTML exists: {os.path.exists(youtube_html_path)}")
 
 context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
 print(f"DEBUG: Globe URL set to: {context.property('globeUrl')}")
-context.setContextProperty("videoUrl", f"http://localhost:{funcs.HTTP_SERVER_PORT}/youtube_embed.html")
+# context.setContextProperty("videoUrl", f"http://localhost:{funcs.HTTP_SERVER_PORT}/youtube_embed.html")
 
 
 from ui_qml import qml_code  # Load QML from external module
