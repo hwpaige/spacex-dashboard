@@ -1161,7 +1161,7 @@ Window {
                                                 }
                                             }
                                             Text { text: modelData.rocket; font.pixelSize: 12; color: "#999999" }
-                                            Text { text: modelData.time + " UTC"; font.pixelSize: 12; color: "#999999" }
+                                            Text { text: modelData.time + " " + backend.timezoneAbbrev; font.pixelSize: 12; color: "#999999" }
                                             Row {
                                                 spacing: 5
                                                 Rectangle {

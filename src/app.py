@@ -278,6 +278,10 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, list, dict)
     statusUpdate = pyqtSignal(str)
 
+    def __init__(self, tz_obj=None):
+        super().__init__()
+        self.tz_obj = tz_obj
+
     def run(self):
         logger.info("DataLoader: Starting parallel data loading...")
         def _safe_emit_status(msg):
@@ -292,7 +296,8 @@ class DataLoader(QObject):
         # Delegate full load to functions.py
         launch_data, weather_data, narratives, calendar_mapping = perform_full_dashboard_data_load(
             location_settings, 
-            status_callback=_safe_emit_status
+            status_callback=_safe_emit_status,
+            tz_obj=self.tz_obj
         )
         profiler.mark("DataLoader: Full data load complete")
 
@@ -300,6 +305,10 @@ class DataLoader(QObject):
 
 class LaunchUpdater(QObject):
     finished = pyqtSignal(dict, list, dict)
+    def __init__(self, tz_obj=None):
+        super().__init__()
+        self.tz_obj = tz_obj
+
     def run(self):
         profiler.mark("LaunchUpdater: Starting update")
         launch_data = fetch_launches()
@@ -307,7 +316,7 @@ class LaunchUpdater(QObject):
         
         # Pre-compute calendar mapping
         from functions import get_calendar_mapping
-        calendar_mapping = get_calendar_mapping(launch_data)
+        calendar_mapping = get_calendar_mapping(launch_data, tz_obj=self.tz_obj)
         
         profiler.mark("LaunchUpdater: Update complete")
         self.finished.emit(launch_data, narratives, calendar_mapping)
@@ -453,6 +462,8 @@ class Backend(QObject):
         # Throttle web content reload signals to avoid flapping-induced UI hiccups
         self._last_web_reload_emit = 0.0
         self._min_reload_emit_interval_sec = 8.0
+        self._last_live_url_update = 0.0
+        self._last_tray_visible = False
         
         # WiFi properties - initialize with provided values
         self._wifi_networks = []
@@ -797,7 +808,7 @@ class Backend(QObject):
 
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader...")
-                self.loader = DataLoader()
+                self.loader = DataLoader(self._tz)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)
@@ -1070,9 +1081,14 @@ class Backend(QObject):
             logger.info(f"Backend: Location changed to {self._location}")
             # Explicitly update radar URL property on location change
             self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+            
+            # Reset calendar mapping cache so it recomputes with new timezone
+            self._launches_by_date_cache = None
+            
             self.radarBaseUrlChanged.emit()
             self.locationChanged.emit()
             self.weatherChanged.emit()
+            self.launchesChanged.emit() # Notify that calendar mapping may have changed
             self.update_countdown() # Triggers countdownChanged and launchTrayVisibilityChanged
             self.update_event_model()
 
@@ -1144,7 +1160,7 @@ class Backend(QObject):
             return self._launches_by_date_cache
             
         from functions import get_calendar_mapping
-        mapping = get_calendar_mapping(self._launch_data)
+        mapping = get_calendar_mapping(self._launch_data, self._tz)
         
         self._launches_by_date_cache = mapping
         
@@ -1346,7 +1362,7 @@ class Backend(QObject):
         if hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning():
             return  # Skip if already updating
 
-        self._launch_updater = LaunchUpdater()
+        self._launch_updater = LaunchUpdater(self._tz)
         self._launch_updater_thread = QThread()
         self._launch_updater.moveToThread(self._launch_updater_thread)
         self._launch_updater.finished.connect(self._on_launches_updated)
@@ -1425,6 +1441,7 @@ class Backend(QObject):
         self.timeChanged.emit()
 
     def _update_live_launch_url(self):
+        self._last_live_url_update = time.time()
         new_live_url = get_closest_x_video_url(self._launch_data)
         if new_live_url != getattr(self, '_live_launch_url', ''):
             self._live_launch_url = new_live_url
@@ -1433,7 +1450,16 @@ class Backend(QObject):
     @pyqtSlot()
     def update_countdown(self):
         # Update countdown every second and re-evaluate tray visibility
-        self._update_live_launch_url()
+        now = time.time()
+        current_tray_visible = self.launchTrayVisible
+        
+        # Update URL if:
+        # 1. It's been more than 60 seconds since last update
+        # 2. The tray just became visible (opened)
+        if (now - self._last_live_url_update >= 60) or (current_tray_visible and not self._last_tray_visible):
+            self._update_live_launch_url()
+
+        self._last_tray_visible = current_tray_visible
         self.countdownChanged.emit()
         self.launchTrayVisibilityChanged.emit()
 
@@ -1614,7 +1640,7 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader for online load…")
                 # DataLoader is defined in this file
-                self.loader = DataLoader()
+                self.loader = DataLoader(self._tz)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)
@@ -2140,7 +2166,7 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("WiFi connected - creating new DataLoader...")
                 # DataLoader is defined in this file
-                self.loader = DataLoader()
+                self.loader = DataLoader(self._tz)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)

@@ -1980,7 +1980,8 @@ def group_event_data(data, mode, event_type, timezone_obj):
     profiler.mark(f"group_event_data Start (mode={mode}, type={event_type})")
     
     # ...
-    today = datetime.now(pytz.UTC).date()
+    # Determine local "today" for grouping
+    today = datetime.now(timezone_obj).date()
     this_week_end = today + timedelta(days=7)
     last_week_start = today - timedelta(days=7)
     grouped = []
@@ -2041,7 +2042,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
                     later_launches.append(l)
                     continue
                 
-                l_date = dt.date()
+                l_date = dt.astimezone(timezone_obj).date()
                 if l_date == today:
                     today_launches.append(l)
                 elif today < l_date <= this_week_end:
@@ -2071,7 +2072,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
                     earlier_launches.append(l)
                     continue
                 
-                l_date = dt.date()
+                l_date = dt.astimezone(timezone_obj).date()
                 if l_date == today:
                     today_launches.append(l)
                 elif last_week_start <= l_date < today:
@@ -2324,7 +2325,7 @@ def is_launch_finished(status):
     s = str(status).lower()
     return any(keyword in s for keyword in ['success', 'failure', 'successful', 'complete'])
 
-def get_calendar_mapping(launch_data):
+def get_calendar_mapping(launch_data, tz_obj=None):
     """
     Generate a mapping of date strings (YYYY-MM-DD) to lists of launches.
     Extracted from Backend.launchesByDate to allow pre-computation during boot.
@@ -2335,18 +2336,46 @@ def get_calendar_mapping(launch_data):
         
     for l in launch_data.get('previous', []):
         d = l.get('date')
+        t = l.get('time')
+        if tz_obj and l.get('net'):
+            try:
+                dt_utc = parse(l['net'])
+                if dt_utc.tzinfo is None:
+                    dt_utc = pytz.UTC.localize(dt_utc)
+                dt_local = dt_utc.astimezone(tz_obj)
+                d = dt_local.strftime('%Y-%m-%d')
+                t = dt_local.strftime('%H:%M:%S')
+            except Exception:
+                pass
+
         if d:
             if d not in mapping: mapping[d] = []
             l_typed = l.copy()
             l_typed['type'] = 'past'
+            l_typed['date'] = d
+            l_typed['time'] = t
             mapping[d].append(l_typed)
             
     for l in launch_data.get('upcoming', []):
         d = l.get('date')
+        t = l.get('time')
+        if tz_obj and l.get('net'):
+            try:
+                dt_utc = parse(l['net'])
+                if dt_utc.tzinfo is None:
+                    dt_utc = pytz.UTC.localize(dt_utc)
+                dt_local = dt_utc.astimezone(tz_obj)
+                d = dt_local.strftime('%Y-%m-%d')
+                t = dt_local.strftime('%H:%M:%S')
+            except Exception:
+                pass
+
         if d:
             if d not in mapping: mapping[d] = []
             l_typed = l.copy()
             l_typed['type'] = 'upcoming'
+            l_typed['date'] = d
+            l_typed['time'] = t
             mapping[d].append(l_typed)
     return mapping
 
@@ -2401,7 +2430,7 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
 def get_closest_x_video_url(launch_data):
     """Find the X.com livestream URL of the launch closest to current time."""
     if not launch_data:
-        logger.info("get_closest_x_video_url: No launch data provided, returning empty URL")
+        logger.debug("get_closest_x_video_url: No launch data provided, returning empty URL")
         return ""
 
     current_time = datetime.now(pytz.UTC)
@@ -2443,7 +2472,7 @@ def get_closest_x_video_url(launch_data):
         except Exception:
             continue
 
-    logger.info(f"get_closest_x_video_url: Found URL: {closest_url}")
+    logger.debug(f"get_closest_x_video_url: Found URL: {closest_url}")
     return closest_url
 
 def initialize_all_weather(locations_config):
@@ -2585,7 +2614,7 @@ def fetch_weather_for_all_locations(locations_config):
             return cache['data']
         return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
-def perform_full_dashboard_data_load(locations_config, status_callback=None):
+def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_obj=None):
     """Orchestrate parallel fetch of launches, narratives, and weather data."""
     profiler.mark("perform_full_dashboard_data_load Start")
     def _emit(msg):
@@ -2639,7 +2668,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
     _emit("Data loading complete")
     
     # Pre-compute calendar mapping while still in the background
-    calendar_mapping = get_calendar_mapping(launch_data)
+    calendar_mapping = get_calendar_mapping(launch_data, tz_obj=tz_obj)
     
     return launch_data, weather_data, narratives, calendar_mapping
 
