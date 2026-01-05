@@ -999,7 +999,33 @@ Window {
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && typeof model === 'object')
 
-                                Text { text: (model && model.mission) ? model.mission : ""; font.pixelSize: 12; font.bold: true; color: backend.theme === "dark" ? "white" : "black"; width: parent.width - 80; wrapMode: Text.Wrap; maximumLineCount: 2; elide: Text.ElideRight }
+                                Column {
+                                    spacing: 0
+                                    width: parent.width - 85
+                                    Text { 
+                                        text: {
+                                            var m = (model && model.mission) ? model.mission : "";
+                                            var idx = m.indexOf("|");
+                                            return idx !== -1 ? m.substring(idx + 1).trim() : m;
+                                        }
+                                        font.pixelSize: 12; font.bold: true; 
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                        width: parent.width
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Text { 
+                                        text: {
+                                            var m = (model && model.mission) ? model.mission : "";
+                                            var idx = m.indexOf("|");
+                                            return idx !== -1 ? m.substring(0, idx).trim() : "";
+                                        }
+                                        visible: text !== ""
+                                        font.pixelSize: 11; font.bold: false;
+                                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                        width: parent.width
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
                                 Row { spacing: 5
                                     Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
@@ -1107,13 +1133,32 @@ Window {
                                             spacing: 1
                                             padding: 2
                                             
-                                            Text { 
+                                            Column {
+                                                spacing: 0
                                                 width: parent.width
-                                                text: modelData.mission 
-                                                wrapMode: Text.Wrap
-                                                font.bold: true 
-                                                font.pixelSize: 12 
-                                                color: backend.theme === "dark" ? "white" : "black" 
+                                                Text { 
+                                                    text: {
+                                                        var m = modelData.mission;
+                                                        var idx = m.indexOf("|");
+                                                        return idx !== -1 ? m.substring(idx + 1).trim() : m;
+                                                    }
+                                                    font.pixelSize: 12; font.bold: true; 
+                                                    color: backend.theme === "dark" ? "white" : "black"
+                                                    width: parent.width
+                                                    wrapMode: Text.Wrap
+                                                }
+                                                Text { 
+                                                    text: {
+                                                        var m = modelData.mission;
+                                                        var idx = m.indexOf("|");
+                                                        return idx !== -1 ? m.substring(0, idx).trim() : "";
+                                                    }
+                                                    visible: text !== ""
+                                                    font.pixelSize: 11; font.bold: false;
+                                                    color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                    width: parent.width
+                                                    wrapMode: Text.Wrap
+                                                }
                                             }
                                             Text { text: modelData.rocket; font.pixelSize: 12; color: "#999999" }
                                             Text { text: modelData.time + " UTC"; font.pixelSize: 12; color: "#999999" }
