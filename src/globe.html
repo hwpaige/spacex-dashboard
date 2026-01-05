@@ -188,59 +188,136 @@
                 const textureLoader = new THREE.TextureLoader();
 
                 function loadEarthTexture(hdPath, sdPath, onComplete) {
-                    // Try HD first
-                    textureLoader.load(hdPath,
-                        function (texture) {
-                            console.log("Loaded HD Earth texture");
-                            // Improve texture sharpness at angles
+                    // Optimized Tiled HD loading (bypasses Pi 4096px hardware limit)
+                    // Configurable grid: 2x1 (Med), 4x2 (High), 6x3 (Ultra)
+                    // Make sure these match the output of tools/tile_globe_texture.py
+                    const tilesX = 4;
+                    const tilesY = 2;
+                    const firstTilePath = '../assets/images/tiles/tile_0_0.jpg';
+
+                    textureLoader.load(firstTilePath,
+                        function (firstTex) {
+                            console.log("Found tiled textures, loading set...");
+                            const tileTextures = new Array(tilesX * tilesY);
                             const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-                            texture.anisotropy = maxAnisotropy;
-                            onComplete(texture);
+                            firstTex.anisotropy = maxAnisotropy;
+                            tileTextures[0] = firstTex;
+
+                            let loadedCount = 1;
+                            const totalTiles = tilesX * tilesY;
+
+                            if (totalTiles === 1) {
+                                onComplete(tileTextures, tilesX, tilesY);
+                                return;
+                            }
+
+                            for (let i = 1; i < totalTiles; i++) {
+                                const tx = i % tilesX;
+                                const ty = Math.floor(i / tilesX);
+                                const tilePath = `../assets/images/tiles/tile_${tx}_${ty}.jpg`;
+
+                                textureLoader.load(tilePath,
+                                    function (tex) {
+                                        tex.anisotropy = maxAnisotropy;
+                                        tileTextures[i] = tex;
+                                        loadedCount++;
+                                        if (loadedCount === totalTiles) {
+                                            onComplete(tileTextures, tilesX, tilesY);
+                                        }
+                                    },
+                                    undefined,
+                                    function () {
+                                        console.warn("Failed to load some tiles, falling back to single HD");
+                                        loadSingleHD();
+                                    }
+                                );
+                            }
                         },
                         undefined,
-                        function (err) {
-                            console.log("HD texture not found, trying SD...");
-                            // Try SD
-                            textureLoader.load(sdPath,
-                                function (texture) {
-                                    console.log("Loaded SD Earth texture");
-                                    const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
-                                    texture.anisotropy = maxAnisotropy;
-                                    onComplete(texture);
-                                },
-                                undefined,
-                                function (err2) {
-                                    console.log("SD texture not found, falling back to procedural");
-                                    // Make sure to call onComplete with null to trigger the blue sphere fallback
-                                    onComplete(null);
-                                }
-                            );
+                        function () {
+                            console.log("Tiled textures not found, trying single HD...");
+                            loadSingleHD();
                         }
                     );
+
+                    function loadSingleHD() {
+                        // Try HD
+                        textureLoader.load(hdPath,
+                            function (texture) {
+                                console.log("Loaded HD Earth texture");
+                                const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                                texture.anisotropy = maxAnisotropy;
+                                onComplete(texture);
+                            },
+                            undefined,
+                            function (err) {
+                                console.log("HD texture not found, trying SD...");
+                                // Try SD
+                                textureLoader.load(sdPath,
+                                    function (texture) {
+                                        console.log("Loaded SD Earth texture");
+                                        const maxAnisotropy = renderer.capabilities.getMaxAnisotropy();
+                                        texture.anisotropy = maxAnisotropy;
+                                        onComplete(texture);
+                                    },
+                                    undefined,
+                                    function (err2) {
+                                        console.log("SD texture not found, falling back to procedural");
+                                        onComplete(null);
+                                    }
+                                );
+                            }
+                        );
+                    }
                 }
 
                 loadEarthTexture(
                     '../assets/images/earth_texture_hd.jpg',
                     '../assets/images/earth_texture.jpg',
-                    function (texture) {
-                        let material;
-                        if (texture) {
-                            material = new THREE.MeshPhongMaterial({
-                                map: texture,
-                                transparent: true,
-                                opacity: 0.9
-                            });
+                    function (texture, tX, tY) {
+                        if (Array.isArray(texture)) {
+                            // Tiled mode
+                            globe = new THREE.Group();
+                            const tilesX = tX;
+                            const tilesY = tY;
+
+                            for (let y = 0; y < tilesY; y++) {
+                                for (let x = 0; x < tilesX; x++) {
+                                    const phiStart = (x / tilesX) * Math.PI * 2;
+                                    const phiLength = (1 / tilesX) * Math.PI * 2;
+                                    const thetaStart = (y / tilesY) * Math.PI;
+                                    const thetaLength = (1 / tilesY) * Math.PI;
+
+                                    const tileGeom = new THREE.SphereGeometry(1, 64 / tilesX, 64 / tilesY, phiStart, phiLength, thetaStart, thetaLength);
+                                    const tileMat = new THREE.MeshPhongMaterial({
+                                        map: texture[y * tilesX + x],
+                                        transparent: true,
+                                        opacity: 0.9
+                                    });
+                                    const tileMesh = new THREE.Mesh(tileGeom, tileMat);
+                                    globe.add(tileMesh);
+                                }
+                            }
                         } else {
-                            // Fallback: create globe without texture
-                            material = new THREE.MeshPhongMaterial({
-                                color: 0x2233ff,
-                                transparent: true,
-                                opacity: 0.9
-                            });
+                            // Single texture mode
+                            let material;
+                            if (texture) {
+                                material = new THREE.MeshPhongMaterial({
+                                    map: texture,
+                                    transparent: true,
+                                    opacity: 0.9
+                                });
+                            } else {
+                                // Fallback: create globe without texture
+                                material = new THREE.MeshPhongMaterial({
+                                    color: 0x2233ff,
+                                    transparent: true,
+                                    opacity: 0.9
+                                });
+                            }
+                            globe = new THREE.Mesh(geometry, material);
                         }
 
-                        // Mesh
-                        globe = new THREE.Mesh(geometry, material);
                         scene.add(globe);
 
                         // Set initial tilt for better orbit visibility
