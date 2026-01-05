@@ -104,7 +104,10 @@ Window {
     Connections {
         target: backend
         function onVideoUrlChanged() {
-            if (root.currentVideoUrl.toString() === "" || root.currentVideoUrl.toString().indexOf("youtube_embed.html") !== -1) {
+            // Only auto-update if we are currently on the default YouTube embed or it's empty.
+            // Use endsWith to avoid matching youtube_embed_nsf.html.
+            var current = root.currentVideoUrl.toString()
+            if (current === "" || current.endsWith("/youtube_embed.html") || current === "about:blank") {
                 root.currentVideoUrl = backend.videoUrl
             }
         }
@@ -1627,7 +1630,7 @@ Window {
                                 Rectangle {
                                     id: starshipBtn
                                     // Match highlight logic used by Windy/plot pills: compare as strings to avoid url vs string type mismatch
-                                    property bool selected: (typeof videoUrl !== 'undefined' && videoUrl) ? (String(root.currentVideoUrl) === String(videoUrl)) : false
+                                    property bool selected: (backend && backend.videoUrl) ? (String(root.currentVideoUrl) === String(backend.videoUrl)) : false
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
@@ -1651,11 +1654,11 @@ Window {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: {
-                                            if (typeof videoUrl !== 'undefined' && videoUrl) {
+                                            if (backend && backend.videoUrl) {
                                                 // Ensure currentVideoUrl updates as a string URL to keep comparison consistent
-                                                root.currentVideoUrl = String(videoUrl)
+                                                root.currentVideoUrl = String(backend.videoUrl)
                                             } else {
-                                                console.log("videoUrl is not defined or empty")
+                                                console.log("backend.videoUrl is not defined or empty")
                                             }
                                         }
                                     }
