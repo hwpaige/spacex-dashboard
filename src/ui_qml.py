@@ -1043,6 +1043,7 @@ Window {
                             sourceComponent: Item {
                             
                             id: calendarViewItem
+                            property var launchesMapping: backend.launchesByDate
                             property var currentMonth: new Date()
                             
                             property var popupLaunches: []
@@ -1261,9 +1262,9 @@ Window {
                                                         
                                                         // Check for launches (optimized via backend mapping)
                                                         property var dayLaunches: {
-                                                            if (!isCurrentMonth || !backend || !backend.launchesByDate) return []
+                                                            if (!isCurrentMonth || !calendarViewItem.launchesMapping) return []
                                                             var dStr = cellDate.toISOString().substring(0,10)
-                                                            return backend.launchesByDate[dStr] || []
+                                                            return calendarViewItem.launchesMapping[dStr] || []
                                                         }
                                                         
                                                         // Selection/Highlight

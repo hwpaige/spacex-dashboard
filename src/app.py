@@ -55,6 +55,9 @@ from functions import (
     # CACHE_FILE constants
     TRAJECTORY_CACHE_FILE,
     RUNTIME_CACHE_FILE_LAUNCHES,
+    RUNTIME_CACHE_FILE_CALENDAR,
+    RUNTIME_CACHE_FILE_CHART_TRENDS,
+    RUNTIME_CACHE_FILE_NARRATIVES,
     WIFI_KEY_FILE,
     REMEMBERED_NETWORKS_FILE,
     LAST_CONNECTED_NETWORK_FILE,
@@ -272,7 +275,7 @@ class EventModel(QAbstractListModel):
         profiler.mark(f"EventModel: update_data End (count: {len(self._grouped_data)})")
 
 class DataLoader(QObject):
-    finished = pyqtSignal(dict, dict, list)
+    finished = pyqtSignal(dict, dict, list, dict)
     statusUpdate = pyqtSignal(str)
 
     def run(self):
@@ -281,28 +284,33 @@ class DataLoader(QObject):
             try: self.statusUpdate.emit(msg)
             except RuntimeError: pass
 
-        def _safe_emit_finished(l, f, w):
-            try: self.finished.emit(l, f, w)
+        def _safe_emit_finished(l, f, w, c):
+            try: self.finished.emit(l, f, w, c)
             except RuntimeError: pass
 
         profiler.mark("DataLoader: Starting full data load")
         # Delegate full load to functions.py
-        launch_data, weather_data, narratives = perform_full_dashboard_data_load(
+        launch_data, weather_data, narratives, calendar_mapping = perform_full_dashboard_data_load(
             location_settings, 
             status_callback=_safe_emit_status
         )
         profiler.mark("DataLoader: Full data load complete")
 
-        _safe_emit_finished(launch_data, weather_data, narratives)
+        _safe_emit_finished(launch_data, weather_data, narratives, calendar_mapping)
 
 class LaunchUpdater(QObject):
-    finished = pyqtSignal(dict, list)
+    finished = pyqtSignal(dict, list, dict)
     def run(self):
         profiler.mark("LaunchUpdater: Starting update")
         launch_data = fetch_launches()
         narratives = fetch_narratives()
+        
+        # Pre-compute calendar mapping
+        from functions import get_calendar_mapping
+        calendar_mapping = get_calendar_mapping(launch_data)
+        
         profiler.mark("LaunchUpdater: Update complete")
-        self.finished.emit(launch_data, narratives)
+        self.finished.emit(launch_data, narratives, calendar_mapping)
 
 class WeatherUpdater(QObject):
     finished = pyqtSignal(dict)
@@ -412,7 +420,21 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
         profiler.mark("Backend: Initializing EventModel End")
         self._launch_trends_cache = {}  # Cache for launch trends series
+        try:
+            trends_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CHART_TRENDS)
+            if trends_cache:
+                self._launch_trends_cache = trends_cache['data']
+                logger.info("Backend: Loaded launch trends cache from disk")
+        except Exception as e:
+            logger.debug(f"Failed to load launch trends cache: {e}")
         self._launches_by_date_cache = None # Cache for date-indexed launches
+        try:
+            cal_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CALENDAR)
+            if cal_cache:
+                self._launches_by_date_cache = cal_cache['data']
+                logger.info("Backend: Loaded calendar cache from disk")
+        except Exception as e:
+            logger.debug(f"Failed to load calendar cache: {e}")
         self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
         self._last_update_check = None  # Track when updates were last checked
@@ -1112,24 +1134,18 @@ class Backend(QObject):
         if hasattr(self, '_launches_by_date_cache') and self._launches_by_date_cache is not None:
             return self._launches_by_date_cache
             
-        mapping = {}
-        for l in self._launch_data.get('previous', []):
-            d = l.get('date')
-            if d:
-                if d not in mapping: mapping[d] = []
-                l_typed = l.copy()
-                l_typed['type'] = 'past'
-                mapping[d].append(l_typed)
-                
-        for l in self._launch_data.get('upcoming', []):
-            d = l.get('date')
-            if d:
-                if d not in mapping: mapping[d] = []
-                l_typed = l.copy()
-                l_typed['type'] = 'upcoming'
-                mapping[d].append(l_typed)
+        from functions import get_calendar_mapping
+        mapping = get_calendar_mapping(self._launch_data)
         
         self._launches_by_date_cache = mapping
+        
+        # Persist to disk for faster subsequent app runs
+        try:
+            save_cache_to_file(RUNTIME_CACHE_FILE_CALENDAR, mapping, datetime.now(pytz.UTC))
+            logger.info("Backend: Saved calendar cache to disk")
+        except Exception as e:
+            logger.debug(f"Failed to save calendar cache: {e}")
+            
         return mapping
 
     @pyqtProperty(str, notify=liveLaunchUrlChanged)
@@ -1174,6 +1190,14 @@ class Backend(QObject):
             'data_sig': data_sig,
             'data': data
         }
+        
+        # Persist to disk
+        try:
+            save_cache_to_file(RUNTIME_CACHE_FILE_CHART_TRENDS, self._launch_trends_cache, datetime.now(pytz.UTC))
+            logger.info("Backend: Saved launch trends cache to disk")
+        except Exception as e:
+            logger.debug(f"Failed to save launch trends cache: {e}")
+            
         profiler.mark("Backend: _get_launch_trends_data End (Recomputed)")
         return data
 
@@ -1409,8 +1433,8 @@ class Backend(QObject):
         self.timeChanged.emit()  # Ensure time updates when timezone changes
         self.eventModelChanged.emit()
 
-    @pyqtSlot(dict, dict, list)
-    def on_data_loaded(self, launch_data, weather_data, narratives):
+    @pyqtSlot(dict, dict, list, dict)
+    def on_data_loaded(self, launch_data, weather_data, narratives, calendar_mapping=None):
         profiler.mark("Backend: on_data_loaded Start")
         logger.info("Backend: on_data_loaded called")
         self.setLoadingStatus("Data loaded successfully")
@@ -1419,6 +1443,12 @@ class Backend(QObject):
         self._launch_descriptions = narratives
         self._update_live_launch_url()
         self._clear_launch_caches()
+        
+        # Apply pre-computed calendar mapping if provided
+        if calendar_mapping:
+            self._launches_by_date_cache = calendar_mapping
+            logger.info("Backend: Applied pre-computed calendar mapping from DataLoader")
+            
         # self._f1_data is now initialized in __init__ and not updated here as it's currently missing from loader
         self._weather_data = weather_data
         # Update the EventModel's data reference
@@ -1512,7 +1542,18 @@ class Backend(QObject):
                 }
             
             self._update_live_launch_url()
-            self._clear_launch_caches()
+            
+            # Seed the calendar cache if it's still None after __init__
+            if getattr(self, '_launches_by_date_cache', None) is None and self._launch_data:
+                from functions import get_calendar_mapping
+                self._launches_by_date_cache = get_calendar_mapping(self._launch_data)
+                logger.info("Backend: Seeded calendar cache during bootstrap")
+
+            # Optimization: only clear caches if we ACTUALLY reloaded launch data
+            # (If it was already in self._launch_data from __init__, don't clear it)
+            if 'prev_cache' in locals() or 'up_cache' in locals():
+                self._clear_launch_caches()
+                
             # Update EventModel immediately
             profiler.mark("Backend: _seed_bootstrap Updating EventModel")
             self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
@@ -1692,13 +1733,18 @@ class Backend(QObject):
         self._launch_trends_cache.clear()
         self._launches_by_date_cache = None
 
-    @pyqtSlot(dict, list)
-    def _on_launches_updated(self, launch_data, narratives):
+    @pyqtSlot(dict, list, dict)
+    def _on_launches_updated(self, launch_data, narratives, calendar_mapping=None):
         """Handle launch data update completion"""
         self._launch_data = launch_data
         self._launch_descriptions = narratives
         self._update_live_launch_url()
         self._clear_launch_caches()
+        
+        if calendar_mapping:
+            self._launches_by_date_cache = calendar_mapping
+            logger.info("Backend: Applied pre-computed calendar mapping from LaunchUpdater")
+            
         self.launchesChanged.emit()
         self.launchTrayVisibilityChanged.emit()
         self.update_event_model()

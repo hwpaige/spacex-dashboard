@@ -180,8 +180,8 @@ def emit_loader_status(message: str):
 
 # --- Cache paths and constants (UI-agnostic) ---
 LAUNCH_API_BASE_URL = "https://launch-narrative-api-dafccc521fb8.herokuapp.com"
-CACHE_REFRESH_INTERVAL_PREVIOUS = 600   # 10 minutes (matches API)
-CACHE_REFRESH_INTERVAL_UPCOMING = 600   # 10 minutes (matches API)
+CACHE_REFRESH_INTERVAL_PREVIOUS = 60   # 1 minutes (matches API)
+CACHE_REFRESH_INTERVAL_UPCOMING = 60   # 1 minutes (matches API)
 CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
 CACHE_REFRESH_INTERVAL_WEATHER = 300     # 5 minutes (matches API)
 CACHE_REFRESH_INTERVAL_NARRATIVES = 900 # 15 minutes
@@ -206,6 +206,9 @@ CACHE_FILE_F1_TRACK_LAYOUT = os.path.join(CACHE_DIR_F1, 'f1_track_layout.json')
 # Runtime (user) cache paths for SpaceX launches. Keep the git-seeded repo cache intact
 # and write incremental updates to the persistent user cache.
 RUNTIME_CACHE_FILE_LAUNCHES = os.path.join(CACHE_DIR_F1, 'launches_cache.json')
+RUNTIME_CACHE_FILE_CALENDAR = os.path.join(CACHE_DIR_F1, 'calendar_cache.json')
+RUNTIME_CACHE_FILE_CHART_TRENDS = os.path.join(CACHE_DIR_F1, 'chart_trends_cache.json')
+RUNTIME_CACHE_FILE_PARSED_DATES = os.path.join(CACHE_DIR_F1, 'parsed_dates_cache.json')
 RUNTIME_CACHE_FILE_NARRATIVES = os.path.join(CACHE_DIR_F1, 'narratives_cache.json')
 CACHE_FILE_WEATHER = os.path.join(CACHE_DIR_F1, 'weather_cache.json')
 
@@ -1869,14 +1872,54 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
 
 # Global date parsing cache to avoid redundant expensive calls across different modules
 _DATE_PARSE_CACHE = {}
+_DATE_PARSE_CACHE_DIRTY = False
+
+def _load_date_cache():
+    global _DATE_PARSE_CACHE
+    try:
+        cache_data = load_cache_from_file(RUNTIME_CACHE_FILE_PARSED_DATES)
+        if cache_data and 'data' in cache_data:
+            # Convert timestamps back to datetime objects
+            for net_str, ts in cache_data['data'].items():
+                if ts is None:
+                    _DATE_PARSE_CACHE[net_str] = None
+                else:
+                    _DATE_PARSE_CACHE[net_str] = datetime.fromtimestamp(ts, pytz.UTC)
+            logger.info(f"Loaded {len(_DATE_PARSE_CACHE)} parsed dates from cache")
+    except Exception as e:
+        logger.debug(f"Failed to load date parse cache: {e}")
+
+def _save_date_cache():
+    global _DATE_PARSE_CACHE, _DATE_PARSE_CACHE_DIRTY
+    if not _DATE_PARSE_CACHE_DIRTY:
+        return
+    try:
+        # Convert datetime objects to timestamps for JSON
+        serializable_cache = {}
+        for net_str, dt in _DATE_PARSE_CACHE.items():
+            if dt is None:
+                serializable_cache[net_str] = None
+            else:
+                serializable_cache[net_str] = dt.timestamp()
+        
+        save_cache_to_file(RUNTIME_CACHE_FILE_PARSED_DATES, serializable_cache, datetime.now(pytz.UTC))
+        _DATE_PARSE_CACHE_DIRTY = False
+        logger.info(f"Saved {len(_DATE_PARSE_CACHE)} parsed dates to cache")
+    except Exception as e:
+        logger.debug(f"Failed to save date parse cache: {e}")
+
+# Initial load
+_load_date_cache()
 
 def group_event_data(data, mode, event_type, timezone_obj):
     """
     Group and filter launch or race event data by date range (Today, This Week, Later, etc.).
     UI-agnostic logic extracted from EventModel.update_data.
     """
-    global _DATE_PARSE_CACHE
+    global _DATE_PARSE_CACHE, _DATE_PARSE_CACHE_DIRTY
     profiler.mark(f"group_event_data Start (mode={mode}, type={event_type})")
+    
+    # ...
     today = datetime.now(pytz.UTC).date()
     this_week_end = today + timedelta(days=7)
     last_week_start = today - timedelta(days=7)
@@ -1891,6 +1934,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
         processed_launches = []
         
         def _get_parsed_dt(net_str):
+            global _DATE_PARSE_CACHE_DIRTY
             if not net_str: return None
             if net_str not in _DATE_PARSE_CACHE:
                 try:
@@ -1900,8 +1944,10 @@ def group_event_data(data, mode, event_type, timezone_obj):
                     else:
                         dt = dt.astimezone(pytz.UTC)
                     _DATE_PARSE_CACHE[net_str] = dt
+                    _DATE_PARSE_CACHE_DIRTY = True
                 except Exception:
                     _DATE_PARSE_CACHE[net_str] = None
+                    _DATE_PARSE_CACHE_DIRTY = True
             return _DATE_PARSE_CACHE[net_str]
 
         for l in launches:
@@ -1984,6 +2030,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
                 grouped.extend(earlier_launches)
     
     profiler.mark(f"group_event_data End (grouped count: {len(grouped)})")
+    _save_date_cache()
     return grouped
 
 LAUNCH_DESCRIPTIONS = [
@@ -2216,6 +2263,32 @@ def is_launch_finished(status):
         return False
     s = str(status).lower()
     return any(keyword in s for keyword in ['success', 'failure', 'successful', 'complete'])
+
+def get_calendar_mapping(launch_data):
+    """
+    Generate a mapping of date strings (YYYY-MM-DD) to lists of launches.
+    Extracted from Backend.launchesByDate to allow pre-computation during boot.
+    """
+    mapping = {}
+    if not launch_data:
+        return mapping
+        
+    for l in launch_data.get('previous', []):
+        d = l.get('date')
+        if d:
+            if d not in mapping: mapping[d] = []
+            l_typed = l.copy()
+            l_typed['type'] = 'past'
+            mapping[d].append(l_typed)
+            
+    for l in launch_data.get('upcoming', []):
+        d = l.get('date')
+        if d:
+            if d not in mapping: mapping[d] = []
+            l_typed = l.copy()
+            l_typed['type'] = 'upcoming'
+            mapping[d].append(l_typed)
+    return mapping
 
 def get_next_launch_info(upcoming_launches, tz_obj):
     """Find and format the next upcoming launch."""
@@ -2490,7 +2563,11 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None):
 
     profiler.mark("perform_full_dashboard_data_load End")
     _emit("Data loading complete")
-    return launch_data, weather_data, narratives
+    
+    # Pre-compute calendar mapping while still in the background
+    calendar_mapping = get_calendar_mapping(launch_data)
+    
+    return launch_data, weather_data, narratives, calendar_mapping
 
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
