@@ -2401,6 +2401,7 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
 def get_closest_x_video_url(launch_data):
     """Find the X.com livestream URL of the launch closest to current time."""
     if not launch_data:
+        logger.info("get_closest_x_video_url: No launch data provided, returning empty URL")
         return ""
 
     current_time = datetime.now(pytz.UTC)
@@ -2412,7 +2413,13 @@ def get_closest_x_video_url(launch_data):
     min_diff = float('inf')
 
     for launch in all_launches:
+        # Prefer explicit x_video_url, but fallback to video_url if it's an X/Twitter link
         x_url = launch.get('x_video_url')
+        if not x_url:
+            v_url = launch.get('video_url', '')
+            if v_url and ('x.com' in v_url.lower() or 'twitter.com' in v_url.lower()):
+                x_url = v_url
+        
         if not x_url:
             continue
 
@@ -2424,12 +2431,19 @@ def get_closest_x_video_url(launch_data):
                 launch_net = launch_net.astimezone(pytz.UTC)
 
             diff = abs((current_time - launch_net).total_seconds())
+            
+            # Prioritization:
+            # 1. If it's very close to now (within 12 hours), it's likely the "Live" one we want.
+            # 2. Upcoming launches with URLs are generally better candidates than old previous ones.
+            # But for now, we'll stick to closest in time, but allow the fallback.
+            
             if diff < min_diff:
                 min_diff = diff
                 closest_url = x_url
         except Exception:
             continue
 
+    logger.info(f"get_closest_x_video_url: Found URL: {closest_url}")
     return closest_url
 
 def initialize_all_weather(locations_config):

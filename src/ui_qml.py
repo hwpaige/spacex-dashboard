@@ -185,28 +185,26 @@ Window {
     visible: !!(backend && (backend.isLoading || backend.updatingInProgress))
         z: 1
 
-        ColumnLayout {
+        Image {
+            id: splashLogo
+            source: "file:///" + spacexLogoPath
+            width: 500
+            height: 160
+            sourceSize.width: 500
+            sourceSize.height: 160
+            fillMode: Image.PreserveAspectFit
             anchors.centerIn: parent
-            spacing: 20
+        }
 
-            Image {
-                source: "file:///" + spacexLogoPath
-                Layout.alignment: Qt.AlignHCenter
-                width: 120
-                height: 120
-                sourceSize.width: 120
-                sourceSize.height: 120
-                fillMode: Image.PreserveAspectFit
-            }
-
-            Text {
-                text: backend.loadingStatus
-                Layout.alignment: Qt.AlignHCenter
-                color: backend.theme === "dark" ? "#ffffff" : "#000000"
-                font.pixelSize: 16
-                font.family: "D-DIN"
-                horizontalAlignment: Text.AlignHCenter
-            }
+        Text {
+            text: backend.loadingStatus
+            anchors.top: splashLogo.bottom
+            anchors.topMargin: 20
+            anchors.horizontalCenter: parent.horizontalCenter
+            color: backend.theme === "dark" ? "#ffffff" : "#000000"
+            font.pixelSize: 16
+            font.family: "D-DIN"
+            horizontalAlignment: Text.AlignHCenter
         }
 
         // Update progress overlay (shown during in-app update)
@@ -3280,6 +3278,29 @@ Window {
                             color: backend.updateChecking ?
                                 (backend.theme === "dark" ? "#666" : "#ccc") :
                                 (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0")
+                            radius: 3
+                        }
+
+                        contentItem: Text {
+                            text: parent.text
+                            color: backend.theme === "dark" ? "white" : "black"
+                            font.pixelSize: 11
+                            horizontalAlignment: Text.AlignHCenter
+                            verticalAlignment: Text.AlignVCenter
+                        }
+                    }
+
+                    Button {
+                        text: "Restart"
+                        Layout.preferredWidth: 70
+                        Layout.preferredHeight: 28
+                        onClicked: {
+                            console.log("Restart clicked")
+                            backend.reboot_device()
+                        }
+
+                        background: Rectangle {
+                            color: backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0"
                             radius: 3
                         }
 

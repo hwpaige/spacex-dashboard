@@ -387,6 +387,16 @@ class Backend(QObject):
         self._event_type = 'upcoming'
         self._theme = load_theme_settings()
         self._location = 'Starbase'
+        # Initialize timezone based on default location
+        self._tz = tzlocal()
+        if self._location in location_settings:
+            tz_name = location_settings[self._location].get('timezone', 'UTC')
+            try:
+                self._tz = pytz.timezone(tz_name)
+                logger.info(f"Backend: Initial timezone set to {tz_name} for {self._location}")
+            except Exception as e:
+                logger.error(f"Backend: Failed to set initial timezone {tz_name}: {e}")
+        
         self._chart_view_mode = 'actual'  # 'actual' or 'cumulative'
         self._chart_type = 'line'  # 'bar' or 'line'
         self._boot_mode = True
@@ -415,7 +425,6 @@ class Backend(QObject):
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
         self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
-        self._tz = tzlocal()
         profiler.mark("Backend: Initializing EventModel Start")
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
         profiler.mark("Backend: Initializing EventModel End")
@@ -2314,6 +2323,26 @@ class Backend(QObject):
     def show_update_dialog(self):
         """Show the update dialog"""
         self.updateDialogRequested.emit()
+
+    @pyqtSlot()
+    def reboot_device(self):
+        """Reboot the device"""
+        logger.info("Reboot requested via UI")
+        try:
+            if platform.system() == 'Linux':
+                # Try standard reboot command with sudo
+                # Use sudo -n to avoid hanging if password is required (though it shouldn't be)
+                subprocess.run(['sudo', '-n', 'reboot'], check=True)
+            else:
+                logger.info("Reboot not supported on this platform (simulating)")
+        except Exception as e:
+            logger.error(f"Failed to reboot: {e}")
+            # Fallback to absolute path if standard reboot fails
+            try:
+                if platform.system() == 'Linux':
+                    subprocess.run(['sudo', '-n', '/usr/sbin/reboot'], check=True)
+            except Exception as e2:
+                logger.error(f"Fallback reboot failed: {e2}")
     def check_network_connectivity(self):
         """Check if we have active network connectivity (beyond just WiFi connection)"""
         return test_network_connectivity()

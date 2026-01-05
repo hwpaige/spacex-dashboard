@@ -677,18 +677,20 @@ configure_boot() {
     local config_file="/boot/firmware/config.txt"
     local cmdline_file="/boot/firmware/cmdline.txt"
     
-    # Silent boot settings with enhanced memory optimizations
-    # Ensure kernel messages do not race with Plymouth by moving console to tty3
-    if ! grep -q "console=tty3" "$cmdline_file"; then
-        sed -i 's/$/ console=tty3/' "$cmdline_file"
-    fi
-    # Remove logo.nologo if present (not needed and can interfere with some splash setups)
-    sed -i 's/ logo\.nologo//g' "$cmdline_file"
-    
-    # Display settings
-    if ! grep -q "hdmi_mode=87" "$config_file"; then
-        cat << EOF >> "$config_file"
+    # Display settings - use a marked block for idempotency and clean updates
+    log "Applying display settings to $config_file..."
+    # Clean up old block or any existing individual lines that might conflict
+    sed -i '/# BEGIN SPACEX DASHBOARD/,/# END SPACEX DASHBOARD/d' "$config_file"
+    # Also remove individual lines if they exist outside a block to avoid duplication
+    for key in hdmi_force_hotplug hdmi_ignore_edid hdmi_force_mode hdmi_drive max_framebuffer_height hdmi_group hdmi_mode hdmi_timings disable_splash; do
+        sed -i "/^$key=/d" "$config_file"
+    done
+    # Remove specific overlays that we are about to add
+    sed -i '/dtoverlay=vc4-kms-v3d/d' "$config_file"
 
+    cat << EOF >> "$config_file"
+
+# BEGIN SPACEX DASHBOARD
 # Custom display settings for Waveshare 11.9inch (1480x320 landscape, rotation via X11)
 hdmi_force_hotplug=1
 hdmi_ignore_edid=0xa5000080
@@ -702,11 +704,15 @@ dtoverlay=vc4-kms-v3d
 dtoverlay=vc4-kms-v3d,cma-128
 dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
+# END SPACEX DASHBOARD
 EOF
-    fi
     
-    # Initramfs settings
-    grep -q "^COMPRESS=lz4" /etc/initramfs-tools/initramfs.conf || echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
+    # Initramfs settings - ensure LZ4 compression is used
+    if grep -q "^#\?COMPRESS=" /etc/initramfs-tools/initramfs.conf; then
+        sed -i 's/^#\?COMPRESS=.*/COMPRESS=lz4/' /etc/initramfs-tools/initramfs.conf
+    else
+        echo "COMPRESS=lz4" >> /etc/initramfs-tools/initramfs.conf
+    fi
     
     # Add required modules
     for module in drm vc4; do
@@ -793,6 +799,16 @@ configure_plymouth() {
     # Copy the SpaceX logo
     cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
 
+    # Rotate and scale the logo 90 degrees CCW (270 degrees CW) to match the 11.9" screen orientation
+    # We also scale it down to fit nicely in the 1480x320 landscape view (max 500x160)
+    # We do this here using ImageMagick because kernel-level rotation can be unreliable
+    if command -v convert &> /dev/null; then
+        log "Rotating and scaling logo 90 degrees CCW..."
+        convert "$THEME_DIR/spacex_logo.png" -rotate 270 -resize 160x500 "$THEME_DIR/spacex_logo.png"
+    else
+        log "WARNING: ImageMagick 'convert' not found, logo will not be processed"
+    fi
+
     # Create theme configuration file
     cat > "$THEME_DIR/spacex.plymouth" << 'EOF'
 [Plymouth Theme]
@@ -805,33 +821,26 @@ ImageDir=/usr/share/plymouth/themes/spacex
 ScriptFile=/usr/share/plymouth/themes/spacex/spacex.script
 EOF
 
-    # Create the script file for the theme (simplified static version for reliability)
+    # Create the script file for the theme (standardized version)
     cat > "$THEME_DIR/spacex.script" << 'EOF'
-# SpaceX Plymouth Theme Script - Static logo display for reliability
+# SpaceX Plymouth Theme Script
+# Use the same background color as the app for visual consistency (#1a1e1e)
+Window.SetBackgroundTopColor(0.102, 0.118, 0.118);
+Window.SetBackgroundBottomColor(0.102, 0.118, 0.118);
 
-# Set background color to match Qt dark theme (#1c2526)
-Window.SetBackgroundTopColor(0.11, 0.145, 0.149);
-Window.SetBackgroundBottomColor(0.11, 0.145, 0.149);
-
-# Load the SpaceX logo
 logo.image = Image("spacex_logo.png");
-
-# Scale the logo to 300x300 pixels while preserving aspect ratio
-logo.width = 300;
-logo.height = 300;
-logo.image = logo.image.Scale(logo.width, logo.height);
+logo.sprite = Sprite(logo.image);
 
 # Center the logo on screen
-logo.x = Window.GetWidth() / 2 - logo.width / 2;
-logo.y = Window.GetHeight() / 2 - logo.height / 2;
+# The logo is pre-rotated 90 deg CCW and scaled down in the setup script for reliability
+logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
+logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2;
+logo.sprite.SetX(logo.x);
+logo.sprite.SetY(logo.y);
 
 fun refresh_callback ()
 {
-    # Clear screen with background color
-    Plymouth.FillScreen(0.11, 0.145, 0.149);
-
-    # Draw the centered logo
-    logo.image.Draw(logo.x, logo.y);
+    # Static logo, no animation needed
 }
 
 Plymouth.SetRefreshFunction(refresh_callback);
@@ -842,9 +851,17 @@ EOF
     chmod 755 "$THEME_DIR/spacex.script"
     chmod 644 "$THEME_DIR/spacex_logo.png"
 
-    # Set the custom SpaceX theme using update-alternatives
-    update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/spacex.plymouth" 200
-    update-alternatives --set default.plymouth "$THEME_DIR/spacex.plymouth"
+    # Set the default theme to our custom SpaceX theme
+    log "Setting default Plymouth theme to 'spacex'..."
+    if command -v plymouth-set-default-theme &> /dev/null; then
+        plymouth-set-default-theme spacex
+    elif [ -x /usr/sbin/plymouth-set-default-theme ]; then
+        /usr/sbin/plymouth-set-default-theme spacex
+    else
+        log "plymouth-set-default-theme not found, using update-alternatives for spacex..."
+        update-alternatives --install /usr/share/plymouth/themes/default.plymouth default.plymouth "$THEME_DIR/spacex.plymouth" 200
+        update-alternatives --set default.plymouth "$THEME_DIR/spacex.plymouth"
+    fi
 
     # Rebuild initramfs with Plymouth embedded
     if ! update-initramfs -u; then
@@ -853,18 +870,21 @@ EOF
         log "✓ Initramfs rebuilt successfully with Plymouth support"
     fi
 
-    # Copy initramfs to Raspberry Pi firmware directory (handle globs safely)
-    copied_any=false
-    for f in /boot/initrd.img-*-raspi; do
-        if [ -f "$f" ]; then
-            cp "$f" /boot/firmware/
-            copied_any=true
-        fi
-    done
-    if [ "$copied_any" = true ]; then
-        log "✓ Initramfs copied to /boot/firmware/"
+    # Copy initramfs to Raspberry Pi firmware directory (ensure it matches config.txt name)
+    # The generic name 'initrd.img' is expected by our config.txt configuration
+    local target_initrd="/boot/firmware/initrd.img"
+    if [ -f /boot/initrd.img ]; then
+        cp /boot/initrd.img "$target_initrd"
+        log "✓ Initramfs copied to $target_initrd"
     else
-        log "No matching initramfs images found to copy to /boot/firmware/"
+        # Fallback: copy the newest versioned raspi initrd
+        local newest_initrd=$(ls -t /boot/initrd.img-*-raspi 2>/dev/null | head -n 1)
+        if [ -n "$newest_initrd" ]; then
+            cp "$newest_initrd" "$target_initrd"
+            log "✓ Newest initramfs ($newest_initrd) copied to $target_initrd"
+        else
+            log "WARNING: No initramfs images found in /boot/ to copy to $target_initrd"
+        fi
     fi
 
     # Ensure firmware loads initramfs at boot (required for Plymouth to appear early)
@@ -884,15 +904,14 @@ EOF
     # Configure kernel command line for Plymouth
     CMDLINE_FILE="/boot/firmware/cmdline.txt"
     if [ -f "$CMDLINE_FILE" ]; then
-        # Remove any existing Plymouth-related parameters
-        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g; s/ logo\.nologo//g' "$CMDLINE_FILE"
-
-        # Remove serial console to prevent conflicts
-        sed -i 's/ console=serial0,[0-9]*//g' "$CMDLINE_FILE"
+        # Remove any existing Plymouth-related parameters and other potentially conflicting console settings
+        # We want a clean slate for quiet splash boot to ensure only our desired console is used
+        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g; s/ logo\.nologo//g; s/ rd\.systemd\.show_status=[a-z]*//g; s/ plymouth\.display-rotation=[0-9]//g; s/ fbcon=rotate:[0-9]//g' "$CMDLINE_FILE"
+        sed -i 's/ console=tty[0-9]//g; s/ console=serial0,[0-9]*//g' "$CMDLINE_FILE"
 
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
-            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles/' "$CMDLINE_FILE"
+            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false/' "$CMDLINE_FILE"
         fi
 
         # Ensure console is moved to tty3 (avoid kernel logs on Plymouth tty)
@@ -902,7 +921,11 @@ EOF
 
         # Ensure fbcon=map:0 for correct framebuffer mapping
         if ! grep -q "fbcon=map:0" "$CMDLINE_FILE"; then
-            sed -i 's/fbcon=map:[0-9]/fbcon=map:0/g' "$CMDLINE_FILE"
+            if grep -q "fbcon=map:[0-9]" "$CMDLINE_FILE"; then
+                sed -i 's/fbcon=map:[0-9]/fbcon=map:0/g' "$CMDLINE_FILE"
+            else
+                sed -i 's/$/ fbcon=map:0/' "$CMDLINE_FILE"
+            fi
         fi
 
         log "✓ Kernel command line updated for Plymouth"
@@ -925,14 +948,14 @@ EOF
 
     # Create Plymouth configuration
     mkdir -p /etc/plymouth
-    cat > /etc/plymouth/plymouthd.conf << 'EOF'
+    cat > /etc/plymouth/plymouthd.conf << EOF
 [Daemon]
 Theme=spacex
 ShowDelay=0
 DeviceTimeout=8
 EOF
 
-    log "✓ Plymouth configured with custom SpaceX theme"
+    log "✓ Plymouth configured with theme: spacex"
 
     # Make sure Plymouth units are enabled (usually pulled in by initramfs, but harmless to ensure)
     systemctl enable plymouth-start.service plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true
