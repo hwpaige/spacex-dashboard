@@ -186,6 +186,8 @@ CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
 CACHE_REFRESH_INTERVAL_WEATHER = 300     # 5 minutes (matches API)
 CACHE_REFRESH_INTERVAL_NARRATIVES = 900 # 15 minutes
 TRAJECTORY_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'trajectory_cache.json')
+SEED_CACHE_FILE_PREVIOUS = os.path.join(os.path.dirname(__file__), '..', 'cache', 'previous_launches_cache.json')
+SEED_CACHE_FILE_UPCOMING = os.path.join(os.path.dirname(__file__), '..', 'cache', 'upcoming_launches_cache.json')
 
 # Cache for F1 data - persistent location outside git repo
 CACHE_DIR_F1 = os.path.expanduser('~/.cache/spacex-dashboard')  # Persistent cache directory
@@ -340,9 +342,26 @@ def load_cache_from_file(cache_file):
         if os.path.exists(cache_file):
             with open(cache_file, 'r') as f:
                 cache_data = json.load(f)
-                cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp']).replace(tzinfo=pytz.UTC)
+                
+                # Check for mandatory 'data' key
+                if 'data' not in cache_data:
+                    logger.warning(f"Cache file {cache_file} missing 'data' key")
+                    return None
+                
+                # Handle timestamp (standard dashboard cache format)
+                if 'timestamp' in cache_data:
+                    try:
+                        cache_data['timestamp'] = datetime.fromisoformat(cache_data['timestamp'])
+                        if cache_data['timestamp'].tzinfo is None:
+                            cache_data['timestamp'] = cache_data['timestamp'].replace(tzinfo=pytz.UTC)
+                    except (ValueError, TypeError):
+                        cache_data['timestamp'] = datetime.fromtimestamp(os.path.getmtime(cache_file), pytz.UTC)
+                else:
+                    # Fallback for seed files (use file modification time)
+                    cache_data['timestamp'] = datetime.fromtimestamp(os.path.getmtime(cache_file), pytz.UTC)
+                
                 return cache_data
-    except (OSError, PermissionError, json.JSONDecodeError, ValueError) as e:
+    except (OSError, PermissionError, json.JSONDecodeError) as e:
         logger.warning(f"Failed to load cache from {cache_file}: {e}")
     return None
 
@@ -360,6 +379,7 @@ def save_cache_to_file(cache_file, data, timestamp):
 # Helpers for launch caches that use a single combined runtime cache
 def load_launch_cache(kind: str):
     """Load a launch cache for kind in {'previous','upcoming'} from the combined cache.
+    Falls back to kind-specific seed files in the project root if combined cache is missing.
     Returns a dict: {'data': list, 'timestamp': datetime} or None.
     """
     profiler.mark(f"load_launch_cache Start ({kind})")
@@ -367,12 +387,21 @@ def load_launch_cache(kind: str):
         if kind not in ('previous', 'upcoming'):
             raise ValueError("kind must be 'previous' or 'upcoming'")
         
+        # Try combined runtime cache first
         data = load_cache_from_file(RUNTIME_CACHE_FILE_LAUNCHES)
         if data and isinstance(data.get('data'), dict):
             kind_data = data['data'].get(kind)
-            if isinstance(kind_data, list):
-                profiler.mark(f"load_launch_cache End ({kind}: Success)")
+            if isinstance(kind_data, list) and len(kind_data) > 0:
+                profiler.mark(f"load_launch_cache End ({kind}: Success from runtime)")
                 return {'data': kind_data, 'timestamp': data['timestamp']}
+        
+        # Fallback to seed files
+        logger.info(f"Runtime {kind} cache unavailable or invalid; falling back to seed...")
+        seed_path = SEED_CACHE_FILE_PREVIOUS if kind == 'previous' else SEED_CACHE_FILE_UPCOMING
+        seed_data = load_cache_from_file(seed_path)
+        if seed_data and isinstance(seed_data.get('data'), list):
+            profiler.mark(f"load_launch_cache End ({kind}: Success from seed)")
+            return {'data': seed_data['data'], 'timestamp': seed_data['timestamp']}
         
         profiler.mark(f"load_launch_cache End ({kind}: Empty/Fail)")
         return None
@@ -636,13 +665,44 @@ def fetch_launches():
         response.raise_for_status()
         data = response.json()
         
+        api_upcoming = data.get('upcoming', [])
+        api_previous = data.get('previous', [])
+        
+        # Merge with existing history to avoid losing data due to API window limits
+        # Load current state (falls back to seed files if runtime is missing)
+        prev_cache = load_launch_cache('previous')
+        existing_previous = prev_cache['data'] if prev_cache else []
+        
+        # Use a map for deduplication, preferring API data for latest status
+        merged_prev_map = {l.get('id'): l for l in existing_previous if l.get('id')}
+        for l in api_previous:
+            launch_id = l.get('id')
+            if launch_id:
+                merged_prev_map[launch_id] = l
+        
+        # Sort merged previous launches by date descending
+        def _parse_net(l):
+            try:
+                dt = parse(l.get('net', ''))
+                return dt if dt.tzinfo else dt.replace(tzinfo=pytz.UTC)
+            except:
+                return datetime.min.replace(tzinfo=pytz.UTC)
+
+        merged_previous = sorted(merged_prev_map.values(), key=_parse_net, reverse=True)
+        
+        # For upcoming, we trust the API's current schedule
+        # but remove any that have moved into the previous list
+        prev_ids = {l.get('id') for l in merged_previous if l.get('id')}
+        merged_upcoming = [l for l in api_upcoming if l.get('id') not in prev_ids]
+        
         launch_data = {
-            'upcoming': data.get('upcoming', []),
-            'previous': data.get('previous', [])
+            'upcoming': merged_upcoming,
+            'previous': merged_previous
         }
         
         save_cache_to_file(RUNTIME_CACHE_FILE_LAUNCHES, launch_data, datetime.now(pytz.UTC))
-        logger.info(f"Fetched and cached {len(launch_data['upcoming'])} upcoming and {len(launch_data['previous'])} previous launches")
+        logger.info(f"Fetched {len(api_upcoming)} upcoming and {len(api_previous)} previous launches from API")
+        logger.info(f"Combined with history: total {len(launch_data['upcoming'])} upcoming and {len(launch_data['previous'])} previous")
         return launch_data
     except Exception as e:
         logger.error(f"Failed to fetch launches from new API: {e}")

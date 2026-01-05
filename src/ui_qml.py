@@ -14,6 +14,17 @@ Window {
     width: 1480
     height: 320
     title: "SpaceX Dashboard"
+
+    function getStatusColor(status) {
+        if (!status) return "#999999"
+        var s = status.toString().toUpperCase()
+        if (s === 'TBD' || s === 'TBC' || s.indexOf('DETERMINED') !== -1 || s.indexOf('CONFIRMED') !== -1) return "#FF9800"
+        if (s.indexOf('SUCCESS') !== -1 || s.indexOf('GO') !== -1) return "#4CAF50"
+        if (s.indexOf('PARTIAL FAILURE') !== -1) return "#FFC107"
+        if (s.indexOf('FAILURE') !== -1) return "#F44336"
+        if (s.indexOf('SCRUBBED') !== -1 || s.indexOf('CANCELLED') !== -1) return "#9E9E9E"
+        return "#F44336" // Default to red for other unknown statuses
+    }
     onActiveChanged: {
         if (active) {
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
@@ -1014,7 +1025,7 @@ Window {
                             Rectangle {
                                 width: statusText.implicitWidth + 16
                                 height: 18
-                                color: (model && model.status === "TBD") ? "#FF9800" : ((model && model.status) && (model.status === "Success" || model.status === "Go" || model.status === "Go for Launch")) ? "#4CAF50" : "#F44336"
+                                color: root.getStatusColor(model ? model.status : "")
                                 radius: 10
                                 anchors.top: parent.top
                                 anchors.right: parent.right
@@ -1051,12 +1062,6 @@ Window {
 
                             function getMonthName(date) {
                                 return date.toLocaleDateString(Qt.locale(), "MMMM yyyy")
-                            }
-
-                            function getStatusColor(status) {
-                                if (status === 'TBD') return "#FF9800"
-                                if (status === 'Success' || status === 'Go' || status === 'Go for Launch') return "#4CAF50"
-                                return "#F44336"
                             }
 
                             function showPopup(launches, dateVal) {
@@ -1118,10 +1123,10 @@ Window {
                                                 spacing: 5
                                                 Rectangle {
                                                    width: 10; height: 10; radius: 5
-                                                   color: calendarViewItem.getStatusColor(modelData.status)
+                                                   color: root.getStatusColor(modelData.status)
                                                    anchors.verticalCenter: parent.verticalCenter
                                                 }
-                                                Text { text: modelData.status; font.bold: true; font.pixelSize: 12; color: calendarViewItem.getStatusColor(modelData.status) }
+                                                Text { text: modelData.status; font.bold: true; font.pixelSize: 12; color: root.getStatusColor(modelData.status) }
                                             }
                                             Rectangle { width: parent.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
                                         }
@@ -1275,7 +1280,7 @@ Window {
                                                             radius: width/2
                                                             color: {
                                                                 if (dayLaunches.length > 0) {
-                                                                    return calendarViewItem.getStatusColor(dayLaunches[0].status)
+                                                                    return root.getStatusColor(dayLaunches[0].status)
                                                                 }
                                                                 // Today highlight
                                                                 var today = new Date()
@@ -1284,7 +1289,7 @@ Window {
                                                             }
                                                             opacity: dayLaunches.length > 0 ? 0.2 : 1.0
                                                             
-                                                            border.color: dayLaunches.length > 0 ? calendarViewItem.getStatusColor(dayLaunches[0].status) : "transparent"
+                                                            border.color: dayLaunches.length > 0 ? root.getStatusColor(dayLaunches[0].status) : "transparent"
                                                             border.width: dayLaunches.length > 0 ? 1 : 0
                                                         }
 
@@ -1299,7 +1304,7 @@ Window {
                                                                 model: Math.min(dayLaunches.length, 3) // Cap at 3
                                                                 Rectangle {
                                                                     width: 4; height: 4; radius: 2
-                                                                    color: calendarViewItem.getStatusColor(dayLaunches[index].status)
+                                                                    color: root.getStatusColor(dayLaunches[index].status)
                                                                 }
                                                             }
                                                             // Add small plus if more than 3? No space really.
@@ -3756,7 +3761,7 @@ Window {
                                                 text: launchTray.nextLaunch ? launchTray.nextLaunch.status.toUpperCase() : ""
                                                 font.pixelSize: 14
                                                 font.weight: Font.Medium
-                                                color: launchTray.nextLaunch && launchTray.nextLaunch.status.toLowerCase().includes("go") ? "#00FF88" : "#FF4444"
+                                                color: root.getStatusColor(launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
                                                 Layout.fillWidth: true
                                                 visible: !!launchTray.nextLaunch
                                             }
