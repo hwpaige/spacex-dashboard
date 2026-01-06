@@ -11,8 +11,8 @@ import QtWebEngine
 Window {
     id: root
     visible: true
-    width: 1480
-    height: 320
+    width: backend ? backend.width : 1480
+    height: backend ? backend.height : 320
     title: "SpaceX Dashboard"
 
     function getStatusColor(status) {

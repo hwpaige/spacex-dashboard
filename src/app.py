@@ -373,6 +373,8 @@ class Backend(QObject):
     updateDialogRequested = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
+    widthChanged = pyqtSignal()
+    heightChanged = pyqtSignal()
     # Globe spin/watchdog feature flag
     globeAutospinGuardChanged = pyqtSignal()
     # WiFi scanning progress notify (for UI spinner)
@@ -446,6 +448,8 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load launch trends cache: {e}")
         self._launches_by_date_cache = None # Cache for date-indexed launches
+        self._width = int(os.environ.get("DASHBOARD_WIDTH", 1480))
+        self._height = int(os.environ.get("DASHBOARD_HEIGHT", 320))
         try:
             cal_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CALENDAR)
             if cal_cache:
@@ -1057,6 +1061,14 @@ class Backend(QObject):
     @pyqtProperty(str, notify=videoUrlChanged)
     def videoUrl(self):
         return self._video_url
+
+    @pyqtProperty(int, notify=widthChanged)
+    def width(self):
+        return self._width
+
+    @pyqtProperty(int, notify=heightChanged)
+    def height(self):
+        return self._height
 
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
