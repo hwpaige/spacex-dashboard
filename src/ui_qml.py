@@ -54,15 +54,17 @@ Window {
     // Helper to enforce rounded corners inside WebEngine pages themselves.
     // This injects CSS into the page to round and clip at the document level,
     // which works even when the scene-graph clipping is ignored by Chromium.
-    function _injectRoundedCorners(webView, radiusPx) {
+    function _injectRoundedCorners(webView, radiusPx, customColor) {
         if (!webView || !webView.runJavaScript) return;
         if (typeof backend !== 'undefined' && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
+        var themeColor = customColor ? customColor : "transparent";
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
+                 "var themeColor='" + themeColor + "';" +
                  "var apply=function(){var h=document.documentElement, b=document.body;" +
-                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.background='transparent'; h.style.clipPath='inset(0 round '+r+'px)';}" +
-                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.background='transparent'; b.style.clipPath='inset(0 round '+r+'px)';}" +
+                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.clipPath='inset(0 round '+r+'px)'; h.style.backgroundColor=themeColor;}" +
+                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.clipPath='inset(0 round '+r+'px)'; b.style.backgroundColor=themeColor;}" +
                  "};" +
                  "apply();" +
                  "var i=0; var timer=setInterval(function(){try{apply(); if(++i>10) clearInterval(timer);}catch(e){clearInterval(timer);}}, 500);" +
@@ -525,8 +527,11 @@ Window {
                                         // Ensure the globe view fills all available space in the layout
                                         anchors.fill: parent
                                         url: globeUrl
-                                        // Transparent so the card's color shows through rounded edges after DOM rounding
+                                        // Use theme background color to avoid white corners during load
                                         backgroundColor: "transparent"
+                                        onBackgroundColorChanged: {
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8, "transparent")
+                                        }
                                         zoomFactor: 1.0
                                         layer.enabled: true
                                         layer.smooth: true
@@ -546,7 +551,7 @@ Window {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
 
                                                 // Enforce rounded corners inside the page itself
-                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
+                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8, "transparent")
                                                 // Ensure the plot card globe animation loop starts/resumes on initial load
                                                 try {
                                                     plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
@@ -1511,6 +1516,9 @@ Window {
                             layer.enabled: true
                             layer.smooth: true
                             backgroundColor: "transparent"
+                            onBackgroundColorChanged: {
+                                if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
+                            }
                             url: parent.visible ? root.currentVideoUrl : ""
                             settings.webGLEnabled: true
                             settings.accelerated2dCanvasEnabled: true
@@ -1528,13 +1536,13 @@ Window {
                                     console.log("YouTube WebEngineView load failed:", loadRequest.errorString);
                                     console.log("Error code:", loadRequest.errorCode);
                                     console.log("Error domain:", loadRequest.errorDomain);
-
+                                    
                                     // Handle specific error codes
                                     if (loadRequest.errorCode === 153) {
                                         console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
                                         console.log("This is a new YouTube policy requiring API client identification");
                                         console.log("Attempting to reload with proper headers...");
-
+                                        
                                         // Auto-retry for Referer header errors
                                         youtubeRetryTimer.restart();
                                     } else if (loadRequest.errorCode === 2) {
@@ -1552,7 +1560,8 @@ Window {
                                 } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                     console.log("YouTube WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
-                                    if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
+                                    // Use black background for video views to avoid white/gray corner artifacts
+                                    if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
                                     
                                     // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
                                     // We only apply this to X.com (Twitter) streams as requested.
@@ -4072,12 +4081,15 @@ Window {
                                 layer.enabled: true
                                 layer.smooth: true
                                 backgroundColor: "transparent"
+                                onBackgroundColorChanged: {
+                                    if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12, "transparent")
+                                }
                                 property bool _active: false
                                 url: _active ? "https://x.com/SpaceX" : ""
                                 zoomFactor: 0.6
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12)
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12, "transparent")
                                     }
                                 }
 
