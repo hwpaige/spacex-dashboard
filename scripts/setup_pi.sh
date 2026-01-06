@@ -1427,7 +1427,13 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+# Detect HDMI output and set rotation/resolution
+HDMI_OUT=$(xrandr | grep " connected" | cut -d" " -f1 | head -n1)
+if [ -n "$HDMI_OUT" ]; then
+    xrandr --output "$HDMI_OUT" --rotate left 2>&1 | tee -a ~/xrandr.log
+else
+    xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+fi
 
 # Set X settings
 xset s off

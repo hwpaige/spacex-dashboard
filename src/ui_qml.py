@@ -11,8 +11,10 @@ import QtWebEngine
 Window {
     id: root
     visible: true
-    width: backend ? backend.width : 1480
-    height: backend ? backend.height : 320
+    visibility: Window.FullScreen
+    // Use screen dimensions if available to avoid stretching; fallback to backend values
+    width: Screen.width > 0 ? Screen.width : (backend ? backend.width : 1480)
+    height: Screen.height > 0 ? Screen.height : (backend ? backend.height : 320)
     title: "SpaceX Dashboard"
 
     function getStatusColor(status) {
