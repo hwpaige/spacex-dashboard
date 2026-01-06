@@ -616,15 +616,13 @@ Type=simple
 User=$USER
 Environment=DISPLAY=:0
 Environment=QT_QPA_PLATFORM=xcb
-Environment=QT_ENABLE_HIGHDPI_SCALING=1
-Environment=QT_SCALE_FACTOR=2.0
 Environment=XAUTHORITY=/home/$USER/.Xauthority
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--force-device-scale-factor=2.0 --enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
-Environment=DASHBOARD_WIDTH=1920
-Environment=DASHBOARD_HEIGHT=550
+Environment=DASHBOARD_WIDTH=3840
+Environment=DASHBOARD_HEIGHT=1100
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
@@ -662,11 +660,9 @@ Wants=network-online.target
 Type=simple
 User=$USER
 Environment=QT_QPA_PLATFORM=eglfs
-Environment=QT_ENABLE_HIGHDPI_SCALING=1
-Environment=QT_SCALE_FACTOR=2.0
-Environment=DASHBOARD_WIDTH=1920
-Environment=DASHBOARD_HEIGHT=550
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--force-device-scale-factor=2.0 --enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
+Environment=DASHBOARD_WIDTH=3840
+Environment=DASHBOARD_HEIGHT=1100
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
 Restart=always
@@ -710,6 +706,8 @@ hdmi_group=2
 hdmi_mode=87
 hdmi_timings=3840 0 160 40 120 1100 0 10 3 10 0 0 0 60 0 297000000 3
 dtoverlay=vc4-kms-v3d
+dtoverlay=vc4-kms-v3d,cma-512
+dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 # END SPACEX DASHBOARD
 EOF
@@ -933,11 +931,6 @@ EOF
             else
                 sed -i 's/$/ fbcon=map:0/' "$CMDLINE_FILE"
             fi
-        fi
-
-        # Force resolution for KMS driver to avoid vertical squashing on bar displays
-        if ! grep -q "video=HDMI-A-1" "$CMDLINE_FILE"; then
-            sed -i 's/$/ video=HDMI-A-1:3840x1100@60/' "$CMDLINE_FILE"
         fi
 
         log "✓ Kernel command line updated for Plymouth"
@@ -1435,24 +1428,8 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-# Detect HDMI output and set resolution to 3840x1100
-HDMI_OUT=$(xrandr | grep " connected" | cut -d" " -f1 | head -n1)
-if [ -n "$HDMI_OUT" ]; then
-    echo "Detected HDMI output: $HDMI_OUT" >> ~/xrandr.log
-    # Define custom mode for DFR1125 if not present
-    # Timings: 3840 4000 4040 4160 (H) 1100 1110 1113 1123 (V) PCLK: 297MHz
-    if ! xrandr | grep -q "3840x1100"; then
-        xrandr --newmode "3840x1100_60" 297.00 3840 4000 4040 4160 1100 1110 1113 1123 +hsync +vsync 2>&1 | tee -a ~/xrandr.log
-        xrandr --addmode "$HDMI_OUT" "3840x1100_60" 2>&1 | tee -a ~/xrandr.log
-    fi
-    # Force the mode
-    xrandr --output "$HDMI_OUT" --mode "3840x1100_60" --rotate normal 2>&1 | tee -a ~/xrandr.log
-    # Also try the standard name just in case
-    xrandr --output "$HDMI_OUT" --mode 3840x1100 --rotate normal 2>/dev/null || true
-else
-    echo "No HDMI output detected, falling back to HDMI-1" >> ~/xrandr.log
-    xrandr --output HDMI-1 --rotate normal 2>&1 | tee -a ~/xrandr.log
-fi
+# No rotation needed for DFR1125
+xrandr --output HDMI-1 --rotate normal 2>&1 | tee -a ~/xrandr.log
 
 # Set X settings
 xset s off
@@ -1466,13 +1443,11 @@ unclutter -idle 0 -root &
 matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
-export DASHBOARD_WIDTH=1920
-export DASHBOARD_HEIGHT=550
+export DASHBOARD_WIDTH=3840
+export DASHBOARD_HEIGHT=1100
 export QT_QPA_PLATFORM=xcb
-export QT_ENABLE_HIGHDPI_SCALING=1
-export QT_SCALE_FACTOR=2.0
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS=\"--force-device-scale-factor=2.0 --enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"
+export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
