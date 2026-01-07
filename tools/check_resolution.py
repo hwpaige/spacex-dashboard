@@ -41,22 +41,12 @@ def check_resolution():
     print(f"--- Window Information ---")
     print(f"Requested Size: {width}x{height}")
     
-    def on_timeout():
-        actual_w = window.width()
-        actual_h = window.height()
-        print(f"Actual Window Size: {actual_w}x{actual_h}")
-        print(f"Actual Window Geometry: {window.geometry().width()}x{window.geometry().height()}")
-        
-        if actual_w != width or actual_h != height:
-            print("\n!!! WARNING: Render resolution does NOT match target resolution !!!")
-            print("This often happens on Raspberry Pi 5 with KMS when the mode is not forced.")
-            print("To fix this, please run:")
-            print("sudo bash ../tools/fix_resolution.sh")
-        
-        app.quit()
-
     # Show window briefly and then exit
-    QTimer.singleShot(500, on_timeout)
+    QTimer.singleShot(100, lambda: (
+        print(f"Actual Window Size: {window.width()}x{window.height()}"),
+        print(f"Actual Window Geometry: {window.geometry().width()}x{window.geometry().height()}"),
+        app.quit()
+    ))
     
     window.show()
     sys.exit(app.exec())
