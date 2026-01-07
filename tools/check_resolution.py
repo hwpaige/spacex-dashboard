@@ -4,6 +4,11 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt6.QtCore import Qt, QTimer
 
 def check_resolution():
+    # Apply QT_SCALE_FACTOR if DASHBOARD_SCALE is set
+    dashboard_scale = os.environ.get("DASHBOARD_SCALE", "1.0")
+    if dashboard_scale != "1.0":
+        os.environ["QT_SCALE_FACTOR"] = dashboard_scale
+
     app = QApplication(sys.argv)
     
     # Get primary screen
@@ -24,6 +29,7 @@ def check_resolution():
     print(f"--- Environment Variables ---")
     print(f"DASHBOARD_WIDTH: {os.environ.get('DASHBOARD_WIDTH', 'Not Set (Default 1480)')}")
     print(f"DASHBOARD_HEIGHT: {os.environ.get('DASHBOARD_HEIGHT', 'Not Set (Default 320)')}")
+    print(f"DASHBOARD_SCALE: {os.environ.get('DASHBOARD_SCALE', 'Not Set (Default 1.0)')}")
     print(f"QT_SCREEN_SCALE_FACTORS: {os.environ.get('QT_SCREEN_SCALE_FACTORS', 'Not Set')}")
     print(f"QT_SCALE_FACTOR: {os.environ.get('QT_SCALE_FACTOR', 'Not Set')}")
     
@@ -31,6 +37,17 @@ def check_resolution():
     window = QMainWindow()
     width = int(os.environ.get("DASHBOARD_WIDTH", 1480))
     height = int(os.environ.get("DASHBOARD_HEIGHT", 320))
+    
+    # Apply logical scaling if defined
+    try:
+        scale = float(os.environ.get("DASHBOARD_SCALE", "1.0"))
+        if scale != 1.0:
+            width = int(width / scale)
+            height = int(height / scale)
+            print(f"Applying logical scaling: {scale}x. Logical target: {width}x{height}")
+    except (ValueError, TypeError):
+        pass
+
     window.resize(width, height)
     window.setWindowTitle("Resolution Test")
     
@@ -41,12 +58,22 @@ def check_resolution():
     print(f"--- Window Information ---")
     print(f"Requested Size: {width}x{height}")
     
-    # Show window briefly and then exit
-    QTimer.singleShot(100, lambda: (
-        print(f"Actual Window Size: {window.width()}x{window.height()}"),
-        print(f"Actual Window Geometry: {window.geometry().width()}x{window.geometry().height()}"),
+    def on_timeout():
+        actual_w = window.width()
+        actual_h = window.height()
+        print(f"Actual Window Size: {actual_w}x{actual_h}")
+        print(f"Actual Window Geometry: {window.geometry().width()}x{window.geometry().height()}")
+        
+        if actual_w != width or actual_h != height:
+            print("\n!!! WARNING: Render resolution does NOT match target resolution !!!")
+            print("This often happens on Raspberry Pi 5 with KMS when the mode is not forced.")
+            print("To fix this, please run:")
+            print("sudo bash ../tools/fix_resolution.sh")
+        
         app.quit()
-    ))
+
+    # Show window briefly and then exit
+    QTimer.singleShot(500, on_timeout)
     
     window.show()
     sys.exit(app.exec())

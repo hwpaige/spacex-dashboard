@@ -623,6 +623,7 @@ Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
 Environment=DASHBOARD_WIDTH=3840
 Environment=DASHBOARD_HEIGHT=1100
+Environment=DASHBOARD_SCALE=2.0
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
@@ -723,6 +724,18 @@ EOF
     for module in drm vc4; do
         grep -qxF "$module" /etc/initramfs-tools/modules || echo "$module" >> /etc/initramfs-tools/modules
     done
+
+    # Force 4K Bar resolution in cmdline.txt for KMS
+    if [ -f "$cmdline_file" ]; then
+        log "Updating $cmdline_file with forced resolution..."
+        # Backup cmdline.txt
+        cp "$cmdline_file" "${cmdline_file}.bak"
+        # Remove any existing video= parameters
+        sed -i 's/ video=[^ ]*//g' "$cmdline_file"
+        # Add the forced resolution for HDMI-A-1 (standard Pi 5 port 0)
+        # We use 'D' to force digital and 'e' to force enable
+        sed -i 's/$/ video=HDMI-A-1:3840x1100M@60D/' "$cmdline_file"
+    fi
 }
 
 setup_repository() {
@@ -1428,8 +1441,12 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-# No rotation needed for DFR1125
-xrandr --output HDMI-1 --rotate normal 2>&1 | tee -a ~/xrandr.log
+# Force 3840x1100 resolution for DFR1125
+# Modeline: 3840x1100 @ 60Hz (297MHz pixel clock)
+MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
+xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
+xrandr --addmode HDMI-1 "3840x1100_60.00" 2>/dev/null || true
+xrandr --output HDMI-1 --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
 
 # Set X settings
 xset s off
@@ -1445,6 +1462,7 @@ matchbox-window-manager -use_titlebar no -use_cursor no &
 # Set environment variables
 export DASHBOARD_WIDTH=3840
 export DASHBOARD_HEIGHT=1100
+export DASHBOARD_SCALE=2.0
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"

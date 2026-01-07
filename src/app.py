@@ -450,6 +450,19 @@ class Backend(QObject):
         self._launches_by_date_cache = None # Cache for date-indexed launches
         self._width = int(os.environ.get("DASHBOARD_WIDTH", 1480))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", 320))
+        
+        # Support logical scaling for High DPI displays
+        try:
+            scale = float(os.environ.get("DASHBOARD_SCALE", "1.0"))
+            if scale != 1.0:
+                # If we are scaling the UI up (e.g. scale=2.0), we need to reduce the logical 
+                # window size so that the physical window (logical * scale) remains the same.
+                self._width = int(self._width / scale)
+                self._height = int(self._height / scale)
+                logger.info(f"Backend: Applying DASHBOARD_SCALE={scale}. Logical size: {self._width}x{self._height}")
+        except (ValueError, TypeError):
+            pass
+
         try:
             cal_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CALENDAR)
             if cal_cache:

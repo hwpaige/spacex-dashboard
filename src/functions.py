@@ -2701,6 +2701,13 @@ def setup_dashboard_environment():
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
     os.environ["QSG_RHI_BACKEND"] = "gl"
 
+    # High DPI Scaling support
+    dashboard_scale = os.environ.get("DASHBOARD_SCALE", "1.0")
+    if dashboard_scale != "1.0":
+        os.environ["QT_SCALE_FACTOR"] = dashboard_scale
+        # In Qt 6, high DPI scaling is usually on by default, 
+        # but setting QT_SCALE_FACTOR forces a specific global scale.
+
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
