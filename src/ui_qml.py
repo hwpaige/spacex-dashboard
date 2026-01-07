@@ -4125,5 +4125,58 @@ Window {
 
         }
     }
+
+    // Debug Resolution Overlay
+    Rectangle {
+        id: debugOverlay
+        anchors.bottom: parent.bottom
+        anchors.right: parent.right
+        anchors.margins: 20
+        width: 220
+        height: 80
+        color: "#AA000000"
+        radius: 10
+        border.color: "#44FFFFFF"
+        border.width: 1
+        visible: true // Always visible for testing
+        z: 9999
+
+        ColumnLayout {
+            anchors.fill: parent
+            anchors.margins: 10
+            spacing: 2
+            Text {
+                text: "RENDER RESOLUTION"
+                color: "#AAAAAA"
+                font.pixelSize: 10
+                font.bold: true
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Text {
+                text: root.width + " x " + root.height
+                color: "white"
+                font.pixelSize: 18
+                font.family: "D-DIN"
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Text {
+                text: "Target: " + (backend ? backend.width : "???") + "x" + (backend ? backend.height : "???")
+                color: "#CCCCCC"
+                font.pixelSize: 12
+                Layout.alignment: Qt.AlignHCenter
+            }
+            Text {
+                text: "Ratio: " + (root.width / root.height).toFixed(3)
+                color: "#CCCCCC"
+                font.pixelSize: 12
+                Layout.alignment: Qt.AlignHCenter
+            }
+        }
+        
+        MouseArea {
+            anchors.fill: parent
+            onClicked: debugOverlay.visible = false
+        }
+    }
 }
 """
