@@ -2693,11 +2693,7 @@ def setup_dashboard_environment():
             "--disable-gpu-driver-bug-workarounds "
             "--autoplay-policy=no-user-gesture-required "
             "--no-user-gesture-required-for-fullscreen "
-            "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,BackForwardCache,InterestFeedContentSuggestions "
-            "--disable-background-timer-throttling --disable-renderer-backgrounding "
-            "--num-raster-threads=1 --disable-software-rasterizer --memory-pressure-off "
-            "--disable-dev-shm-usage --disable-gpu-vsync --disable-smooth-scrolling "
-            "--enable-zero-copy --disable-reading-from-canvas"
+            "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         )
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --enable-webgl --disable-web-security"
