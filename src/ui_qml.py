@@ -415,8 +415,10 @@ Window {
                 clip: false
                 visible: !isWindyFullscreen
                 // Toggle to switch between plot and globe within this card
-                // Default to globe view on app load
-                property bool plotCardShowsGlobe: true
+                // On high resolution displays, globe is shown in launch card instead
+                property bool isHighResolution: backend && (backend.width > 1920 || backend.height > 1080)
+                // Default to globe view on app load, but not on high resolution displays
+                property bool plotCardShowsGlobe: !isHighResolution
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
                 property real toggleAbsX: 0
                 property real toggleAbsY: 0
@@ -642,12 +644,14 @@ Window {
                             }
 
                             // Toggle button between Plot and Globe (matches bar button style)
-                            Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
+                            // Hidden on high resolution displays where globe is in launch card
+                            Item { Layout.preferredWidth: plotCard.isHighResolution ? 0 : 8; Layout.preferredHeight: 1 } // spacer
                             Rectangle {
                                 id: globeToggle
-                                Layout.preferredWidth: 40
+                                visible: !plotCard.isHighResolution
+                                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 40
                                 Layout.preferredHeight: 28
-                                width: 40
+                                width: plotCard.isHighResolution ? 0 : 40
                                 height: 28
                                 radius: 14
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
@@ -692,7 +696,7 @@ Window {
                     Rectangle {
                         id: globeOverlayToggle
                         parent: plotCard
-                        visible: backend && plotCard.plotCardShowsGlobe
+                        visible: backend && plotCard.plotCardShowsGlobe && !plotCard.isHighResolution
                         x: plotCard.toggleAbsX
                         y: plotCard.toggleAbsY
                         width: 40
@@ -958,9 +962,63 @@ Window {
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
 
+                // Check if this is a high resolution display (width > 1920 or height > 1080)
+                property bool isHighResolution: backend && (backend.width > 1920 || backend.height > 1080)
+
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
+
+                    // On high resolution displays, show globe above launch list
+                    Loader {
+                        id: launchGlobeLoader
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: parent.height * 0.4  // Globe takes 40% of height
+                        active: launchCard.isHighResolution
+                        visible: active
+
+                        sourceComponent: Item {
+                            // Globe view for launch card
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                radius: 6
+                                clip: true
+
+                                WebEngineView {
+                                    id: launchGlobeView
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    url: globeUrl
+                                    backgroundColor: "transparent"
+                                    zoomFactor: 1.0
+                                    settings.javascriptCanAccessClipboard: false
+                                    settings.allowWindowActivationFromJavaScript: false
+                                    onContextMenuRequested: function(request) { request.accepted = true }
+
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            var trajectoryData = backend.get_launch_trajectory();
+                                            if (trajectoryData) {
+                                                launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                            }
+                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            // Enforce rounded corners
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, "transparent")
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: backend
+                                        function onThemeChanged() {
+                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     StackLayout {
                         Layout.fillWidth: true
