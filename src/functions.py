@@ -1556,27 +1556,34 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
 
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
-    Get trajectory data for the next upcoming launch.
+    Get trajectory data for the next upcoming launch or a specific launch.
+    If upcoming_launches is a dict, treat it as a single launch object.
+    If upcoming_launches is a list, use the first item (existing behavior).
     Standalone version of Backend.get_launch_trajectory.
     """
     profiler.mark("get_launch_trajectory_data Start")
     logger.info("get_launch_trajectory_data called")
     
-    # If no upcoming launches, try to use recent launches for demo
-    display_launches = upcoming_launches
-    if not display_launches:
-        logger.info("No upcoming launches, trying recent launches")
-        if previous_launches:
-            recent_launches = previous_launches[:5]
-            if recent_launches:
-                display_launches = [{
-                    'mission': launch.get('mission', 'Unknown'),
-                    'pad': launch.get('pad', 'Cape Canaveral'),
-                    'orbit': launch.get('orbit', 'LEO'),
-                    'net': launch.get('net', ''),
-                    'landing_type': launch.get('landing_type')
-                } for launch in recent_launches]
-                logger.info(f"Using {len(display_launches)} recent launches for demo")
+    # Handle single launch object (dict) vs list of launches
+    if isinstance(upcoming_launches, dict):
+        # Single launch object
+        display_launches = [upcoming_launches]
+    else:
+        # List of launches (existing behavior)
+        display_launches = upcoming_launches
+        if not display_launches:
+            logger.info("No upcoming launches, trying recent launches")
+            if previous_launches:
+                recent_launches = previous_launches[:5]
+                if recent_launches:
+                    display_launches = [{
+                        'mission': launch.get('mission', 'Unknown'),
+                        'pad': launch.get('pad', 'Cape Canaveral'),
+                        'orbit': launch.get('orbit', 'LEO'),
+                        'net': launch.get('net', ''),
+                        'landing_type': launch.get('landing_type')
+                    } for launch in recent_launches]
+                    logger.info(f"Using {len(display_launches)} recent launches for demo")
 
     if not display_launches:
         logger.info("No launches available at all")

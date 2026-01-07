@@ -373,6 +373,7 @@ class Backend(QObject):
     updateDialogRequested = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
+    selectedLaunchChanged = pyqtSignal()
     widthChanged = pyqtSignal()
     heightChanged = pyqtSignal()
     # Globe spin/watchdog feature flag
@@ -451,7 +452,7 @@ class Backend(QObject):
         if platform.system() == 'Windows':
             default_w, default_h, default_s = 1480, 320, "1.0"
         else:
-            default_w, default_h, default_s = 3840, 1100, "2.0"
+            default_w, default_h, default_s = 320, 1480, "1.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
@@ -523,6 +524,7 @@ class Backend(QObject):
 
         # Initialize videoUrl to a safe default while HTTP server starts
         self._video_url = ""
+        self._selected_launch_mission = ""  # Track which launch is currently selected
         self._http_ready_timer = QTimer(self)
         self._http_ready_timer.setInterval(100)
         self._http_ready_timer.timeout.connect(self._check_http_server_ready)
@@ -1081,6 +1083,10 @@ class Backend(QObject):
     def videoUrl(self):
         return self._video_url
 
+    @pyqtProperty(str, notify=selectedLaunchChanged)
+    def selectedLaunch(self):
+        return self._selected_launch_mission
+
     @pyqtProperty(int, notify=widthChanged)
     def width(self):
         return self._width
@@ -1350,9 +1356,24 @@ class Backend(QObject):
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
-        """Get trajectory data for the next upcoming launch"""
+        """Get trajectory data for the next upcoming launch or currently selected launch"""
+        # If we have a specific trajectory loaded, return that
+        if hasattr(self, '_current_trajectory') and self._current_trajectory:
+            logger.info("get_launch_trajectory: Returning current selected launch trajectory")
+            return self._current_trajectory
+        
+        # Otherwise, get the default next launch trajectory
         upcoming = self.get_upcoming_launches()
         previous = self._launch_data.get('previous', [])
+        
+        # Set selected launch to the next upcoming launch if available
+        if upcoming and len(upcoming) > 0:
+            next_launch = upcoming[0]
+            mission = next_launch.get('mission', '')
+            if mission and self._selected_launch_mission != mission:
+                self._selected_launch_mission = mission
+                self.selectedLaunchChanged.emit()
+                logger.info(f"get_launch_trajectory: Set selected launch to next upcoming: {mission}")
         
         # Use the centralized trajectory calculator in functions.py
         result = get_launch_trajectory_data(upcoming, previous)
@@ -1363,6 +1384,67 @@ class Backend(QObject):
         else:
             logger.info("get_launch_trajectory: Returning None")
         return result
+
+    @pyqtSlot(str, str, str, str)
+    def loadLaunchTrajectory(self, mission, pad, orbit, landing_type):
+        """Load trajectory data for a specific launch"""
+        try:
+            logger.info(f"Loading trajectory for launch: {mission} from {pad}")
+            
+            # Set the selected launch for visual indication
+            if self._selected_launch_mission != mission:
+                self._selected_launch_mission = mission
+                self.selectedLaunchChanged.emit()
+            
+            # Create a launch object for the trajectory calculator
+            launch_data = {
+                'mission': mission,
+                'pad': pad,
+                'orbit': orbit,
+                'landing_type': landing_type
+            }
+            
+            # Use the trajectory calculator with this specific launch
+            result = get_launch_trajectory_data(launch_data)
+            
+            if result:
+                # Store the trajectory data for the globe
+                self._current_trajectory = result
+                logger.info(f"Trajectory loaded for {mission}: {len(result.get('trajectory', []))} points")
+                
+                # Emit signal to update globe
+                self.updateGlobeTrajectory.emit()
+            else:
+                logger.warning(f"Failed to generate trajectory for {mission}")
+                
+        except Exception as e:
+            logger.error(f"Error loading trajectory for {mission}: {e}")
+
+    @pyqtSlot(str)
+    def loadLaunchVideo(self, video_url):
+        """Load video for a specific launch, or clear if no video"""
+        try:
+            # Always update the video URL, even if empty (to clear the view)
+            if video_url and video_url.strip():
+                # Convert YouTube watch URLs to embed URLs
+                if 'youtube.com/watch?v=' in video_url:
+                    video_id = video_url.split('v=')[1].split('&')[0]
+                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+                elif 'youtu.be/' in video_url:
+                    video_id = video_url.split('youtu.be/')[1].split('?')[0]
+                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+                
+                logger.info(f"Loading video: {video_url}")
+            else:
+                logger.info("Clearing video view (no video for this launch)")
+                video_url = ""  # Ensure it's an empty string
+            
+            # Update the video URL which will be picked up by the YouTube WebEngine view
+            if self._video_url != video_url:
+                self._video_url = video_url
+                self.videoUrlChanged.emit()
+        except Exception as e:
+            logger.error(f"Error loading video: {e}")
 
     @pyqtSlot(bool)
     def setBootMode(self, val):

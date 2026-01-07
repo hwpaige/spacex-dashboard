@@ -416,7 +416,7 @@ Window {
                 visible: !isWindyFullscreen && !plotCard.isHighResolution
                 // Toggle to switch between plot and globe within this card
                 // On high resolution displays, globe is shown in launch card instead
-                property bool isHighResolution: backend && (backend.width >= 1920 || backend.height >= 1080)
+                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
                 // Default to globe view on app load, but not on high resolution displays
                 property bool plotCardShowsGlobe: !isHighResolution
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
@@ -962,8 +962,8 @@ Window {
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
 
-                // Check if this is a high resolution display (width >= 1920 or height >= 1080)
-                property bool isHighResolution: backend && (backend.width >= 1920 || backend.height >= 1080)
+                // Check if this is a high resolution display (width >= 1920 and height >= 1080)
+                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1041,7 +1041,16 @@ Window {
                             width: ListView.view.width
                             height: model && model.isGroup ? 30 : launchColumn.height + 20
 
-                            Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
+                            Rectangle { 
+                                anchors.fill: parent; 
+                                color: (model && model.isGroup) ? "transparent" : 
+                                       (backend.selectedLaunch === model.mission ? 
+                                        (backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
+                                        (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
+                                radius: (model && model.isGroup) ? 0 : 6;
+                                border.width: (model && !model.isGroup && backend.selectedLaunch === model.mission) ? 2 : 0;
+                                border.color: backend.theme === "dark" ? "#6a8a8a" : "#80a0a0";
+                            }
 
                             Text {
                                 anchors.left: parent.left
@@ -1123,6 +1132,24 @@ Window {
                                     color: "white"
                                     anchors.centerIn: parent
                                 }
+                            }
+
+                            // Click handler for launch selection
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !!(model && !model.isGroup)
+                                onClicked: {
+                                    if (model && !model.isGroup) {
+                                        // Load trajectory for this specific launch
+                                        backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
+                                        
+                                        // Load video for this launch if available, otherwise clear the video view
+                                        backend.loadLaunchVideo(model.videoUrl || "")
+                                        
+                                        console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
+                                    }
+                                }
+                                cursorShape: Qt.PointingHandCursor
                             }
 
                         }
@@ -1571,7 +1598,20 @@ Window {
                             onBackgroundColorChanged: {
                                 if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
                             }
-                            url: parent.visible ? root.currentVideoUrl : ""
+                            url: ""
+
+                            // Explicitly load URL when backend video URL changes
+                            Connections {
+                                target: backend
+                                function onVideoUrlChanged() {
+                                    if (backend.videoUrl && backend.videoUrl !== "") {
+                                        youtubeView.loadUrl(backend.videoUrl)
+                                    } else {
+                                        youtubeView.loadHtml("<html><body></body></html>")
+                                    }
+                                }
+                            }
+
                             settings.webGLEnabled: true
                             settings.accelerated2dCanvasEnabled: true
                             settings.allowRunningInsecureContent: true
@@ -1671,6 +1711,17 @@ Window {
                                     youtubeView.reload();
                                 }
                             }
+                        }
+
+                        // Show "No Video" when there's no video URL
+                        Text {
+                            anchors.centerIn: parent
+                            text: "No Video"
+                            font.pixelSize: 24
+                            font.bold: true
+                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                            visible: !root.currentVideoUrl || root.currentVideoUrl === ""
+                            z: 1
                         }
 
                         // Overlay for quick-action buttons floating on top of the video
