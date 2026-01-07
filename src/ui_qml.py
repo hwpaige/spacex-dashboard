@@ -405,7 +405,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
@@ -413,7 +413,7 @@ Window {
                        : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                 radius: 8
                 clip: false
-                visible: !isWindyFullscreen
+                visible: !isWindyFullscreen && !plotCard.isHighResolution
                 // Toggle to switch between plot and globe within this card
                 // On high resolution displays, globe is shown in launch card instead
                 property bool isHighResolution: backend && (backend.width >= 1920 || backend.height >= 1080)
