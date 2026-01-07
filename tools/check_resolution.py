@@ -3,9 +3,17 @@ import os
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt6.QtCore import Qt, QTimer
 
+import platform
+
 def check_resolution():
-    # Apply QT_SCALE_FACTOR if DASHBOARD_SCALE is set
-    dashboard_scale = os.environ.get("DASHBOARD_SCALE", "1.0")
+    # Platform-aware defaults
+    if platform.system() == "Windows":
+        default_w, default_h, default_s = 1480, 320, "1.0"
+    else:
+        default_w, default_h, default_s = 3840, 1100, "2.0"
+
+    # Apply QT_SCALE_FACTOR if DASHBOARD_SCALE is set or use default
+    dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_s)
     if dashboard_scale != "1.0":
         os.environ["QT_SCALE_FACTOR"] = dashboard_scale
 
@@ -27,20 +35,20 @@ def check_resolution():
     print(f"Physical DPI: {physical_dpi}")
     print(f"Device Pixel Ratio: {device_pixel_ratio}")
     print(f"--- Environment Variables ---")
-    print(f"DASHBOARD_WIDTH: {os.environ.get('DASHBOARD_WIDTH', 'Not Set (Default 1480)')}")
-    print(f"DASHBOARD_HEIGHT: {os.environ.get('DASHBOARD_HEIGHT', 'Not Set (Default 320)')}")
-    print(f"DASHBOARD_SCALE: {os.environ.get('DASHBOARD_SCALE', 'Not Set (Default 1.0)')}")
+    print(f"DASHBOARD_WIDTH: {os.environ.get('DASHBOARD_WIDTH', f'Not Set (Default {default_w})')}")
+    print(f"DASHBOARD_HEIGHT: {os.environ.get('DASHBOARD_HEIGHT', f'Not Set (Default {default_h})')}")
+    print(f"DASHBOARD_SCALE: {os.environ.get('DASHBOARD_SCALE', f'Not Set (Default {default_s})')}")
     print(f"QT_SCREEN_SCALE_FACTORS: {os.environ.get('QT_SCREEN_SCALE_FACTORS', 'Not Set')}")
     print(f"QT_SCALE_FACTOR: {os.environ.get('QT_SCALE_FACTOR', 'Not Set')}")
     
     # Create a small window to check actual rendering
     window = QMainWindow()
-    width = int(os.environ.get("DASHBOARD_WIDTH", 1480))
-    height = int(os.environ.get("DASHBOARD_HEIGHT", 320))
+    width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
+    height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
     
     # Apply logical scaling if defined
     try:
-        scale = float(os.environ.get("DASHBOARD_SCALE", "1.0"))
+        scale = float(os.environ.get("DASHBOARD_SCALE", default_s))
         if scale != 1.0:
             width = int(width / scale)
             height = int(height / scale)

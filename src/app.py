@@ -447,13 +447,19 @@ class Backend(QObject):
                 logger.info("Backend: Loaded launch trends cache from disk")
         except Exception as e:
             logger.debug(f"Failed to load launch trends cache: {e}")
-        self._launches_by_date_cache = None # Cache for date-indexed launches
-        self._width = int(os.environ.get("DASHBOARD_WIDTH", 1480))
-        self._height = int(os.environ.get("DASHBOARD_HEIGHT", 320))
+        # Platform-aware defaults for resolution and scaling
+        if platform.system() == 'Windows':
+            default_w, default_h, default_s = 1480, 320, "1.0"
+        else:
+            default_w, default_h, default_s = 3840, 1100, "2.0"
+
+        self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
+        self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
         
         # Support logical scaling for High DPI displays
         try:
-            scale = float(os.environ.get("DASHBOARD_SCALE", "1.0"))
+            scale_str = os.environ.get("DASHBOARD_SCALE", default_s)
+            scale = float(scale_str)
             if scale != 1.0:
                 # If we are scaling the UI up (e.g. scale=2.0), we need to reduce the logical 
                 # window size so that the physical window (logical * scale) remains the same.
