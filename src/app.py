@@ -2858,35 +2858,8 @@ if __name__ == '__main__':
     except Exception as e:
         print(f"QtWebEngineQuick.initialize() notice: {e}")
 
-    # Configure High-DPI scaling for Linux. 
-    # For high-PPI bar displays, we want scaling enabled to avoid tiny UI, 
-    # but we allow environment variables (like QT_SCALE_FACTOR) to take precedence.
-    if platform.system() != 'Windows':
-        if "QT_ENABLE_HIGHDPI_SCALING" not in os.environ:
-            os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
-        if "QT_AUTO_SCREEN_SCALE_FACTOR" not in os.environ:
-            # Auto-scaling can be problematic on some Pi kernels if EDID is invalid.
-            # If the user hasn't specified a scale factor, we'll enable auto-detection.
-            if "QT_SCALE_FACTOR" not in os.environ and "QT_SCREEN_SCALE_FACTORS" not in os.environ:
-                os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
-            else:
-                os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
-
     profiler.mark("QApplication Initialization")
-    # For Qt 6, set rounding policy before creating QApplication
-    try:
-        QApplication.setHighDpiScaleFactorRoundingPolicy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
-    except Exception:
-        pass
-
     app = QApplication(sys.argv)
-    
-    # Log screen diagnostics to help debug resolution issues
-    if platform.system() != 'Windows':
-        for i, screen in enumerate(app.screens()):
-            logger.info(f"BOOT: Screen {i} ({screen.name()}): {screen.size().width()}x{screen.size().height()} "
-                        f"at {screen.geometry().x()},{screen.geometry().y()} "
-                        f"DPI: {screen.physicalDotsPerInch()} Depth: {screen.depth()}")
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
