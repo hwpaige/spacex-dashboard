@@ -14,6 +14,14 @@ Window {
     width: backend ? backend.width : 1480
     height: backend ? backend.height : 320
     title: "SpaceX Dashboard"
+    // Ensure no scaling is applied to the window content
+    // Qt should respect the exact pixel dimensions
+    Component.onCompleted: {
+        console.log("Window dimensions: " + width + "x" + height)
+        console.log("Screen dimensions: " + Screen.width + "x" + Screen.height)
+        console.log("Device pixel ratio: " + Screen.devicePixelRatio)
+        console.log("Qt platform: " + Qt.platform.os)
+    }
 
     function getStatusColor(status) {
         if (!status) return "#999999"

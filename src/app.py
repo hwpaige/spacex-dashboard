@@ -2960,6 +2960,10 @@ if __name__ == '__main__':
         print(f"QtWebEngineQuick.initialize() notice: {e}")
 
     profiler.mark("QApplication Initialization")
+    # Set environment variables to disable Qt high DPI scaling before creating QApplication
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
+    os.environ["QT_SCALE_FACTOR"] = "1"
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
