@@ -1794,7 +1794,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
 
     target_r = compute_orbit_radius(orbit)
-    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 360)
+    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 180)  # Reduced from 360 for performance
     for p in orbit_path:
         p['r'] = target_r
     

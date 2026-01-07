@@ -540,19 +540,19 @@ class Backend(QObject):
         self._trajectory_recompute_timer = QTimer(self)
         self._trajectory_recompute_timer.setSingleShot(True)
         try:
-            self._trajectory_recompute_timer.setInterval(250)
+            self._trajectory_recompute_timer.setInterval(2000)  # Increased from 250ms for performance
         except Exception:
             pass
         self._trajectory_compute_inflight = False
         self._trajectory_emit_timer = QTimer(self)
         self._trajectory_emit_timer.setSingleShot(True)
         try:
-            self._trajectory_emit_timer.setInterval(120)
+            self._trajectory_emit_timer.setInterval(500)  # Increased from 120ms for performance
         except Exception:
             pass
 
         self._time_timer = QTimer(self)
-        self._time_timer.setInterval(1000)
+        self._time_timer.setInterval(5000)  # Increased from 1000ms for performance - time display updates every 5 seconds
         self._time_timer.timeout.connect(self.update_time)
         self._time_timer.start()
 
