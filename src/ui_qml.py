@@ -416,7 +416,7 @@ Window {
                 visible: !isWindyFullscreen
                 // Toggle to switch between plot and globe within this card
                 // On high resolution displays, globe is shown in launch card instead
-                property bool isHighResolution: backend && (backend.width > 1920 || backend.height > 1080)
+                property bool isHighResolution: backend && (backend.width >= 1920 || backend.height >= 1080)
                 // Default to globe view on app load, but not on high resolution displays
                 property bool plotCardShowsGlobe: !isHighResolution
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
@@ -962,8 +962,8 @@ Window {
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
 
-                // Check if this is a high resolution display (width > 1920 or height > 1080)
-                property bool isHighResolution: backend && (backend.width > 1920 || backend.height > 1080)
+                // Check if this is a high resolution display (width >= 1920 or height >= 1080)
+                property bool isHighResolution: backend && (backend.width >= 1920 || backend.height >= 1080)
 
                 ColumnLayout {
                     anchors.fill: parent
