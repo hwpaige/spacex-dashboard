@@ -445,15 +445,15 @@ setup_python_environment() {
 
 create_debug_script() {
     log "Creating debug script..."
-    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/debug_x.sh
+    sudo -u "$USER" tee "$HOME_DIR/debug_x.sh" > /dev/null << 'EOF'
 #!/bin/bash
 echo '=== System Status ==='
-echo \"User: \$(whoami) | Display: \$DISPLAY\"
-echo \"Python: \$(python3 --version 2>/dev/null || echo 'Not found')\"
+echo "User: $(whoami) | Display: $DISPLAY"
+echo "Python: $(python3 --version 2>/dev/null || echo 'Not found')"
 echo ''
 echo '=== Package Tests ==='
-python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print(\"System packages working\")' 2>/dev/null || echo 'System Python failed'
-python3 -c 'import fastf1; print(\"fastf1 available\")' 2>/dev/null || echo 'fastf1 not available'
+python3 -c 'import PyQt6, pyqtgraph, requests, pandas, psutil; print("System packages working")' 2>/dev/null || echo 'System Python failed'
+python3 -c 'import fastf1; print("fastf1 available")' 2>/dev/null || echo 'fastf1 not available'
 echo ''
 echo '=== Qt/GPU Debug Info ==='
 echo 'Qt6 Platform Plugins:'
@@ -463,27 +463,27 @@ echo 'Qt6 WebEngine Libraries:'
 ls -la /usr/lib/aarch64-linux-gnu/ | grep qt6webengine 2>/dev/null || echo 'Qt6 WebEngine libs not found'
 echo ''
 echo 'EGL/GLES Libraries:'
-ls -la /usr/lib/aarch64-linux-gnu/ | grep -E \"egl\|gles\" 2>/dev/null || echo 'EGL/GLES libs not found'
+ls -la /usr/lib/aarch64-linux-gnu/ | grep -E "egl|gles" 2>/dev/null || echo 'EGL/GLES libs not found'
 echo ''
 echo 'Mesa Libraries:'
 ls -la /usr/lib/aarch64-linux-gnu/ | grep mesa 2>/dev/null || echo 'Mesa libs not found'
 echo ''
 echo 'Environment Variables:'
-echo \"QT_QPA_PLATFORM: \$QT_QPA_PLATFORM\"
-echo \"QTWEBENGINE_CHROMIUM_FLAGS: \$QTWEBENGINE_CHROMIUM_FLAGS\"
-echo \"EGL_PLATFORM: \$EGL_PLATFORM\"
-echo \"GALLIUM_DRIVER: \$GALLIUM_DRIVER\"
-echo \"LIBGL_ALWAYS_SOFTWARE: \$LIBGL_ALWAYS_SOFTWARE\"
+echo "QT_QPA_PLATFORM: $QT_QPA_PLATFORM"
+echo "QTWEBENGINE_CHROMIUM_FLAGS: $QTWEBENGINE_CHROMIUM_FLAGS"
+echo "EGL_PLATFORM: $EGL_PLATFORM"
+echo "GALLIUM_DRIVER: $GALLIUM_DRIVER"
+echo "LIBGL_ALWAYS_SOFTWARE: $LIBGL_ALWAYS_SOFTWARE"
 echo ''
 echo '=== GPU Device Info ==='
 echo 'GPU devices:'
 ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
 echo ''
 echo 'GPU memory info:'
-cat /proc/meminfo | grep -E \"MemTotal\|MemAvailable\|Buffers\|Cached\" 2>/dev/null || echo 'Memory info unavailable'
+cat /proc/meminfo | grep -E "MemTotal|MemAvailable|Buffers|Cached" 2>/dev/null || echo 'Memory info unavailable'
 echo ''
 echo '=== Qt Platform Test ==='
-python3 -c \"
+python3 -c "
 import os
 os.environ['QT_QPA_PLATFORM'] = 'xcb'
 os.environ['QT_DEBUG_PLUGINS'] = '1'
@@ -495,10 +495,10 @@ try:
     app.quit()
 except Exception as e:
     print('Qt xcb platform failed: ' + str(e))
-\" 2>/dev/null
+" 2>/dev/null
 echo ''
 echo '=== WebEngine Test ==='
-python3 -c \"
+python3 -c "
 import os
 os.environ['QT_QPA_PLATFORM'] = 'xcb'
 os.environ['QTWEBENGINE_CHROMIUM_FLAGS'] = '--disable-gpu --no-sandbox'
@@ -512,7 +512,7 @@ try:
     app.quit()
 except Exception as e:
     print('Qt WebEngine failed: ' + str(e))
-\" 2>/dev/null
+" 2>/dev/null
 echo ''
 echo '=== Plymouth Status ==='
 echo 'Plymouth version:'
@@ -535,7 +535,7 @@ echo 'Testing SpaceX API...'
 curl -s --max-time 10 'https://launch-narrative-api-dafccc521fb8.herokuapp.com/launches' | head -c 200 && echo -e '\nAPI reachable' || echo 'API unreachable'
 echo ''
 echo 'Testing Python requests to API with SSL debugging...'
-python3 -c \"
+python3 -c "
 import requests
 import ssl
 print('SSL version:', ssl.OPENSSL_VERSION)
@@ -549,20 +549,20 @@ except Exception as e:
         print('Non-SSL request successful:', response.status_code)
     except Exception as e2:
         print('Non-SSL request also failed:', str(e2))
-\" 2>/dev/null || echo 'Python SSL test failed'
+" 2>/dev/null || echo 'Python SSL test failed'
 echo ''
 echo '=== GPU/DMA Buffer Status ==='
-echo \"GPU devices:\"
+echo "GPU devices:"
 ls -la /dev/dri/ 2>/dev/null || echo 'No GPU devices found'
-echo \"DMA heap:\"
+echo "DMA heap:"
 ls -la /dev/dma_heap/ 2>/dev/null || echo 'No DMA heap found'
-echo \"GPU memory info:\"
-cat /proc/meminfo | grep -E \"MemTotal\|MemAvailable\|Buffers\|Cached\|SwapTotal\|SwapFree\" 2>/dev/null || echo 'Memory info unavailable'
-echo \"System memory usage:\"
+echo "GPU memory info:"
+cat /proc/meminfo | grep -E "MemTotal|MemAvailable|Buffers|Cached|SwapTotal|SwapFree" 2>/dev/null || echo 'Memory info unavailable'
+echo "System memory usage:"
 free -h 2>/dev/null || echo 'free command not available'
-echo \"GPU cgroup status:\"
+echo "GPU cgroup status:"
 ls -la /sys/fs/cgroup/memory/gpu/ 2>/dev/null || echo 'GPU cgroup not configured'
-EOF"
+EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/debug_x.sh"
 }
 
@@ -621,9 +621,6 @@ Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --ena
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
-Environment=DASHBOARD_WIDTH=3840
-Environment=DASHBOARD_HEIGHT=1100
-Environment=DASHBOARD_SCALE=2.0
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
@@ -661,8 +658,6 @@ Wants=network-online.target
 Type=simple
 User=$USER
 Environment=QT_QPA_PLATFORM=eglfs
-Environment=DASHBOARD_WIDTH=3840
-Environment=DASHBOARD_HEIGHT=1100
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
@@ -990,9 +985,9 @@ EOF
 configure_openbox() {
     log "Configuring Openbox..."
     sudo -u "$USER" mkdir -p "$HOME_DIR/.config/openbox"
-    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.config/openbox/rc.xml
-<?xml version=\"1.0\" encoding=\"UTF-8\"?>
-<openbox_config xmlns=\"http://openbox.org/3.4/rc\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://openbox.org/3.4/rc http://openbox.org/3.4/rc.xsd\">
+    sudo -u "$USER" tee "$HOME_DIR/.config/openbox/rc.xml" > /dev/null << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<openbox_config xmlns="http://openbox.org/3.4/rc" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://openbox.org/3.4/rc http://openbox.org/3.4/rc.xsd">
   <resistance>
     <strength>0</strength>
     <screen_edge_strength>20</screen_edge_strength>
@@ -1365,16 +1360,14 @@ configure_openbox() {
     <manageDesktops>yes</manageDesktops>
   </menu>
   <applications>
-    <application class=\"*\">
+    <application class="*">
       <decor>no</decor>
       <maximized>yes</maximized>
       <fullscreen>yes</fullscreen>
     </application>
   </applications>
 </openbox_config>
-EOF"
-
-
+EOF
 }
 
 create_xinitrc() {
@@ -1428,12 +1421,12 @@ Type=Application
 EOF
     
     # Create .xsession for the user
-    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.xsession
+    sudo -u "$USER" tee "$HOME_DIR/.xsession" > /dev/null << 'EOF'
 #!/bin/bash
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-echo \"Starting X session at \$(date)\" > ~/xsession.log
+echo "Starting X session at $(date)" > ~/xsession.log
 
 # Clear any console text and switch to X tty
 chvt 7 2>/dev/null || true
@@ -1460,15 +1453,12 @@ unclutter -idle 0 -root &
 matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
-export DASHBOARD_WIDTH=3840
-export DASHBOARD_HEIGHT=1100
-export DASHBOARD_SCALE=2.0
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=1 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --disable-gpu-vsync --disable-smooth-scrolling --enable-zero-copy --disable-reading-from-canvas"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
-export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
+export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
 # Change to app directory
 cd ~/Desktop/project/src
@@ -1479,11 +1469,11 @@ if [ -f ~/app.log ]; then
 fi
 > ~/app.log
 
-echo \"Starting SpaceX Dashboard at \$(date)\" >> ~/app.log
+echo "Starting SpaceX Dashboard at $(date)" >> ~/app.log
 
 # Start the application
 exec python3 app.py >> ~/app.log 2>&1
-EOF"
+EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
     
     # Fix X authority permissions

@@ -2,6 +2,11 @@ import platform
 IS_WINDOWS = platform.system() == 'Windows'
 import sys
 import os
+
+# Initialize environment as early as possible (before PyQt imports)
+import functions as funcs
+funcs.setup_dashboard_environment()
+
 import json
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
@@ -20,7 +25,6 @@ import subprocess
 import signal
 import calendar
 import threading
-import functions as funcs
 from functions import (
     # status helpers
     profiler,
@@ -128,8 +132,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 # test update 9
 
-# Initialize environment and logging
-setup_dashboard_environment()
+# Initialize logging
 setup_dashboard_logging(__file__)
 logger = logging.getLogger(__name__)
 
@@ -893,7 +896,7 @@ class Backend(QObject):
         # WiFi timer for status updates
         self.wifi_timer = QTimer(self)
         self.wifi_timer.timeout.connect(self.update_wifi_status)
-        self.wifi_timer.start(10000)  # Check every 10 seconds
+        self.wifi_timer.start(60000)  # Check every 60 seconds (reduced from 10s for performance)
 
         # Update check timer - check every 6 hours (21600000 ms)
         self.update_check_timer = QTimer(self)
@@ -1490,9 +1493,12 @@ class Backend(QObject):
         if (now - self._last_live_url_update >= 60) or (current_tray_visible and not self._last_tray_visible):
             self._update_live_launch_url()
 
+        # Only emit visibility change if it actually changed to reduce UI churn
+        if current_tray_visible != self._last_tray_visible:
+            self.launchTrayVisibilityChanged.emit()
+
         self._last_tray_visible = current_tray_visible
         self.countdownChanged.emit()
-        self.launchTrayVisibilityChanged.emit()
 
     def update_event_model(self):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
