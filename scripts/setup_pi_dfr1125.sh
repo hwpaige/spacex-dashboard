@@ -723,6 +723,18 @@ EOF
     for module in drm vc4; do
         grep -qxF "$module" /etc/initramfs-tools/modules || echo "$module" >> /etc/initramfs-tools/modules
     done
+
+    # Force 4K Bar resolution in cmdline.txt for KMS
+    if [ -f "$cmdline_file" ]; then
+        log "Updating $cmdline_file with forced resolution..."
+        # Backup cmdline.txt
+        cp "$cmdline_file" "${cmdline_file}.bak"
+        # Remove any existing video= parameters
+        sed -i 's/ video=[^ ]*//g' "$cmdline_file"
+        # Add the forced resolution for HDMI-A-1 (standard Pi 5 port 0)
+        # We use 'D' to force digital and 'e' to force enable
+        sed -i 's/$/ video=HDMI-A-1:3840x1100M@60D/' "$cmdline_file"
+    fi
 }
 
 setup_repository() {
@@ -1428,8 +1440,12 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-# No rotation needed for DFR1125
-xrandr --output HDMI-1 --rotate normal 2>&1 | tee -a ~/xrandr.log
+# Force 3840x1100 resolution for DFR1125
+# Modeline: 3840x1100 @ 60Hz (297MHz pixel clock)
+MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
+xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
+xrandr --addmode HDMI-1 "3840x1100_60.00" 2>/dev/null || true
+xrandr --output HDMI-1 --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
 
 # Set X settings
 xset s off
