@@ -973,7 +973,7 @@ Window {
                     Loader {
                         id: launchGlobeLoader
                         Layout.fillWidth: true
-                        Layout.preferredHeight: parent.height * 0.4  // Globe takes 40% of height
+                        Layout.preferredHeight: parent.height * 0.5  // Globe takes 50% of height
                         active: launchCard.isHighResolution
                         visible: active
 
