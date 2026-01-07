@@ -763,13 +763,7 @@ Window {
                             interactive: true
                             currentIndex: 1
                             property int loadedMask: (1 << 1)
-                            // Auto-load all weather views after a short delay to speed up transitions
-                            Timer {
-                                interval: 5000
-                                running: true
-                                repeat: false
-                                onTriggered: weatherSwipe.loadedMask = (1 << 6) - 1
-                            }
+                            // Removed auto-loading of all weather views to reduce WebEngine processes
                             onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
 
                         Component.onCompleted: {
@@ -795,8 +789,8 @@ Window {
                                     Loader {
                                         id: webViewLoader
                                         anchors.fill: parent
-                                        // Load current item and neighbors for smooth vertical swiping if they have been visited
-                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1 && (weatherSwipe.loadedMask & (1 << index))
+                                        // Only load the currently active weather tool to reduce WebEngine processes
+                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
                                         visible: active
 
                                         sourceComponent: WebEngineView {
