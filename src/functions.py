@@ -600,6 +600,10 @@ def fetch_launch_details(launch_id):
 
 def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
     """Helper to parse raw API launch data into the dashboard's internal format."""
+    # If already parsed (indicated by presence of 'mission' and 'video_url' and absence of 'vidURLs')
+    if 'mission' in launch and 'video_url' in launch and 'vidURLs' not in launch:
+        return launch.copy()
+
     launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
     landing_type = None
     landing_location = None
@@ -622,8 +626,8 @@ def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
         'rocket': launch.get('rocket', {}).get('configuration', {}).get('name', 'Unknown'),
         'orbit': launch.get('mission', {}).get('orbit', {}).get('name', 'Unknown') if launch.get('mission') else 'Unknown',
         'pad': launch.get('pad', {}).get('name', 'Unknown'),
-        'video_url': launch.get('vidURLs', [{}])[0].get('url', '') if launch.get('vidURLs') else '',
-        'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), '') if launch.get('vidURLs') else '',
+        'video_url': next((v.get('url', '') for v in launch.get('vidURLs', []) if v.get('url')), ''),
+        'x_video_url': next((v.get('url', '') for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
         'landing_type': landing_type,
         'landing_location': landing_location,
         'is_detailed': is_detailed
@@ -665,8 +669,8 @@ def fetch_launches():
         response.raise_for_status()
         data = response.json()
         
-        api_upcoming = data.get('upcoming', [])
-        api_previous = data.get('previous', [])
+        api_upcoming = [parse_launch_data(l) for l in data.get('upcoming', [])]
+        api_previous = [parse_launch_data(l) for l in data.get('previous', [])]
         
         # Merge with existing history to avoid losing data due to API window limits
         # Load current state (falls back to seed files if runtime is missing)
@@ -2019,7 +2023,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
             return _DATE_PARSE_CACHE[net_str]
 
         for l in launches:
-            launch = l.copy()
+            launch = parse_launch_data(l)
             net = launch.get('net', '') or launch.get('date_start', '')
             dt = _get_parsed_dt(net)
             if dt:

@@ -21,6 +21,69 @@ Window {
         console.log("Screen dimensions: " + Screen.width + "x" + Screen.height)
         console.log("Device pixel ratio: " + Screen.devicePixelRatio)
         console.log("Qt platform: " + Qt.platform.os)
+        console.log("Window created - bottom bar should be visible")
+        // Connect web content reload signal
+        backend.reloadWebContent.connect(function() {
+            console.log("Reloading web content after WiFi connection...")
+            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
+            // Instead, nudge animation loops to resume if they paused.
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Globe view JS resume failed:", e); }
+                }
+            }
+            // Plot card globe view (left-most card) – also avoid reload
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+                }
+            }
+            // Debounce all other heavy reloads to a single update shortly after connect
+            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
+            reloadCoalesceTimer.start();
+        })
+        // Push globe autospin guard flag into globe pages
+        var guard = backend.globeAutospinGuard
+        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
+        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
+        }
+        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
+        }
+        // Resume spin on key backend signals
+        backend.launchCacheReady.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.updateGlobeTrajectory.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.loadingFinished.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.firstOnline.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        // Keep guard value in sync if changed at runtime
+        backend.globeAutospinGuardChanged.connect(function(){
+            if (backend.wifiConnecting) return;
+            var guard2 = backend.globeAutospinGuard
+            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
+        })
     }
 
     function getStatusColor(status) {
@@ -114,80 +177,23 @@ Window {
     Connections {
         target: backend
         function onVideoUrlChanged() {
-            // Only auto-update if we are currently on the default YouTube embed or it's empty.
-            // Use endsWith to avoid matching youtube_embed_nsf.html.
+            // Sync with backend video URL if it's a specific launch video (YouTube embed)
+            // or if we are currently on a default/empty state.
+            // This prevents background refreshes from overriding manual NSF/Live selections
+            // while still allowing launch selection to work.
             var current = root.currentVideoUrl.toString()
-            if (current === "" || current.endsWith("/youtube_embed.html") || current === "about:blank") {
-                root.currentVideoUrl = backend.videoUrl
+            var next = backend.videoUrl.toString()
+            
+            if (next.indexOf("youtube.com/embed/") !== -1 || 
+                current === "" || 
+                current.endsWith("/youtube_embed.html") || 
+                current === "about:blank") {
+                root.currentVideoUrl = next
             }
         }
     }
 
-    Component.onCompleted: {
-        console.log("Window created - bottom bar should be visible")
-        // Connect web content reload signal
-        backend.reloadWebContent.connect(function() {
-            console.log("Reloading web content after WiFi connection...")
-            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
-            // Instead, nudge animation loops to resume if they paused.
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                    try {
-                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                    } catch (e) { console.log("Globe view JS resume failed:", e); }
-                }
-            }
-            // Plot card globe view (left-most card) – also avoid reload
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                    try {
-                        plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
-                }
-            }
-            // Debounce all other heavy reloads to a single update shortly after connect
-            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
-            reloadCoalesceTimer.start();
-        })
-        // Push globe autospin guard flag into globe pages
-        var guard = backend.globeAutospinGuard
-        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
-        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
-        }
-        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
-        }
-        // Resume spin on key backend signals
-        backend.launchCacheReady.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.updateGlobeTrajectory.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.loadingFinished.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.firstOnline.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        // Keep guard value in sync if changed at runtime
-        backend.globeAutospinGuardChanged.connect(function(){
-            if (backend.wifiConnecting) return;
-            var guard2 = backend.globeAutospinGuard
-            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
-        })
-    }
+    // (Removed duplicate Component.onCompleted block; logic merged above)
 
     Rectangle {
         id: loadingScreen
@@ -1606,17 +1612,10 @@ Window {
                             onBackgroundColorChanged: {
                                 if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
                             }
-                            url: ""
-
-                            // Explicitly load URL when backend video URL changes
-                            Connections {
-                                target: backend
-                                function onVideoUrlChanged() {
-                                    if (backend.videoUrl && backend.videoUrl !== "") {
-                                        youtubeView.loadUrl(backend.videoUrl)
-                                    } else {
-                                        youtubeView.loadHtml("<html><body></body></html>")
-                                    }
+                            url: root.currentVideoUrl
+                            onUrlChanged: {
+                                if (url.toString() === "") {
+                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:transparent;'></body></html>")
                                 }
                             }
 
