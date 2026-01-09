@@ -5,8 +5,8 @@ set -o pipefail
 # Trap to handle interrupts gracefully
 trap 'log "Setup interrupted by user"; exit 1' INT TERM
 
-# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 25.04 with Qt 6.8.x
-# This script is specifically designed for Qt 6.8.x compatibility
+# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 25.04 (DFR1125 4K Bar Display)
+# This script is configured for the 14 inch 3840x1100 display
 # Qt 6.9.x and later versions have known GLOzone issues with WebEngine
 
 USER="${SUDO_USER:-harrison}"
@@ -621,8 +621,9 @@ Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --ena
 Environment=PYQTGRAPH_QT_LIB=PyQt6
 Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
-Environment=DASHBOARD_WIDTH=1480
-Environment=DASHBOARD_HEIGHT=320
+Environment=DASHBOARD_WIDTH=3840
+Environment=DASHBOARD_HEIGHT=1100
+Environment=DASHBOARD_SCALE=2.0
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
@@ -660,8 +661,8 @@ Wants=network-online.target
 Type=simple
 User=$USER
 Environment=QT_QPA_PLATFORM=eglfs
-Environment=DASHBOARD_WIDTH=1480
-Environment=DASHBOARD_HEIGHT=320
+Environment=DASHBOARD_WIDTH=3840
+Environment=DASHBOARD_HEIGHT=1100
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
@@ -686,7 +687,7 @@ configure_boot() {
     # Clean up old block or any existing individual lines that might conflict
     sed -i '/# BEGIN SPACEX DASHBOARD/,/# END SPACEX DASHBOARD/d' "$config_file"
     # Also remove individual lines if they exist outside a block to avoid duplication
-    for key in hdmi_force_hotplug hdmi_ignore_edid hdmi_force_mode hdmi_drive max_framebuffer_height hdmi_group hdmi_mode hdmi_timings disable_splash; do
+    for key in hdmi_force_hotplug hdmi_ignore_edid hdmi_force_mode hdmi_drive max_framebuffer_width max_framebuffer_height hdmi_group hdmi_mode hdmi_timings disable_splash; do
         sed -i "/^$key=/d" "$config_file"
     done
     # Remove specific overlays that we are about to add
@@ -695,17 +696,18 @@ configure_boot() {
     cat << EOF >> "$config_file"
 
 # BEGIN SPACEX DASHBOARD
-# Custom display settings for Waveshare 11.9inch (1480x320 landscape, rotation via X11)
+# Custom display settings for DFR1125 14 inch 4K Bar Display (3840x1100 landscape)
 hdmi_force_hotplug=1
 hdmi_ignore_edid=0xa5000080
 hdmi_force_mode=1
 hdmi_drive=1
-max_framebuffer_height=320
+max_framebuffer_width=3840
+max_framebuffer_height=1100
 hdmi_group=2
 hdmi_mode=87
-hdmi_timings=1480 0 80 16 32 320 0 16 4 12 0 0 0 60 0 42000000 3
+hdmi_timings=3840 0 160 40 120 1100 0 10 3 10 0 0 0 60 0 297000000 3
 dtoverlay=vc4-kms-v3d
-dtoverlay=vc4-kms-v3d,cma-128
+dtoverlay=vc4-kms-v3d,cma-512
 dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 # END SPACEX DASHBOARD
@@ -722,6 +724,18 @@ EOF
     for module in drm vc4; do
         grep -qxF "$module" /etc/initramfs-tools/modules || echo "$module" >> /etc/initramfs-tools/modules
     done
+
+    # Force 4K Bar resolution in cmdline.txt for KMS
+    if [ -f "$cmdline_file" ]; then
+        log "Updating $cmdline_file with forced resolution..."
+        # Backup cmdline.txt
+        cp "$cmdline_file" "${cmdline_file}.bak"
+        # Remove any existing video= parameters
+        sed -i 's/ video=[^ ]*//g' "$cmdline_file"
+        # Add the forced resolution for HDMI-A-1 (standard Pi 5 port 0)
+        # We use 'D' to force digital and 'e' to force enable
+        sed -i 's/$/ video=HDMI-A-1:3840x1100M@60D/' "$cmdline_file"
+    fi
 }
 
 setup_repository() {
@@ -803,12 +817,12 @@ configure_plymouth() {
     # Copy the SpaceX logo
     cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
 
-    # Rotate and scale the logo 90 degrees CCW (270 degrees CW) to match the 11.9" screen orientation
-    # We also scale it down to fit nicely in the 1480x320 landscape view (max 500x160)
-    # We do this here using ImageMagick because kernel-level rotation can be unreliable
+    # Scale the logo for the 4K bar display (3840x1100)
+    # No rotation needed as the display is naturally landscape.
+    # We scale it to fit nicely (max 1200x400)
     if command -v convert &> /dev/null; then
-        log "Rotating and scaling logo 90 degrees CCW..."
-        convert "$THEME_DIR/spacex_logo.png" -rotate 270 -resize 160x500 "$THEME_DIR/spacex_logo.png"
+        log "Scaling logo for 4K display..."
+        convert "$THEME_DIR/spacex_logo.png" -resize 1200x400 "$THEME_DIR/spacex_logo.png"
     else
         log "WARNING: ImageMagick 'convert' not found, logo will not be processed"
     fi
@@ -836,7 +850,7 @@ logo.image = Image("spacex_logo.png");
 logo.sprite = Sprite(logo.image);
 
 # Center the logo on screen
-# The logo is pre-rotated 90 deg CCW and scaled down in the setup script for reliability
+# The logo is scaled in the setup script for reliability
 logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
 logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2;
 logo.sprite.SetX(logo.x);
@@ -1427,7 +1441,12 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+# Force 3840x1100 resolution for DFR1125
+# Modeline: 3840x1100 @ 60Hz (297MHz pixel clock)
+MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
+xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
+xrandr --addmode HDMI-1 "3840x1100_60.00" 2>/dev/null || true
+xrandr --output HDMI-1 --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
 
 # Set X settings
 xset s off
@@ -1441,8 +1460,9 @@ unclutter -idle 0 -root &
 matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
-export DASHBOARD_WIDTH=1480
-export DASHBOARD_HEIGHT=320
+export DASHBOARD_WIDTH=3840
+export DASHBOARD_HEIGHT=1100
+export DASHBOARD_SCALE=2.0
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"

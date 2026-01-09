@@ -11,9 +11,80 @@ import QtWebEngine
 Window {
     id: root
     visible: true
-    width: 1480
-    height: 320
+    width: backend ? backend.width : 1480
+    height: backend ? backend.height : 320
     title: "SpaceX Dashboard"
+    // Ensure no scaling is applied to the window content
+    // Qt should respect the exact pixel dimensions
+    Component.onCompleted: {
+        console.log("Window dimensions: " + width + "x" + height)
+        console.log("Screen dimensions: " + Screen.width + "x" + Screen.height)
+        console.log("Device pixel ratio: " + Screen.devicePixelRatio)
+        console.log("Qt platform: " + Qt.platform.os)
+        console.log("Window created - bottom bar should be visible")
+        // Connect web content reload signal
+        backend.reloadWebContent.connect(function() {
+            console.log("Reloading web content after WiFi connection...")
+            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
+            // Instead, nudge animation loops to resume if they paused.
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Globe view JS resume failed:", e); }
+                }
+            }
+            // Plot card globe view (left-most card) – also avoid reload
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+                if (!(backend && backend.wifiConnecting)) {
+                    try {
+                        plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
+                }
+            }
+            // Debounce all other heavy reloads to a single update shortly after connect
+            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
+            reloadCoalesceTimer.start();
+        })
+        // Push globe autospin guard flag into globe pages
+        var guard = backend.globeAutospinGuard
+        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
+        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
+        }
+        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
+            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
+        }
+        // Resume spin on key backend signals
+        backend.launchCacheReady.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.updateGlobeTrajectory.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.loadingFinished.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        backend.firstOnline.connect(function(){
+            if (backend.wifiConnecting) return;
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
+        })
+        // Keep guard value in sync if changed at runtime
+        backend.globeAutospinGuardChanged.connect(function(){
+            if (backend.wifiConnecting) return;
+            var guard2 = backend.globeAutospinGuard
+            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
+            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
+        })
+    }
 
     function getStatusColor(status) {
         if (!status) return "#999999"
@@ -106,80 +177,23 @@ Window {
     Connections {
         target: backend
         function onVideoUrlChanged() {
-            // Only auto-update if we are currently on the default YouTube embed or it's empty.
-            // Use endsWith to avoid matching youtube_embed_nsf.html.
+            // Sync with backend video URL if it's a specific launch video (YouTube embed)
+            // or if we are currently on a default/empty state.
+            // This prevents background refreshes from overriding manual NSF/Live selections
+            // while still allowing launch selection to work.
             var current = root.currentVideoUrl.toString()
-            if (current === "" || current.endsWith("/youtube_embed.html") || current === "about:blank") {
-                root.currentVideoUrl = backend.videoUrl
+            var next = backend.videoUrl.toString()
+            
+            if (next.indexOf("youtube.com/embed/") !== -1 || 
+                current === "" || 
+                current.endsWith("/youtube_embed.html") || 
+                current === "about:blank") {
+                root.currentVideoUrl = next
             }
         }
     }
 
-    Component.onCompleted: {
-        console.log("Window created - bottom bar should be visible")
-        // Connect web content reload signal
-        backend.reloadWebContent.connect(function() {
-            console.log("Reloading web content after WiFi connection...")
-            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
-            // Instead, nudge animation loops to resume if they paused.
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                    try {
-                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                    } catch (e) { console.log("Globe view JS resume failed:", e); }
-                }
-            }
-            // Plot card globe view (left-most card) – also avoid reload
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                    try {
-                        plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                    } catch (e) { console.log("Plot globe view JS resume failed:", e); }
-                }
-            }
-            // Debounce all other heavy reloads to a single update shortly after connect
-            if (reloadCoalesceTimer.running) reloadCoalesceTimer.stop();
-            reloadCoalesceTimer.start();
-        })
-        // Push globe autospin guard flag into globe pages
-        var guard = backend.globeAutospinGuard
-        var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
-        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
-        }
-        if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
-            try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
-        }
-        // Resume spin on key backend signals
-        backend.launchCacheReady.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.updateGlobeTrajectory.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.loadingFinished.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        backend.firstOnline.connect(function(){
-            if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-        })
-        // Keep guard value in sync if changed at runtime
-        backend.globeAutospinGuardChanged.connect(function(){
-            if (backend.wifiConnecting) return;
-            var guard2 = backend.globeAutospinGuard
-            var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
-        })
-    }
+    // (Removed duplicate Component.onCompleted block; logic merged above)
 
     Rectangle {
         id: loadingScreen
@@ -405,7 +419,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
@@ -413,10 +427,12 @@ Window {
                        : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                 radius: 8
                 clip: false
-                visible: !isWindyFullscreen
+                visible: !isWindyFullscreen && !plotCard.isHighResolution
                 // Toggle to switch between plot and globe within this card
-                // Default to globe view on app load
-                property bool plotCardShowsGlobe: true
+                // On high resolution displays, globe is shown in launch card instead
+                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
+                // Default to globe view on app load, but not on high resolution displays
+                property bool plotCardShowsGlobe: !isHighResolution
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
                 property real toggleAbsX: 0
                 property real toggleAbsY: 0
@@ -642,12 +658,14 @@ Window {
                             }
 
                             // Toggle button between Plot and Globe (matches bar button style)
-                            Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
+                            // Hidden on high resolution displays where globe is in launch card
+                            Item { Layout.preferredWidth: plotCard.isHighResolution ? 0 : 8; Layout.preferredHeight: 1 } // spacer
                             Rectangle {
                                 id: globeToggle
-                                Layout.preferredWidth: 40
+                                visible: !plotCard.isHighResolution
+                                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 40
                                 Layout.preferredHeight: 28
-                                width: 40
+                                width: plotCard.isHighResolution ? 0 : 40
                                 height: 28
                                 radius: 14
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
@@ -692,7 +710,7 @@ Window {
                     Rectangle {
                         id: globeOverlayToggle
                         parent: plotCard
-                        visible: backend && plotCard.plotCardShowsGlobe
+                        visible: backend && plotCard.plotCardShowsGlobe && !plotCard.isHighResolution
                         x: plotCard.toggleAbsX
                         y: plotCard.toggleAbsY
                         width: 40
@@ -763,13 +781,7 @@ Window {
                             interactive: true
                             currentIndex: 1
                             property int loadedMask: (1 << 1)
-                            // Auto-load all weather views after a short delay to speed up transitions
-                            Timer {
-                                interval: 5000
-                                running: true
-                                repeat: false
-                                onTriggered: weatherSwipe.loadedMask = (1 << 6) - 1
-                            }
+                            // Removed auto-loading of all weather views to reduce WebEngine processes
                             onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
 
                         Component.onCompleted: {
@@ -795,8 +807,8 @@ Window {
                                     Loader {
                                         id: webViewLoader
                                         anchors.fill: parent
-                                        // Load current item and neighbors for smooth vertical swiping if they have been visited
-                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1 && (weatherSwipe.loadedMask & (1 << index))
+                                        // Only load the currently active weather tool to reduce WebEngine processes
+                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
                                         visible: active
 
                                         sourceComponent: WebEngineView {
@@ -964,9 +976,63 @@ Window {
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
 
+                // Check if this is a high resolution display (width >= 1920 and height >= 1080)
+                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
+
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
+
+                    // On high resolution displays, show globe above launch list
+                    Loader {
+                        id: launchGlobeLoader
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: parent.height * 0.5  // Globe takes 50% of height
+                        active: launchCard.isHighResolution
+                        visible: active
+
+                        sourceComponent: Item {
+                            // Globe view for launch card
+                            Rectangle {
+                                anchors.fill: parent
+                                anchors.margins: 5
+                                color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                radius: 6
+                                clip: true
+
+                                WebEngineView {
+                                    id: launchGlobeView
+                                    anchors.fill: parent
+                                    anchors.margins: 2
+                                    url: globeUrl
+                                    backgroundColor: "transparent"
+                                    zoomFactor: 1.0
+                                    settings.javascriptCanAccessClipboard: false
+                                    settings.allowWindowActivationFromJavaScript: false
+                                    onContextMenuRequested: function(request) { request.accepted = true }
+
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            var trajectoryData = backend.get_launch_trajectory();
+                                            if (trajectoryData) {
+                                                launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                            }
+                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            // Enforce rounded corners
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, "transparent")
+                                        }
+                                    }
+
+                                    Connections {
+                                        target: backend
+                                        function onThemeChanged() {
+                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     StackLayout {
                         Layout.fillWidth: true
@@ -989,7 +1055,16 @@ Window {
                             width: ListView.view.width
                             height: model && model.isGroup ? 30 : launchColumn.height + 20
 
-                            Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
+                            Rectangle { 
+                                anchors.fill: parent; 
+                                color: (model && model.isGroup) ? "transparent" : 
+                                       (backend.selectedLaunch === model.mission ? 
+                                        (backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
+                                        (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
+                                radius: (model && model.isGroup) ? 0 : 6;
+                                border.width: (model && !model.isGroup && backend.selectedLaunch === model.mission) ? 2 : 0;
+                                border.color: backend.theme === "dark" ? "#6a8a8a" : "#80a0a0";
+                            }
 
                             Text {
                                 anchors.left: parent.left
@@ -1071,6 +1146,24 @@ Window {
                                     color: "white"
                                     anchors.centerIn: parent
                                 }
+                            }
+
+                            // Click handler for launch selection
+                            MouseArea {
+                                anchors.fill: parent
+                                enabled: !!(model && !model.isGroup)
+                                onClicked: {
+                                    if (model && !model.isGroup) {
+                                        // Load trajectory for this specific launch
+                                        backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
+                                        
+                                        // Load video for this launch if available, otherwise clear the video view
+                                        backend.loadLaunchVideo(model.videoUrl || "")
+                                        
+                                        console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
+                                    }
+                                }
+                                cursorShape: Qt.PointingHandCursor
                             }
 
                         }
@@ -1519,7 +1612,13 @@ Window {
                             onBackgroundColorChanged: {
                                 if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
                             }
-                            url: parent.visible ? root.currentVideoUrl : ""
+                            url: root.currentVideoUrl
+                            onUrlChanged: {
+                                if (url.toString() === "") {
+                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:transparent;'></body></html>")
+                                }
+                            }
+
                             settings.webGLEnabled: true
                             settings.accelerated2dCanvasEnabled: true
                             settings.allowRunningInsecureContent: true
@@ -1619,6 +1718,17 @@ Window {
                                     youtubeView.reload();
                                 }
                             }
+                        }
+
+                        // Show "No Video" when there's no video URL
+                        Text {
+                            anchors.centerIn: parent
+                            text: "No Video"
+                            font.pixelSize: 24
+                            font.bold: true
+                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                            visible: !root.currentVideoUrl || root.currentVideoUrl === ""
+                            z: 1
                         }
 
                         // Overlay for quick-action buttons floating on top of the video
@@ -4125,5 +4235,6 @@ Window {
 
         }
     }
+
 }
 """

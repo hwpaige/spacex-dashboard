@@ -600,6 +600,10 @@ def fetch_launch_details(launch_id):
 
 def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
     """Helper to parse raw API launch data into the dashboard's internal format."""
+    # If already parsed (indicated by presence of 'mission' and 'video_url' and absence of 'vidURLs')
+    if 'mission' in launch and 'video_url' in launch and 'vidURLs' not in launch:
+        return launch.copy()
+
     launcher_stage = launch.get('rocket', {}).get('launcher_stage', [])
     landing_type = None
     landing_location = None
@@ -622,8 +626,8 @@ def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
         'rocket': launch.get('rocket', {}).get('configuration', {}).get('name', 'Unknown'),
         'orbit': launch.get('mission', {}).get('orbit', {}).get('name', 'Unknown') if launch.get('mission') else 'Unknown',
         'pad': launch.get('pad', {}).get('name', 'Unknown'),
-        'video_url': launch.get('vidURLs', [{}])[0].get('url', '') if launch.get('vidURLs') else '',
-        'x_video_url': next((v['url'] for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), '') if launch.get('vidURLs') else '',
+        'video_url': next((v.get('url', '') for v in launch.get('vidURLs', []) if v.get('url')), ''),
+        'x_video_url': next((v.get('url', '') for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
         'landing_type': landing_type,
         'landing_location': landing_location,
         'is_detailed': is_detailed
@@ -665,8 +669,8 @@ def fetch_launches():
         response.raise_for_status()
         data = response.json()
         
-        api_upcoming = data.get('upcoming', [])
-        api_previous = data.get('previous', [])
+        api_upcoming = [parse_launch_data(l) for l in data.get('upcoming', [])]
+        api_previous = [parse_launch_data(l) for l in data.get('previous', [])]
         
         # Merge with existing history to avoid losing data due to API window limits
         # Load current state (falls back to seed files if runtime is missing)
@@ -1556,27 +1560,34 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
 
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
-    Get trajectory data for the next upcoming launch.
+    Get trajectory data for the next upcoming launch or a specific launch.
+    If upcoming_launches is a dict, treat it as a single launch object.
+    If upcoming_launches is a list, use the first item (existing behavior).
     Standalone version of Backend.get_launch_trajectory.
     """
     profiler.mark("get_launch_trajectory_data Start")
     logger.info("get_launch_trajectory_data called")
     
-    # If no upcoming launches, try to use recent launches for demo
-    display_launches = upcoming_launches
-    if not display_launches:
-        logger.info("No upcoming launches, trying recent launches")
-        if previous_launches:
-            recent_launches = previous_launches[:5]
-            if recent_launches:
-                display_launches = [{
-                    'mission': launch.get('mission', 'Unknown'),
-                    'pad': launch.get('pad', 'Cape Canaveral'),
-                    'orbit': launch.get('orbit', 'LEO'),
-                    'net': launch.get('net', ''),
-                    'landing_type': launch.get('landing_type')
-                } for launch in recent_launches]
-                logger.info(f"Using {len(display_launches)} recent launches for demo")
+    # Handle single launch object (dict) vs list of launches
+    if isinstance(upcoming_launches, dict):
+        # Single launch object
+        display_launches = [upcoming_launches]
+    else:
+        # List of launches (existing behavior)
+        display_launches = upcoming_launches
+        if not display_launches:
+            logger.info("No upcoming launches, trying recent launches")
+            if previous_launches:
+                recent_launches = previous_launches[:5]
+                if recent_launches:
+                    display_launches = [{
+                        'mission': launch.get('mission', 'Unknown'),
+                        'pad': launch.get('pad', 'Cape Canaveral'),
+                        'orbit': launch.get('orbit', 'LEO'),
+                        'net': launch.get('net', ''),
+                        'landing_type': launch.get('landing_type')
+                    } for launch in recent_launches]
+                    logger.info(f"Using {len(display_launches)} recent launches for demo")
 
     if not display_launches:
         logger.info("No launches available at all")
@@ -1794,7 +1805,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
 
     target_r = compute_orbit_radius(orbit)
-    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 360)
+    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 180)  # Reduced from 360 for performance
     for p in orbit_path:
         p['r'] = target_r
     
@@ -2012,7 +2023,7 @@ def group_event_data(data, mode, event_type, timezone_obj):
             return _DATE_PARSE_CACHE[net_str]
 
         for l in launches:
-            launch = l.copy()
+            launch = parse_launch_data(l)
             net = launch.get('net', '') or launch.get('date_start', '')
             dt = _get_parsed_dt(net)
             if dt:
@@ -2700,6 +2711,14 @@ def setup_dashboard_environment():
 
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
     os.environ["QSG_RHI_BACKEND"] = "gl"
+
+    # High DPI Scaling support
+    default_scale = "1.0" if platform.system() == 'Windows' else "2.0"
+    dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_scale)
+    if dashboard_scale != "1.0":
+        os.environ["QT_SCALE_FACTOR"] = dashboard_scale
+        # In Qt 6, high DPI scaling is usually on by default, 
+        # but setting QT_SCALE_FACTOR forces a specific global scale.
 
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"

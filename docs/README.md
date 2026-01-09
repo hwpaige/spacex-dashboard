@@ -63,3 +63,22 @@ Tuning:
 - SPACEX_WIFI_SCAN_STABILIZE_INTERVAL (seconds, default 1)
 
 Set these environment variables if you want a shorter or longer stabilization period on your hardware.
+
+## Raspberry Pi Setup
+
+The project includes setup scripts for different display configurations on Raspberry Pi (optimized for Ubuntu 25.04).
+
+### Supported Displays
+
+1.  **Waveshare 11.9inch LCD (1480x320)**
+    - Use the standard setup script:
+      ```bash
+      sudo bash scripts/setup_pi.sh
+      ```
+2.  **DFR1125 14 inch 4K Bar Display (3840x1100)**
+    - Use the dedicated setup script:
+      ```bash
+      sudo bash scripts/setup_pi_dfr1125.sh
+      ```
+
+The setup scripts handle system dependencies, display timings, Kiosk mode configuration, and boot splash screen setup.
