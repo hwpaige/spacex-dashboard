@@ -11,17 +11,9 @@ import QtWebEngine
 Window {
     id: root
     visible: true
-    width: backend ? backend.width : 1480
-    height: backend ? backend.height : 320
+    width: 1480
+    height: 320
     title: "SpaceX Dashboard"
-    // Ensure no scaling is applied to the window content
-    // Qt should respect the exact pixel dimensions
-    Component.onCompleted: {
-        console.log("Window dimensions: " + width + "x" + height)
-        console.log("Screen dimensions: " + Screen.width + "x" + Screen.height)
-        console.log("Device pixel ratio: " + Screen.devicePixelRatio)
-        console.log("Qt platform: " + Qt.platform.os)
-    }
 
     function getStatusColor(status) {
         if (!status) return "#999999"
@@ -413,7 +405,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1
+                Layout.preferredWidth: 1
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
@@ -421,12 +413,10 @@ Window {
                        : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
                 radius: 8
                 clip: false
-                visible: !isWindyFullscreen && !plotCard.isHighResolution
+                visible: !isWindyFullscreen
                 // Toggle to switch between plot and globe within this card
-                // On high resolution displays, globe is shown in launch card instead
-                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
-                // Default to globe view on app load, but not on high resolution displays
-                property bool plotCardShowsGlobe: !isHighResolution
+                // Default to globe view on app load
+                property bool plotCardShowsGlobe: true
                 // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
                 property real toggleAbsX: 0
                 property real toggleAbsY: 0
@@ -652,14 +642,12 @@ Window {
                             }
 
                             // Toggle button between Plot and Globe (matches bar button style)
-                            // Hidden on high resolution displays where globe is in launch card
-                            Item { Layout.preferredWidth: plotCard.isHighResolution ? 0 : 8; Layout.preferredHeight: 1 } // spacer
+                            Item { Layout.preferredWidth: 8; Layout.preferredHeight: 1 } // spacer
                             Rectangle {
                                 id: globeToggle
-                                visible: !plotCard.isHighResolution
-                                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 40
+                                Layout.preferredWidth: 40
                                 Layout.preferredHeight: 28
-                                width: plotCard.isHighResolution ? 0 : 40
+                                width: 40
                                 height: 28
                                 radius: 14
                                 color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
@@ -704,7 +692,7 @@ Window {
                     Rectangle {
                         id: globeOverlayToggle
                         parent: plotCard
-                        visible: backend && plotCard.plotCardShowsGlobe && !plotCard.isHighResolution
+                        visible: backend && plotCard.plotCardShowsGlobe
                         x: plotCard.toggleAbsX
                         y: plotCard.toggleAbsY
                         width: 40
@@ -775,7 +763,13 @@ Window {
                             interactive: true
                             currentIndex: 1
                             property int loadedMask: (1 << 1)
-                            // Removed auto-loading of all weather views to reduce WebEngine processes
+                            // Auto-load all weather views after a short delay to speed up transitions
+                            Timer {
+                                interval: 5000
+                                running: true
+                                repeat: false
+                                onTriggered: weatherSwipe.loadedMask = (1 << 6) - 1
+                            }
                             onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
 
                         Component.onCompleted: {
@@ -801,8 +795,8 @@ Window {
                                     Loader {
                                         id: webViewLoader
                                         anchors.fill: parent
-                                        // Only load the currently active weather tool to reduce WebEngine processes
-                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
+                                        // Load current item and neighbors for smooth vertical swiping if they have been visited
+                                        active: Math.abs(index - weatherSwipe.currentIndex) <= 1 && (weatherSwipe.loadedMask & (1 << index))
                                         visible: active
 
                                         sourceComponent: WebEngineView {
@@ -970,63 +964,9 @@ Window {
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
 
-                // Check if this is a high resolution display (width >= 1920 and height >= 1080)
-                property bool isHighResolution: backend && (backend.width >= 1920 && backend.height >= 1080)
-
                 ColumnLayout {
                     anchors.fill: parent
                     spacing: 0
-
-                    // On high resolution displays, show globe above launch list
-                    Loader {
-                        id: launchGlobeLoader
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: parent.height * 0.5  // Globe takes 50% of height
-                        active: launchCard.isHighResolution
-                        visible: active
-
-                        sourceComponent: Item {
-                            // Globe view for launch card
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 5
-                                color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
-                                radius: 6
-                                clip: true
-
-                                WebEngineView {
-                                    id: launchGlobeView
-                                    anchors.fill: parent
-                                    anchors.margins: 2
-                                    url: globeUrl
-                                    backgroundColor: "transparent"
-                                    zoomFactor: 1.0
-                                    settings.javascriptCanAccessClipboard: false
-                                    settings.allowWindowActivationFromJavaScript: false
-                                    onContextMenuRequested: function(request) { request.accepted = true }
-
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            var trajectoryData = backend.get_launch_trajectory();
-                                            if (trajectoryData) {
-                                                launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                                            }
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                            // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, "transparent")
-                                        }
-                                    }
-
-                                    Connections {
-                                        target: backend
-                                        function onThemeChanged() {
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
 
                     StackLayout {
                         Layout.fillWidth: true
@@ -1049,16 +989,7 @@ Window {
                             width: ListView.view.width
                             height: model && model.isGroup ? 30 : launchColumn.height + 20
 
-                            Rectangle { 
-                                anchors.fill: parent; 
-                                color: (model && model.isGroup) ? "transparent" : 
-                                       (backend.selectedLaunch === model.mission ? 
-                                        (backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
-                                        (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
-                                radius: (model && model.isGroup) ? 0 : 6;
-                                border.width: (model && !model.isGroup && backend.selectedLaunch === model.mission) ? 2 : 0;
-                                border.color: backend.theme === "dark" ? "#6a8a8a" : "#80a0a0";
-                            }
+                            Rectangle { anchors.fill: parent; color: (model && model.isGroup) ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"); radius: (model && model.isGroup) ? 0 : 6 }
 
                             Text {
                                 anchors.left: parent.left
@@ -1140,24 +1071,6 @@ Window {
                                     color: "white"
                                     anchors.centerIn: parent
                                 }
-                            }
-
-                            // Click handler for launch selection
-                            MouseArea {
-                                anchors.fill: parent
-                                enabled: !!(model && !model.isGroup)
-                                onClicked: {
-                                    if (model && !model.isGroup) {
-                                        // Load trajectory for this specific launch
-                                        backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
-                                        
-                                        // Load video for this launch if available, otherwise clear the video view
-                                        backend.loadLaunchVideo(model.videoUrl || "")
-                                        
-                                        console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
-                                    }
-                                }
-                                cursorShape: Qt.PointingHandCursor
                             }
 
                         }
@@ -1606,20 +1519,7 @@ Window {
                             onBackgroundColorChanged: {
                                 if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
                             }
-                            url: ""
-
-                            // Explicitly load URL when backend video URL changes
-                            Connections {
-                                target: backend
-                                function onVideoUrlChanged() {
-                                    if (backend.videoUrl && backend.videoUrl !== "") {
-                                        youtubeView.loadUrl(backend.videoUrl)
-                                    } else {
-                                        youtubeView.loadHtml("<html><body></body></html>")
-                                    }
-                                }
-                            }
-
+                            url: parent.visible ? root.currentVideoUrl : ""
                             settings.webGLEnabled: true
                             settings.accelerated2dCanvasEnabled: true
                             settings.allowRunningInsecureContent: true
@@ -1719,17 +1619,6 @@ Window {
                                     youtubeView.reload();
                                 }
                             }
-                        }
-
-                        // Show "No Video" when there's no video URL
-                        Text {
-                            anchors.centerIn: parent
-                            text: "No Video"
-                            font.pixelSize: 24
-                            font.bold: true
-                            color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                            visible: !root.currentVideoUrl || root.currentVideoUrl === ""
-                            z: 1
                         }
 
                         // Overlay for quick-action buttons floating on top of the video
@@ -4236,6 +4125,5 @@ Window {
 
         }
     }
-
 }
 """

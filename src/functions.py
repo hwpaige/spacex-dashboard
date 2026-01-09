@@ -1556,34 +1556,27 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
 
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
-    Get trajectory data for the next upcoming launch or a specific launch.
-    If upcoming_launches is a dict, treat it as a single launch object.
-    If upcoming_launches is a list, use the first item (existing behavior).
+    Get trajectory data for the next upcoming launch.
     Standalone version of Backend.get_launch_trajectory.
     """
     profiler.mark("get_launch_trajectory_data Start")
     logger.info("get_launch_trajectory_data called")
     
-    # Handle single launch object (dict) vs list of launches
-    if isinstance(upcoming_launches, dict):
-        # Single launch object
-        display_launches = [upcoming_launches]
-    else:
-        # List of launches (existing behavior)
-        display_launches = upcoming_launches
-        if not display_launches:
-            logger.info("No upcoming launches, trying recent launches")
-            if previous_launches:
-                recent_launches = previous_launches[:5]
-                if recent_launches:
-                    display_launches = [{
-                        'mission': launch.get('mission', 'Unknown'),
-                        'pad': launch.get('pad', 'Cape Canaveral'),
-                        'orbit': launch.get('orbit', 'LEO'),
-                        'net': launch.get('net', ''),
-                        'landing_type': launch.get('landing_type')
-                    } for launch in recent_launches]
-                    logger.info(f"Using {len(display_launches)} recent launches for demo")
+    # If no upcoming launches, try to use recent launches for demo
+    display_launches = upcoming_launches
+    if not display_launches:
+        logger.info("No upcoming launches, trying recent launches")
+        if previous_launches:
+            recent_launches = previous_launches[:5]
+            if recent_launches:
+                display_launches = [{
+                    'mission': launch.get('mission', 'Unknown'),
+                    'pad': launch.get('pad', 'Cape Canaveral'),
+                    'orbit': launch.get('orbit', 'LEO'),
+                    'net': launch.get('net', ''),
+                    'landing_type': launch.get('landing_type')
+                } for launch in recent_launches]
+                logger.info(f"Using {len(display_launches)} recent launches for demo")
 
     if not display_launches:
         logger.info("No launches available at all")
@@ -1801,7 +1794,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
 
     target_r = compute_orbit_radius(orbit)
-    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 180)  # Reduced from 360 for performance
+    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 360)
     for p in orbit_path:
         p['r'] = target_r
     
@@ -2707,14 +2700,6 @@ def setup_dashboard_environment():
 
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
     os.environ["QSG_RHI_BACKEND"] = "gl"
-
-    # High DPI Scaling support
-    default_scale = "1.0" if platform.system() == 'Windows' else "2.0"
-    dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_scale)
-    if dashboard_scale != "1.0":
-        os.environ["QT_SCALE_FACTOR"] = dashboard_scale
-        # In Qt 6, high DPI scaling is usually on by default, 
-        # but setting QT_SCALE_FACTOR forces a specific global scale.
 
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"

@@ -179,23 +179,6 @@ if [ -d "$PROJECT_DIR/cache" ]; then
         -exec rm -rf {} + 2>/dev/null || true
 fi
 
-# Reapply display settings for Pi with Waveshare 11.9" display (320x1480 rotated to portrait)
-echo "Checking for Raspberry Pi display configuration..."
-if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model" 2>/dev/null; then
-    echo "Raspberry Pi detected. Reapplying display rotation for Waveshare 11.9\" (320x1480) display..."
-    # Wait a moment for X session to be ready
-    sleep 2
-    # Apply rotation if HDMI-1 is connected (assumes the small display is on HDMI-1)
-    if xrandr | grep -q "HDMI-1 connected"; then
-        xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr_update.log || echo "Warning: xrandr rotation failed - display may need manual setup"
-        echo "Display rotation applied. If the app still scales incorrectly, you may need to rerun setup_pi.sh manually."
-    else
-        echo "HDMI-1 not detected as connected. Skipping display rotation."
-    fi
-else
-    echo "Not a Raspberry Pi or model file not found. Skipping display setup."
-fi
-
 echo "Update complete. Rebooting system in 5 seconds..."
 echo "Press Ctrl+C to cancel reboot."
 
