@@ -926,7 +926,7 @@ class Backend(QObject):
         if self._mode != value:
             self._mode = value
             self.modeChanged.emit()
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
             self.update_event_model()
 
     @pyqtProperty(str, notify=eventTypeChanged)
@@ -952,7 +952,7 @@ class Backend(QObject):
             self._clear_launch_caches()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
 
     @pyqtProperty(str, notify=chartTypeChanged)
     def chartType(self):
@@ -966,7 +966,7 @@ class Backend(QObject):
             self._clear_launch_caches()
             # Also emit launchesChanged to refresh the chart
             self.launchesChanged.emit()
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
 
     @pyqtProperty(str, notify=themeChanged)
     def theme(self):
@@ -978,6 +978,14 @@ class Backend(QObject):
             self._theme = value
             save_theme_settings(value)
             self.themeChanged.emit()
+
+    def _emit_tray_visibility_changed(self):
+        """Emit launchTrayVisibilityChanged only if the state has actually changed to reduce UI churn."""
+        current = self.launchTrayVisible
+        if current != self._last_tray_visible:
+            self._last_tray_visible = current
+            logger.debug(f"Backend: Tray visibility changed to {current}, emitting signal")
+            self.launchTrayVisibilityChanged.emit()
 
     @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
     def launchTrayVisible(self):
@@ -995,7 +1003,7 @@ class Backend(QObject):
             self._launch_tray_manual_override = True
         else:
             self._launch_tray_manual_override = None
-        self.launchTrayVisibilityChanged.emit()
+        self._emit_tray_visibility_changed()
 
     @pyqtProperty(bool, notify=loadingFinished)
     def isLoading(self):
@@ -1542,7 +1550,7 @@ class Backend(QObject):
 
             self._update_live_launch_url()
             self.launchesChanged.emit()
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
             # Update the model to refresh UI list/pill
             if hasattr(self, '_event_model'):
                 self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data['schedule']
@@ -1572,9 +1580,8 @@ class Backend(QObject):
         if (now - self._last_live_url_update >= 60) or (current_tray_visible and not self._last_tray_visible):
             self._update_live_launch_url()
 
-        self._last_tray_visible = current_tray_visible
         self.countdownChanged.emit()
-        self.launchTrayVisibilityChanged.emit()
+        self._emit_tray_visibility_changed()
 
     def update_event_model(self):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
@@ -1611,7 +1618,7 @@ class Backend(QObject):
         profiler.mark("Backend: Emitting UI update signals Start")
         self.loadingFinished.emit()
         self.launchesChanged.emit()
-        self.launchTrayVisibilityChanged.emit()
+        self._emit_tray_visibility_changed()
         self.weatherChanged.emit()
         self.eventModelChanged.emit()
         profiler.mark("Backend: Emitting UI update signals End")
@@ -1660,7 +1667,7 @@ class Backend(QObject):
         # Mirror the same UI update signals as online path so QML refreshes lists and trajectory
         try:
             self.launchesChanged.emit()
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
             self.weatherChanged.emit()
             self.eventModelChanged.emit()
             # Update trajectory now that cached data is applied
@@ -1719,7 +1726,7 @@ class Backend(QObject):
             profiler.mark("Backend: _seed_bootstrap emitting launchesChanged End")
             
             profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged Start")
-            self.launchTrayVisibilityChanged.emit()
+            self._emit_tray_visibility_changed()
             profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged End")
             
             profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged Start")
@@ -1894,7 +1901,7 @@ class Backend(QObject):
             logger.info("Backend: Applied pre-computed calendar mapping from LaunchUpdater")
             
         self.launchesChanged.emit()
-        self.launchTrayVisibilityChanged.emit()
+        self._emit_tray_visibility_changed()
         self.update_event_model()
         # Update globe trajectory in case current/next launch changed (e.g., after Success)
         self._emit_update_globe_trajectory_debounced()
