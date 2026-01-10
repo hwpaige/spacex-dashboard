@@ -2747,10 +2747,17 @@ def setup_dashboard_environment():
     elif platform.system() == 'Linux':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
-            "--disable-gpu-sandbox --no-sandbox --use-gl=egl "
+            "--disable-gpu-sandbox --no-sandbox "
+            "--disable-dev-shm-usage --disable-accelerated-video-decode "
+            "--disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas "
+            "--enable-gpu-rasterization "
             "--disable-web-security --allow-running-insecure-content "
             "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
             "--disable-gpu-driver-bug-workarounds "
+            "--memory-pressure-off --max_old_space_size=1024 --memory-reducer "
+            "--gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 "
+            "--num-raster-threads=2 --disable-background-timer-throttling "
+            "--disable-renderer-backgrounding --disable-backgrounding-occluded-windows "
             "--autoplay-policy=no-user-gesture-required "
             "--no-user-gesture-required-for-fullscreen "
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"

@@ -58,16 +58,24 @@
         // Lightweight loader that ensures THREE is available even if we started offline.
         // We avoid hard-failing when there's no network at boot and retry when it comes back.
         (function () {
+            var attempts = 0;
             function injectThree(onReady) {
                 if (window.THREE) { onReady && onReady(); return; }
+                attempts++;
                 try {
                     var s = document.createElement('script');
-                    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+                    // Alternate between local and CDN every 2 attempts
+                    if (attempts % 2 === 1) {
+                        s.src = 'three.min.js';
+                    } else {
+                        s.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';
+                    }
                     s.async = true;
                     s.onload = function () { onReady && onReady(); };
                     s.onerror = function () {
                         // Retry shortly; also wait for online event
-                        setTimeout(function () { injectThree(onReady); }, 4000);
+                        var delay = attempts > 5 ? 10000 : 4000;
+                        setTimeout(function () { injectThree(onReady); }, delay);
                     };
                     document.head.appendChild(s);
                 } catch (e) {
