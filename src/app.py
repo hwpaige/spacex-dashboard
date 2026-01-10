@@ -454,6 +454,9 @@ class Backend(QObject):
         else:
             # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
             default_w, default_h, default_s = 3840, 1100, "2.0"
+            # If we are explicitly using the small display resolution on Linux, default to 1x scale
+            if os.environ.get("DASHBOARD_WIDTH") == "1480":
+                default_s = "1.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
@@ -2972,7 +2975,7 @@ if __name__ == '__main__':
     # These are typically set in setup_dashboard_environment() from functions.py
     # or by the user via DASHBOARD_SCALE.
     if "QT_SCALE_FACTOR" not in os.environ:
-        default_scale = "1.0" if platform.system() == 'Windows' else "2.0"
+        default_scale = "1.0" if platform.system() == 'Windows' or os.environ.get("DASHBOARD_WIDTH") == "1480" else "2.0"
         os.environ["QT_SCALE_FACTOR"] = os.environ.get("DASHBOARD_SCALE", default_scale)
     
     # In Qt 6, high DPI is enabled by default. 

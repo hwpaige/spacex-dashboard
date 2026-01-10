@@ -979,14 +979,6 @@ EOF
     systemctl enable plymouth-start.service plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true
 }
 
-configure_touch_rotation() {
-    log "Configuring touch rotation..."
-    cat << EOF > /etc/udev/rules.d/99-touch-rotation.rules
-SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
-EOF
-    udevadm control --reload-rules
-}
-
 configure_openbox() {
     log "Configuring Openbox..."
     sudo -u "$USER" mkdir -p "$HOME_DIR/.config/openbox"
@@ -1549,7 +1541,6 @@ main() {
     configure_update_permissions
     configure_openbox
     configure_plymouth
-    configure_touch_rotation
     create_xinitrc
     configure_autologin
     configure_eglfs_service
