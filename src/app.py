@@ -474,6 +474,7 @@ class Backend(QObject):
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
+        self._is_large_display = is_large_display
         
         # Support logical scaling for High DPI displays
         try:
@@ -1122,6 +1123,10 @@ class Backend(QObject):
     @pyqtProperty(int, notify=heightChanged)
     def height(self):
         return self._height
+
+    @pyqtProperty(bool, notify=widthChanged)
+    def isHighResolution(self):
+        return self._is_large_display
 
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
