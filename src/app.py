@@ -452,7 +452,8 @@ class Backend(QObject):
         if platform.system() == 'Windows':
             default_w, default_h, default_s = 1480, 320, "1.0"
         else:
-            default_w, default_h, default_s = 320, 1480, "1.0"
+            # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
+            default_w, default_h, default_s = 3840, 1100, "2.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
@@ -2967,10 +2968,18 @@ if __name__ == '__main__':
         print(f"QtWebEngineQuick.initialize() notice: {e}")
 
     profiler.mark("QApplication Initialization")
-    # Set environment variables to disable Qt high DPI scaling before creating QApplication
-    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "0"
-    os.environ["QT_SCALE_FACTOR"] = "1"
-    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
+    # Support high DPI scaling by using environment variables if set
+    # These are typically set in setup_dashboard_environment() from functions.py
+    # or by the user via DASHBOARD_SCALE.
+    if "QT_SCALE_FACTOR" not in os.environ:
+        default_scale = "1.0" if platform.system() == 'Windows' else "2.0"
+        os.environ["QT_SCALE_FACTOR"] = os.environ.get("DASHBOARD_SCALE", default_scale)
+    
+    # In Qt 6, high DPI is enabled by default. 
+    # We only set these if not already present to avoid overriding user/setup preferences.
+    if "QT_AUTO_SCREEN_SCALE_FACTOR" not in os.environ:
+        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
+    
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
