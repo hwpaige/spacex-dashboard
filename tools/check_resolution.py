@@ -7,12 +7,12 @@ import platform
 
 def check_resolution():
     # Platform-aware defaults
-    if os.environ.get("DASHBOARD_WIDTH") == "3840":
-        # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
-        default_w, default_h, default_s = 3840, 1100, "2.0"
-    else:
-        # Default to small display resolution (1480x320)
+    is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480")
+    if platform.system() == 'Windows' or is_small_display:
         default_w, default_h, default_s = 1480, 320, "1.0"
+    else:
+        # Default to large display resolution (3840x1100) and 2x scale for Linux
+        default_w, default_h, default_s = 3840, 1100, "2.0"
 
     # Apply QT_SCALE_FACTOR if DASHBOARD_SCALE is set or use default
     dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_s)

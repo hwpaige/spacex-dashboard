@@ -2713,16 +2713,19 @@ def setup_dashboard_environment():
     os.environ["QSG_RHI_BACKEND"] = "gl"
 
     # High DPI Scaling support
-    # Default to 1.0 for all platforms except if explicitly configured for large 4K bar display
-    default_scale = "2.0" if os.environ.get("DASHBOARD_WIDTH") == "3840" else "1.0"
+    # Default to 1.0 on Windows or if explicitly configured for small display (1480px)
+    # Otherwise default to 2.0 (large display or backward compatibility for Linux)
+    if platform.system() == 'Windows':
+        default_scale = "1.0"
+    elif os.environ.get("DASHBOARD_WIDTH") == "1480":
+        default_scale = "1.0"
+    else:
+        default_scale = "2.0"
+
     dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_scale)
     
     # Set QT_SCALE_FACTOR to ensure consistent scaling across all displays
     os.environ["QT_SCALE_FACTOR"] = dashboard_scale
-    
-    # Disable auto screen scaling in Qt 6 to ensure our manual scale factor is respected
-    if "QT_AUTO_SCREEN_SCALE_FACTOR" not in os.environ:
-        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
 
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"

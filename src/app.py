@@ -1,3 +1,7 @@
+import functions as funcs
+# Initialize environment variables before importing PyQt6 to ensure Qt picks them up
+funcs.setup_dashboard_environment()
+
 import platform
 IS_WINDOWS = platform.system() == 'Windows'
 import sys
@@ -20,7 +24,6 @@ import subprocess
 import signal
 import calendar
 import threading
-import functions as funcs
 from functions import (
     # status helpers
     profiler,
@@ -128,8 +131,7 @@ if hasattr(sys.stderr, 'reconfigure'):
 
 # test update 9
 
-# Initialize environment and logging
-setup_dashboard_environment()
+# Initialize logging
 setup_dashboard_logging(__file__)
 logger = logging.getLogger(__name__)
 
@@ -451,12 +453,13 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load launch trends cache: {e}")
         # Platform-aware defaults for resolution and scaling
-        if os.environ.get("DASHBOARD_WIDTH") == "3840":
-            # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
-            default_w, default_h, default_s = 3840, 1100, "2.0"
-        else:
-            # Default to small display resolution (1480x320)
+        is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480")
+        if platform.system() == 'Windows' or is_small_display:
+            # Default to small display resolution (1480x320) and 1x scale
             default_w, default_h, default_s = 1480, 320, "1.0"
+        else:
+            # Default to large display resolution (3840x1100) and 2x scale for Linux
+            default_w, default_h, default_s = 3840, 1100, "2.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
