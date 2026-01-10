@@ -1127,10 +1127,6 @@ Window {
                                     }
                                 }
                                 Row { spacing: 5
-                                    Text { text: "\uf135"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Rocket: " + ((model && model.rocket) ? model.rocket : ""); font.pixelSize: 12; color: "#999999" }
-                                }
-                                Row { spacing: 5
                                     Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
                                 }
@@ -1142,8 +1138,11 @@ Window {
                                     Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
                                     Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.pixelSize: 12; color: "#999999" }
                                 }
-                                Text { text: ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"; font.pixelSize: 12; color: "#999999" }
-                                Text { text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD"); font.pixelSize: 12; color: "#999999" }
+                                Text { 
+                                    text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
+                                          ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"
+                                    font.pixelSize: 12; color: "#999999" 
+                                }
                             }
 
                             Rectangle {
@@ -1291,8 +1290,11 @@ Window {
                                                     wrapMode: Text.Wrap
                                                 }
                                             }
-                                            Text { text: modelData.rocket; font.pixelSize: 12; color: "#999999" }
-                                            Text { text: modelData.time + " " + backend.timezoneAbbrev; font.pixelSize: 12; color: "#999999" }
+                                            Text { 
+                                                text: (modelData.localTime ? modelData.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
+                                                      (modelData.date ? modelData.date : "") + (modelData.time ? (" " + modelData.time) : "") + " UTC"
+                                                font.pixelSize: 12; color: "#999999" 
+                                            }
                                             Row {
                                                 spacing: 5
                                                 Rectangle {

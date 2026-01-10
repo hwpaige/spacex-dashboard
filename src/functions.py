@@ -2364,8 +2364,10 @@ def get_calendar_mapping(launch_data, tz_obj=None):
             if d not in mapping: mapping[d] = []
             l_typed = l.copy()
             l_typed['type'] = 'past'
-            l_typed['date'] = d
-            l_typed['time'] = t
+            # Keep original date/time as UTC (from parse_launch_data)
+            # Add local versions for UI display
+            l_typed['localDate'] = d
+            l_typed['localTime'] = d + " " + t
             mapping[d].append(l_typed)
             
     for l in launch_data.get('upcoming', []):
@@ -2386,8 +2388,10 @@ def get_calendar_mapping(launch_data, tz_obj=None):
             if d not in mapping: mapping[d] = []
             l_typed = l.copy()
             l_typed['type'] = 'upcoming'
-            l_typed['date'] = d
-            l_typed['time'] = t
+            # Keep original date/time as UTC (from parse_launch_data)
+            # Add local versions for UI display
+            l_typed['localDate'] = d
+            l_typed['localTime'] = d + " " + t
             mapping[d].append(l_typed)
     return mapping
 
