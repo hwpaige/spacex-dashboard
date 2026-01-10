@@ -1174,22 +1174,20 @@ Window {
                                         // Load trajectory for this specific launch
                                         backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
                                         
-                                        // If this launch has an X video URL and it matches the backend's live URL,
-                                        // "effectively select" the LIVE button by using that URL directly.
+                                        // Prefer X video URL if available for SpaceX launches, fallback to converted YouTube URL
                                         var xUrl = model.xVideoUrl || "";
-                                        if (xUrl !== "" && xUrl === backend.liveLaunchUrl) {
-                                            console.log("Launch selected matches LIVE launch, switching to X.com stream")
-                                            root.currentVideoUrl = backend.liveLaunchUrl
+                                        var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
+                                        
+                                        if (xUrl !== "") {
+                                            console.log("Launch selected: Using X.com stream:", xUrl)
+                                            root.currentVideoUrl = xUrl
+                                        } else if (convertedUrl !== "") {
+                                            console.log("Launch selected: Using YouTube embed:", convertedUrl)
+                                            root.currentVideoUrl = convertedUrl;
                                         } else {
-                                            // Load video for this launch without hijacking backend.videoUrl (the Starship Playlist).
-                                            // This allows easy switching back to the playlist by clicking the rocket button.
-                                            var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
-                                            if (convertedUrl !== "") {
-                                                root.currentVideoUrl = convertedUrl;
-                                            } else {
-                                                // Clear the video view if no video is available for this launch
-                                                root.currentVideoUrl = "about:blank";
-                                            }
+                                            // Clear the video view if no video is available for this launch
+                                            console.log("Launch selected: No video available")
+                                            root.currentVideoUrl = "about:blank";
                                         }
                                         
                                         console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")

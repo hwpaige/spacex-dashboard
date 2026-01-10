@@ -1456,6 +1456,9 @@ class Backend(QObject):
         if 'youtube.com/watch?v=' in video_url:
             video_id = video_url.split('v=')[1].split('&')[0]
             return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+        if 'youtube.com/live/' in video_url:
+            video_id = video_url.split('youtube.com/live/')[1].split('?')[0]
+            return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
         if 'youtu.be/' in video_url:
             video_id = video_url.split('youtu.be/')[1].split('?')[0]
             return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
@@ -1470,6 +1473,9 @@ class Backend(QObject):
                 # Convert YouTube watch URLs to embed URLs
                 if 'youtube.com/watch?v=' in video_url:
                     video_id = video_url.split('v=')[1].split('&')[0]
+                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+                elif 'youtube.com/live/' in video_url:
+                    video_id = video_url.split('youtube.com/live/')[1].split('?')[0]
                     video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
                 elif 'youtu.be/' in video_url:
                     video_id = video_url.split('youtu.be/')[1].split('?')[0]
