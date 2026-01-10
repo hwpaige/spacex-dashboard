@@ -152,6 +152,7 @@ __all__ = [
     "fetch_narratives",
     "load_theme_settings",
     "save_theme_settings",
+    "get_rpi_config_resolution",
 ]
 
 
@@ -2683,6 +2684,50 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
     
     return launch_data, weather_data, narratives, calendar_mapping
 
+def get_rpi_config_resolution():
+    """Attempt to detect resolution from Raspberry Pi boot config."""
+    if platform.system() != 'Linux':
+        return None, None
+        
+    config_paths = [
+        "/boot/firmware/config.txt",
+        "/boot/config.txt"
+    ]
+    
+    for path in config_paths:
+        if os.path.exists(path):
+            try:
+                width, height = None, None
+                with open(path, 'r') as f:
+                    content = f.read()
+                    
+                # Look for max_framebuffer_width/height
+                w_match = re.search(r'^max_framebuffer_width=(\d+)', content, re.MULTILINE)
+                h_match = re.search(r'^max_framebuffer_height=(\d+)', content, re.MULTILINE)
+                
+                if w_match: width = int(w_match.group(1))
+                if h_match: height = int(h_match.group(1))
+                
+                # If width not found via max_framebuffer_width, check hdmi_timings
+                if not width:
+                    # hdmi_timings=width 0 h_front_porch h_sync h_back_porch height ...
+                    timings_match = re.search(r'^hdmi_timings=(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)', content, re.MULTILINE)
+                    if timings_match:
+                        width = int(timings_match.group(1))
+                        if not height:
+                            height = int(timings_match.group(2))
+                            
+                if width and height:
+                    return width, height
+                if width:
+                    return width, None
+                if height:
+                    return None, height
+            except Exception as e:
+                logger.debug(f"Failed to read {path}: {e}")
+                
+    return None, None
+
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
     if platform.system() == 'Windows':
@@ -2713,12 +2758,27 @@ def setup_dashboard_environment():
     os.environ["QSG_RHI_BACKEND"] = "gl"
 
     # High DPI Scaling support
-    # Default to 1.0 on Windows or if explicitly configured for small display (1480px)
-    # Otherwise default to 2.0 (large display or backward compatibility for Linux)
+    # Detect physical resolution from config file if environment variables are missing
+    detected_w, detected_h = get_rpi_config_resolution()
+    
+    # Priority for determining the default scale factor:
+    # 1. DASHBOARD_WIDTH == 1480 (explicitly small display) -> 1.0
+    # 2. Config file width/height matching small display -> 1.0
+    # 3. Windows -> 1.0
+    # 4. DASHBOARD_WIDTH == 3840 (explicitly large display) -> 2.0
+    # 5. Config file matching large display -> 2.0
+    # 6. Default fallback for Linux -> 2.0
+    
     if platform.system() == 'Windows':
         default_scale = "1.0"
     elif os.environ.get("DASHBOARD_WIDTH") == "1480":
         default_scale = "1.0"
+    elif detected_w == 1480 or detected_h == 320:
+        default_scale = "1.0"
+    elif os.environ.get("DASHBOARD_WIDTH") == "3840":
+        default_scale = "2.0"
+    elif detected_w == 3840 or detected_h == 1100:
+        default_scale = "2.0"
     else:
         default_scale = "2.0"
 

@@ -4,15 +4,51 @@ from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel
 from PyQt6.QtCore import Qt, QTimer
 
 import platform
+import re
+
+def get_rpi_config_resolution():
+    """Attempt to detect resolution from Raspberry Pi boot config."""
+    if platform.system() != 'Linux':
+        return None, None
+    config_paths = ["/boot/firmware/config.txt", "/boot/config.txt"]
+    for path in config_paths:
+        if os.path.exists(path):
+            try:
+                width, height = None, None
+                with open(path, 'r') as f:
+                    content = f.read()
+                w_match = re.search(r'^max_framebuffer_width=(\d+)', content, re.MULTILINE)
+                h_match = re.search(r'^max_framebuffer_height=(\d+)', content, re.MULTILINE)
+                if w_match: width = int(w_match.group(1))
+                if h_match: height = int(h_match.group(1))
+                if not width:
+                    timings_match = re.search(r'^hdmi_timings=(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)', content, re.MULTILINE)
+                    if timings_match:
+                        width = int(timings_match.group(1))
+                        if not height: height = int(timings_match.group(2))
+                return width, height
+            except: pass
+    return None, None
 
 def check_resolution():
     # Platform-aware defaults
-    is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480")
+    detected_w, detected_h = get_rpi_config_resolution()
+    is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480" or detected_w == 1480 or detected_h == 320)
+    is_large_display = (os.environ.get("DASHBOARD_WIDTH") == "3840" or detected_w == 3840 or detected_h == 1100)
+    
     if platform.system() == 'Windows' or is_small_display:
         default_w, default_h, default_s = 1480, 320, "1.0"
-    else:
+    elif is_large_display:
         # Default to large display resolution (3840x1100) and 2x scale for Linux
         default_w, default_h, default_s = 3840, 1100, "2.0"
+    else:
+        # Linux fallback
+        default_w, default_h, default_s = 3840, 1100, "2.0"
+
+    print(f"--- Detection Information ---")
+    print(f"Detected from Config: {detected_w}x{detected_h}")
+    print(f"Is Small Display: {is_small_display}")
+    print(f"Is Large Display: {is_large_display}")
 
     # Apply QT_SCALE_FACTOR if DASHBOARD_SCALE is set or use default
     dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_s)

@@ -108,7 +108,8 @@ from functions import (
     remove_nm_connection,
     get_closest_x_video_url,
     load_theme_settings,
-    save_theme_settings
+    save_theme_settings,
+    get_rpi_config_resolution
 )
 # DBus imports are now conditional and imported only on Linux
 # import dbus
@@ -453,12 +454,18 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load launch trends cache: {e}")
         # Platform-aware defaults for resolution and scaling
-        is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480")
+        detected_w, detected_h = get_rpi_config_resolution()
+        is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480" or detected_w == 1480 or detected_h == 320)
+        is_large_display = (os.environ.get("DASHBOARD_WIDTH") == "3840" or detected_w == 3840 or detected_h == 1100)
+        
         if platform.system() == 'Windows' or is_small_display:
             # Default to small display resolution (1480x320) and 1x scale
             default_w, default_h, default_s = 1480, 320, "1.0"
+        elif is_large_display:
+            # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
+            default_w, default_h, default_s = 3840, 1100, "2.0"
         else:
-            # Default to large display resolution (3840x1100) and 2x scale for Linux
+            # Linux default fallback (usually large display for backward compatibility)
             default_w, default_h, default_s = 3840, 1100, "2.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
