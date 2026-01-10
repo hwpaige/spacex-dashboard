@@ -1412,12 +1412,12 @@ Type=Application
 EOF
     
     # Create .xsession for the user
-    sudo -u "$USER" bash -c "cat << 'EOF' > $HOME_DIR/.xsession
+    sudo -u "$USER" tee "$HOME_DIR/.xsession" > /dev/null << 'EOF'
 #!/bin/bash
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-echo \"Starting X session at \$(date)\" > ~/xsession.log
+echo "Starting X session at $(date)" > ~/xsession.log
 
 # Clear any console text and switch to X tty
 chvt 7 2>/dev/null || true
@@ -1457,10 +1457,10 @@ export DASHBOARD_WIDTH=1480
 export DASHBOARD_HEIGHT=320
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS=\"--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen\"
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
-export QT_LOGGING_RULES=\"qt.qpa.plugin=false\"
+export QT_LOGGING_RULES="qt.qpa.plugin=false"
 
 # Change to app directory
 cd ~/Desktop/project/src
@@ -1471,11 +1471,11 @@ if [ -f ~/app.log ]; then
 fi
 > ~/app.log
 
-echo \"Starting SpaceX Dashboard at \$(date)\" >> ~/app.log
+echo "Starting SpaceX Dashboard at $(date)" >> ~/app.log
 
 # Start the application
 exec python3 app.py >> ~/app.log 2>&1
-EOF"
+EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
     
     # Fix X authority permissions
