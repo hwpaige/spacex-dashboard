@@ -133,6 +133,8 @@ setup_dashboard_environment()
 setup_dashboard_logging(__file__)
 logger = logging.getLogger(__name__)
 
+logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR')}")
+
 # Qt message handler to surface QML / Qt internal messages (errors, warnings, info)
 # Install as early as possible after logger initialization
 
@@ -449,14 +451,12 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load launch trends cache: {e}")
         # Platform-aware defaults for resolution and scaling
-        if platform.system() == 'Windows':
-            default_w, default_h, default_s = 1480, 320, "1.0"
-        else:
+        if os.environ.get("DASHBOARD_WIDTH") == "3840":
             # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
             default_w, default_h, default_s = 3840, 1100, "2.0"
-            # If we are explicitly using the small display resolution on Linux, default to 1x scale
-            if os.environ.get("DASHBOARD_WIDTH") == "1480":
-                default_s = "1.0"
+        else:
+            # Default to small display resolution (1480x320)
+            default_w, default_h, default_s = 1480, 320, "1.0"
 
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
@@ -470,9 +470,11 @@ class Backend(QObject):
                 # window size so that the physical window (logical * scale) remains the same.
                 self._width = int(self._width / scale)
                 self._height = int(self._height / scale)
-                logger.info(f"Backend: Applying DASHBOARD_SCALE={scale}. Logical size: {self._width}x{self._height}")
+            
+            logger.info(f"Backend: Initialized resolution: {self._width}x{self._height} (logical), scale: {scale}")
         except (ValueError, TypeError):
-            pass
+            logger.warning(f"Backend: Invalid DASHBOARD_SCALE value: {scale_str}")
+            scale = 1.0
 
         try:
             cal_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CALENDAR)
@@ -2974,15 +2976,9 @@ if __name__ == '__main__':
     # Support high DPI scaling by using environment variables if set
     # These are typically set in setup_dashboard_environment() from functions.py
     # or by the user via DASHBOARD_SCALE.
-    if "QT_SCALE_FACTOR" not in os.environ:
-        default_scale = "1.0" if platform.system() == 'Windows' or os.environ.get("DASHBOARD_WIDTH") == "1480" else "2.0"
-        os.environ["QT_SCALE_FACTOR"] = os.environ.get("DASHBOARD_SCALE", default_scale)
+    # We already called setup_dashboard_environment() at the top of the file.
     
-    # In Qt 6, high DPI is enabled by default. 
-    # We only set these if not already present to avoid overriding user/setup preferences.
-    if "QT_AUTO_SCREEN_SCALE_FACTOR" not in os.environ:
-        os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "0"
-    
+    # QApplication setup
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
