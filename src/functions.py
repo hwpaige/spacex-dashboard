@@ -2730,7 +2730,11 @@ def get_rpi_config_resolution():
 
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
-    if platform.system() == 'Windows':
+    # Check if flags are already set (e.g. by .xsession or systemd)
+    # If so, we avoid overwriting them to preserve critical stability flags
+    if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
+        logger.info("setup_dashboard_environment: QTWEBENGINE_CHROMIUM_FLAGS already set, respecting environment.")
+    elif platform.system() == 'Windows':
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             "--enable-gpu --ignore-gpu-blocklist --enable-accelerated-video-decode --enable-webgl "
             "--disable-web-security --allow-running-insecure-content "

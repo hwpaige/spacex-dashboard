@@ -185,12 +185,27 @@ if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree
     echo "Raspberry Pi detected. Reapplying display rotation for Waveshare 11.9\" (320x1480) display..."
     # Wait a moment for X session to be ready
     sleep 2
-    # Apply rotation if HDMI-1 is connected (assumes the small display is on HDMI-1)
-    if xrandr | grep -q "HDMI-1 connected"; then
-        xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr_update.log || echo "Warning: xrandr rotation failed - display may need manual setup"
-        echo "Display rotation applied. If the app still scales incorrectly, you may need to rerun setup_pi.sh manually."
+    # Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
+    OUTPUT=$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
+    if [ -z "$OUTPUT" ]; then
+        # Fallback to first connected output if HDMI-1/HDMI-A-1 not found
+        OUTPUT=$(xrandr | grep " connected" | cut -d' ' -f1 | head -n1)
+    fi
+
+    if [ -n "$OUTPUT" ]; then
+        echo "Detected display output: $OUTPUT"
+        # Only apply rotation for the small display (Waveshare 11.9") if explicitly configured or detected
+        # By default, we use 'left' rotation for the small display and 'normal' for the large display
+        if [ "$DASHBOARD_WIDTH" = "1480" ] || grep -q "max_framebuffer_height=320" /boot/firmware/config.txt 2>/dev/null; then
+            echo "Applying 'left' rotation for small display..."
+            xrandr --output "$OUTPUT" --rotate left 2>&1 | tee -a ~/xrandr_update.log || echo "Warning: xrandr rotation failed"
+        else
+            echo "Applying 'normal' rotation..."
+            xrandr --output "$OUTPUT" --rotate normal 2>&1 | tee -a ~/xrandr_update.log || echo "Warning: xrandr rotation failed"
+        fi
+        echo "Display settings applied. If the app still scales incorrectly, you may need to rerun the setup script manually."
     else
-        echo "HDMI-1 not detected as connected. Skipping display rotation."
+        echo "No connected HDMI display detected. Skipping display setup."
     fi
 else
     echo "Not a Raspberry Pi or model file not found. Skipping display setup."

@@ -706,9 +706,7 @@ max_framebuffer_height=1100
 hdmi_group=2
 hdmi_mode=87
 hdmi_timings=3840 0 160 40 120 1100 0 10 3 10 0 0 0 60 0 297000000 3
-dtoverlay=vc4-kms-v3d
 dtoverlay=vc4-kms-v3d,cma-512
-dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 # END SPACEX DASHBOARD
 EOF
@@ -1436,9 +1434,23 @@ sleep 2
 # Force 3840x1100 resolution for DFR1125
 # Modeline: 3840x1100 @ 60Hz (297MHz pixel clock)
 MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
-xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
-xrandr --addmode HDMI-1 "3840x1100_60.00" 2>/dev/null || true
-xrandr --output HDMI-1 --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
+
+# Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
+OUTPUT=$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
+if [ -z "$OUTPUT" ]; then
+    # Fallback to first connected output if HDMI-1/HDMI-A-1 not found
+    OUTPUT=$(xrandr | grep " connected" | cut -d' ' -f1 | head -n1)
+fi
+
+echo "Using display output: $OUTPUT" >> ~/xsession.log
+
+if [ -n "$OUTPUT" ]; then
+    xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
+    xrandr --addmode "$OUTPUT" "3840x1100_60.00" 2>/dev/null || true
+    xrandr --output "$OUTPUT" --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
+else
+    echo "ERROR: No connected display output found" >> ~/xsession.log
+fi
 
 # Set X settings
 xset s off

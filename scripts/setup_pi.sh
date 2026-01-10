@@ -704,9 +704,7 @@ max_framebuffer_height=320
 hdmi_group=2
 hdmi_mode=87
 hdmi_timings=1480 0 80 16 32 320 0 16 4 12 0 0 0 60 0 42000000 3
-dtoverlay=vc4-kms-v3d
 dtoverlay=vc4-kms-v3d,cma-128
-dtoverlay=vc4-kms-v3d-pi5
 disable_splash=1
 # END SPACEX DASHBOARD
 EOF
@@ -1427,7 +1425,21 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-xrandr --output HDMI-1 --rotate left 2>&1 | tee -a ~/xrandr.log
+
+# Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
+OUTPUT=$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
+if [ -z "$OUTPUT" ]; then
+    # Fallback to first connected output if HDMI-1/HDMI-A-1 not found
+    OUTPUT=$(xrandr | grep " connected" | cut -d' ' -f1 | head -n1)
+fi
+
+echo "Using display output: $OUTPUT" >> ~/xsession.log
+
+if [ -n "$OUTPUT" ]; then
+    xrandr --output "$OUTPUT" --rotate left 2>&1 | tee -a ~/xrandr.log
+else
+    echo "ERROR: No connected display output found" >> ~/xsession.log
+fi
 
 # Set X settings
 xset s off
