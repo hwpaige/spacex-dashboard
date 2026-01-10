@@ -178,6 +178,7 @@ class EventModel(QAbstractListModel):
     TrackMapPathRole = Qt.ItemDataRole.UserRole + 19
     LandingTypeRole = Qt.ItemDataRole.UserRole + 20
     LandingLocationRole = Qt.ItemDataRole.UserRole + 21
+    XVideoUrlRole = Qt.ItemDataRole.UserRole + 22
 
     def __init__(self, data, mode, event_type, tz, parent=None):
         super().__init__(parent)
@@ -239,6 +240,8 @@ class EventModel(QAbstractListModel):
                     return item.get('landing_type', '')
                 elif role == self.LandingLocationRole:
                     return item.get('landing_location', '')
+                elif role == self.XVideoUrlRole:
+                    return item.get('x_video_url', '')
             return None
 
     def roleNames(self):
@@ -264,6 +267,7 @@ class EventModel(QAbstractListModel):
         roles[self.TrackMapPathRole] = b"trackMapPath"
         roles[self.LandingTypeRole] = b"landingType"
         roles[self.LandingLocationRole] = b"landingLocation"
+        roles[self.XVideoUrlRole] = b"xVideoUrl"
         return roles
 
     def update_data(self):
@@ -1443,6 +1447,19 @@ class Backend(QObject):
                 
         except Exception as e:
             logger.error(f"Error loading trajectory for {mission}: {e}")
+
+    @pyqtSlot(str, result=str)
+    def getConvertedVideoUrl(self, video_url):
+        """Helper to convert raw YouTube URLs to embed format without updating state."""
+        if not video_url or not video_url.strip():
+            return ""
+        if 'youtube.com/watch?v=' in video_url:
+            video_id = video_url.split('v=')[1].split('&')[0]
+            return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+        if 'youtu.be/' in video_url:
+            video_id = video_url.split('youtu.be/')[1].split('?')[0]
+            return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+        return video_url
 
     @pyqtSlot(str)
     def loadLaunchVideo(self, video_url):

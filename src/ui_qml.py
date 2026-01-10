@@ -184,6 +184,23 @@ Window {
             var current = root.currentVideoUrl.toString()
             var next = backend.videoUrl.toString()
             
+            // If the user has manually selected NSF or the Live stream, 
+            // don't let background updates (like the placeholder) override it.
+            var isManualLive = (backend.liveLaunchUrl !== "" && current === backend.liveLaunchUrl)
+            // We check the URL directly for NSF as well
+            var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+            var isManualNsf = (current === nsfUrl)
+            
+            if (isManualLive || isManualNsf) {
+                // Only allow override if 'next' is a specific YouTube video (not the placeholder)
+                // and it's different from what we had.
+                if (next.indexOf("youtube.com/embed/") !== -1 && !next.endsWith("/youtube_embed.html") && next !== current) {
+                     console.log("Allowing manual override from list selection while on LIVE/NSF")
+                     root.currentVideoUrl = next
+                }
+                return
+            }
+            
             if (next.indexOf("youtube.com/embed/") !== -1 || 
                 current === "" || 
                 current.endsWith("/youtube_embed.html") || 
@@ -1157,8 +1174,23 @@ Window {
                                         // Load trajectory for this specific launch
                                         backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
                                         
-                                        // Load video for this launch if available, otherwise clear the video view
-                                        backend.loadLaunchVideo(model.videoUrl || "")
+                                        // If this launch has an X video URL and it matches the backend's live URL,
+                                        // "effectively select" the LIVE button by using that URL directly.
+                                        var xUrl = model.xVideoUrl || "";
+                                        if (xUrl !== "" && xUrl === backend.liveLaunchUrl) {
+                                            console.log("Launch selected matches LIVE launch, switching to X.com stream")
+                                            root.currentVideoUrl = backend.liveLaunchUrl
+                                        } else {
+                                            // Load video for this launch without hijacking backend.videoUrl (the Starship Playlist).
+                                            // This allows easy switching back to the playlist by clicking the rocket button.
+                                            var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
+                                            if (convertedUrl !== "") {
+                                                root.currentVideoUrl = convertedUrl;
+                                            } else {
+                                                // Clear the video view if no video is available for this launch
+                                                root.currentVideoUrl = "about:blank";
+                                            }
+                                        }
                                         
                                         console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
                                     }
