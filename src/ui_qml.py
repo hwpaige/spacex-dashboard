@@ -100,7 +100,7 @@ Window {
         }
     }
     // Use the same background color as the globe view for visual consistency
-    color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
@@ -116,9 +116,9 @@ Window {
     // which works even when the scene-graph clipping is ignored by Chromium.
     function _injectRoundedCorners(webView, radiusPx, customColor) {
         if (!webView || !webView.runJavaScript) return;
-        if (typeof backend !== 'undefined' && backend.wifiConnecting) return; // Prevent JS during connection
+        if (typeof backend !== 'undefined' && backend && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
-        var themeColor = customColor ? customColor : (backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8");
+        var themeColor = customColor ? customColor : ((backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8");
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
                  "var themeColor='" + themeColor + "';" +
@@ -205,7 +205,7 @@ Window {
         id: loadingScreen
         anchors.fill: parent
         // Match app background to the globe background
-        color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+        color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
     // Keep this container visible during initial load OR while an update is in progress
     visible: !!(backend && (backend.isLoading || backend.updatingInProgress))
         z: 1
@@ -222,11 +222,11 @@ Window {
         }
 
         Text {
-            text: backend.loadingStatus
+            text: backend ? backend.loadingStatus : "Initializing..."
             anchors.top: splashLogo.bottom
             anchors.topMargin: 20
             anchors.horizontalCenter: parent.horizontalCenter
-            color: backend.theme === "dark" ? "#ffffff" : "#000000"
+            color: (backend && backend.theme === "dark") ? "#ffffff" : "#000000"
             font.pixelSize: 16
             font.family: "D-DIN"
             horizontalAlignment: Text.AlignHCenter
@@ -237,7 +237,7 @@ Window {
             id: updateOverlay
             anchors.fill: parent
             visible: backend && backend.updatingInProgress
-            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+            color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
             opacity: 0.98
             z: 9999
 
@@ -506,12 +506,12 @@ Window {
                                 Layout.fillHeight: true
                                 visible: !plotCard.plotCardShowsGlobe
 
-                                chartType: backend.chartType
-                                viewMode: backend.chartViewMode
-                                series: backend.launchTrendsSeries
-                                months: backend.launchTrendsMonths
-                                maxValue: backend.launchTrendsMaxValue
-                                theme: backend.theme
+                                chartType: backend ? backend.chartType : "line"
+                                viewMode: backend ? backend.chartViewMode : "actual"
+                                series: backend ? backend.launchTrendsSeries : []
+                                months: backend ? backend.launchTrendsMonths : []
+                                maxValue: backend ? backend.launchTrendsMaxValue : 10
+                                theme: backend ? backend.theme : "dark"
 
                                 opacity: showAnimated
 
@@ -570,12 +570,14 @@ Window {
                                         onLoadingChanged: function(loadRequest) {
                                             if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
                                                 plotGlobeView._loaded = true;
-                                                var trajectoryData = backend.get_launch_trajectory();
+                                                var trajectoryData = backend ? backend.get_launch_trajectory() : null;
                                                 if (trajectoryData) {
                                                     plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                                 }
                                                 // Set initial theme
-                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                                if (backend) {
+                                                    plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                                }
 
                                                 // Enforce rounded corners inside the page itself
                                                 if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
@@ -589,7 +591,9 @@ Window {
                                         Connections {
                                             target: backend
                                             function onThemeChanged() {
-                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                                if (backend) {
+                                                    plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                                }
                                             }
                                         }
                                     }
@@ -623,23 +627,23 @@ Window {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                           (backend.chartType === modelData.type ?
-                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")) :
-                                           (backend.chartViewMode === modelData.type ?
-                                            (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                            (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"))
+                                           (backend && backend.chartType === modelData.type ?
+                                            (backend && backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")) :
+                                           (backend && backend.chartViewMode === modelData.type ?
+                                            (backend && backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"))
                                     radius: 14
                                     border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend.chartType === modelData.type ?
-                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")) :
-                                                 (backend.chartViewMode === modelData.type ?
-                                                  (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                  (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                                 (backend && backend.chartType === modelData.type ?
+                                                  (backend && backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")) :
+                                                 (backend && backend.chartViewMode === modelData.type ?
+                                                  (backend && backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
                                     border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend.chartType === modelData.type ? 2 : 1) :
-                                                 (backend.chartViewMode === modelData.type ? 2 : 1)
+                                                 (backend && backend.chartType === modelData.type ? 2 : 1) :
+                                                 (backend && backend.chartViewMode === modelData.type ? 2 : 1)
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     Behavior on border.color { ColorAnimation { duration: 200 } }
@@ -650,15 +654,15 @@ Window {
                                         text: modelData.icon
                                         font.pixelSize: 14
                                         font.family: "Font Awesome 5 Free"
-                                        color: backend.theme === "dark" ? "white" : "black"
+                                        color: (backend && backend.theme === "dark") ? "white" : "black"
                                     }
 
                                     MouseArea {
                                         anchors.fill: parent
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                  backend.chartType = modelData.type :
-                                                  backend.chartViewMode = modelData.type
+                                                  (backend ? backend.chartType = modelData.type : null) :
+                                                  (backend ? backend.chartViewMode = modelData.type : null)
                                     }
 
                                     ToolTip {
@@ -679,8 +683,8 @@ Window {
                                 width: plotCard.isHighResolution ? 0 : 40
                                 height: 28
                                 radius: 14
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f5f5f5"
+                                border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                                 border.width: 1
 
                                 Behavior on color { ColorAnimation { duration: 200 } }
@@ -693,7 +697,7 @@ Window {
                                     text: plotCard.plotCardShowsGlobe ? "\uf201" : "\uf0ac"
                                     font.pixelSize: 14
                                     font.family: "Font Awesome 5 Free"
-                                    color: backend.theme === "dark" ? "white" : "black"
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
                                 }
 
                                 MouseArea {
@@ -727,8 +731,8 @@ Window {
                         width: 40
                         height: 28
                         radius: 14
-                        color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f5f5f5"
+                        border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
                         z: 1000
 
@@ -742,7 +746,7 @@ Window {
                             text: "\uf201"
                             font.pixelSize: 14
                             font.family: "Font Awesome 5 Free"
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                         }
 
                         MouseArea {
@@ -807,7 +811,7 @@ Window {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: 0
-                                    color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
                                     clip: false
                                     // Performance: Disable layers to reduce GPU/Compositor load on Pi
                                     layer.enabled: false
@@ -830,8 +834,8 @@ Window {
                                             layer.enabled: false
                                             layer.smooth: true
                                             // Avoid white square corners by matching parent background
-                                            backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
-                                            url: parent.visible ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                            backgroundColor: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+                                            url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                             onUrlChanged: console.log("WebEngineView URL changed to:", url)
                                             settings.webGLEnabled: true
                                             settings.accelerated2dCanvasEnabled: true
@@ -1076,12 +1080,12 @@ Window {
                             Rectangle { 
                                 anchors.fill: parent; 
                                 color: (model && model.isGroup) ? "transparent" : 
-                                       (backend.selectedLaunch === model.mission ? 
-                                        (backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
-                                        (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
+                                       (backend && backend.selectedLaunch === model.mission ? 
+                                        (backend && backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
+                                        (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
                                 radius: (model && model.isGroup) ? 0 : 6;
-                                border.width: (model && !model.isGroup && backend.selectedLaunch === model.mission) ? 2 : 0;
-                                border.color: backend.theme === "dark" ? "#6a8a8a" : "#80a0a0";
+                                border.width: (model && !model.isGroup && backend && backend.selectedLaunch === model.mission) ? 2 : 0;
+                                border.color: (backend && backend.theme === "dark") ? "#6a8a8a" : "#80a0a0";
                             }
 
                             Text {
@@ -1110,7 +1114,7 @@ Window {
                                             return idx !== -1 ? m.substring(idx + 1).trim() : m;
                                         }
                                         font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
-                                        color: backend.theme === "dark" ? "white" : "black"
+                                        color: (backend && backend.theme === "dark") ? "white" : "black"
                                         width: parent.width
                                         wrapMode: Text.Wrap
                                     }
@@ -1122,7 +1126,7 @@ Window {
                                         }
                                         visible: text !== ""
                                         font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
-                                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                        color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                         width: parent.width
                                         wrapMode: Text.Wrap
                                     }
@@ -1142,7 +1146,7 @@ Window {
                                 Row { spacing: 5
                                     Text { text: "\uf017"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { 
-                                        text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
+                                        text: ((model && model.localTime && backend) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
                                               ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"
                                         font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" 
                                     }
@@ -1431,13 +1435,13 @@ Window {
                                                     }
                                                     visible: text !== ""
                                                     font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
-                                                    color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                                    color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
                                                 }
                                             }
                                             Text { 
-                                                text: (modelData.localTime ? modelData.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
+                                                text: (modelData.localTime && backend ? modelData.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
                                                       (modelData.date ? modelData.date : "") + (modelData.time ? (" " + modelData.time) : "") + " UTC"
                                                 font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" 
                                             }
@@ -2008,8 +2012,8 @@ Window {
                     Layout.maximumWidth: 200
                     height: 28
                     radius: 14
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
+                    border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
 
                     Row {
@@ -2017,8 +2021,8 @@ Window {
                         spacing: 10
 
                         Text {
-                            text: backend.currentTime
-                            color: backend.theme === "dark" ? "white" : "black"
+                            text: backend ? backend.currentTime : "--:--:--"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
@@ -2026,14 +2030,14 @@ Window {
                         Text {
                             id: weatherText
                             text: {
-                                var weather = backend.weather;
+                                var weather = backend ? backend.weather : null;
                                 if (weather && weather.temperature_f !== undefined) {
                                     return "Wind " + (weather.wind_speed_kts || 0).toFixed(1) + " kts | " +
                                            (weather.temperature_f || 0).toFixed(1) + "°F";
                                 }
                                 return "Weather loading...";
                             }
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
@@ -2273,7 +2277,7 @@ Window {
                                                 // Handle both structured object and legacy string
                                                 text: (typeof modelData === "object" && modelData.date) ? modelData.date : ""
                                                 visible: text !== ""
-                                                color: backend.theme === "dark" ? "#88ffffff" : "#88000000" // Muted opacity
+                                                color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity
                                                 font.pixelSize: 13
                                                 font.family: "D-DIN"
                                                 font.bold: true
@@ -2289,7 +2293,7 @@ Window {
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignTop
                                                 wrapMode: Text.Wrap
-                                                color: backend.theme === "dark" ? "#dddddd" : "#333333"
+                                                color: (backend && backend.theme === "dark") ? "#dddddd" : "#333333"
                                                 font.pixelSize: 13
                                                 font.family: "D-DIN"
                                                 lineHeight: 1.2
@@ -2304,7 +2308,7 @@ Window {
                                             anchors.leftMargin: 12
                                             anchors.rightMargin: 12
                                             height: 1
-                                            color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
+                                            color: (backend && backend.theme === "dark") ? "#33ffffff" : "#33000000"
                                             visible: ListView.view && index < ListView.view.count - 1
                                         }
                                     }
@@ -2324,8 +2328,8 @@ Window {
                     width: 28
                     height: 32
                     radius: 16
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
+                    border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
 
                     Text {
@@ -2333,19 +2337,19 @@ Window {
                         text: "\uf021"
                         font.family: "Font Awesome 5 Free"
                         font.pixelSize: 12
-                        color: backend.theme === "dark" ? "white" : "black"
+                        color: (backend && backend.theme === "dark") ? "white" : "black"
                     }
 
                     MouseArea {
                         anchors.fill: parent
                         onClicked: {
                             console.log("Update clicked - showing update dialog")
-                            backend.show_update_dialog()
+                            if (backend) backend.show_update_dialog()
                         }
                     }
 
                     ToolTip {
-                        text: backend.updateAvailable ? "Update Available - Click to Update and Reboot" : "Update and Reboot"
+                        text: (backend && backend.updateAvailable) ? "Update Available - Click to Update and Reboot" : "Update and Reboot"
                         delay: 500
                     }
 
@@ -2355,7 +2359,7 @@ Window {
                         height: 8
                         radius: 4
                         color: "#FF4444"
-                        border.color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
                         border.width: 1
                         anchors.top: parent.top
                         anchors.right: parent.right
@@ -2370,8 +2374,8 @@ Window {
                         width: 28
                         height: 32
                         radius: 16
-                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
+                        border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
 
                         Text {
@@ -2380,7 +2384,7 @@ Window {
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
                             font.weight: Font.Black
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                         }
 
                         MouseArea {
@@ -2398,9 +2402,9 @@ Window {
                             height: 280
                             padding: 0
                             background: Rectangle {
-                                color: backend.theme === "dark" ? "#111111" : "#f5f5f5"
+                                color: (backend && backend.theme === "dark") ? "#111111" : "#f5f5f5"
                                 radius: 20
-                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#ddd"
+                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#ddd"
                                 border.width: 1
                                 layer.enabled: true
                             }
@@ -2413,7 +2417,7 @@ Window {
                                 Rectangle {
                                     Layout.fillHeight: true
                                     Layout.preferredWidth: 70
-                                    color: backend.theme === "dark" ? "#181818" : "#ebebeb"
+                                    color: (backend && backend.theme === "dark") ? "#181818" : "#ebebeb"
                                     radius: 20
 
                                     // Mask the right side of sidebar radius
@@ -3420,13 +3424,13 @@ Window {
                         Layout.preferredHeight: 28
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
-                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#ffffff"
+                            border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#cccccc"
                             border.width: 1
                             radius: 3
                         }
 
-                        color: backend.theme === "dark" ? "white" : "black"
+                        color: (backend && backend.theme === "dark") ? "white" : "black"
                     }
 
                     Button {
@@ -3439,13 +3443,13 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 12
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -3466,13 +3470,13 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            color: (backend && backend.theme === "dark") ? "#4a4e4e" : "#d0d0d0"
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 10
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -3794,13 +3798,13 @@ Window {
                         text: "Update Available"
                         font.pixelSize: 16
                         font.bold: true
-                        color: backend.theme === "dark" ? "white" : "black"
+                        color: (backend && backend.theme === "dark") ? "white" : "black"
                     }
 
                     Text {
-                        text: "• Last checked: " + backend.lastUpdateCheckTime
+                        text: "• Last checked: " + (backend ? backend.lastUpdateCheckTime : "Never")
                         font.pixelSize: 10
-                        color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                        color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                         Layout.alignment: Qt.AlignVCenter
                     }
                 }
@@ -3809,7 +3813,7 @@ Window {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 45
-                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
@@ -3830,16 +3834,16 @@ Window {
                             spacing: 2
 
                             Text {
-                                text: "Current: " + (backend.currentVersionInfo.short_hash || "Unknown")
+                                text: "Current: " + (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
                                 font.pixelSize: 11
                                 font.bold: true
-                                color: backend.theme === "dark" ? "white" : "black"
+                                color: (backend && backend.theme === "dark") ? "white" : "black"
                             }
 
                             Text {
-                                text: backend.currentVersionInfo.message || "Unable to retrieve current version"
+                                text: (backend && backend.currentVersionInfo) ? (backend.currentVersionInfo.message || "Unable to retrieve current version") : "Waiting for backend..."
                                 font.pixelSize: 9
-                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -3851,7 +3855,7 @@ Window {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 45
-                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
@@ -3872,16 +3876,16 @@ Window {
                             spacing: 2
 
                             Text {
-                                text: "Latest: " + (backend.latestVersionInfo.short_hash || "Unknown")
+                                text: "Latest: " + (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
                                 font.pixelSize: 11
                                 font.bold: true
-                                color: backend.theme === "dark" ? "white" : "black"
+                                color: (backend && backend.theme === "dark") ? "white" : "black"
                             }
 
                             Text {
-                                text: backend.latestVersionInfo.message || "Unable to retrieve latest version"
+                                text: (backend && backend.latestVersionInfo) ? (backend.latestVersionInfo.message || "Unable to retrieve latest version") : "Waiting for backend..."
                                 font.pixelSize: 9
-                                color: backend.theme === "dark" ? "#cccccc" : "#666666"
+                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -3892,6 +3896,7 @@ Window {
                 // Status message - compact
                 Text {
                     text: {
+                        if (!backend) return "Initializing..."
                         var current = backend.currentVersionInfo.hash
                         var latest = backend.latestVersionInfo.hash
                         if (!current || !latest) {
@@ -3905,6 +3910,7 @@ Window {
                     font.pixelSize: 12
                     font.bold: true
                     color: {
+                        if (!backend) return "grey"
                         var current = backend.currentVersionInfo.hash
                         var latest = backend.latestVersionInfo.hash
                         if (!current || !latest) {

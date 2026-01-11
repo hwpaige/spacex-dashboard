@@ -968,10 +968,10 @@ class Backend(QObject):
         self.update_check_timer.timeout.connect(self.check_for_updates_periodic)
         self.update_check_timer.start(21600000)  # 6 hours
 
-        # Near-real-time update for next launch - check every 60 seconds
+        # Near-real-time update for next launch - check every 2 minutes (v2.3.0 detailed)
         self.next_launch_timer = QTimer(self)
         self.next_launch_timer.timeout.connect(self.update_next_launch_periodic)
-        self.next_launch_timer.start(60000)  # 1 minute
+        self.next_launch_timer.start(120000)  # 2 minutes
 
         # Countdown timer - 1 second for precision
         self.countdown_timer = QTimer(self)
@@ -2031,17 +2031,23 @@ class Backend(QObject):
         if not upcoming:
             return
 
-        # Verify ID still matches our current 'next' launch
-        if upcoming[0].get('id') != detailed_data.get('id'):
+        # Find the launch by ID in the upcoming list
+        launch_index = -1
+        for i, l in enumerate(upcoming):
+            if l.get('id') == detailed_data.get('id'):
+                launch_index = i
+                break
+        
+        if launch_index == -1:
             return
 
-        # Parse detailed data and update the first item in the list
+        # Parse detailed data and update the item in the list
         parsed_data = funcs.parse_launch_data(detailed_data, is_detailed=True)
         
         # Only update and notify if something changed (like status)
-        if upcoming[0] != parsed_data:
-            logger.info(f"Backend: Next launch status/data changed! Status: {parsed_data.get('status')}")
-            upcoming[0] = parsed_data
+        if upcoming[launch_index] != parsed_data:
+            logger.info(f"Backend: Launch {parsed_data.get('id')} status/data changed! Status: {parsed_data.get('status')}")
+            upcoming[launch_index] = parsed_data
             
             # Persist the update to disk cache so it's available after restart
             try:

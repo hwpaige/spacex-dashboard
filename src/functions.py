@@ -184,9 +184,9 @@ def emit_loader_status(message: str):
 
 # --- Cache paths and constants (UI-agnostic) ---
 LAUNCH_API_BASE_URL = "https://launch-narrative-api-dafccc521fb8.herokuapp.com"
-CACHE_REFRESH_INTERVAL_PREVIOUS = 60   # 1 minutes (matches API)
-CACHE_REFRESH_INTERVAL_UPCOMING = 60   # 1 minutes (matches API)
-CACHE_REFRESH_INTERVAL_F1 = 3600         # 1 hour for F1 data
+CACHE_REFRESH_INTERVAL_PREVIOUS = 600  # 10 minutes (increased to avoid API limits)
+CACHE_REFRESH_INTERVAL_UPCOMING = 600  # 10 minutes (increased to avoid API limits)
+CACHE_REFRESH_INTERVAL_F1 = 3600       # 1 hour for F1 data
 CACHE_REFRESH_INTERVAL_WEATHER = 300     # 5 minutes (matches API)
 CACHE_REFRESH_INTERVAL_NARRATIVES = 900 # 15 minutes
 TRAJECTORY_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'cache', 'trajectory_cache.json')
@@ -711,8 +711,30 @@ def fetch_launches():
         
         # For upcoming, we trust the API's current schedule
         # but remove any that have moved into the previous list
+        # SPECIAL CASE: if a launch is in 'previous' but is NOT finished (e.g. 'In Flight'),
+        # we treat it as an active/upcoming launch so it stays in the banner and next launch slot.
         prev_ids = {l.get('id') for l in merged_previous if l.get('id')}
-        merged_upcoming = [l for l in api_upcoming if l.get('id') not in prev_ids]
+        
+        # Find unfinished launches in the previous list
+        active_launches = [l for l in merged_previous if not is_launch_finished(l.get('status'))]
+        active_ids = {l.get('id') for l in active_launches}
+        
+        # Remove truly finished previous launches from the upcoming list
+        merged_upcoming = [l for l in api_upcoming if l.get('id') not in prev_ids or l.get('id') in active_ids]
+        
+        # Add any active launches from 'previous' back to 'upcoming' if they are missing
+        upcoming_ids = {l.get('id') for l in merged_upcoming if l.get('id')}
+        for al in active_launches:
+            if al.get('id') not in upcoming_ids:
+                merged_upcoming.append(al)
+                
+        # To avoid showing them in "Past Launches" group while they are "In Flight",
+        # we remove active launches from the merged_previous list
+        merged_previous = [l for l in merged_previous if l.get('id') not in active_ids]
+        
+        # Sort both lists by date (upcoming ascending, previous descending)
+        merged_upcoming = sorted(merged_upcoming, key=_parse_net)
+        merged_previous = sorted(merged_previous, key=_parse_net, reverse=True)
         
         launch_data = {
             'upcoming': merged_upcoming,
@@ -2430,8 +2452,8 @@ def get_next_launch_info(upcoming_launches, tz_obj):
             lt_utc = _get_parsed_dt(l['net'])
             if not lt_utc: continue
             is_finished = is_launch_finished(l.get('status'))
-            # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
-            if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
+            # Include future launches OR ongoing launches (not finished regardless of T0)
+            if lt_utc > current_time or (lt_utc <= current_time and not is_finished):
                 valid_launches.append(l)
         except Exception:
             continue
@@ -2457,8 +2479,8 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
             lt_utc = _get_parsed_dt(l['net'])
             if not lt_utc: continue
             is_finished = is_launch_finished(l.get('status'))
-            # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
-            if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
+            # Include future launches OR ongoing launches (not finished regardless of T0)
+            if lt_utc > current_time or (lt_utc <= current_time and not is_finished):
                 valid_launches.append(l)
         except Exception:
             continue
@@ -2938,9 +2960,9 @@ def get_launch_tray_visibility_state(launch_data, mode):
         if current_time <= launch_time <= current_time + timedelta(hours=1):
             return True
 
-        # Ongoing/post‑T0: keep tray visible if it just launched and isn't finished yet (2 hour window)
+        # Ongoing/post‑T0: keep tray visible if it just launched and isn't finished yet
         is_finished = is_launch_finished(launch.get('status'))
-        if launch_time <= current_time <= launch_time + timedelta(hours=2) and not is_finished:
+        if launch_time <= current_time and not is_finished:
             return True
 
     return False
@@ -2959,7 +2981,7 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
             upcoming_sorted = upcoming
 
         now_utc = datetime.now(pytz.UTC)
-        # Check for ongoing/just-launched (within 2 hours of T0 and not finished)
+        # Check for ongoing/just-launched (not finished regardless of T0)
         for l in upcoming_sorted:
             try:
                 lt_utc = _get_parsed_dt(l.get('net'))
@@ -2968,7 +2990,7 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
                 continue
             
             is_finished = is_launch_finished(l.get('status'))
-            if lt_utc <= now_utc <= lt_utc + timedelta(hours=2) and not is_finished:
+            if lt_utc <= now_utc and not is_finished:
                 delta = datetime.now(tz_obj) - lt_utc.astimezone(tz_obj)
                 total_seconds = int(max(delta.total_seconds(), 0))
                 days, rem = divmod(total_seconds, 86400)
