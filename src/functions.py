@@ -2128,7 +2128,6 @@ def group_event_data(data, mode, event_type, timezone_obj):
                 grouped.extend(earlier_launches)
     
     profiler.mark(f"group_event_data End (grouped count: {len(grouped)})")
-    _save_date_cache()
     return grouped
 
 LAUNCH_DESCRIPTIONS = [
@@ -2501,11 +2500,9 @@ def get_closest_x_video_url(launch_data):
             continue
 
         try:
-            launch_net = parse(launch['net'])
-            if launch_net.tzinfo is None:
-                launch_net = pytz.UTC.localize(launch_net)
-            else:
-                launch_net = launch_net.astimezone(pytz.UTC)
+            launch_net = _get_parsed_dt(launch['net'])
+            if not launch_net:
+                continue
 
             diff = abs((current_time - launch_net).total_seconds())
             
@@ -2925,14 +2922,15 @@ def get_launch_tray_visibility_state(launch_data, mode):
         # Sort upcoming launches by time
         upcoming_sorted = sorted(
             [l for l in upcoming if l.get('time') != 'TBD' and l.get('net')],
-            key=lambda x: parse(x['net'])
+            key=lambda x: _get_parsed_dt(x.get('net')) or datetime.min.replace(tzinfo=pytz.UTC)
         )
     except Exception:
         upcoming_sorted = upcoming
 
     for launch in upcoming_sorted:
         try:
-            launch_time = parse(launch['net']).replace(tzinfo=pytz.UTC)
+            launch_time = _get_parsed_dt(launch.get('net'))
+            if not launch_time: continue
         except Exception:
             continue
 
@@ -2955,7 +2953,7 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
             # Sort upcoming launches by time
             upcoming_sorted = sorted(
                 [l for l in upcoming if l.get('time') != 'TBD' and l.get('net')],
-                key=lambda x: parse(x['net'])
+                key=lambda x: _get_parsed_dt(x.get('net')) or datetime.min.replace(tzinfo=pytz.UTC)
             )
         except Exception:
             upcoming_sorted = upcoming
@@ -2964,7 +2962,8 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
         # Check for ongoing/just-launched (within 2 hours of T0 and not finished)
         for l in upcoming_sorted:
             try:
-                lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+                lt_utc = _get_parsed_dt(l.get('net'))
+                if not lt_utc: continue
             except Exception:
                 continue
             
@@ -2981,14 +2980,18 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
         if not next_launch:
             return "No upcoming launches"
         try:
-            launch_time = parse(next_launch['net']).replace(tzinfo=pytz.UTC).astimezone(tz_obj)
-            current_time = datetime.now(tz_obj)
-            delta = launch_time - current_time
-            total_seconds = int(max(delta.total_seconds(), 0))
-            days, rem = divmod(total_seconds, 86400)
-            hours, rem = divmod(rem, 3600)
-            minutes, seconds = divmod(rem, 60)
-            return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+            launch_time = _get_parsed_dt(next_launch.get('net'))
+            if launch_time:
+                launch_time = launch_time.astimezone(tz_obj)
+                current_time = datetime.now(tz_obj)
+                delta = launch_time - current_time
+                total_seconds = int(max(delta.total_seconds(), 0))
+                days, rem = divmod(total_seconds, 86400)
+                hours, rem = divmod(rem, 3600)
+                minutes, seconds = divmod(rem, 60)
+                return f"T- {days}d {hours:02d}h {minutes:02d}m {seconds:02d}s"
+            else:
+                return "T- TBD"
         except Exception:
             return "T- Error"
 

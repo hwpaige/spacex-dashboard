@@ -986,6 +986,7 @@ Window {
                 clip: true
                 visible: !isWindyFullscreen
                 property string launchViewMode: "list"
+                property bool calendarLoaded: false
 
                 // Check if this is a high resolution display
                 property bool isHighResolution: backend && backend.isHighResolution
@@ -1204,17 +1205,159 @@ Window {
                         Loader {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
-                            active: launchCard.launchViewMode === "calendar"
+                            active: launchCard.launchViewMode === "calendar" || launchCard.calendarLoaded
+                            onActiveChanged: if (active) launchCard.calendarLoaded = true
+                            asynchronous: false // Synchronous to ensure properties like currentIndex are applied before render
                             sourceComponent: Item {
                             
                             id: calendarViewItem
                             property var launchesMapping: backend.launchesByDate
+                            property var todayDateString: Qt.formatDate(new Date(), "yyyy-MM-dd")
                             property var currentMonth: new Date()
                             
                             property var popupLaunches: []
                             property string popupDateString: ""
+                            
+                            property bool staggeredLoadActive: false
+                            property Item hoveredCell: null
+                            property int hoveredLaunchesCount: 0
+                            
+                            Timer {
+                                id: staggeredTimer
+                                interval: 400
+                                running: true
+                                onTriggered: calendarViewItem.staggeredLoadActive = true
+                            }
+                            
+                            ToolTip {
+                                id: sharedToolTip
+                                visible: calendarViewItem.hoveredCell !== null
+                                text: calendarViewItem.hoveredLaunchesCount > 0 ? (calendarViewItem.hoveredLaunchesCount + " Launch" + (calendarViewItem.hoveredLaunchesCount > 1 ? "es" : "")) : ""
+                                parent: calendarViewItem.hoveredCell
+                                delay: 500
+                            }
+
+                            Component {
+                                id: monthGridComponent
+                                GridLayout {
+                                    id: grid
+                                    property date pageDate
+                                    property int daysInMonth
+                                    property int startDayOfWeek
+                                    
+                                    property var gridData: {
+                                        if (!pageDate || isNaN(pageDate.getTime())) return [];
+                                        var data = [];
+                                        var year = pageDate.getFullYear();
+                                        var month = pageDate.getMonth();
+                                        for (var i = 0; i < 42; i++) {
+                                            var dayNum = i - startDayOfWeek + 1;
+                                            var isCurrent = dayNum > 0 && dayNum <= daysInMonth;
+                                            var d = new Date(year, month, dayNum);
+                                            data.push({
+                                                day: d.getDate(),
+                                                dateString: isCurrent ? Qt.formatDate(d, "yyyy-MM-dd") : "",
+                                                isCurrentMonth: isCurrent,
+                                                fullDate: d
+                                            });
+                                        }
+                                        return data;
+                                    }
+
+                                    anchors.fill: parent
+                                    columns: 7
+                                    rows: 6
+                                    rowSpacing: 2
+                                    columnSpacing: 2
+                                    
+                                    Repeater {
+                                        model: grid.gridData
+                                        
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            
+                                            property bool isCurrentMonth: modelData.isCurrentMonth
+                                            property string dateString: modelData.dateString
+                                            
+                                            color: "transparent"
+                                            
+                                            // Check for launches (optimized via backend mapping)
+                                            property var dayLaunches: (isCurrentMonth && calendarViewItem.launchesMapping) ? 
+                                                                      (calendarViewItem.launchesMapping[dateString] || []) : []
+                                            
+                                            // Selection/Highlight
+                                            Rectangle {
+                                                anchors.centerIn: parent
+                                                width: Math.min(parent.width, parent.height) - 4
+                                                height: width
+                                                radius: width/2
+                                                color: {
+                                                    if (dayLaunches.length > 0) {
+                                                        return root.getStatusColor(dayLaunches[0].status)
+                                                    }
+                                                    // Today highlight
+                                                    if (isCurrentMonth && dateString === calendarViewItem.todayDateString) return backend.theme === "dark" ? "#444" : "#ddd"
+                                                    return "transparent"
+                                                }
+                                                opacity: dayLaunches.length > 0 ? 0.2 : 1.0
+                                                
+                                                border.color: dayLaunches.length > 0 ? root.getStatusColor(dayLaunches[0].status) : "transparent"
+                                                border.width: dayLaunches.length > 0 ? 1 : 0
+                                            }
+
+                                            // Inner Dots for launches
+                                            Row {
+                                                anchors.centerIn: parent
+                                                anchors.verticalCenterOffset: 6
+                                                spacing: 2
+                                                visible: dayLaunches.length > 0
+                                                
+                                                Repeater {
+                                                    model: Math.min(dayLaunches.length, 3) // Cap at 3
+                                                    Rectangle {
+                                                        width: 4; height: 4; radius: 2
+                                                        color: root.getStatusColor(dayLaunches[index].status)
+                                                    }
+                                                }
+                                            }
+
+                                            Text {
+                                                anchors.centerIn: parent
+                                                anchors.verticalCenterOffset: -2
+                                                text: modelData.day
+                                                font.pixelSize: 12
+                                                color: isCurrentMonth ? 
+                                                       (backend.theme === "dark" ? "white" : "black") : 
+                                                       (backend.theme === "dark" ? "#555555" : "#aaaaaa")
+                                                font.bold: isCurrentMonth && dayLaunches.length > 0
+                                            }
+                                            
+                                            MouseArea {
+                                                id: ma
+                                                anchors.fill: parent
+                                                hoverEnabled: true
+                                                cursorShape: dayLaunches.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onEntered: {
+                                                    if (dayLaunches.length > 0) {
+                                                        calendarViewItem.hoveredLaunchesCount = dayLaunches.length
+                                                        calendarViewItem.hoveredCell = ma
+                                                    }
+                                                }
+                                                onExited: calendarViewItem.hoveredCell = null
+                                                onClicked: {
+                                                    if (dayLaunches.length > 0) {
+                                                        calendarViewItem.showPopup(dayLaunches, modelData.fullDate)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
                             function getMonthName(date) {
+                                if (!date || isNaN(date.getTime())) return "";
                                 return date.toLocaleDateString(Qt.locale(), "MMMM yyyy")
                             }
 
@@ -1374,6 +1517,8 @@ Window {
                                 Row {
                                     Layout.fillWidth: true
                                     Layout.preferredHeight: 20
+                                    Layout.leftMargin: 5
+                                    Layout.rightMargin: 5
                                     Repeater {
                                         model: ["S", "M", "T", "W", "T", "F", "S"]
                                         Text {
@@ -1397,6 +1542,16 @@ Window {
                                     // Index 12 will be "current month" (relative offset 0)
                                     currentIndex: 12
                                     
+                                    Component.onCompleted: {
+                                        // Jump to index 12 without animation on initial load
+                                        if (contentItem) {
+                                            var oldDuration = contentItem.highlightMoveDuration
+                                            contentItem.highlightMoveDuration = 0
+                                            currentIndex = 12
+                                            contentItem.highlightMoveDuration = oldDuration
+                                        }
+                                    }
+                                    
                                     onCurrentIndexChanged: {
                                         var today = new Date()
                                         var offset = currentIndex - 12
@@ -1410,109 +1565,24 @@ Window {
                                         Item {
                                             id: monthPage
                                             property int monthOffset: index - 12
-                                            property date pageDate: {
-                                                var d = new Date()
-                                                return new Date(d.getFullYear(), d.getMonth() + monthOffset, 1)
-                                            }
                                             
-                                            // Calculate grid logic
-                                            property int daysInMonth: new Date(pageDate.getFullYear(), pageDate.getMonth() + 1, 0).getDate()
-                                            property int startDayOfWeek: new Date(pageDate.getFullYear(), pageDate.getMonth(), 1).getDay()
-                                            
-                                            GridLayout {
+                                            Loader {
                                                 anchors.fill: parent
                                                 anchors.margins: 5
-                                                columns: 7
-                                                rows: 6
-                                                rowSpacing: 2
-                                                columnSpacing: 2
+                                                active: {
+                                                    if (index === calendarSwipe.currentIndex) return true;
+                                                    return calendarViewItem.staggeredLoadActive && Math.abs(index - calendarSwipe.currentIndex) <= 1;
+                                                }
+                                                asynchronous: true
+                                                sourceComponent: monthGridComponent
                                                 
-                                                Repeater {
-                                                    model: 42 // 6 rows * 7 cols
-                                                    
-                                                    Rectangle {
-                                                        Layout.fillWidth: true
-                                                        Layout.fillHeight: true
-                                                        
-                                                        property int dayNum: index - parent.parent.startDayOfWeek + 1
-                                                        property bool isCurrentMonth: dayNum > 0 && dayNum <= parent.parent.daysInMonth
-                                                        property date cellDate: new Date(parent.parent.pageDate.getFullYear(), parent.parent.pageDate.getMonth(), dayNum)
-                                                        
-                                                        color: "transparent"
-                                                        visible: isCurrentMonth
-                                                        
-                                                        // Check for launches (optimized via backend mapping)
-                                                        property var dayLaunches: {
-                                                            if (!isCurrentMonth || !calendarViewItem.launchesMapping) return []
-                                                            var dStr = cellDate.toISOString().substring(0,10)
-                                                            return calendarViewItem.launchesMapping[dStr] || []
-                                                        }
-                                                        
-                                                        // Selection/Highlight
-                                                        Rectangle {
-                                                            anchors.centerIn: parent
-                                                            width: Math.min(parent.width, parent.height) - 4
-                                                            height: width
-                                                            radius: width/2
-                                                            color: {
-                                                                if (dayLaunches.length > 0) {
-                                                                    return root.getStatusColor(dayLaunches[0].status)
-                                                                }
-                                                                // Today highlight
-                                                                var today = new Date()
-                                                                if (cellDate.toDateString() === today.toDateString()) return backend.theme === "dark" ? "#444" : "#ddd"
-                                                                return "transparent"
-                                                            }
-                                                            opacity: dayLaunches.length > 0 ? 0.2 : 1.0
-                                                            
-                                                            border.color: dayLaunches.length > 0 ? root.getStatusColor(dayLaunches[0].status) : "transparent"
-                                                            border.width: dayLaunches.length > 0 ? 1 : 0
-                                                        }
-
-                                                        // Inner Dots for launches
-                                                        Row {
-                                                            anchors.centerIn: parent
-                                                            anchors.verticalCenterOffset: 6
-                                                            spacing: 2
-                                                            visible: dayLaunches.length > 0
-                                                            
-                                                            Repeater {
-                                                                model: Math.min(dayLaunches.length, 3) // Cap at 3
-                                                                Rectangle {
-                                                                    width: 4; height: 4; radius: 2
-                                                                    color: root.getStatusColor(dayLaunches[index].status)
-                                                                }
-                                                            }
-                                                            // Add small plus if more than 3? No space really.
-                                                        }
-
-                                                        Text {
-                                                            anchors.centerIn: parent
-                                                            anchors.verticalCenterOffset: -2
-                                                            text: isCurrentMonth ? dayNum : ""
-                                                            font.pixelSize: 12
-                                                            color: backend.theme === "dark" ? "white" : "black"
-                                                            font.bold: dayLaunches.length > 0
-                                                        }
-                                                        
-                                                        // Simple Tooltip logic
-                                                        ToolTip {
-                                                            visible: ma.containsMouse && dayLaunches.length > 0
-                                                            text: dayLaunches.length > 0 ? (dayLaunches.length + " Launch" + (dayLaunches.length > 1 ? "es" : "")) : ""
-                                                            delay: 500
-                                                        }
-                                                        MouseArea {
-                                                            id: ma
-                                                            anchors.fill: parent
-                                                            hoverEnabled: true
-                                                            cursorShape: dayLaunches.length > 0 ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                                            onClicked: {
-                                                                if (dayLaunches.length > 0) {
-                                                                    calendarViewItem.showPopup(dayLaunches, cellDate)
-                                                                }
-                                                            }
-                                                        }
-                                                    }
+                                                // Pass properties to the loaded item
+                                                onLoaded: {
+                                                    var d = new Date()
+                                                    var pageDate = new Date(d.getFullYear(), d.getMonth() + monthOffset, 1)
+                                                    item.pageDate = pageDate
+                                                    item.daysInMonth = new Date(pageDate.getFullYear(), pageDate.getMonth() + 1, 0).getDate()
+                                                    item.startDayOfWeek = pageDate.getDay()
                                                 }
                                             }
                                         }

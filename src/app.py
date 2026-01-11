@@ -549,6 +549,8 @@ class Backend(QObject):
                 logger.info("Backend: Loaded calendar cache from disk")
         except Exception as e:
             logger.debug(f"Failed to load calendar cache: {e}")
+        self._precomputing_calendar = False
+        self._precomputing_trends = False
         self._update_available = False
         self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
         self._last_update_check = None  # Track when updates were last checked
@@ -1669,19 +1671,12 @@ class Backend(QObject):
         if hasattr(self, '_launches_by_date_cache') and self._launches_by_date_cache is not None:
             return self._launches_by_date_cache
             
-        from functions import get_calendar_mapping
-        mapping = get_calendar_mapping(self._launch_data, self._tz)
-        
-        self._launches_by_date_cache = mapping
-        
-        # Persist to disk for faster subsequent app runs
-        try:
-            save_cache_to_file(RUNTIME_CACHE_FILE_CALENDAR, mapping, datetime.now(pytz.UTC))
-            logger.info("Backend: Saved calendar cache to disk")
-        except Exception as e:
-            logger.debug(f"Failed to save calendar cache: {e}")
+        # If not ready, return empty to avoid blocking UI thread and trigger background compute
+        if not getattr(self, '_precomputing_calendar', False):
+            logger.info("Backend: Calendar mapping requested but not ready; triggering background compute")
+            threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
             
-        return mapping
+        return {}
 
     @pyqtProperty(str, notify=liveLaunchUrlChanged)
     def liveLaunchUrl(self):
@@ -1706,35 +1701,58 @@ class Backend(QObject):
             self._launch_trends_cache.get('data_sig') == data_sig):
             return self._launch_trends_cache['data']
             
-        profiler.mark("Backend: _get_launch_trends_data Recomputing")
-        months, series = get_launch_trends_series(
-            prev_launches,
-            self._chart_view_mode,
-            current_year,
-            current_month
-        )
+        # If not ready, return cached or empty and trigger background compute
+        if not getattr(self, '_precomputing_trends', False):
+             logger.info("Backend: Launch trends requested but not ready; triggering background compute")
+             threading.Thread(target=self._precompute_launch_trends, args=(cache_key, data_sig), daemon=True).start()
         
-        data = {
-            'months': months,
-            'series': series,
-            'max_value': get_max_value_from_series(series)
-        }
-        
-        self._launch_trends_cache = {
-            'key': cache_key,
-            'data_sig': data_sig,
-            'data': data
-        }
-        
-        # Persist to disk
+        # Return whatever we have in cache (even if stale) or a default empty structure
+        return self._launch_trends_cache.get('data', {'months': [], 'series': [], 'max_value': 0})
+
+    def _precompute_launch_trends(self, cache_key, data_sig):
+        """Pre-compute launch trends in the background."""
+        if getattr(self, '_precomputing_trends', False):
+            return
+        self._precomputing_trends = True
         try:
-            save_cache_to_file(RUNTIME_CACHE_FILE_CHART_TRENDS, self._launch_trends_cache, datetime.now(pytz.UTC))
-            logger.info("Backend: Saved launch trends cache to disk")
-        except Exception as e:
-            logger.debug(f"Failed to save launch trends cache: {e}")
+            profiler.mark("Backend: _precompute_launch_trends Recomputing")
+            prev_launches = self._launch_data.get('previous', [])
+            current_year = datetime.now(pytz.UTC).year
+            current_month = datetime.now(pytz.UTC).month
+
+            from functions import get_launch_trends_series, get_max_value_from_series, RUNTIME_CACHE_FILE_CHART_TRENDS
+            months, series = get_launch_trends_series(
+                prev_launches,
+                self._chart_view_mode,
+                current_year,
+                current_month
+            )
             
-        profiler.mark("Backend: _get_launch_trends_data End (Recomputed)")
-        return data
+            data = {
+                'months': months,
+                'series': series,
+                'max_value': get_max_value_from_series(series)
+            }
+            
+            self._launch_trends_cache = {
+                'key': cache_key,
+                'data_sig': data_sig,
+                'data': data
+            }
+            
+            # Persist to disk
+            try:
+                save_cache_to_file(RUNTIME_CACHE_FILE_CHART_TRENDS, self._launch_trends_cache, datetime.now(pytz.UTC))
+                logger.info("Backend: Saved launch trends cache to disk (background)")
+            except Exception as e:
+                logger.debug(f"Failed to save launch trends cache: {e}")
+                
+            profiler.mark("Backend: _precompute_launch_trends End (Recomputed)")
+            self.launchesChanged.emit() # Signal UI to refresh charts
+        except Exception as e:
+            logger.error(f"Failed to precompute launch trends: {e}")
+        finally:
+            self._precomputing_trends = False
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def launchTrends(self):
@@ -2071,6 +2089,9 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data if self._mode == 'spacex' else self._f1_data['schedule'], self._mode, self._event_type, self._tz)
         self.timeChanged.emit()  # Ensure time updates when timezone changes
         self.eventModelChanged.emit()
+        # Timezone change affects calendar mapping, trigger recompute
+        self._clear_launch_caches()
+        threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
 
     @pyqtSlot(dict, dict, list, dict)
     def on_data_loaded(self, launch_data, weather_data, narratives, calendar_mapping=None):
@@ -2083,10 +2104,12 @@ class Backend(QObject):
         self._update_live_launch_url()
         self._clear_launch_caches()
         
-        # Apply pre-computed calendar mapping if provided
+        # Apply pre-computed calendar mapping if provided, or trigger background recompute
         if calendar_mapping:
             self._launches_by_date_cache = calendar_mapping
             logger.info("Backend: Applied pre-computed calendar mapping from DataLoader")
+        else:
+            threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
             
         # self._f1_data is now initialized in __init__ and not updated here as it's currently missing from loader
         self._weather_data = weather_data
@@ -2135,6 +2158,8 @@ class Backend(QObject):
         self._launch_data = self._load_cached_launch_data()
         self._update_live_launch_url()
         self._clear_launch_caches()
+        # Trigger background recompute for calendar mapping
+        threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
         logger.info("BOOT: Loading cached weather data...")
         self._weather_data = self._load_cached_weather_data()
 
@@ -2183,15 +2208,14 @@ class Backend(QObject):
             self._update_live_launch_url()
             
             # Seed the calendar cache if it's still None after __init__
-            if getattr(self, '_launches_by_date_cache', None) is None and self._launch_data:
-                from functions import get_calendar_mapping
-                self._launches_by_date_cache = get_calendar_mapping(self._launch_data)
-                logger.info("Backend: Seeded calendar cache during bootstrap")
-
-            # Optimization: only clear caches if we ACTUALLY reloaded launch data
-            # (If it was already in self._launch_data from __init__, don't clear it)
-            if 'prev_cache' in locals() or 'up_cache' in locals():
+            reloaded = 'prev_cache' in locals() or 'up_cache' in locals()
+            if reloaded:
                 self._clear_launch_caches()
+            
+            if (reloaded or getattr(self, '_launches_by_date_cache', None) is None) and self._launch_data:
+                # Trigger background recompute to avoid UI blocking
+                threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
+                logger.info("Backend: Triggered background calendar cache seeding during bootstrap")
                 
             # Update EventModel immediately
             profiler.mark("Backend: _seed_bootstrap Updating EventModel")
@@ -2372,6 +2396,32 @@ class Backend(QObject):
         self._launch_trends_cache.clear()
         self._launches_by_date_cache = None
 
+    def _precompute_calendar_mapping(self):
+        """Pre-compute the calendar mapping in the background to avoid UI blocking."""
+        if getattr(self, '_precomputing_calendar', False):
+            return
+        self._precomputing_calendar = True
+        try:
+            from functions import get_calendar_mapping, RUNTIME_CACHE_FILE_CALENDAR
+            mapping = get_calendar_mapping(self._launch_data, self._tz)
+            self._launches_by_date_cache = mapping
+            
+            # Persist to disk for faster subsequent app runs
+            try:
+                save_cache_to_file(RUNTIME_CACHE_FILE_CALENDAR, mapping, datetime.now(pytz.UTC))
+                logger.info("Backend: Pre-computed and saved calendar cache to disk")
+            except Exception as e:
+                logger.debug(f"Failed to save calendar cache: {e}")
+                
+            try:
+                self.launchesChanged.emit() # Signal that mapping is ready for QML
+            except Exception:
+                pass 
+        except Exception as e:
+            logger.error(f"Failed to pre-compute calendar mapping: {e}")
+        finally:
+            self._precomputing_calendar = False
+
     @pyqtSlot(dict, list, dict)
     def _on_launches_updated(self, launch_data, narratives, calendar_mapping=None):
         """Handle launch data update completion"""
@@ -2380,9 +2430,12 @@ class Backend(QObject):
         self._update_live_launch_url()
         self._clear_launch_caches()
         
+        # Apply pre-computed calendar mapping if provided, or trigger background recompute
         if calendar_mapping:
             self._launches_by_date_cache = calendar_mapping
             logger.info("Backend: Applied pre-computed calendar mapping from LaunchUpdater")
+        else:
+            threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
             
         self.launchesChanged.emit()
         self._emit_tray_visibility_changed()
