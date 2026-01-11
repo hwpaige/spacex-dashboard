@@ -1013,7 +1013,10 @@ Window {
                                     anchors.margins: 2
                                     url: globeUrl
                                     // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                    backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                    backgroundColor: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                    onBackgroundColorChanged: {
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
+                                    }
                                     zoomFactor: 1.0
                                     layer.enabled: false
                                     layer.smooth: true
@@ -1029,7 +1032,7 @@ Window {
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4)
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
                                         }
                                     }
 
@@ -1686,7 +1689,7 @@ Window {
                                     console.log("YouTube WebEngineView loaded successfully");
                                     // Apply internal page rounding to ensure corners clip
                                     // Use black background for video views to avoid white/gray corner artifacts
-                                    if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
+                                    if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
                                     
                                     // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
                                     // We only apply this to X.com (Twitter) streams as requested.
