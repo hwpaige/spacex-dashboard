@@ -2288,6 +2288,97 @@ Window {
                     }
                 }
 
+                    // Brightness icon
+                    Rectangle {
+                        width: 28
+                        height: 32
+                        radius: 16
+                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        border.width: 1
+
+                        Text {
+                            anchors.centerIn: parent
+                            text: "\uf185"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 12
+                            font.weight: Font.Black
+                            color: backend.theme === "dark" ? "white" : "black"
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                brightnessPopup.open()
+                            }
+                        }
+
+                        Popup {
+                            id: brightnessPopup
+                            y: -155
+                            x: -6
+                            width: 40
+                            height: 150
+                            padding: 10
+                            background: Rectangle {
+                                color: backend.theme === "dark" ? "#2a2e2e" : "white"
+                                radius: 8
+                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.width: 1
+                            }
+                            
+                            Slider {
+                                id: brightnessSlider
+                                anchors.fill: parent
+                                orientation: Qt.Vertical
+                                from: 10
+                                to: 100
+                                stepSize: 5
+                                snapMode: Slider.SnapAlways
+                                value: backend.brightness
+                                onMoved: {
+                                    backend.setBrightness(value)
+                                }
+                                
+                                background: Rectangle {
+                                    x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                                    y: brightnessSlider.topPadding
+                                    implicitWidth: 4
+                                    implicitHeight: 120
+                                    width: implicitWidth
+                                    height: brightnessSlider.availableHeight
+                                    radius: 2
+                                    color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+
+                                    Rectangle {
+                                        width: parent.width
+                                        height: brightnessSlider.visualPosition * parent.height
+                                        y: (1.0 - brightnessSlider.visualPosition) * parent.height
+                                        color: "#2196F3"
+                                        radius: 2
+                                    }
+                                }
+
+                                handle: Rectangle {
+                                    x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
+                                    y: brightnessSlider.topPadding + (1.0 - brightnessSlider.visualPosition) * (brightnessSlider.availableHeight - height)
+                                    implicitWidth: 16
+                                    implicitHeight: 16
+                                    radius: 8
+                                    color: brightnessSlider.pressed ? "#f0f0f0" : "#ffffff"
+                                    border.color: "#2196F3"
+                                    border.width: 2
+                                }
+                                
+                                ToolTip {
+                                    visible: brightnessSlider.pressed
+                                    text: Math.round(brightnessSlider.value) + "%"
+                                    timeout: 1000
+                                }
+                            }
+                        }
+                    }
+
                     // WiFi icon
                     Rectangle {
                         width: 28

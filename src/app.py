@@ -382,6 +382,7 @@ class Backend(QObject):
     updateDialogRequested = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
+    brightnessChanged = pyqtSignal()
     selectedLaunchChanged = pyqtSignal()
     widthChanged = pyqtSignal()
     heightChanged = pyqtSignal()
@@ -475,6 +476,9 @@ class Backend(QObject):
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
         self._is_large_display = is_large_display
+        self._brightness = 100
+        if self._is_large_display and not IS_WINDOWS:
+            QTimer.singleShot(5000, self._initial_brightness_fetch)
         
         # Support logical scaling for High DPI displays
         try:
@@ -1127,6 +1131,77 @@ class Backend(QObject):
     @pyqtProperty(bool, notify=widthChanged)
     def isHighResolution(self):
         return self._is_large_display
+
+    @pyqtProperty(int, notify=brightnessChanged)
+    def brightness(self):
+        return self._brightness
+
+    @pyqtSlot(int)
+    def setBrightness(self, value):
+        if self._brightness != value:
+            self._brightness = value
+            self.set_brightness_on_hardware(value)
+            self.brightnessChanged.emit()
+
+    def set_brightness_on_hardware(self, value):
+        if IS_WINDOWS:
+            logger.info(f"Backend: Simulation: Setting brightness to {value}%")
+            return
+
+        def _worker():
+            try:
+                if self._is_large_display:
+                    # DFR1125 4K monitor on bus 13 (as verified)
+                    cmd = f"sudo ddcutil setvcp --bus=13 10 {value}"
+                    subprocess.run(cmd, shell=True, check=True, capture_output=True)
+                    logger.info(f"Backend: Set DFR1125 brightness to {value}%")
+                else:
+                    # Waveshare display - try common backlight interface first
+                    backlight_path = "/sys/class/backlight/rpi_backlight/brightness"
+                    # If it's the 1480x320 Waveshare HDMI, it might use a different method.
+                    # For now, let's try the standard RPi backlight if it exists.
+                    if os.path.exists(backlight_path):
+                        # Convert 0-100 to 0-255
+                        hw_val = int(value * 2.55)
+                        try:
+                            # Using sudo to write to system file
+                            subprocess.run(f"echo {hw_val} | sudo tee {backlight_path}", shell=True, check=True, capture_output=True)
+                            logger.info(f"Backend: Set Waveshare backlight to {hw_val}")
+                        except Exception as e:
+                            logger.error(f"Backend: Failed to write to backlight file: {e}")
+                    else:
+                        # Placeholder for other Waveshare methods (e.g. i2cset for HDMI version)
+                        logger.warning("Backend: Waveshare backlight interface not found at /sys/class/backlight/rpi_backlight/brightness")
+            except Exception as e:
+                logger.error(f"Backend: Failed to set brightness: {e}")
+
+        # Run in a thread to avoid blocking UI
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _initial_brightness_fetch(self):
+        if IS_WINDOWS or not self._is_large_display:
+            return
+
+        def _worker():
+            try:
+                # Get current value for feature 10
+                cmd = "sudo ddcutil getvcp 10 --bus=13 --brief"
+                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                if result.returncode == 0:
+                    # Output: VCP 10 C 35 100
+                    parts = result.stdout.strip().split()
+                    if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "10":
+                        try:
+                            current_val = int(parts[3])
+                            self._brightness = current_val
+                            self.brightnessChanged.emit()
+                            logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_val}%")
+                        except ValueError:
+                            pass
+            except Exception as e:
+                logger.error(f"Backend: Failed to fetch initial brightness: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     @pyqtProperty(str, notify=locationChanged)
     def location(self):
