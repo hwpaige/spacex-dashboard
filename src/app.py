@@ -410,6 +410,8 @@ class Backend(QObject):
     # Signal for thread-safe WiFi status updates
     wifiCheckReady = pyqtSignal(bool, str)
     touchCalibrationExistsChanged = pyqtSignal()
+    calibrationStarted = pyqtSignal()
+    calibrationFinished = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -1221,19 +1223,29 @@ class Backend(QObject):
 
         def _worker():
             try:
+                self.calibrationStarted.emit()
                 if platform.system() == 'Linux':
                     subprocess.run(['chmod', '+x', script_path])
-                    result = subprocess.run(['/bin/bash', script_path], capture_output=True, text=True)
-                    logger.info(f"Calibration script finished: {result.stdout}")
+                    # Ensure we pass the current environment to the script, especially DISPLAY and XAUTHORITY
+                    env = os.environ.copy()
+                    result = subprocess.run(['/bin/bash', script_path], capture_output=True, text=True, env=env)
+                    if result.returncode == 0:
+                        logger.info(f"Calibration script finished successfully: {result.stdout}")
+                    else:
+                        logger.error(f"Calibration script failed with return code {result.returncode}")
+                        logger.error(f"STDOUT: {result.stdout}")
+                        logger.error(f"STDERR: {result.stderr}")
                 else:
                     logger.info("Simulation: Running touch calibration")
-                    time.sleep(2)
+                    time.sleep(5)
                 
                 # Update state
                 self._touch_calibration_exists = funcs.check_touch_calibration_exists()
                 self.touchCalibrationExistsChanged.emit()
+                self.calibrationFinished.emit()
             except Exception as e:
                 logger.error(f"Error running calibration: {e}")
+                self.calibrationFinished.emit()
 
         threading.Thread(target=_worker, daemon=True).start()
 
