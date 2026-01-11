@@ -477,6 +477,13 @@ class Backend(QObject):
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
         self._is_large_display = is_large_display
         self._brightness = 100
+        self._target_brightness = 100
+        self._last_applied_brightness = -1
+        self._brightness_lock = threading.Lock()
+        self._brightness_timer = QTimer()
+        self._brightness_timer.setSingleShot(True)
+        self._brightness_timer.timeout.connect(self._apply_brightness)
+        
         if self._is_large_display and not IS_WINDOWS:
             QTimer.singleShot(5000, self._initial_brightness_fetch)
         
@@ -1138,10 +1145,22 @@ class Backend(QObject):
 
     @pyqtSlot(int)
     def setBrightness(self, value):
+        """Update brightness with debouncing and serial hardware execution."""
+        # Update the UI state immediately
         if self._brightness != value:
             self._brightness = value
-            self.set_brightness_on_hardware(value)
             self.brightnessChanged.emit()
+        
+        # Track the latest target value
+        self._target_brightness = value
+        
+        # Debounce the hardware update. 
+        # Using 400ms to allow smooth sliding without overwhelming ddcutil
+        self._brightness_timer.start(400)
+
+    def _apply_brightness(self):
+        """Triggered by debounce timer to ensure the latest target is set on hardware."""
+        self.set_brightness_on_hardware(self._target_brightness)
 
     def set_brightness_on_hardware(self, value):
         if IS_WINDOWS:
@@ -1149,34 +1168,42 @@ class Backend(QObject):
             return
 
         def _worker():
-            try:
-                if self._is_large_display:
-                    # DFR1125 4K monitor on bus 13 (as verified)
-                    # Removing sudo as harrison user is in i2c group
-                    cmd = f"ddcutil setvcp --bus=13 10 {value}"
-                    subprocess.run(cmd, shell=True, check=True, capture_output=True)
-                    logger.info(f"Backend: Set DFR1125 brightness to {value}%")
-                else:
-                    # Waveshare display - try common backlight interface first
-                    backlight_path = "/sys/class/backlight/rpi_backlight/brightness"
-                    # If it's the 1480x320 Waveshare HDMI, it might use a different method.
-                    # For now, let's try the standard RPi backlight if it exists.
-                    if os.path.exists(backlight_path):
-                        # Convert 0-100 to 0-255
-                        hw_val = int(value * 2.55)
-                        try:
-                            # Using sudo to write to system file
-                            subprocess.run(f"echo {hw_val} | sudo tee {backlight_path}", shell=True, check=True, capture_output=True)
-                            logger.info(f"Backend: Set Waveshare backlight to {hw_val}")
-                        except Exception as e:
-                            logger.error(f"Backend: Failed to write to backlight file: {e}")
-                    else:
-                        # Placeholder for other Waveshare methods (e.g. i2cset for HDMI version)
-                        logger.warning("Backend: Waveshare backlight interface not found at /sys/class/backlight/rpi_backlight/brightness")
-            except Exception as e:
-                logger.error(f"Backend: Failed to set brightness: {e}")
+            # Use a lock to ensure only one ddcutil process runs at a time
+            # and that we always finish the current one before starting the next.
+            with self._brightness_lock:
+                # If target changed while we were waiting for lock, we'll apply the NEW target
+                to_set = self._target_brightness
+                
+                # Don't repeat the same value if we just set it
+                if to_set == self._last_applied_brightness:
+                    return
 
-        # Run in a thread to avoid blocking UI
+                try:
+                    if self._is_large_display:
+                        # DFR1125 4K monitor on bus 13 (as verified)
+                        # Ensure we use absolute path and capture all output to prevent interference
+                        cmd = f"/usr/bin/ddcutil setvcp 10 {to_set} --bus=13"
+                        logger.debug(f"Backend: Executing hardware command: {cmd}")
+                        
+                        # Use a reasonable timeout to prevent hanging the worker thread
+                        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, timeout=10)
+                        
+                        self._last_applied_brightness = to_set
+                        logger.info(f"Backend: Successfully set DFR1125 brightness to {to_set}%")
+                    else:
+                        # Waveshare display
+                        backlight_path = "/sys/class/backlight/rpi_backlight/brightness"
+                        if os.path.exists(backlight_path):
+                            hw_val = int(to_set * 2.55)
+                            subprocess.run(f"echo {hw_val} | sudo tee {backlight_path}", shell=True, check=True, capture_output=True)
+                            self._last_applied_brightness = to_set
+                            logger.info(f"Backend: Set Waveshare backlight to {hw_val}")
+                except subprocess.TimeoutExpired:
+                    logger.error("Backend: ddcutil command timed out")
+                except Exception as e:
+                    logger.error(f"Backend: Failed to set brightness to {to_set}: {e}")
+
+        # Start the worker thread
         threading.Thread(target=_worker, daemon=True).start()
 
     def _initial_brightness_fetch(self):
@@ -1185,21 +1212,25 @@ class Backend(QObject):
 
         def _worker():
             try:
-                # Get current value for feature 10
-                # Removing sudo as harrison user is in i2c group
-                cmd = "ddcutil getvcp 10 --bus=13 --brief"
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-                if result.returncode == 0:
-                    # Output: VCP 10 C 35 100
-                    parts = result.stdout.strip().split()
-                    if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "10":
-                        try:
-                            current_val = int(parts[3])
-                            self._brightness = current_val
-                            self.brightnessChanged.emit()
-                            logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_val}%")
-                        except ValueError:
-                            pass
+                # Use lock to avoid collision with any concurrent set operation
+                with self._brightness_lock:
+                    # Get current value for feature 10
+                    # Removing sudo as harrison user is in i2c group
+                    cmd = "/usr/bin/ddcutil getvcp 10 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        # Output example: VCP 10 C 35 100
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "10":
+                            try:
+                                current_val = int(parts[3])
+                                self._brightness = current_val
+                                self._last_applied_brightness = current_val
+                                self._target_brightness = current_val
+                                self.brightnessChanged.emit()
+                                logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_val}%")
+                            except ValueError:
+                                pass
             except Exception as e:
                 logger.error(f"Backend: Failed to fetch initial brightness: {e}")
 

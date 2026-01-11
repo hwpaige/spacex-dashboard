@@ -2331,10 +2331,10 @@ Window {
                                 id: brightnessSlider
                                 anchors.fill: parent
                                 orientation: Qt.Vertical
-                                from: 10
+                                from: 0
                                 to: 100
-                                stepSize: 5
-                                snapMode: Slider.SnapAlways
+                                stepSize: 1
+                                snapMode: Slider.NoSnap
                                 value: backend.brightness
                                 
                                 // Use a local property to track the value during movement
