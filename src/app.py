@@ -1152,7 +1152,8 @@ class Backend(QObject):
             try:
                 if self._is_large_display:
                     # DFR1125 4K monitor on bus 13 (as verified)
-                    cmd = f"sudo ddcutil setvcp --bus=13 10 {value}"
+                    # Removing sudo as harrison user is in i2c group
+                    cmd = f"ddcutil setvcp --bus=13 10 {value}"
                     subprocess.run(cmd, shell=True, check=True, capture_output=True)
                     logger.info(f"Backend: Set DFR1125 brightness to {value}%")
                 else:
@@ -1185,7 +1186,8 @@ class Backend(QObject):
         def _worker():
             try:
                 # Get current value for feature 10
-                cmd = "sudo ddcutil getvcp 10 --bus=13 --brief"
+                # Removing sudo as harrison user is in i2c group
+                cmd = "ddcutil getvcp 10 --bus=13 --brief"
                 result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                 if result.returncode == 0:
                     # Output: VCP 10 C 35 100

@@ -2315,14 +2315,14 @@ Window {
 
                         Popup {
                             id: brightnessPopup
-                            y: -155
-                            x: -6
-                            width: 40
-                            height: 150
-                            padding: 10
+                            y: -185
+                            x: -16
+                            width: 60
+                            height: 180
+                            padding: 15
                             background: Rectangle {
                                 color: backend.theme === "dark" ? "#2a2e2e" : "white"
-                                radius: 8
+                                radius: 12
                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                                 border.width: 1
                             }
@@ -2343,11 +2343,11 @@ Window {
                                 background: Rectangle {
                                     x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
                                     y: brightnessSlider.topPadding
-                                    implicitWidth: 4
+                                    implicitWidth: 6
                                     implicitHeight: 120
                                     width: implicitWidth
                                     height: brightnessSlider.availableHeight
-                                    radius: 2
+                                    radius: 3
                                     color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
 
                                     Rectangle {
@@ -2355,19 +2355,19 @@ Window {
                                         height: brightnessSlider.visualPosition * parent.height
                                         y: (1.0 - brightnessSlider.visualPosition) * parent.height
                                         color: "#2196F3"
-                                        radius: 2
+                                        radius: 3
                                     }
                                 }
 
                                 handle: Rectangle {
                                     x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
                                     y: brightnessSlider.topPadding + (1.0 - brightnessSlider.visualPosition) * (brightnessSlider.availableHeight - height)
-                                    implicitWidth: 16
-                                    implicitHeight: 16
-                                    radius: 8
+                                    implicitWidth: 32
+                                    implicitHeight: 32
+                                    radius: 16
                                     color: brightnessSlider.pressed ? "#f0f0f0" : "#ffffff"
                                     border.color: "#2196F3"
-                                    border.width: 2
+                                    border.width: 3
                                 }
                                 
                                 ToolTip {
