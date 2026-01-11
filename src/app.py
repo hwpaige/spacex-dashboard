@@ -1160,8 +1160,8 @@ class Backend(QObject):
             self.brightnessChanged.emit()
         
         # Debounce the hardware update. 
-        # Using 250ms (reduced from 400ms) for better responsiveness while still debouncing
-        self._brightness_timer.start(250)
+        # Using 300ms (tuned from 250ms) for better balance between responsiveness and stability
+        self._brightness_timer.start(300)
 
     def _apply_brightness(self):
         """Triggered by debounce timer to ensure the latest target is set on hardware."""
@@ -1186,17 +1186,22 @@ class Backend(QObject):
                 try:
                     if self._is_large_display:
                         # DFR1125 4K monitor on bus 13 (as verified)
+                        # Root cause identified: Monitor VCP feature 10 actually uses a 0-31 scale
+                        # but reports 0-100. Values above 31 wrap around (32=0, 33=1, etc.).
+                        # We must scale our 0-100% slider value to 0-31 for the hardware.
+                        hw_value = int(round(to_set * 31 / 100))
+                        
                         # Added --noverify to speed up command execution
                         # Added --mccs 2.2 to avoid auto-detection overhead
-                        cmd = f"/usr/bin/ddcutil setvcp 10 {to_set} --bus=13 --noverify --mccs 2.2"
-                        logger.debug(f"Backend: Executing hardware command: {cmd}")
+                        cmd = f"/usr/bin/ddcutil setvcp 10 {hw_value} --bus=13 --noverify --mccs 2.2"
+                        logger.debug(f"Backend: Executing hardware command: {cmd} (UI value: {to_set}%)")
                         
                         # Use a reasonable timeout
                         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                         
                         if result.returncode == 0:
                             self._last_applied_brightness = to_set
-                            logger.info(f"Backend: Successfully set DFR1125 brightness to {to_set}%")
+                            logger.info(f"Backend: Successfully set DFR1125 hardware brightness to {hw_value} (UI: {to_set}%)")
                         else:
                             logger.error(f"Backend: ddcutil failed with code {result.returncode}: {result.stderr.strip()}")
                     else:
@@ -1224,7 +1229,6 @@ class Backend(QObject):
                 # Use lock to avoid collision with any concurrent set operation
                 with self._brightness_lock:
                     # Get current value for feature 10
-                    # Removing sudo as harrison user is in i2c group
                     cmd = "/usr/bin/ddcutil getvcp 10 --bus=13 --brief"
                     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
@@ -1232,12 +1236,17 @@ class Backend(QObject):
                         parts = result.stdout.strip().split()
                         if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "10":
                             try:
-                                current_val = int(parts[3])
-                                self._brightness = current_val
-                                self._last_applied_brightness = current_val
-                                self._target_brightness = current_val
+                                current_hw_val = int(parts[3])
+                                # Scale back from 0-31 hardware range to 0-100 UI range
+                                current_ui_val = int(round(current_hw_val * 100 / 31))
+                                # Ensure we don't exceed 100
+                                current_ui_val = min(100, max(0, current_ui_val))
+                                
+                                self._brightness = current_ui_val
+                                self._last_applied_brightness = current_ui_val
+                                self._target_brightness = current_ui_val
                                 self.brightnessChanged.emit()
-                                logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_val}%")
+                                logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_hw_val} (Scaled UI: {current_ui_val}%)")
                             except ValueError:
                                 pass
             except Exception as e:
