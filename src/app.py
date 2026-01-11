@@ -287,12 +287,13 @@ class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, list, dict)
     statusUpdate = pyqtSignal(str)
 
-    def __init__(self, tz_obj=None):
+    def __init__(self, tz_obj=None, active_location=None):
         super().__init__()
         self.tz_obj = tz_obj
+        self.active_location = active_location
 
     def run(self):
-        logger.info("DataLoader: Starting parallel data loading...")
+        logger.info(f"DataLoader: Starting parallel data loading (active: {self.active_location})...")
         def _safe_emit_status(msg):
             try: self.statusUpdate.emit(msg)
             except RuntimeError: pass
@@ -306,7 +307,8 @@ class DataLoader(QObject):
         launch_data, weather_data, narratives, calendar_mapping = perform_full_dashboard_data_load(
             location_settings, 
             status_callback=_safe_emit_status,
-            tz_obj=self.tz_obj
+            tz_obj=self.tz_obj,
+            active_location=self.active_location
         )
         profiler.mark("DataLoader: Full data load complete")
 
@@ -332,9 +334,13 @@ class LaunchUpdater(QObject):
 
 class WeatherUpdater(QObject):
     finished = pyqtSignal(dict)
+    def __init__(self, active_location=None):
+        super().__init__()
+        self.active_location = active_location
+
     def run(self):
-        profiler.mark("WeatherUpdater: Starting update")
-        weather_data = fetch_weather_for_all_locations(location_settings)
+        profiler.mark(f"WeatherUpdater: Starting update (active: {self.active_location})")
+        weather_data = fetch_weather_for_all_locations(location_settings, self.active_location)
         profiler.mark("WeatherUpdater: Update complete")
         self.finished.emit(weather_data)
 
@@ -899,7 +905,7 @@ class Backend(QObject):
 
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader...")
-                self.loader = DataLoader(self._tz)
+                self.loader = DataLoader(self._tz, self._location)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)
@@ -1951,7 +1957,7 @@ class Backend(QObject):
         if hasattr(self, '_weather_updater_thread') and self._weather_updater_thread.isRunning():
             return  # Skip if already updating
 
-        self._weather_updater = WeatherUpdater()
+        self._weather_updater = WeatherUpdater(self._location)
         self._weather_updater_thread = QThread()
         self._weather_updater.moveToThread(self._weather_updater_thread)
         self._weather_updater.finished.connect(self._on_weather_updated)
@@ -2240,7 +2246,7 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader for online load…")
                 # DataLoader is defined in this file
-                self.loader = DataLoader(self._tz)
+                self.loader = DataLoader(self._tz, self._location)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)
@@ -2766,7 +2772,7 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("WiFi connected - creating new DataLoader...")
                 # DataLoader is defined in this file
-                self.loader = DataLoader(self._tz)
+                self.loader = DataLoader(self._tz, self._location)
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
                 self.loader.finished.connect(self.on_data_loaded)
@@ -3453,6 +3459,12 @@ if __name__ == '__main__':
     # We already called setup_dashboard_environment() at the top of the file.
     
     # QApplication setup
+    # Optimize Qt WebEngine for Raspberry Pi performance
+    if '--disable-background-timer-throttling' not in sys.argv:
+        sys.argv.append('--disable-background-timer-throttling')
+    if '--memory-pressure-off' not in sys.argv:
+        sys.argv.append('--memory-pressure-off')
+        
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally

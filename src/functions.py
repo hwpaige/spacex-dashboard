@@ -1791,7 +1791,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             points.append({'lat': lat, 'lon': lon})
         return points
 
-    def generate_orbit_path_inclined(trajectory, orbit_label, inclination_deg, num_points=180):
+    def generate_orbit_path_inclined(trajectory, orbit_label, inclination_deg, num_points=90):
         if not trajectory: return []
         start = trajectory[-1]
         lat0 = float(start['lat']); lon0 = float(start['lon'])
@@ -1830,7 +1830,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         trajectory = generate_curved_trajectory(launch_site, {'lat': launch_site['lat'] + 20, 'lon': launch_site['lon'] + 60}, 20, orbit_type='default')
 
     target_r = compute_orbit_radius(orbit)
-    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 180)  # Reduced from 360 for performance
+    orbit_path = generate_orbit_path_inclined(trajectory, orbit, assumed_incl, 90)  # Reduced from 360 for performance
     for p in orbit_path:
         p['r'] = target_r
     
@@ -2613,8 +2613,8 @@ def get_nmcli_profiles():
         logger.debug(f"Failed to fetch nmcli profiles: {e}")
         return []
 
-def fetch_weather_for_all_locations(locations_config):
-    """Fetch weather for all configured locations from the new unified API."""
+def fetch_weather_for_all_locations(locations_config, active_location=None):
+    """Fetch weather for all configured locations, prioritizing active location for performance."""
     profiler.mark("fetch_weather_for_all_locations Start")
 
     # Try loading from cache first
@@ -2636,12 +2636,31 @@ def fetch_weather_for_all_locations(locations_config):
 
     try:
         emit_loader_status("Fetching global weather data…")
-        url = f"{LAUNCH_API_BASE_URL}/weather_all"
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        data = response.json()
         
-        weather_data = data.get('weather', {})
+        if active_location and active_location in locations_config:
+            # OPTIMIZATION: Prioritize active location to improve UI responsiveness
+            logger.info(f"Optimization: Fetching weather only for active location: {active_location}")
+            loc_data = locations_config[active_location]
+            single_weather = fetch_weather(loc_data.get('lat'), loc_data.get('lon'), active_location)
+            
+            # Use cached data for other locations if available, otherwise use defaults
+            weather_data = {}
+            if cache and cache.get('data'):
+                weather_data = cache['data'].copy()
+            
+            weather_data[active_location] = single_weather
+            
+            # Fill remaining missing locations with defaults
+            for loc in locations_config:
+                if loc not in weather_data:
+                    weather_data[loc] = {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50}
+        else:
+            # Full fetch via unified endpoint
+            url = f"{LAUNCH_API_BASE_URL}/weather_all"
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            weather_data = data.get('weather', {})
         
         # Save to cache
         save_cache_to_file(CACHE_FILE_WEATHER, weather_data, datetime.now(pytz.UTC))
@@ -2654,7 +2673,7 @@ def fetch_weather_for_all_locations(locations_config):
             return cache['data']
         return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
-def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_obj=None):
+def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_obj=None, active_location=None):
     """Orchestrate parallel fetch of launches, narratives, and weather data."""
     profiler.mark("perform_full_dashboard_data_load Start")
     def _emit(msg):
@@ -2680,7 +2699,8 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         def _fetch_w():
             profiler.mark("Thread: Fetch Weather Start")
             _emit("Getting live weather for locations…")
-            res = fetch_weather_for_all_locations(locations_config)
+            # Pass active_location to fetch_weather_for_all_locations for optimization
+            res = fetch_weather_for_all_locations(locations_config, active_location)
             profiler.mark("Thread: Fetch Weather End")
             return res
 
