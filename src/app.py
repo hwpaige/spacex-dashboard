@@ -1143,23 +1143,29 @@ class Backend(QObject):
     def brightness(self):
         return self._brightness
 
-    @pyqtSlot(int)
+    @pyqtSlot(float)
     def setBrightness(self, value):
         """Update brightness with debouncing and serial hardware execution."""
-        # Update the UI state immediately
-        if self._brightness != value:
-            self._brightness = value
+        # Convert to int as most hardware interfaces expect integers
+        int_val = int(round(value))
+        
+        # Track the latest target value regardless of whether it's the same as current
+        # This ensures that if a hardware command failed or was missed, we try again
+        self._target_brightness = int_val
+        
+        # Update the UI state immediately for responsiveness
+        if self._brightness != int_val:
+            self._brightness = int_val
+            logger.debug(f"Backend: Brightness UI set to {int_val}%")
             self.brightnessChanged.emit()
         
-        # Track the latest target value
-        self._target_brightness = value
-        
         # Debounce the hardware update. 
-        # Using 400ms to allow smooth sliding without overwhelming ddcutil
-        self._brightness_timer.start(400)
+        # Using 250ms (reduced from 400ms) for better responsiveness while still debouncing
+        self._brightness_timer.start(250)
 
     def _apply_brightness(self):
         """Triggered by debounce timer to ensure the latest target is set on hardware."""
+        logger.debug(f"Backend: Debounce timer fired, target: {self._target_brightness}%")
         self.set_brightness_on_hardware(self._target_brightness)
 
     def set_brightness_on_hardware(self, value):
@@ -1169,27 +1175,30 @@ class Backend(QObject):
 
         def _worker():
             # Use a lock to ensure only one ddcutil process runs at a time
-            # and that we always finish the current one before starting the next.
             with self._brightness_lock:
-                # If target changed while we were waiting for lock, we'll apply the NEW target
                 to_set = self._target_brightness
                 
-                # Don't repeat the same value if we just set it
+                # Don't repeat the same value if we just set it successfully
                 if to_set == self._last_applied_brightness:
+                    logger.debug(f"Backend: Skipping redundant hardware set for {to_set}%")
                     return
 
                 try:
                     if self._is_large_display:
                         # DFR1125 4K monitor on bus 13 (as verified)
-                        # Ensure we use absolute path and capture all output to prevent interference
-                        cmd = f"/usr/bin/ddcutil setvcp 10 {to_set} --bus=13"
+                        # Added --noverify to speed up command execution
+                        # Added --mccs 2.2 to avoid auto-detection overhead
+                        cmd = f"/usr/bin/ddcutil setvcp 10 {to_set} --bus=13 --noverify --mccs 2.2"
                         logger.debug(f"Backend: Executing hardware command: {cmd}")
                         
-                        # Use a reasonable timeout to prevent hanging the worker thread
-                        result = subprocess.run(cmd, shell=True, check=True, capture_output=True, timeout=10)
+                        # Use a reasonable timeout
+                        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                         
-                        self._last_applied_brightness = to_set
-                        logger.info(f"Backend: Successfully set DFR1125 brightness to {to_set}%")
+                        if result.returncode == 0:
+                            self._last_applied_brightness = to_set
+                            logger.info(f"Backend: Successfully set DFR1125 brightness to {to_set}%")
+                        else:
+                            logger.error(f"Backend: ddcutil failed with code {result.returncode}: {result.stderr.strip()}")
                     else:
                         # Waveshare display
                         backlight_path = "/sys/class/backlight/rpi_backlight/brightness"
