@@ -1109,7 +1109,7 @@ Window {
                                             var idx = m.indexOf("|");
                                             return idx !== -1 ? m.substring(idx + 1).trim() : m;
                                         }
-                                        font.pixelSize: 12; font.bold: true; 
+                                        font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                         color: backend.theme === "dark" ? "white" : "black"
                                         width: parent.width
                                         wrapMode: Text.Wrap
@@ -1121,28 +1121,31 @@ Window {
                                             return idx !== -1 ? m.substring(0, idx).trim() : "";
                                         }
                                         visible: text !== ""
-                                        font.pixelSize: 11; font.bold: false;
+                                        font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                         color: backend.theme === "dark" ? "#cccccc" : "#666666"
                                         width: parent.width
                                         wrapMode: Text.Wrap
                                     }
                                 }
                                 Row { spacing: 5
-                                    Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
+                                    Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
                                 Row { spacing: 5
-                                    Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
+                                    Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
                                 Row { spacing: 5; visible: !!(model && model.landingType)
-                                    Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 12; color: "#999999" }
-                                    Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.pixelSize: 12; color: "#999999" }
+                                    Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
+                                    Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Text { 
-                                    text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
-                                          ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"
-                                    font.pixelSize: 12; color: "#999999" 
+                                Row { spacing: 5
+                                    Text { text: "\uf017"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
+                                    Text { 
+                                        text: ((model && model.localTime) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
+                                              ((model && model.date) ? model.date : "") + ((model && model.time) ? (" " + model.time) : "") + " UTC"
+                                        font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" 
+                                    }
                                 }
                             }
 
@@ -1415,7 +1418,7 @@ Window {
                                                         var idx = m.indexOf("|");
                                                         return idx !== -1 ? m.substring(idx + 1).trim() : m;
                                                     }
-                                                    font.pixelSize: 12; font.bold: true; 
+                                                    font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                                     color: backend.theme === "dark" ? "white" : "black"
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
@@ -1427,7 +1430,7 @@ Window {
                                                         return idx !== -1 ? m.substring(0, idx).trim() : "";
                                                     }
                                                     visible: text !== ""
-                                                    font.pixelSize: 11; font.bold: false;
+                                                    font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                                     color: backend.theme === "dark" ? "#cccccc" : "#666666"
                                                     width: parent.width
                                                     wrapMode: Text.Wrap
@@ -1436,7 +1439,7 @@ Window {
                                             Text { 
                                                 text: (modelData.localTime ? modelData.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
                                                       (modelData.date ? modelData.date : "") + (modelData.time ? (" " + modelData.time) : "") + " UTC"
-                                                font.pixelSize: 12; color: "#999999" 
+                                                font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" 
                                             }
                                             Row {
                                                 spacing: 5
