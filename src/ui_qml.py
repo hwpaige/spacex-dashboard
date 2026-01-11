@@ -2357,8 +2357,7 @@ Window {
                                         Repeater {
                                             model: [
                                                 { icon: "\uf1de", idx: 0 },
-                                                { icon: "\uf53f", idx: 1 },
-                                                { icon: "\uf132", idx: 2 }
+                                                { icon: "\uf53f", idx: 1 }
                                             ]
                                             delegate: Rectangle {
                                                 Layout.preferredWidth: 45
@@ -2416,8 +2415,7 @@ Window {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Text {
-                                            text: displayStack.currentIndex === 0 ? "Quick Controls" : 
-                                                  displayStack.currentIndex === 1 ? "Display & Color" : "Safety & Input"
+                                            text: displayStack.currentIndex === 0 ? "Quick Controls" : "Display & Color"
                                             color: backend.theme === "dark" ? "white" : "black"
                                             font.pixelSize: 20
                                             font.bold: true
@@ -2590,82 +2588,6 @@ Window {
                                                     }
                                                 }
                                             }
-                                        }
-
-                                        // Tab 3: Safety & Input
-                                        ColumnLayout {
-                                            spacing: 15
-                                            
-                                            Text { text: "Input Source"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
-                                            Flow {
-                                                Layout.fillWidth: true
-                                                spacing: 8
-                                                Repeater {
-                                                    model: [
-                                                        {text: "HDMI 1", val: "11"}, {text: "HDMI 2", val: "12"},
-                                                        {text: "DP 1", val: "0f"}, {text: "DP 2", val: "10"},
-                                                        {text: "VGA", val: "01"}, {text: "DVI 1", val: "03"}, {text: "DVI 2", val: "04"}
-                                                    ]
-                                                    delegate: Button {
-                                                        id: inputBtn
-                                                        text: modelData.text
-                                                        contentItem: Text {
-                                                            text: inputBtn.text
-                                                            font: inputBtn.font
-                                                            color: inputBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
-                                                            horizontalAlignment: Text.AlignHCenter
-                                                            verticalAlignment: Text.AlignVCenter
-                                                        }
-                                                        background: Rectangle {
-                                                            implicitWidth: 80
-                                                            implicitHeight: 34
-                                                            color: inputBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
-                                                            radius: 8
-                                                            border.color: inputBtn.pressed ? "#3e6ae1" : "transparent"
-                                                            border.width: 1
-                                                        }
-                                                        highlighted: backend.inputSource === modelData.val
-                                                        onClicked: backend.setInputSource(modelData.val)
-                                                    }
-                                                }
-                                            }
-
-                                            Rectangle { Layout.fillWidth: true; height: 1; color: backend.theme === "dark" ? "#222" : "#ddd"; Layout.topMargin: 5; Layout.bottomMargin: 5 }
-
-                                            Text { text: "Power Control"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
-                                            RowLayout {
-                                                spacing: 12
-                                                Repeater {
-                                                    model: [
-                                                        { text: "Power On", val: "01" },
-                                                        { text: "Standby", val: "04" },
-                                                        { text: "Power Off", val: "05" }
-                                                    ]
-                                                    delegate: Button {
-                                                        id: pwrBtn
-                                                        Layout.fillWidth: true
-                                                        text: modelData.text
-                                                        contentItem: Text {
-                                                            text: pwrBtn.text
-                                                            font: pwrBtn.font
-                                                            color: pwrBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
-                                                            horizontalAlignment: Text.AlignHCenter
-                                                            verticalAlignment: Text.AlignVCenter
-                                                        }
-                                                        background: Rectangle {
-                                                            implicitWidth: 80
-                                                            implicitHeight: 34
-                                                            color: pwrBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
-                                                            radius: 8
-                                                            border.color: pwrBtn.pressed ? "#3e6ae1" : "transparent"
-                                                            border.width: 1
-                                                        }
-                                                        highlighted: backend.powerMode === modelData.val
-                                                        onClicked: backend.setPowerMode(modelData.val)
-                                                    }
-                                                }
-                                            }
-                                            Item { Layout.fillHeight: true }
                                         }
                                     }
                                 }
