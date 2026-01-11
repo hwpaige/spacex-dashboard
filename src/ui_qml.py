@@ -2416,7 +2416,11 @@ Window {
                                     RowLayout {
                                         Layout.fillWidth: true
                                         Text {
-                                            text: displayStack.currentIndex === 0 ? "Quick Controls" : "Display & Color"
+                                            text: {
+                                                if (displayStack.currentIndex === 0) return "Quick Controls"
+                                                if (displayStack.currentIndex === 1) return "Display & Color"
+                                                return "Calibration"
+                                            }
                                             color: backend.theme === "dark" ? "white" : "black"
                                             font.pixelSize: 20
                                             font.bold: true
@@ -2589,6 +2593,74 @@ Window {
                                                     }
                                                 }
                                             }
+                                        }
+
+                                        // Tab 3: Calibration
+                                        ColumnLayout {
+                                            spacing: 25
+                                            Layout.fillWidth: true
+                                            
+                                            Text {
+                                                text: "Touchscreen Calibration"
+                                                color: backend.theme === "dark" ? "#aaa" : "#555"
+                                                font.pixelSize: 13
+                                                font.bold: true
+                                            }
+
+                                            Text {
+                                                text: "If touch inputs are misaligned, use the calibration tool to map the display coordinates correctly. This will require following on-screen prompts."
+                                                color: backend.theme === "dark" ? "#888" : "#666"
+                                                font.pixelSize: 12
+                                                Layout.fillWidth: true
+                                                wrapMode: Text.Wrap
+                                            }
+
+                                            RowLayout {
+                                                spacing: 15
+                                                
+                                                Button {
+                                                    id: calBtn
+                                                    text: "Calibrate Screen"
+                                                    contentItem: Text {
+                                                        text: calBtn.text
+                                                        font: calBtn.font
+                                                        color: "white"
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                    background: Rectangle {
+                                                        implicitWidth: 160
+                                                        implicitHeight: 45
+                                                        color: calBtn.pressed ? "#2e5ab1" : "#3e6ae1"
+                                                        radius: 10
+                                                    }
+                                                    onClicked: backend.calibrateTouchscreen()
+                                                }
+
+                                                Button {
+                                                    id: removeCalBtn
+                                                    text: "Remove Calibration"
+                                                    enabled: backend && backend.touchCalibrationExists
+                                                    contentItem: Text {
+                                                        text: removeCalBtn.text
+                                                        font: removeCalBtn.font
+                                                        color: removeCalBtn.enabled ? (backend.theme === "dark" ? "white" : "black") : "#666"
+                                                        horizontalAlignment: Text.AlignHCenter
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                    background: Rectangle {
+                                                        implicitWidth: 160
+                                                        implicitHeight: 45
+                                                        color: removeCalBtn.enabled ? (backend.theme === "dark" ? "#333" : "#ddd") : (backend.theme === "dark" ? "#222" : "#eee")
+                                                        radius: 10
+                                                        border.color: removeCalBtn.enabled ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
+                                                        border.width: 1
+                                                    }
+                                                    onClicked: backend.removeTouchCalibration()
+                                                }
+                                            }
+
+                                            Item { Layout.fillHeight: true }
                                         }
                                     }
                                 }
