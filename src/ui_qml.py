@@ -118,7 +118,7 @@ Window {
         if (!webView || !webView.runJavaScript) return;
         if (typeof backend !== 'undefined' && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
-        var themeColor = customColor ? customColor : "transparent";
+        var themeColor = customColor ? customColor : (backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8");
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
                  "var themeColor='" + themeColor + "';" +
@@ -550,12 +550,13 @@ Window {
                                         anchors.fill: parent
                                         url: globeUrl
                                         // Use theme background color to avoid white corners during load
-                                        backgroundColor: "transparent"
+                                        // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
+                                        backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                         onBackgroundColorChanged: {
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8, "transparent")
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                         }
                                         zoomFactor: 1.0
-                                        layer.enabled: true
+                                        layer.enabled: false
                                         layer.smooth: true
                                         settings.javascriptCanAccessClipboard: false
                                         settings.allowWindowActivationFromJavaScript: false
@@ -573,7 +574,7 @@ Window {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
 
                                                 // Enforce rounded corners inside the page itself
-                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8, "transparent")
+                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                                 // Ensure the plot card globe animation loop starts/resumes on initial load
                                                 try {
                                                     plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
@@ -802,10 +803,10 @@ Window {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: 0
-                                    color: "transparent"
+                                    color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                     clip: false
-                                    // Layer can remain enabled
-                                    layer.enabled: true
+                                    // Performance: Disable layers to reduce GPU/Compositor load on Pi
+                                    layer.enabled: false
                                     layer.smooth: true
 
                                     // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
@@ -821,11 +822,11 @@ Window {
                                             id: webView
                                             objectName: "webView"
                                             anchors.fill: parent
-                                            // Make the view itself a layer to cooperate with ancestor clipping
-                                            layer.enabled: true
+                                            // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
+                                            layer.enabled: false
                                             layer.smooth: true
-                                            // Avoid white square corners by letting parent background show through
-                                            backgroundColor: "transparent"
+                                            // Avoid white square corners by matching parent background
+                                            backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                             url: parent.visible ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                             onUrlChanged: console.log("WebEngineView URL changed to:", url)
                                             settings.webGLEnabled: true
@@ -1011,8 +1012,11 @@ Window {
                                     anchors.fill: parent
                                     anchors.margins: 2
                                     url: globeUrl
-                                    backgroundColor: "transparent"
+                                    // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
+                                    backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                                     zoomFactor: 1.0
+                                    layer.enabled: false
+                                    layer.smooth: true
                                     settings.javascriptCanAccessClipboard: false
                                     settings.allowWindowActivationFromJavaScript: false
                                     onContextMenuRequested: function(request) { request.accepted = true }
@@ -1025,7 +1029,7 @@ Window {
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, "transparent")
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4)
                                         }
                                     }
 
@@ -1615,9 +1619,10 @@ Window {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 8
-                        color: "transparent"
+                        color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
                         clip: true
-                        layer.enabled: true
+                        // Performance: Disable layers to reduce GPU load on Pi
+                        layer.enabled: false
                         layer.smooth: true
 
                         // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
@@ -1626,17 +1631,17 @@ Window {
                             id: youtubeView
                             profile: youtubeProfile
                             anchors.fill: parent
-                            // Ensure proper rounded clipping and avoid white corners
-                            layer.enabled: true
+                            // Performance: Disable layers to reduce GPU/Compositor load on Pi
+                            layer.enabled: false
                             layer.smooth: true
-                            backgroundColor: "transparent"
+                            backgroundColor: "black"
                             onBackgroundColorChanged: {
-                                if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8, "transparent")
+                                if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
                             }
                             url: root.currentVideoUrl
                             onUrlChanged: {
                                 if (url.toString() === "") {
-                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:transparent;'></body></html>")
+                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:black;'></body></html>")
                                 }
                             }
 
