@@ -502,57 +502,53 @@ def compute_orbit_radius(orbit_label):
 
 
 # --- System/network helpers moved from app.py ---
+# Global Wi-Fi status cache to avoid frequent expensive subprocess calls
+_WIFI_STATUS_CACHE = {'connected': False, 'ssid': '', 'timestamp': 0}
+WIFI_STATUS_TTL = 30  # seconds
+
 def check_wifi_status():
     """Check WiFi connection status and return (connected, ssid) tuple"""
+    global _WIFI_STATUS_CACHE
+    
+    # Return cached result if fresh
+    now = time.time()
+    if now - _WIFI_STATUS_CACHE['timestamp'] < WIFI_STATUS_TTL:
+        logger.debug(f"Returning cached WiFi status: {_WIFI_STATUS_CACHE['connected']} ({_WIFI_STATUS_CACHE['ssid']})")
+        return _WIFI_STATUS_CACHE['connected'], _WIFI_STATUS_CACHE['ssid']
+
     profiler.mark("check_wifi_status Start")
     try:
         is_windows = platform.system() == 'Windows'
-        logger.info(f"BOOT: Checking WiFi status on {platform.system()} platform")
-
+        
         if is_windows:
-            logger.debug("BOOT: Using Windows netsh command to check WiFi status")
             # Check WiFi interface status using Windows commands
             result = subprocess.run(['netsh', 'wlan', 'show', 'interfaces'],
                                   capture_output=True, text=True, timeout=5)
 
-            logger.debug(f"BOOT: netsh return code: {result.returncode}")
-            if result.returncode != 0:
-                logger.warning(f"BOOT: netsh command failed with return code {result.returncode}")
-                logger.debug(f"BOOT: netsh stderr: {result.stderr}")
-
             connected = False
             current_ssid = ""
 
-            logger.debug("BOOT: Parsing netsh output...")
             for line in result.stdout.split('\n'):
                 line = line.strip()
-                logger.debug(f"BOOT: netsh line: '{line}'")
-
                 if 'State' in line and 'connected' in line.lower():
                     connected = True
-                    logger.info("BOOT: Windows WiFi state shows CONNECTED")
-
                 if 'SSID' in line and 'BSSID' not in line:
                     ssid_match = re.search(r'SSID\s*:\s*(.+)', line)
                     if ssid_match:
                         current_ssid = ssid_match.group(1).strip()
-                        logger.info(f"BOOT: Windows WiFi SSID found: '{current_ssid}'")
-
-            logger.info(f"BOOT: Windows WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
+            
+            _WIFI_STATUS_CACHE = {'connected': connected, 'ssid': current_ssid, 'timestamp': now}
             profiler.mark(f"check_wifi_status End (Windows: {connected})")
             return connected, current_ssid
         else:
-            logger.debug("BOOT: Using Linux WiFi checking methods")
-            # Enhanced Linux WiFi status checking with multiple methods
+            # Enhanced Linux WiFi status checking
             connected = False
             current_ssid = ""
 
-            # Method 1: Try nmcli first (most reliable on modern Linux)
-            logger.debug("BOOT: Trying nmcli connection show --active...")
+            # Method 1: Try nmcli (active connection) - usually very fast
             try:
                 nmcli_check = subprocess.run(['which', 'nmcli'], capture_output=True, timeout=3)
                 if nmcli_check.returncode == 0:
-                    # Get active wifi connections
                     result = subprocess.run(['nmcli', '-t', '-f', 'TYPE,SSID,DEVICE', 'connection', 'show', '--active'],
                                           capture_output=True, text=True, timeout=5)
                     
@@ -563,46 +559,41 @@ def check_wifi_status():
                             if len(parts) >= 3 and parts[0].lower() == '802-11-wireless':
                                 connected = True
                                 current_ssid = parts[1]
-                                logger.info(f"BOOT: Linux WiFi connected via nmcli (active connection): '{current_ssid}'")
                                 break
-                    
-                    if not connected:
-                        # Fallback to device status if active connection check failed
-                        logger.debug("BOOT: Trying nmcli device status fallback...")
-                        result = subprocess.run(['nmcli', 'device', 'status'],
-                                              capture_output=True, text=True, timeout=5)
-                        if result.returncode == 0:
-                            for line in result.stdout.split('\n'):
-                                parts = line.split()
-                                if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
-                                    connected = True
-                                    # Try to get SSID for this device
-                                    dev = parts[0]
-                                    ssid_res = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi', 'list', 'ifname', dev],
-                                                            capture_output=True, text=True, timeout=5)
-                                    if ssid_res.returncode == 0:
-                                        for sline in ssid_res.stdout.split('\n'):
-                                            if sline.startswith('yes:'):
-                                                current_ssid = sline.split(':', 1)[1].strip()
-                                                break
-                                    logger.info(f"BOOT: Linux WiFi connected via nmcli device status: '{current_ssid}'")
-                                    break
-            except Exception as e:
-                logger.warning(f"BOOT: nmcli status check encountered error: {e}")
+            except Exception: pass
 
-            # Method 2: Fallback to /proc/net/wireless or iwgetid if nmcli failed
+            # Method 2: iwgetid fallback - very fast
             if not connected:
-                logger.debug("BOOT: Trying iwgetid fallback...")
                 try:
                     iw_res = subprocess.run(['iwgetid', '-r'], capture_output=True, text=True, timeout=3)
                     if iw_res.returncode == 0:
                         current_ssid = iw_res.stdout.strip()
                         if current_ssid:
                             connected = True
-                            logger.info(f"BOOT: Linux WiFi connected via iwgetid: '{current_ssid}'")
                 except: pass
 
-            logger.info(f"BOOT: Linux WiFi check result - Connected: {connected}, SSID: '{current_ssid}'")
+            # Method 3: nmcli device status fallback
+            if not connected:
+                try:
+                    result = subprocess.run(['nmcli', 'device', 'status'],
+                                          capture_output=True, text=True, timeout=5)
+                    if result.returncode == 0:
+                        for line in result.stdout.split('\n'):
+                            parts = line.split()
+                            if len(parts) >= 4 and parts[1].lower() == 'wifi' and parts[2].lower() == 'connected':
+                                connected = True
+                                dev = parts[0]
+                                ssid_res = subprocess.run(['nmcli', '-t', '-f', 'active,ssid', 'device', 'wifi', 'list', 'ifname', dev],
+                                                        capture_output=True, text=True, timeout=5)
+                                if ssid_res.returncode == 0:
+                                    for sline in ssid_res.stdout.split('\n'):
+                                        if sline.startswith('yes:'):
+                                            current_ssid = sline.split(':', 1)[1].strip()
+                                            break
+                                break
+                except Exception: pass
+
+            _WIFI_STATUS_CACHE = {'connected': connected, 'ssid': current_ssid, 'timestamp': now}
             profiler.mark(f"check_wifi_status End (Linux: {connected})")
             return connected, current_ssid
     except Exception as e:

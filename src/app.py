@@ -956,18 +956,10 @@ class Backend(QObject):
         self.launch_timer.timeout.connect(self.update_launches_periodic)
         self.launch_timer.start(CACHE_REFRESH_INTERVAL_UPCOMING * 1000)
 
-        self.time_timer = QTimer(self)
-        self.time_timer.timeout.connect(self.update_time)
-        self.time_timer.start(1000)
-
-        self.countdown_timer = QTimer(self)
-        self.countdown_timer.timeout.connect(self.update_countdown)
-        self.countdown_timer.start(1000)
-
-        # WiFi timer for status updates
+        # WiFi timer for status updates - check every 60 seconds
         self.wifi_timer = QTimer(self)
         self.wifi_timer.timeout.connect(self.update_wifi_status)
-        self.wifi_timer.start(10000)  # Check every 10 seconds
+        self.wifi_timer.start(60000)
 
         # Update check timer - check every 6 hours (21600000 ms)
         self.update_check_timer = QTimer(self)
@@ -978,6 +970,12 @@ class Backend(QObject):
         self.next_launch_timer = QTimer(self)
         self.next_launch_timer.timeout.connect(self.update_next_launch_periodic)
         self.next_launch_timer.start(60000)  # 1 minute
+
+        # Countdown timer - 1 second for precision
+        self.countdown_timer = QTimer(self)
+        self.countdown_timer.timeout.connect(self.update_countdown)
+        self.countdown_timer.start(1000)
+
         profiler.mark("Backend: _setup_timers End")
 
     @pyqtSlot()
