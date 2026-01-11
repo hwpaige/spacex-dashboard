@@ -1225,16 +1225,26 @@ class Backend(QObject):
             try:
                 self.calibrationStarted.emit()
                 if platform.system() == 'Linux':
-                    subprocess.run(['chmod', '+x', script_path])
+                    subprocess.run(['chmod', '+x', script_path], check=True)
                     # Ensure we pass the current environment to the script, especially DISPLAY and XAUTHORITY
                     env = os.environ.copy()
-                    result = subprocess.run(['/bin/bash', script_path], capture_output=True, text=True, env=env)
+                    if 'DISPLAY' not in env:
+                        env['DISPLAY'] = ':0'
+                    
+                    logger.info(f"Running calibration script: {script_path}")
+                    # We use a longer timeout or no timeout as calibration takes time
+                    result = subprocess.run([script_path], capture_output=True, text=True, env=env)
+                    
                     if result.returncode == 0:
-                        logger.info(f"Calibration script finished successfully: {result.stdout}")
+                        logger.info("Calibration script finished successfully")
+                        if result.stdout:
+                            logger.info(f"Script STDOUT: {result.stdout}")
                     else:
                         logger.error(f"Calibration script failed with return code {result.returncode}")
-                        logger.error(f"STDOUT: {result.stdout}")
-                        logger.error(f"STDERR: {result.stderr}")
+                        if result.stdout:
+                            logger.error(f"STDOUT: {result.stdout}")
+                        if result.stderr:
+                            logger.error(f"STDERR: {result.stderr}")
                 else:
                     logger.info("Simulation: Running touch calibration")
                     time.sleep(5)

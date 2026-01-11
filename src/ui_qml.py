@@ -77,12 +77,23 @@ Window {
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         // Keep guard value in sync if changed at runtime
-        backend.globeAutospinGuardChanged.connect(function(){
+        backend.globeAutospinGuardChanged.connect(function() {
             if (backend.wifiConnecting) return;
             var guard2 = backend.globeAutospinGuard
             var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
             if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
+        })
+        // Handle touch calibration window visibility
+        backend.calibrationStarted.connect(function() {
+            console.log("Calibration started - hiding main window")
+            root.visible = false
+            if (typeof displaySettingsPopup !== 'undefined') displaySettingsPopup.close()
+        })
+        backend.calibrationFinished.connect(function() {
+            console.log("Calibration finished - showing main window")
+            root.visible = true
+            root.requestActivate()
         })
     }
 
