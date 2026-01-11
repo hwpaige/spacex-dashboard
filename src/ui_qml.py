@@ -2288,7 +2288,7 @@ Window {
                     }
                 }
 
-                    // Brightness icon
+                    // Display Settings icon (formerly Brightness)
                     Rectangle {
                         width: 28
                         height: 32
@@ -2309,84 +2309,365 @@ Window {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                brightnessPopup.open()
+                                displaySettingsPopup.open()
                             }
                         }
 
                         Popup {
-                            id: brightnessPopup
-                            y: -185
-                            x: -16
-                            width: 60
-                            height: 180
-                            padding: 15
+                            id: displaySettingsPopup
+                            y: -285
+                            x: -330
+                            width: 620
+                            height: 280
+                            padding: 0
                             background: Rectangle {
-                                color: backend.theme === "dark" ? "#2a2e2e" : "white"
-                                radius: 12
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                color: backend.theme === "dark" ? "#111111" : "#f5f5f5"
+                                radius: 20
+                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#ddd"
                                 border.width: 1
+                                layer.enabled: true
                             }
                             
-                            Slider {
-                                id: brightnessSlider
+                            RowLayout {
                                 anchors.fill: parent
-                                orientation: Qt.Vertical
-                                from: 0
-                                to: 100
-                                stepSize: 1
-                                snapMode: Slider.NoSnap
-                                value: backend.brightness
-                                
-                                // Use a local property to track the value during movement
-                                // to avoid fighting with the backend signal during dragging
-                                onMoved: {
-                                    backend.setBrightness(value)
-                                }
-                                
-                                // Update slider value from backend only when not dragging
-                                Connections {
-                                    target: backend
-                                    function onBrightnessChanged() {
-                                        if (!brightnessSlider.pressed) {
-                                            brightnessSlider.value = backend.brightness
+                                spacing: 0
+
+                                // Sidebar
+                                Rectangle {
+                                    Layout.fillHeight: true
+                                    Layout.preferredWidth: 70
+                                    color: backend.theme === "dark" ? "#181818" : "#ebebeb"
+                                    radius: 20
+
+                                    // Mask the right side of sidebar radius
+                                    Rectangle {
+                                        anchors.right: parent.right
+                                        height: parent.height
+                                        width: 20
+                                        color: parent.color
+                                        visible: true
+                                    }
+
+                                    ColumnLayout {
+                                        anchors.fill: parent
+                                        anchors.topMargin: 25
+                                        anchors.bottomMargin: 15
+                                        spacing: 20
+
+                                        Repeater {
+                                            model: [
+                                                { icon: "\uf1de", idx: 0 },
+                                                { icon: "\uf53f", idx: 1 },
+                                                { icon: "\uf132", idx: 2 }
+                                            ]
+                                            delegate: Rectangle {
+                                                Layout.preferredWidth: 45
+                                                Layout.preferredHeight: 45
+                                                Layout.alignment: Qt.AlignHCenter
+                                                radius: 10
+                                                color: displayStack.currentIndex === modelData.idx ? (backend.theme === "dark" ? "#2a2a2a" : "#dfdfdf") : "transparent"
+                                                Text {
+                                                    anchors.centerIn: parent
+                                                    text: modelData.icon
+                                                    font.family: "Font Awesome 5 Free"
+                                                    font.pixelSize: 20
+                                                    font.weight: Font.Black
+                                                    color: displayStack.currentIndex === modelData.idx ? "#3e6ae1" : (backend.theme === "dark" ? "#888" : "#666")
+                                                }
+                                                MouseArea { 
+                                                    anchors.fill: parent
+                                                    onClicked: displayStack.currentIndex = modelData.idx
+                                                }
+                                            }
+                                        }
+                                        
+                                        Item { Layout.fillHeight: true }
+                                        
+                                        Rectangle {
+                                            Layout.preferredWidth: 45
+                                            Layout.preferredHeight: 45
+                                            Layout.alignment: Qt.AlignHCenter
+                                            radius: 10
+                                            color: "transparent"
+                                            Text {
+                                                anchors.centerIn: parent
+                                                text: "\uf00d"
+                                                font.family: "Font Awesome 5 Free"
+                                                font.pixelSize: 20
+                                                font.weight: Font.Black
+                                                color: (backend.theme === "dark" ? "#888" : "#666")
+                                            }
+                                            MouseArea { 
+                                                anchors.fill: parent
+                                                onClicked: displaySettingsPopup.close()
+                                            }
                                         }
                                     }
                                 }
-                                
-                                background: Rectangle {
-                                    x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
-                                    y: brightnessSlider.topPadding
-                                    implicitWidth: 6
-                                    implicitHeight: 120
-                                    width: implicitWidth
-                                    height: brightnessSlider.availableHeight
-                                    radius: 3
-                                    color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
 
-                                    Rectangle {
-                                        width: parent.width
-                                        height: (1.0 - brightnessSlider.visualPosition) * parent.height
-                                        y: brightnessSlider.visualPosition * parent.height
-                                        color: "#2196F3"
-                                        radius: 3
+                                // Main Content
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.margins: 20
+                                    Layout.leftMargin: 25
+                                    spacing: 12
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        Text {
+                                            text: displayStack.currentIndex === 0 ? "Quick Controls" : 
+                                                  displayStack.currentIndex === 1 ? "Display & Color" : "Safety & Input"
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 20
+                                            font.bold: true
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Text {
+                                            text: "Bus 13 • DFR1125"
+                                            color: "#666"
+                                            font.pixelSize: 11
+                                            font.bold: true
+                                        }
                                     }
-                                }
 
-                                handle: Rectangle {
-                                    x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
-                                    y: brightnessSlider.topPadding + brightnessSlider.visualPosition * (brightnessSlider.availableHeight - height)
-                                    implicitWidth: 32
-                                    implicitHeight: 32
-                                    radius: 16
-                                    color: brightnessSlider.pressed ? "#f0f0f0" : "#ffffff"
-                                    border.color: "#2196F3"
-                                    border.width: 3
-                                }
-                                
-                                ToolTip {
-                                    visible: brightnessSlider.pressed
-                                    text: Math.round(brightnessSlider.value) + "%"
-                                    timeout: 1000
+                                    StackLayout {
+                                        id: displayStack
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+
+                                        // Tab 1: Quick Controls
+                                        ColumnLayout {
+                                            spacing: 15
+                                            
+                                            Repeater {
+                                                model: [
+                                                    { label: "Brightness", val: backend.brightness, func: "setBrightness", accent: "#3e6ae1" },
+                                                    { label: "Contrast", val: backend.contrast, func: "setContrast", accent: "#3e6ae1" },
+                                                    { label: "Sharpness", val: backend.sharpness, func: "setSharpness", accent: "#3e6ae1" }
+                                                ]
+                                                delegate: ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        Text { text: modelData.label; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
+                                                        Item { Layout.fillWidth: true }
+                                                        Text { text: Math.round(tSlider.value) + "%"; color: modelData.accent; font.pixelSize: 12; font.bold: true }
+                                                    }
+                                                    Slider {
+                                                        id: tSlider
+                                                        Layout.fillWidth: true
+                                                        from: 0; to: 100
+                                                        value: modelData.val
+                                                        onMoved: backend[modelData.func](value)
+                                                        background: Rectangle {
+                                                            x: tSlider.leftPadding
+                                                            y: tSlider.topPadding + tSlider.availableHeight / 2 - height / 2
+                                                            implicitWidth: 200
+                                                            implicitHeight: 10
+                                                            width: tSlider.availableWidth
+                                                            height: implicitHeight
+                                                            radius: 5
+                                                            color: backend.theme === "dark" ? "#222" : "#ddd"
+                                                            Rectangle {
+                                                                width: tSlider.visualPosition * parent.width
+                                                                height: parent.height
+                                                                color: modelData.accent
+                                                                radius: 5
+                                                            }
+                                                        }
+                                                        handle: Rectangle {
+                                                            x: tSlider.leftPadding + tSlider.visualPosition * (tSlider.availableWidth - width)
+                                                            y: tSlider.topPadding + tSlider.availableHeight / 2 - height / 2
+                                                            implicitWidth: 24
+                                                            implicitHeight: 24
+                                                            radius: 12
+                                                            color: "white"
+                                                            border.color: "#ccc"
+                                                            border.width: 1
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            Item { Layout.fillHeight: true }
+                                        }
+
+                                        // Tab 2: Display & Color
+                                        ScrollView {
+                                            clip: true
+                                            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
+                                            ColumnLayout {
+                                                width: 480
+                                                spacing: 15
+
+                                                Text { text: "Color Preset"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
+                                                Flow {
+                                                    Layout.fillWidth: true
+                                                    spacing: 8
+                                                    Repeater {
+                                                        model: [
+                                                            {text: "sRGB", val: "01"}, {text: "Native", val: "02"},
+                                                            {text: "5000K", val: "04"}, {text: "6500K", val: "05"},
+                                                            {text: "7500K", val: "06"}, {text: "9300K", val: "08"},
+                                                            {text: "User 1", val: "0b"}
+                                                        ]
+                                                        delegate: Button {
+                                                            id: tBtn
+                                                            text: modelData.text
+                                                            contentItem: Text {
+                                                                text: tBtn.text
+                                                                font: tBtn.font
+                                                                color: tBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
+                                                                horizontalAlignment: Text.AlignHCenter
+                                                                verticalAlignment: Text.AlignVCenter
+                                                            }
+                                                            background: Rectangle {
+                                                                implicitWidth: 80
+                                                                implicitHeight: 34
+                                                                color: tBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
+                                                                radius: 8
+                                                                border.color: tBtn.pressed ? "#3e6ae1" : "transparent"
+                                                                border.width: 1
+                                                            }
+                                                            highlighted: backend.colorPreset === modelData.val
+                                                            onClicked: backend.setColorPreset(modelData.val)
+                                                        }
+                                                    }
+                                                }
+
+                                                Text { text: "RGB Video Gains"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true; Layout.topMargin: 5 }
+                                                
+                                                Repeater {
+                                                    model: [
+                                                        { label: "Red Gain", val: backend.videoGainRed, func: "setVideoGainRed", accent: "#FF5252" },
+                                                        { label: "Green Gain", val: backend.videoGainGreen, func: "setVideoGainGreen", accent: "#4CAF50" },
+                                                        { label: "Blue Gain", val: backend.videoGainBlue, func: "setVideoGainBlue", accent: "#2196F3" }
+                                                    ]
+                                                    delegate: ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 2
+                                                        RowLayout {
+                                                            Layout.fillWidth: true
+                                                            Text { text: modelData.label; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
+                                                            Item { Layout.fillWidth: true }
+                                                            Text { text: Math.round(rgbSlider.value) + "%"; color: modelData.accent; font.pixelSize: 12; font.bold: true }
+                                                        }
+                                                        Slider {
+                                                            id: rgbSlider
+                                                            Layout.fillWidth: true
+                                                            from: 0; to: 100
+                                                            value: modelData.val
+                                                            onMoved: backend[modelData.func](value)
+                                                            background: Rectangle {
+                                                                x: rgbSlider.leftPadding
+                                                                y: rgbSlider.topPadding + rgbSlider.availableHeight / 2 - height / 2
+                                                                implicitWidth: 200
+                                                                implicitHeight: 10
+                                                                width: rgbSlider.availableWidth
+                                                                height: implicitHeight
+                                                                radius: 5
+                                                                color: backend.theme === "dark" ? "#222" : "#ddd"
+                                                                Rectangle {
+                                                                    width: rgbSlider.visualPosition * parent.width
+                                                                    height: parent.height
+                                                                    color: modelData.accent
+                                                                    radius: 5
+                                                                }
+                                                            }
+                                                            handle: Rectangle {
+                                                                x: rgbSlider.leftPadding + rgbSlider.visualPosition * (rgbSlider.availableWidth - width)
+                                                                y: rgbSlider.topPadding + rgbSlider.availableHeight / 2 - height / 2
+                                                                implicitWidth: 24
+                                                                implicitHeight: 24
+                                                                radius: 12
+                                                                color: "white"
+                                                                border.color: "#ccc"
+                                                                border.width: 1
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // Tab 3: Safety & Input
+                                        ColumnLayout {
+                                            spacing: 15
+                                            
+                                            Text { text: "Input Source"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
+                                            Flow {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+                                                Repeater {
+                                                    model: [
+                                                        {text: "HDMI 1", val: "11"}, {text: "HDMI 2", val: "12"},
+                                                        {text: "DP 1", val: "0f"}, {text: "DP 2", val: "10"},
+                                                        {text: "VGA", val: "01"}, {text: "DVI 1", val: "03"}, {text: "DVI 2", val: "04"}
+                                                    ]
+                                                    delegate: Button {
+                                                        id: inputBtn
+                                                        text: modelData.text
+                                                        contentItem: Text {
+                                                            text: inputBtn.text
+                                                            font: inputBtn.font
+                                                            color: inputBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
+                                                            horizontalAlignment: Text.AlignHCenter
+                                                            verticalAlignment: Text.AlignVCenter
+                                                        }
+                                                        background: Rectangle {
+                                                            implicitWidth: 80
+                                                            implicitHeight: 34
+                                                            color: inputBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
+                                                            radius: 8
+                                                            border.color: inputBtn.pressed ? "#3e6ae1" : "transparent"
+                                                            border.width: 1
+                                                        }
+                                                        highlighted: backend.inputSource === modelData.val
+                                                        onClicked: backend.setInputSource(modelData.val)
+                                                    }
+                                                }
+                                            }
+
+                                            Rectangle { Layout.fillWidth: true; height: 1; color: backend.theme === "dark" ? "#222" : "#ddd"; Layout.topMargin: 5; Layout.bottomMargin: 5 }
+
+                                            Text { text: "Power Control"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
+                                            RowLayout {
+                                                spacing: 12
+                                                Repeater {
+                                                    model: [
+                                                        { text: "Power On", val: "01" },
+                                                        { text: "Standby", val: "04" },
+                                                        { text: "Power Off", val: "05" }
+                                                    ]
+                                                    delegate: Button {
+                                                        id: pwrBtn
+                                                        Layout.fillWidth: true
+                                                        text: modelData.text
+                                                        contentItem: Text {
+                                                            text: pwrBtn.text
+                                                            font: pwrBtn.font
+                                                            color: pwrBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
+                                                            horizontalAlignment: Text.AlignHCenter
+                                                            verticalAlignment: Text.AlignVCenter
+                                                        }
+                                                        background: Rectangle {
+                                                            implicitWidth: 80
+                                                            implicitHeight: 34
+                                                            color: pwrBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
+                                                            radius: 8
+                                                            border.color: pwrBtn.pressed ? "#3e6ae1" : "transparent"
+                                                            border.width: 1
+                                                        }
+                                                        highlighted: backend.powerMode === modelData.val
+                                                        onClicked: backend.setPowerMode(modelData.val)
+                                                    }
+                                                }
+                                            }
+                                            Item { Layout.fillHeight: true }
+                                        }
+                                    }
                                 }
                             }
                         }

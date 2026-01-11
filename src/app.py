@@ -383,6 +383,14 @@ class Backend(QObject):
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
     brightnessChanged = pyqtSignal()
+    contrastChanged = pyqtSignal()
+    colorPresetChanged = pyqtSignal()
+    videoGainRedChanged = pyqtSignal()
+    videoGainGreenChanged = pyqtSignal()
+    videoGainBlueChanged = pyqtSignal()
+    sharpnessChanged = pyqtSignal()
+    inputSourceChanged = pyqtSignal()
+    powerModeChanged = pyqtSignal()
     selectedLaunchChanged = pyqtSignal()
     widthChanged = pyqtSignal()
     heightChanged = pyqtSignal()
@@ -479,13 +487,35 @@ class Backend(QObject):
         self._brightness = 100
         self._target_brightness = 100
         self._last_applied_brightness = -1
+        self._contrast = 50
+        self._target_contrast = 50
+        self._last_applied_contrast = -1
+        self._color_preset = "02"
+        self._video_gain_red = 50
+        self._target_video_gain_red = 50
+        self._last_applied_video_gain_red = -1
+        self._video_gain_green = 50
+        self._target_video_gain_green = 50
+        self._last_applied_video_gain_green = -1
+        self._video_gain_blue = 50
+        self._target_video_gain_blue = 50
+        self._last_applied_video_gain_blue = -1
+        self._sharpness = 50
+        self._target_sharpness = 50
+        self._last_applied_sharpness = -1
+        self._input_source = "11"
+        self._power_mode = "01"
         self._brightness_lock = threading.Lock()
         self._brightness_timer = QTimer()
         self._brightness_timer.setSingleShot(True)
         self._brightness_timer.timeout.connect(self._apply_brightness)
         
+        self._display_settings_timer = QTimer()
+        self._display_settings_timer.setSingleShot(True)
+        self._display_settings_timer.timeout.connect(self._apply_display_settings)
+
         if self._is_large_display and not IS_WINDOWS:
-            QTimer.singleShot(5000, self._initial_brightness_fetch)
+            QTimer.singleShot(5000, self._initial_display_settings_fetch)
         
         # Support logical scaling for High DPI displays
         try:
@@ -1143,30 +1173,171 @@ class Backend(QObject):
     def brightness(self):
         return self._brightness
 
+    @pyqtProperty(int, notify=contrastChanged)
+    def contrast(self):
+        return self._contrast
+
+    @pyqtProperty(str, notify=colorPresetChanged)
+    def colorPreset(self):
+        return self._color_preset
+
+    @pyqtProperty(int, notify=videoGainRedChanged)
+    def videoGainRed(self):
+        return self._video_gain_red
+
+    @pyqtProperty(int, notify=videoGainGreenChanged)
+    def videoGainGreen(self):
+        return self._video_gain_green
+
+    @pyqtProperty(int, notify=videoGainBlueChanged)
+    def videoGainBlue(self):
+        return self._video_gain_blue
+
+    @pyqtProperty(int, notify=sharpnessChanged)
+    def sharpness(self):
+        return self._sharpness
+
+    @pyqtProperty(str, notify=inputSourceChanged)
+    def inputSource(self):
+        return self._input_source
+
+    @pyqtProperty(str, notify=powerModeChanged)
+    def powerMode(self):
+        return self._power_mode
+
     @pyqtSlot(float)
     def setBrightness(self, value):
         """Update brightness with debouncing and serial hardware execution."""
-        # Convert to int as most hardware interfaces expect integers
         int_val = int(round(value))
-        
-        # Track the latest target value regardless of whether it's the same as current
-        # This ensures that if a hardware command failed or was missed, we try again
         self._target_brightness = int_val
-        
-        # Update the UI state immediately for responsiveness
         if self._brightness != int_val:
             self._brightness = int_val
             logger.debug(f"Backend: Brightness UI set to {int_val}%")
             self.brightnessChanged.emit()
-        
-        # Debounce the hardware update. 
-        # Using 300ms (tuned from 250ms) for better balance between responsiveness and stability
         self._brightness_timer.start(300)
+
+    @pyqtSlot(float)
+    def setContrast(self, value):
+        int_val = int(round(value))
+        self._target_contrast = int_val
+        if self._contrast != int_val:
+            self._contrast = int_val
+            self.contrastChanged.emit()
+        self._display_settings_timer.start(300)
+
+    @pyqtSlot(str)
+    def setColorPreset(self, value):
+        if self._color_preset != value:
+            self._color_preset = value
+            self.colorPresetChanged.emit()
+            self._set_setting_on_hardware("14", value)
+
+    @pyqtSlot(float)
+    def setVideoGainRed(self, value):
+        int_val = int(round(value))
+        self._target_video_gain_red = int_val
+        if self._video_gain_red != int_val:
+            self._video_gain_red = int_val
+            self.videoGainRedChanged.emit()
+        self._display_settings_timer.start(300)
+
+    @pyqtSlot(float)
+    def setVideoGainGreen(self, value):
+        int_val = int(round(value))
+        self._target_video_gain_green = int_val
+        if self._video_gain_green != int_val:
+            self._video_gain_green = int_val
+            self.videoGainGreenChanged.emit()
+        self._display_settings_timer.start(300)
+
+    @pyqtSlot(float)
+    def setVideoGainBlue(self, value):
+        int_val = int(round(value))
+        self._target_video_gain_blue = int_val
+        if self._video_gain_blue != int_val:
+            self._video_gain_blue = int_val
+            self.videoGainBlueChanged.emit()
+        self._display_settings_timer.start(300)
+
+    @pyqtSlot(float)
+    def setSharpness(self, value):
+        int_val = int(round(value))
+        self._target_sharpness = int_val
+        if self._sharpness != int_val:
+            self._sharpness = int_val
+            self.sharpnessChanged.emit()
+        self._display_settings_timer.start(300)
+
+    @pyqtSlot(str)
+    def setInputSource(self, value):
+        if self._input_source != value:
+            self._input_source = value
+            self.inputSourceChanged.emit()
+            self._set_setting_on_hardware("60", value)
+
+    @pyqtSlot(str)
+    def setPowerMode(self, value):
+        if self._power_mode != value:
+            self._power_mode = value
+            self.powerModeChanged.emit()
+            self._set_setting_on_hardware("D6", value)
 
     def _apply_brightness(self):
         """Triggered by debounce timer to ensure the latest target is set on hardware."""
         logger.debug(f"Backend: Debounce timer fired, target: {self._target_brightness}%")
         self.set_brightness_on_hardware(self._target_brightness)
+
+    def _apply_display_settings(self):
+        """Debounced applicator for multi-value slider settings (Contrast, RGB, Sharpness)."""
+        if IS_WINDOWS or not self._is_large_display:
+            return
+
+        def _worker():
+            with self._brightness_lock:
+                targets = [
+                    ("12", self._target_contrast, "_last_applied_contrast"),
+                    ("16", self._target_video_gain_red, "_last_applied_video_gain_red"),
+                    ("18", self._target_video_gain_green, "_last_applied_video_gain_green"),
+                    ("1A", self._target_video_gain_blue, "_last_applied_video_gain_blue"),
+                    ("87", self._target_sharpness, "_last_applied_sharpness"),
+                ]
+                
+                for vcp, target_val, last_attr in targets:
+                    last_val = getattr(self, last_attr)
+                    if target_val != last_val:
+                        # Scale 0-100 to 0-31 for this monitor's quirks
+                        hw_val = int(round(target_val * 31 / 100))
+                        cmd = f"/usr/bin/ddcutil setvcp {vcp} {hw_val} --bus=13 --noverify --mccs 2.2"
+                        try:
+                            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                            if result.returncode == 0:
+                                setattr(self, last_attr, target_val)
+                                logger.info(f"Backend: Set VCP {vcp} to {hw_val} (UI: {target_val})")
+                            else:
+                                logger.error(f"Backend: ddcutil VCP {vcp} failed: {result.stderr.strip()}")
+                        except Exception as e:
+                            logger.error(f"Backend: Exception setting VCP {vcp}: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    def _set_setting_on_hardware(self, vcp, value):
+        """Direct applicator for discrete settings (non-debounced)."""
+        if IS_WINDOWS or not self._is_large_display:
+            return
+        
+        def _worker():
+            with self._brightness_lock:
+                cmd = f"/usr/bin/ddcutil setvcp {vcp} {value} --bus=13 --noverify --mccs 2.2"
+                try:
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        logger.info(f"Backend: Successfully set VCP {vcp} to {value}")
+                    else:
+                        logger.error(f"Backend: ddcutil setvcp {vcp} failed: {result.stderr.strip()}")
+                except Exception as e:
+                    logger.error(f"Backend: Exception setting VCP {vcp}: {e}")
+        
+        threading.Thread(target=_worker, daemon=True).start()
 
     def set_brightness_on_hardware(self, value):
         if IS_WINDOWS:
@@ -1220,37 +1391,113 @@ class Backend(QObject):
         # Start the worker thread
         threading.Thread(target=_worker, daemon=True).start()
 
-    def _initial_brightness_fetch(self):
+    def _initial_display_settings_fetch(self):
         if IS_WINDOWS or not self._is_large_display:
             return
 
         def _worker():
             try:
-                # Use lock to avoid collision with any concurrent set operation
                 with self._brightness_lock:
-                    # Get current value for feature 10
+                    # Brightness (10)
                     cmd = "/usr/bin/ddcutil getvcp 10 --bus=13 --brief"
                     result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
                     if result.returncode == 0:
-                        # Output example: VCP 10 C 35 100
                         parts = result.stdout.strip().split()
                         if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "10":
                             try:
-                                current_hw_val = int(parts[3])
-                                # Scale back from 0-31 hardware range to 0-100 UI range
-                                current_ui_val = int(round(current_hw_val * 100 / 31))
-                                # Ensure we don't exceed 100
-                                current_ui_val = min(100, max(0, current_ui_val))
-                                
-                                self._brightness = current_ui_val
-                                self._last_applied_brightness = current_ui_val
-                                self._target_brightness = current_ui_val
+                                val = int(parts[3])
+                                ui_val = min(100, max(0, int(round(val * 100 / 31))))
+                                self._brightness = ui_val
+                                self._last_applied_brightness = ui_val
+                                self._target_brightness = ui_val
                                 self.brightnessChanged.emit()
-                                logger.info(f"Backend: Initial DFR1125 brightness fetched: {current_hw_val} (Scaled UI: {current_ui_val}%)")
-                            except ValueError:
-                                pass
+                                logger.info(f"Backend: Initial brightness fetched: {ui_val}%")
+                            except ValueError: pass
+
+                    # Contrast (12)
+                    cmd = "/usr/bin/ddcutil getvcp 12 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "12":
+                            try:
+                                val = int(parts[3])
+                                ui_val = min(100, max(0, int(round(val * 100 / 31))))
+                                self._contrast = ui_val
+                                self._last_applied_contrast = ui_val
+                                self._target_contrast = ui_val
+                                self.contrastChanged.emit()
+                                logger.info(f"Backend: Initial contrast fetched: {ui_val}%")
+                            except ValueError: pass
+
+                    # Color Preset (14)
+                    cmd = "/usr/bin/ddcutil getvcp 14 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "14":
+                            val = parts[3].lower().replace("0x", "")
+                            if len(val) == 1: val = "0" + val
+                            self._color_preset = val
+                            self.colorPresetChanged.emit()
+
+                    # RGB Gains (16, 18, 1A)
+                    for vcp, attr, sig in [("16", "video_gain_red", self.videoGainRedChanged), 
+                                           ("18", "video_gain_green", self.videoGainGreenChanged), 
+                                           ("1A", "video_gain_blue", self.videoGainBlueChanged)]:
+                        cmd = f"/usr/bin/ddcutil getvcp {vcp} --bus=13 --brief"
+                        result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                        if result.returncode == 0:
+                            parts = result.stdout.strip().split()
+                            if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == vcp:
+                                try:
+                                    val = int(parts[3])
+                                    ui_val = min(100, max(0, int(round(val * 100 / 31))))
+                                    setattr(self, f"_{attr}", ui_val)
+                                    setattr(self, f"_last_applied_{attr}", ui_val)
+                                    setattr(self, f"_target_{attr}", ui_val)
+                                    sig.emit()
+                                except ValueError: pass
+
+                    # Sharpness (87)
+                    cmd = "/usr/bin/ddcutil getvcp 87 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "87":
+                            try:
+                                val = int(parts[3])
+                                ui_val = min(100, max(0, int(round(val * 100 / 31))))
+                                self._sharpness = ui_val
+                                self._last_applied_sharpness = ui_val
+                                self._target_sharpness = ui_val
+                                self.sharpnessChanged.emit()
+                            except ValueError: pass
+
+                    # Input Source (60)
+                    cmd = "/usr/bin/ddcutil getvcp 60 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and parts[0] == "VCP" and parts[1] == "60":
+                            val = parts[3].lower().replace("0x", "")
+                            if len(val) == 1: val = "0" + val
+                            self._input_source = val
+                            self.inputSourceChanged.emit()
+
+                    # Power Mode (D6)
+                    cmd = "/usr/bin/ddcutil getvcp D6 --bus=13 --brief"
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=10)
+                    if result.returncode == 0:
+                        parts = result.stdout.strip().split()
+                        if len(parts) >= 4 and (parts[0] == "VCP" and (parts[1] == "D6" or parts[1] == "d6")):
+                            val = parts[3].lower().replace("0x", "")
+                            if len(val) == 1: val = "0" + val
+                            self._power_mode = val
+                            self.powerModeChanged.emit()
+
             except Exception as e:
-                logger.error(f"Backend: Failed to fetch initial brightness: {e}")
+                logger.error(f"Backend: Failed to fetch initial display settings: {e}")
 
         threading.Thread(target=_worker, daemon=True).start()
 
