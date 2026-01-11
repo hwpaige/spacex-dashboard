@@ -3339,32 +3339,24 @@ class ChartItem(QQuickPaintedItem):
                 y = height - margin - (height - 2 * margin) * value / actual_max if actual_max > 0 else height - margin
                 points.append(QPoint(int(x), int(y)))
 
-            # Draw sophisticated multi-layer glow lines
-            for glow_layer in range(3):
-                glow_alpha = 60 - (glow_layer * 20)
-                glow_width = 8 - (glow_layer * 2)
-                glow_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
-                painter.setPen(QPen(glow_color, glow_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                if len(points) > 1:
-                    for i in range(len(points) - 1):
-                        painter.drawLine(points[i], points[i + 1])
+            # Draw simplified glow line (1 layer instead of 3)
+            glow_color = QColor(color.red(), color.green(), color.blue(), 40)
+            painter.setPen(QPen(glow_color, 6, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            if len(points) > 1:
+                painter.drawPolyline(points)
 
             # Draw main line with smooth caps and joins
             painter.setPen(QPen(color, 2.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             if len(points) > 1:
-                for i in range(len(points) - 1):
-                    painter.drawLine(points[i], points[i + 1])
+                painter.drawPolyline(points)
 
-            # Draw sophisticated point markers with glow
+            # Draw simplified point markers (1 layer instead of 4)
             for point in points:
-                # Multi-layer glow effect for points
-                for glow_layer in range(4):
-                    glow_alpha = 80 - (glow_layer * 20)
-                    glow_radius = 6 - glow_layer
-                    glow_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
-                    painter.setBrush(QBrush(glow_color))
-                    painter.setPen(Qt.PenStyle.NoPen)
-                    painter.drawEllipse(point, glow_radius, glow_radius)
+                # Single glow layer
+                glow_color = QColor(color.red(), color.green(), color.blue(), 60)
+                painter.setBrush(QBrush(glow_color))
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawEllipse(point, 5, 5)
 
                 # Main point with subtle border
                 painter.setBrush(QBrush(color))
@@ -3386,41 +3378,34 @@ class ChartItem(QQuickPaintedItem):
                 points.append(QPoint(int(x), int(y)))
             points.append(QPoint(int(width - margin), int(height - margin)))
 
-            # Draw sophisticated multi-layer glow fill
-            for glow_layer in range(3):
-                glow_alpha = 35 - (glow_layer * 10)
-                glow_offset = glow_layer * 1.5
-
-                glow_fill_color = QColor(color.red(), color.green(), color.blue(), glow_alpha)
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QBrush(glow_fill_color))
-
-                # Create offset glow points for depth
-                glow_points = []
-                for point in points:
-                    if point.y() < height - margin:  # Not the bottom points
-                        glow_points.append(QPoint(int(point.x()), int(point.y() - glow_offset)))
-                    else:
-                        glow_points.append(point)
-                painter.drawPolygon(glow_points)
+            # Draw simplified glow fill (1 layer instead of 3)
+            glow_fill_color = QColor(color.red(), color.green(), color.blue(), 25)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QBrush(glow_fill_color))
+            
+            # Use a slightly offset polygon for the single glow layer
+            glow_points = []
+            for point in points:
+                if point.y() < height - margin:
+                    glow_points.append(QPoint(int(point.x()), int(point.y() - 2)))
+                else:
+                    glow_points.append(point)
+            painter.drawPolygon(glow_points)
 
             # Draw main area fill with sophisticated gradient
             gradient = QLinearGradient(0, margin, 0, height - margin)
-            gradient.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 180))  # Top - more transparent
-            gradient.setColorAt(0.7, QColor(color.red(), color.green(), color.blue(), 140))  # Middle
-            gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 100))  # Bottom - most transparent
+            gradient.setColorAt(0, QColor(color.red(), color.green(), color.blue(), 180))  # Top
+            gradient.setColorAt(0.7, QColor(color.red(), color.green(), color.blue(), 140))
+            gradient.setColorAt(1, QColor(color.red(), color.green(), color.blue(), 100))  # Bottom
 
             painter.setBrush(QBrush(gradient))
             painter.drawPolygon(points)
 
-            # Draw sophisticated outline with multi-layer glow
-            for outline_layer in range(3):
-                outline_alpha = 120 - (outline_layer * 30)
-                outline_width = 4 - outline_layer
-                outline_color = QColor(color.red(), color.green(), color.blue(), outline_alpha)
-                painter.setPen(QPen(outline_color, outline_width, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-                painter.setBrush(Qt.BrushStyle.NoBrush)
-                painter.drawPolygon(points)
+            # Draw simplified outline (1 layer instead of 3)
+            outline_color = QColor(color.red(), color.green(), color.blue(), 90)
+            painter.setPen(QPen(outline_color, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPolygon(points)
 
             # Draw final sharp outline
             painter.setPen(QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))

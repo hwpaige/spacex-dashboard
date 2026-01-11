@@ -47,18 +47,19 @@ class BootProfiler:
     def mark(self, event_name):
         """Mark a point in time with a name."""
         elapsed = time.time() - self.start_time
-        self.events.append((event_name, elapsed))
-        logger.info(f"PROFILER: {event_name} at {elapsed:.3f}s")
+        thread_name = threading.current_thread().name
+        self.events.append((event_name, elapsed, thread_name))
+        logger.info(f"PROFILER: [{thread_name}] {event_name} at {elapsed:.3f}s")
         
     def get_summary(self):
         """Get a formatted summary of all tracked events."""
         summary = ["--- Boot Performance Summary ---"]
         prev_time = 0
-        for name, timestamp in self.events:
+        for name, timestamp, thread_name in self.events:
             duration = timestamp - prev_time
-            summary.append(f"{name:.<40} {timestamp:>6.3f}s (step: {duration:>6.3f}s)")
+            summary.append(f"[{thread_name:^12}] {name:.<40} {timestamp:>6.3f}s (step: {duration:>6.3f}s)")
             prev_time = timestamp
-        summary.append(f"{'Total Boot Time':.<40} {prev_time:>6.3f}s")
+        summary.append(f"{'Total Boot Time':.<55} {prev_time:>6.3f}s")
         return "\n".join(summary)
 
     def log_summary(self):
@@ -710,12 +711,10 @@ def fetch_launches():
                 merged_prev_map[launch_id] = l
         
         # Sort merged previous launches by date descending
+        profiler.mark("fetch_launches: Sorting and Deduplicating Start")
         def _parse_net(l):
-            try:
-                dt = parse(l.get('net', ''))
-                return dt if dt.tzinfo else dt.replace(tzinfo=pytz.UTC)
-            except:
-                return datetime.min.replace(tzinfo=pytz.UTC)
+            dt = _get_parsed_dt(l.get('net', ''))
+            return dt if dt else datetime.min.replace(tzinfo=pytz.UTC)
 
         merged_previous = sorted(merged_prev_map.values(), key=_parse_net, reverse=True)
         
@@ -728,6 +727,7 @@ def fetch_launches():
             'upcoming': merged_upcoming,
             'previous': merged_previous
         }
+        profiler.mark("fetch_launches: Sorting and Deduplicating End")
         
         save_cache_to_file(RUNTIME_CACHE_FILE_LAUNCHES, launch_data, datetime.now(pytz.UTC))
         logger.info(f"Fetched {len(api_upcoming)} upcoming and {len(api_previous)} previous launches from API")
@@ -2007,6 +2007,24 @@ def _save_date_cache():
 # Initial load
 _load_date_cache()
 
+def _get_parsed_dt(net_str):
+    """Helper to get parsed datetime from cache or parse it if not cached."""
+    global _DATE_PARSE_CACHE, _DATE_PARSE_CACHE_DIRTY
+    if not net_str: return None
+    if net_str not in _DATE_PARSE_CACHE:
+        try:
+            dt = parse(net_str)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=pytz.UTC)
+            else:
+                dt = dt.astimezone(pytz.UTC)
+            _DATE_PARSE_CACHE[net_str] = dt
+            _DATE_PARSE_CACHE_DIRTY = True
+        except Exception:
+            _DATE_PARSE_CACHE[net_str] = None
+            _DATE_PARSE_CACHE_DIRTY = True
+    return _DATE_PARSE_CACHE[net_str]
+
 def group_event_data(data, mode, event_type, timezone_obj):
     """
     Group and filter launch or race event data by date range (Today, This Week, Later, etc.).
@@ -2030,23 +2048,6 @@ def group_event_data(data, mode, event_type, timezone_obj):
         # Pre-parse dates and add local time to each launch to avoid redundant expensive calls
         processed_launches = []
         
-        def _get_parsed_dt(net_str):
-            global _DATE_PARSE_CACHE_DIRTY
-            if not net_str: return None
-            if net_str not in _DATE_PARSE_CACHE:
-                try:
-                    dt = parse(net_str)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=pytz.UTC)
-                    else:
-                        dt = dt.astimezone(pytz.UTC)
-                    _DATE_PARSE_CACHE[net_str] = dt
-                    _DATE_PARSE_CACHE_DIRTY = True
-                except Exception:
-                    _DATE_PARSE_CACHE[net_str] = None
-                    _DATE_PARSE_CACHE_DIRTY = True
-            return _DATE_PARSE_CACHE[net_str]
-
         for l in launches:
             launch = parse_launch_data(l)
             net = launch.get('net', '') or launch.get('date_start', '')
@@ -2366,6 +2367,7 @@ def get_calendar_mapping(launch_data, tz_obj=None):
     Generate a mapping of date strings (YYYY-MM-DD) to lists of launches.
     Extracted from Backend.launchesByDate to allow pre-computation during boot.
     """
+    profiler.mark("get_calendar_mapping Start")
     mapping = {}
     if not launch_data:
         return mapping
@@ -2375,12 +2377,11 @@ def get_calendar_mapping(launch_data, tz_obj=None):
         t = l.get('time')
         if tz_obj and l.get('net'):
             try:
-                dt_utc = parse(l['net'])
-                if dt_utc.tzinfo is None:
-                    dt_utc = pytz.UTC.localize(dt_utc)
-                dt_local = dt_utc.astimezone(tz_obj)
-                d = dt_local.strftime('%Y-%m-%d')
-                t = dt_local.strftime('%H:%M:%S')
+                dt_utc = _get_parsed_dt(l['net'])
+                if dt_utc:
+                    dt_local = dt_utc.astimezone(tz_obj)
+                    d = dt_local.strftime('%Y-%m-%d')
+                    t = dt_local.strftime('%H:%M:%S')
             except Exception:
                 pass
 
@@ -2399,12 +2400,11 @@ def get_calendar_mapping(launch_data, tz_obj=None):
         t = l.get('time')
         if tz_obj and l.get('net'):
             try:
-                dt_utc = parse(l['net'])
-                if dt_utc.tzinfo is None:
-                    dt_utc = pytz.UTC.localize(dt_utc)
-                dt_local = dt_utc.astimezone(tz_obj)
-                d = dt_local.strftime('%Y-%m-%d')
-                t = dt_local.strftime('%H:%M:%S')
+                dt_utc = _get_parsed_dt(l['net'])
+                if dt_utc:
+                    dt_local = dt_utc.astimezone(tz_obj)
+                    d = dt_local.strftime('%Y-%m-%d')
+                    t = dt_local.strftime('%H:%M:%S')
             except Exception:
                 pass
 
@@ -2417,6 +2417,8 @@ def get_calendar_mapping(launch_data, tz_obj=None):
             l_typed['localDate'] = d
             l_typed['localTime'] = d + " " + t
             mapping[d].append(l_typed)
+    profiler.mark(f"get_calendar_mapping End ({len(mapping)} dates)")
+    _save_date_cache()
     return mapping
 
 def get_next_launch_info(upcoming_launches, tz_obj):
@@ -2426,7 +2428,8 @@ def get_next_launch_info(upcoming_launches, tz_obj):
     for l in upcoming_launches:
         if l.get('time') == 'TBD': continue
         try:
-            lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+            lt_utc = _get_parsed_dt(l['net'])
+            if not lt_utc: continue
             is_finished = is_launch_finished(l.get('status'))
             # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
             if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
@@ -2435,12 +2438,14 @@ def get_next_launch_info(upcoming_launches, tz_obj):
             continue
             
     if valid_launches:
-        next_l = min(valid_launches, key=lambda x: parse(x['net']))
+        next_l = min(valid_launches, key=lambda x: _get_parsed_dt(x['net']) or datetime.max.replace(tzinfo=pytz.UTC))
         launch = next_l.copy()
-        launch_datetime = parse(next_l['net']).replace(tzinfo=pytz.UTC).astimezone(tz_obj)
-        launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
-        launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
-        return launch
+        dt_utc = _get_parsed_dt(next_l['net'])
+        if dt_utc:
+            launch_datetime = dt_utc.astimezone(tz_obj)
+            launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
+            launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            return launch
     return None
 
 def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
@@ -2450,7 +2455,8 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
     for l in upcoming_launches:
         if l.get('time') == 'TBD': continue
         try:
-            lt_utc = parse(l['net']).replace(tzinfo=pytz.UTC)
+            lt_utc = _get_parsed_dt(l['net'])
+            if not lt_utc: continue
             is_finished = is_launch_finished(l.get('status'))
             # Include future launches OR ongoing launches (within 2 hours of T0 and not finished)
             if lt_utc > current_time or (current_time <= lt_utc + timedelta(hours=2) and not is_finished):
@@ -2459,12 +2465,14 @@ def get_upcoming_launches_list(upcoming_launches, tz_obj, limit=10):
             continue
 
     launches = []
-    for l in sorted(valid_launches, key=lambda x: parse(x['net']))[:limit]:
+    for l in sorted(valid_launches, key=lambda x: _get_parsed_dt(x['net']) or datetime.max.replace(tzinfo=pytz.UTC))[:limit]:
         launch = l.copy()
-        launch_datetime = parse(l['net']).replace(tzinfo=pytz.UTC).astimezone(tz_obj)
-        launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
-        launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
-        launches.append(launch)
+        dt_utc = _get_parsed_dt(l['net'])
+        if dt_utc:
+            launch_datetime = dt_utc.astimezone(tz_obj)
+            launch['local_date'] = launch_datetime.strftime('%Y-%m-%d')
+            launch['local_time'] = launch_datetime.strftime('%H:%M:%S')
+            launches.append(launch)
     return launches
 
 def get_closest_x_video_url(launch_data):
