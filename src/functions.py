@@ -1574,6 +1574,9 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
     profiler.mark("get_launch_trends_series End")
     return all_months, series
 
+# Global trajectory data cache to avoid redundant disk I/O
+_TRAJECTORY_DATA_CACHE = None
+
 def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     """
     Get trajectory data for the next upcoming launch or a specific launch.
@@ -1690,14 +1693,19 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     landing_loc = next_launch.get('landing_location')
     cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}:{landing_loc}"
     
-    traj_cache = {}
-    cache_loaded = load_cache_from_file(TRAJECTORY_CACHE_FILE)
-    if cache_loaded and isinstance(cache_loaded.get('data'), dict):
-        traj_cache = cache_loaded['data']
+    global _TRAJECTORY_DATA_CACHE
+    if _TRAJECTORY_DATA_CACHE is None:
+        logger.info("Loading trajectory cache from disk...")
+        cache_loaded = load_cache_from_file(TRAJECTORY_CACHE_FILE)
+        if cache_loaded and isinstance(cache_loaded.get('data'), dict):
+            _TRAJECTORY_DATA_CACHE = cache_loaded['data']
+        else:
+            # Handle direct dictionary without 'data' wrapper if it exists
+            _TRAJECTORY_DATA_CACHE = cache_loaded if isinstance(cache_loaded, dict) else {}
 
-    if cache_key in traj_cache:
-        cached = traj_cache[cache_key]
-        logger.info(f"Trajectory cache hit for {cache_key}")
+    if cache_key in _TRAJECTORY_DATA_CACHE:
+        cached = _TRAJECTORY_DATA_CACHE[cache_key]
+        logger.info(f"Trajectory in-memory cache hit for {cache_key}")
         return {
             'launch_site': cached.get('launch_site', launch_site),
             'trajectory': cached.get('trajectory', []),
@@ -1711,6 +1719,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'landing_location': cached.get('landing_location', next_launch.get('landing_location'))
         }
 
+    traj_cache = _TRAJECTORY_DATA_CACHE
     logger.info(f"Trajectory cache miss for {cache_key}; generating new trajectory")
 
     def get_radius(progress, target_radius, offset=0.0):
@@ -2795,9 +2804,10 @@ def setup_dashboard_environment():
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
             "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
             "--disable-gpu-sandbox --no-sandbox "
-            "--disable-dev-shm-usage --disable-accelerated-video-decode "
-            "--disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas "
-            "--enable-gpu-rasterization "
+            "--disable-dev-shm-usage --enable-accelerated-video-decode "
+            "--enable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas "
+            "--enable-gpu-rasterization --enable-zero-copy "
+            "--enable-native-gpu-memory-buffers --enable-features=VaapiVideoDecoder "
             "--disable-web-security --allow-running-insecure-content "
             "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
             "--disable-gpu-driver-bug-workarounds "

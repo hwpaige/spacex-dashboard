@@ -506,6 +506,11 @@
         function animate() {
             requestAnimationFrame(animate);
 
+            // Optimization: Skip all processing if system is paused and no interaction is happening
+            if (systemPaused && !userInteracting && !isInMomentum) {
+                return;
+            }
+
             if (globe) {
                 if (isInMomentum) {
                     // Apply momentum directly in the same frame of reference it was recorded

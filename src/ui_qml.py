@@ -536,6 +536,10 @@ Window {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 visible: plotCard.plotCardShowsGlobe
+                                onVisibleChanged: {
+                                    if (visible) runJavaScript("if(window.resumeSpin) resumeSpin();")
+                                    else runJavaScript("if(window.pauseSpin) pauseSpin();")
+                                }
                                 property bool _loaded: false
                                 function runJavaScript(script) {
                                     if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
