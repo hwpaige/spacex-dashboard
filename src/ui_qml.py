@@ -2018,6 +2018,7 @@ Window {
                             color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
+                            font.bold: true
                         }
                         Text {
                             id: weatherText
@@ -2032,6 +2033,7 @@ Window {
                             color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
+                            font.bold: true
                         }
                     }
                 }
@@ -2082,6 +2084,7 @@ Window {
                             color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
+                            font.bold: true
                             // Fade out as tray expands (starts fading when tray is 2x ticker height)
                             opacity: 1.0 - Math.min(1.0, narrativeTray.height / 56.0)
 
