@@ -25,15 +25,6 @@ Window {
         // Connect web content reload signal
         backend.reloadWebContent.connect(function() {
             console.log("Reloading web content after WiFi connection...")
-            // Smooth globe handling: avoid full reloads to prevent freeze/replot.
-            // Instead, nudge animation loops to resume if they paused.
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                    try {
-                        globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
-                    } catch (e) { console.log("Globe view JS resume failed:", e); }
-                }
-            }
             // Plot card globe view (left-most card) – also avoid reload
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
                 if (!(backend && backend.wifiConnecting)) {
@@ -49,31 +40,24 @@ Window {
         // Push globe autospin guard flag into globe pages
         var guard = backend.globeAutospinGuard
         var guardJs = "window.globeAutospinGuard=" + (guard ? "true" : "false") + ";"
-        if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-            try { globeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on globeView:", e) }
-        }
         if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
             try { plotGlobeView.runJavaScript(guardJs) } catch(e) { console.log("Failed to set globeAutospinGuard on plotGlobeView:", e) }
         }
         // Resume spin on key backend signals
         backend.launchCacheReady.connect(function(){
             if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.updateGlobeTrajectory.connect(function(){
             if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.loadingFinished.connect(function(){
             if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         backend.firstOnline.connect(function(){
             if (backend.wifiConnecting) return;
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();")
         })
         // Keep guard value in sync if changed at runtime
@@ -81,7 +65,6 @@ Window {
             if (backend.wifiConnecting) return;
             var guard2 = backend.globeAutospinGuard
             var guardJs2 = "window.globeAutospinGuard=" + (guard2 ? "true" : "false") + ";"
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) globeView.runJavaScript(guardJs2)
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) plotGlobeView.runJavaScript(guardJs2)
         })
         // Handle touch calibration window visibility
@@ -109,11 +92,6 @@ Window {
     }
     onActiveChanged: {
         if (active) {
-            if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                if (!(backend && backend.wifiConnecting)) {
-                   try { globeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
-                }
-            }
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
                 if (!(backend && backend.wifiConnecting)) {
                    try { plotGlobeView.runJavaScript("(function(){try{if(window.forceResumeSpin)forceResumeSpin();else if(window.resumeSpin)resumeSpin();}catch(e){}})();"); } catch (e) {}
@@ -4039,7 +4017,7 @@ Window {
         Popup {
             id: launchTray
             width: parent.width
-            height: 25  // Start with larger collapsed height
+            height: 25  // Fixed banner height
             x: 0
             y: 0  // Position at top of screen
             modal: false
@@ -4056,12 +4034,9 @@ Window {
             topMargin: 0
             bottomMargin: 0
 
-            property real expandedHeight: parent.height
-            property real collapsedHeight: 25  // Increased for better visibility when collapsed
+            property real expandedHeight: 25
+            property real collapsedHeight: 25
             property var nextLaunch: null
-            property real colorFactor: (height - collapsedHeight) / (expandedHeight - collapsedHeight)
-            property color collapsedColor: "#FF3838"
-            property color expandedColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
             property string tMinus: ""
 
             Connections {
@@ -4072,47 +4047,29 @@ Window {
             }
 
             Timer {
-                interval: 1000  // Update every second for testing
+                interval: 1000
                 running: true
                 repeat: true
                 onTriggered: {
                     var next = backend.get_next_launch();
                     launchTray.nextLaunch = next;
-                    // Use the backend's countdown calculation for consistency
                     launchTray.tMinus = backend.countdown;
                 }
             }
 
             background: Rectangle {
-                color: Qt.rgba(
-                    launchTray.collapsedColor.r + launchTray.colorFactor * (launchTray.expandedColor.r - launchTray.collapsedColor.r),
-                    launchTray.collapsedColor.g + launchTray.colorFactor * (launchTray.expandedColor.g - launchTray.collapsedColor.g),
-                    launchTray.collapsedColor.b + launchTray.colorFactor * (launchTray.expandedColor.b - launchTray.collapsedColor.b),
-                    0.7 + launchTray.colorFactor * 0.3  // Fade from 70% to 100% opacity
-                )
+                color: "#FF3838" // Use the red color for the banner
                 radius: 12
                 border.width: 0
-
-                Behavior on color {
-                    ColorAnimation { duration: 300 }
-                }
-            }
-
-            // Smooth animation for height changes
-            Behavior on height {
-                NumberAnimation {
-                    duration: 300
-                    easing.type: Easing.OutCubic
-                }
+                opacity: 0.8
             }
 
             // Bottom status text - T-minus on left, launch name on right
             Item {
                 width: parent.width
                 height: 20
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 3  // Moved up slightly for better centering
-                z: -1  // Ensure this is behind the drag handle
+                anchors.verticalCenter: parent.verticalCenter
+                z: 1
 
                 Text {
                     text: launchTray.tMinus || "T-0"
@@ -4140,524 +4097,8 @@ Window {
                     horizontalAlignment: Text.AlignRight
                 }
             }
-
-            // Drag handle at bottom
-            /*
-            Rectangle {
-                width: parent.width
-                height: 60  // Reduced height for more compact touch area
-                color: "transparent"
-                anchors.bottom: parent.bottom
-                anchors.bottomMargin: 2  // Small gap to match original spacing
-                z: 1  // Ensure this is on top for touch events
-
-                // Double chevron indicator
-                Item {
-                    width: 60
-                    height: 30
-                    anchors.bottom: parent.bottom
-                    anchors.bottomMargin: -3  // Moved down slightly for better centering
-                    anchors.horizontalCenter: parent.horizontalCenter
-
-                    Image {
-                        source: "file:///" + chevronPath
-                        width: 24
-                        height: 24
-                        anchors.centerIn: parent
-                        rotation: launchTray.height > launchTray.collapsedHeight + 50 ? -90 : 90  // Point up when expanded, down when collapsed
-                        Behavior on rotation {
-                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
-                        }
-                    }
-                }
-
-                MouseArea {
-                    anchors.fill: parent  // Now fills the larger 40px height area
-
-                    property point startGlobalPos: Qt.point(0, 0)
-                    property real startHeight: 0
-                    property bool isDragging: false
-
-                    onPressed: {
-                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
-                        startHeight = launchTray.height
-                        isDragging = true
-                    }
-
-                    onPositionChanged: {
-                        if (isDragging && pressed) {
-                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
-                            var deltaY = currentGlobalPos.y - startGlobalPos.y
-                            var newHeight = startHeight + deltaY
-
-                            // Constrain the height
-                            newHeight = Math.max(launchTray.collapsedHeight, Math.min(launchTray.expandedHeight, newHeight))
-
-                            launchTray.height = newHeight
-                        }
-                    }
-
-                    onReleased: {
-                        isDragging = false
-
-                        // Snap based on drag distance from start position
-                        var delta = launchTray.height - startHeight
-                        var range = launchTray.expandedHeight - launchTray.collapsedHeight
-                        var threshold = 0.15 * range
-
-                        if (delta > threshold) {
-                            // Dragged down enough, snap to expanded
-                            launchTray.height = launchTray.expandedHeight
-                        } else if (delta < -threshold) {
-                            // Dragged up enough, snap to collapsed
-                            launchTray.height = launchTray.collapsedHeight
-                        } else {
-                            // Not dragged enough, snap back to start
-                            launchTray.height = startHeight
-                        }
-                    }
-                }
-            }
-            */
-
-            /*
-            ColumnLayout {
-                anchors.fill: parent
-                anchors.topMargin: 10
-                anchors.bottomMargin: 10  // Reduced to bring content closer to bottom handle
-                spacing: 10
-                clip: true  // Ensure content doesn't overflow
-
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 15
-
-                    RowLayout {
-                        opacity: launchTray.colorFactor
-                        visible: launchTray.height > launchTray.collapsedHeight + 10
-                        Behavior on opacity { NumberAnimation { duration: 300 } }
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 10
-
-                        Flickable {
-                            Layout.preferredWidth: launchTray.width / 3
-                            Layout.fillHeight: true
-                            contentHeight: launchDetailsColumn.height
-                            clip: true
-
-                            Rectangle {
-                                id: launchDetailsColumn
-                                width: parent.width
-                                radius: 12
-                                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                                implicitHeight: launchDetailsLayout.height
-
-                                ColumnLayout {
-                                    id: launchDetailsLayout
-                                    anchors.fill: parent
-                                    anchors.margins: 15
-                                    spacing: 10
-
-                                    ColumnLayout {
-                                        spacing: 6
-
-                                        Text {
-                                            text: "🚀 MISSION: " + (launchTray.nextLaunch ? launchTray.nextLaunch.mission.toUpperCase() : "NO UPCOMING LAUNCHES")
-                                            font.pixelSize: 18
-                                            font.bold: true
-                                            font.letterSpacing: 1
-                                            color: "#FF6B35"
-                                            wrapMode: Text.Wrap
-                                            Layout.fillWidth: true
-                                        }
-
-                                        // Table-like layout for launch details
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "📅"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "LAUNCH DATE:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_date : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "⏰"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "LAUNCH TIME:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.local_time : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "📡"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "NET:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.net : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "📊"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "STATUS:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.status.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: root.getStatusColor(launchTray.nextLaunch ? launchTray.nextLaunch.status : "")
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "🚀"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "VEHICLE:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.rocket.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "🛰️"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "ORBIT:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.orbit.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "🏗️"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "PAD:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.pad.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            visible: launchTray.nextLaunch && launchTray.nextLaunch.landing_type
-                                            Text {
-                                                text: "🛬"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "LANDING:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch && launchTray.nextLaunch.landing_type ? launchTray.nextLaunch.landing_type.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            visible: launchTray.nextLaunch && launchTray.nextLaunch.landing_location
-                                            Text {
-                                                text: "📍"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "LOC:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch && launchTray.nextLaunch.landing_location ? launchTray.nextLaunch.landing_location.toUpperCase() : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                            }
-                                        }
-
-                                        RowLayout {
-                                            spacing: 8
-                                            Text {
-                                                text: "🎥"
-                                                font.pixelSize: 14
-                                                color: backend.theme === "dark" ? "black" : "white"
-                                                Layout.preferredWidth: 20
-                                            }
-                                            Text {
-                                                text: "STREAM:"
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                font.letterSpacing: 0.5
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.preferredWidth: 120
-                                            }
-                                            Text {
-                                                text: launchTray.nextLaunch ? launchTray.nextLaunch.video_url : ""
-                                                font.pixelSize: 14
-                                                font.weight: Font.Medium
-                                                color: backend.theme === "dark" ? "white" : "black"
-                                                Layout.fillWidth: true
-                                                wrapMode: Text.Wrap
-                                                visible: !!launchTray.nextLaunch
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.preferredWidth: launchTray.width / 3
-                            Layout.fillHeight: true
-                            radius: 0
-                            // Match the app background so the globe appears to sit on the background
-                            color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
-
-                            WebEngineView {
-                                id: globeView
-                                anchors.fill: parent
-                                anchors.margins: 0
-                                property bool _active: false
-                                url: _active ? globeUrl : ""
-                                backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
-                                zoomFactor: 1.0
-                                settings.javascriptCanAccessClipboard: false
-                                settings.allowWindowActivationFromJavaScript: false
-                                // Disable any default context menu (long-press/right-click)
-                                onContextMenuRequested: function(request) { request.accepted = true }
-
-                                onLoadingChanged: function(loadRequest) {
-                                    console.log("WebEngineView loading changed:", loadRequest.status, loadRequest.url);
-                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        console.log("Globe HTML loaded successfully");
-                                        // Update trajectory when globe loads
-                                        var trajectoryData = backend.get_launch_trajectory();
-                                        if (trajectoryData) {
-                                            globeView.runJavaScript("console.log('About to call updateTrajectory'); updateTrajectory(" + JSON.stringify(trajectoryData) + "); console.log('Called updateTrajectory');");
-                                        }
-                                        
-                                        // Set initial theme
-                                        globeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-
-                                        // Ensure the globe animation loop starts/resumes on initial load
-                                        try {
-                                            globeView.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Globe animation start failed', e);}})();");
-                                        } catch (e) { console.log("Globe JS nudge error:", e); }
-                                    } else if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                        console.log("Globe HTML failed to load:", loadRequest.errorString);
-                                    }
-                                }
-
-                                Connections {
-                                    target: backend
-                                    function onThemeChanged() {
-                                        globeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                    }
-                                }
-                                Timer {
-                                    interval: 3000
-                                    running: true
-                                    repeat: false
-                                    onTriggered: globeView._active = true
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            Layout.preferredWidth: launchTray.width / 3
-                            Layout.fillHeight: true
-                            radius: 12
-                            color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                            clip: true
-                            layer.enabled: true
-                            layer.smooth: true
-
-                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
-
-                            WebEngineView {
-                                id: xComView
-                                anchors.fill: parent
-                                anchors.margins: 5
-                                layer.enabled: true
-                                layer.smooth: true
-                                backgroundColor: "transparent"
-                                onBackgroundColorChanged: {
-                                    if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12, "transparent")
-                                }
-                                property bool _active: false
-                                url: _active ? "https://x.com/SpaceX" : ""
-                                zoomFactor: 0.6
-                                onLoadingChanged: function(loadRequest) {
-                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(xComView, 12, "transparent")
-                                    }
-                                }
-
-                                // Staggered reload for X.com view
-                                Connections {
-                                    target: backend
-                                    function onReloadWebContent() {
-                                        if (xComView._active) xComReloadTimer.start()
-                                    }
-                                }
-                                Timer {
-                                    id: xComReloadTimer
-                                    interval: 4000
-                                    repeat: false
-                                    onTriggered: {
-                                        xComView.reload()
-                                        console.log("x.com view reloaded (staggered)")
-                                    }
-                                }
-                                Timer {
-                                    interval: 8000
-                                    running: true
-                                    repeat: false
-                                    onTriggered: xComView._active = true
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            */
-        }
-
         }
     }
-
+}
 }
 """
