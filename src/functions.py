@@ -153,6 +153,8 @@ __all__ = [
     "load_theme_settings",
     "save_theme_settings",
     "get_rpi_config_resolution",
+    "check_touch_calibration_exists",
+    "remove_touch_calibration",
 ]
 
 
@@ -227,6 +229,28 @@ WIFI_KEY_FILE = os.path.join(CACHE_DIR_F1, 'wifi_key.bin')
 REMEMBERED_NETWORKS_FILE = os.path.join(CACHE_DIR_F1, 'remembered_networks.json')
 LAST_CONNECTED_NETWORK_FILE = os.path.join(CACHE_DIR_F1, 'last_connected_network.json')
 THEME_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'theme_settings.json')
+TOUCH_CALIBRATION_FILE = "/etc/X11/xorg.conf.d/99-calibration.conf"
+
+def check_touch_calibration_exists():
+    """Check if a touchscreen calibration file exists."""
+    if platform.system() == 'Windows':
+        return False
+    return os.path.exists(TOUCH_CALIBRATION_FILE)
+
+def remove_touch_calibration():
+    """Remove the touchscreen calibration file and reload udev rules."""
+    if platform.system() == 'Windows':
+        return True, "Simulation: Calibration removed"
+    
+    try:
+        if os.path.exists(TOUCH_CALIBRATION_FILE):
+            subprocess.run(['sudo', 'rm', TOUCH_CALIBRATION_FILE], check=True)
+            subprocess.run(['sudo', 'udevadm', 'control', '--reload-rules'], check=True)
+            subprocess.run(['sudo', 'udevadm', 'trigger'], check=True)
+            return True, "Calibration removed successfully"
+        return False, "No calibration file found"
+    except Exception as e:
+        return False, f"Failed to remove calibration: {e}"
 
 def load_theme_settings():
     """Load theme settings from file."""

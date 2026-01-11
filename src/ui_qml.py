@@ -2357,7 +2357,8 @@ Window {
                                         Repeater {
                                             model: [
                                                 { icon: "\uf1de", idx: 0 },
-                                                { icon: "\uf53f", idx: 1 }
+                                                { icon: "\uf53f", idx: 1 },
+                                                { icon: "\uf05b", idx: 2 }
                                             ]
                                             delegate: Rectangle {
                                                 Layout.preferredWidth: 45

@@ -409,6 +409,7 @@ class Backend(QObject):
     updatingStatusChanged = pyqtSignal()
     # Signal for thread-safe WiFi status updates
     wifiCheckReady = pyqtSignal(bool, str)
+    touchCalibrationExistsChanged = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -505,6 +506,7 @@ class Backend(QObject):
         self._last_applied_sharpness = -1
         self._input_source = "11"
         self._power_mode = "01"
+        self._touch_calibration_exists = funcs.check_touch_calibration_exists()
         self._brightness_lock = threading.Lock()
         self._brightness_timer = QTimer()
         self._brightness_timer.setSingleShot(True)
@@ -1204,6 +1206,45 @@ class Backend(QObject):
     @pyqtProperty(str, notify=powerModeChanged)
     def powerMode(self):
         return self._power_mode
+
+    @pyqtProperty(bool, notify=touchCalibrationExistsChanged)
+    def touchCalibrationExists(self):
+        return self._touch_calibration_exists
+
+    @pyqtSlot()
+    def calibrateTouchscreen(self):
+        """Run the touch calibration script."""
+        script_path = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'calibrate_touch.sh')
+        if not os.path.exists(script_path):
+            logger.error(f"Calibration script not found at {script_path}")
+            return
+
+        def _worker():
+            try:
+                if platform.system() == 'Linux':
+                    subprocess.run(['chmod', '+x', script_path])
+                    result = subprocess.run(['/bin/bash', script_path], capture_output=True, text=True)
+                    logger.info(f"Calibration script finished: {result.stdout}")
+                else:
+                    logger.info("Simulation: Running touch calibration")
+                    time.sleep(2)
+                
+                # Update state
+                self._touch_calibration_exists = funcs.check_touch_calibration_exists()
+                self.touchCalibrationExistsChanged.emit()
+            except Exception as e:
+                logger.error(f"Error running calibration: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
+    @pyqtSlot()
+    def removeTouchCalibration(self):
+        """Remove existing touch calibration."""
+        success, msg = funcs.remove_touch_calibration()
+        logger.info(msg)
+        if success:
+            self._touch_calibration_exists = False
+            self.touchCalibrationExistsChanged.emit()
 
     @pyqtSlot(float)
     def setBrightness(self, value):
