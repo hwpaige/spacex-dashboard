@@ -2336,8 +2336,21 @@ Window {
                                 stepSize: 5
                                 snapMode: Slider.SnapAlways
                                 value: backend.brightness
+                                
+                                // Use a local property to track the value during movement
+                                // to avoid fighting with the backend signal during dragging
                                 onMoved: {
                                     backend.setBrightness(value)
+                                }
+                                
+                                // Update slider value from backend only when not dragging
+                                Connections {
+                                    target: backend
+                                    function onBrightnessChanged() {
+                                        if (!brightnessSlider.pressed) {
+                                            brightnessSlider.value = backend.brightness
+                                        }
+                                    }
                                 }
                                 
                                 background: Rectangle {
@@ -2352,8 +2365,8 @@ Window {
 
                                     Rectangle {
                                         width: parent.width
-                                        height: brightnessSlider.visualPosition * parent.height
-                                        y: (1.0 - brightnessSlider.visualPosition) * parent.height
+                                        height: (1.0 - brightnessSlider.visualPosition) * parent.height
+                                        y: brightnessSlider.visualPosition * parent.height
                                         color: "#2196F3"
                                         radius: 3
                                     }
@@ -2361,7 +2374,7 @@ Window {
 
                                 handle: Rectangle {
                                     x: brightnessSlider.leftPadding + brightnessSlider.availableWidth / 2 - width / 2
-                                    y: brightnessSlider.topPadding + (1.0 - brightnessSlider.visualPosition) * (brightnessSlider.availableHeight - height)
+                                    y: brightnessSlider.topPadding + brightnessSlider.visualPosition * (brightnessSlider.availableHeight - height)
                                     implicitWidth: 32
                                     implicitHeight: 32
                                     radius: 16
