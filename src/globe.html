@@ -338,9 +338,14 @@
                         const cloudVertexShader = `
                             precision mediump float;
                             varying vec2 vUv;
+                            varying vec3 vNormal;
+                            varying vec3 vViewPosition;
                             void main() {
                                 vUv = uv;
-                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                                vNormal = normalize(normalMatrix * normal);
+                                vViewPosition = -mvPosition.xyz;
+                                gl_Position = projectionMatrix * mvPosition;
                             }
                         `;
                         const cloudFragmentShader = `
@@ -349,6 +354,8 @@
                             uniform float time;
                             uniform bool hasTexture;
                             varying vec2 vUv;
+                            varying vec3 vNormal;
+                            varying vec3 vViewPosition;
 
                             // 2D Noise function for convection/swirl effect
                             vec2 hash(vec2 p) {
@@ -369,39 +376,63 @@
                                 return dot(n, vec3(70.0));
                             }
 
+                            // Optimized multi-octave noise for Pi (fBm)
+                            float fbm(vec2 p) {
+                                float f = 0.0;
+                                float amp = 0.5;
+                                for (int i = 0; i < 4; i++) {
+                                    f += amp * noise(p);
+                                    p *= 2.0;
+                                    amp *= 0.5;
+                                }
+                                return f;
+                            }
+
                             void main() {
-                                // Swirl and distort UVs over time
-                                float n = noise(vUv * 10.0 + time * 0.1);
-                                vec2 distortedUv = vUv + vec2(n * 0.02, n * 0.01);
+                                // Multi-scale distortion for organic movement
+                                float n1 = noise(vUv * 4.0 + time * 0.04);
+                                float n2 = noise(vUv * 8.0 - time * 0.07);
+                                vec2 distortedUv = vUv + vec2(n1 * 0.03, n2 * 0.02);
                                 
                                 vec4 texColor;
                                 vec4 texColor2;
                                 
                                 if (hasTexture) {
                                     texColor = texture2D(cloudTexture, distortedUv);
-                                    float n2 = noise(vUv * 5.0 - time * 0.05);
-                                    texColor2 = texture2D(cloudTexture, vUv + vec2(n2 * 0.01, 0.0));
+                                    float n3 = noise(vUv * 6.0 - time * 0.05);
+                                    texColor2 = texture2D(cloudTexture, vUv + vec2(n3 * 0.015, 0.0));
                                 } else {
-                                    // Procedural fallback that actually looks like moving clouds
-                                    float cloudBase = noise(vUv * 3.0 + time * 0.05) * 0.5 + 0.5;
-                                    float cloudDetail = noise(vUv * 10.0 - time * 0.1) * 0.5 + 0.5;
-                                    float combined = cloudBase * cloudDetail;
+                                    // High-detail procedural fallback using fBm
+                                    // Layer 1: Large slow structures
+                                    float layer1 = fbm(vUv * 3.5 + time * 0.03) * 0.5 + 0.5;
+                                    // Layer 2: Medium faster wisps
+                                    float layer2 = fbm(vUv * 8.0 - time * 0.06) * 0.5 + 0.5;
+                                    // Layer 3: Tiny high-freq detail
+                                    float layer3 = noise(vUv * 25.0 + time * 0.1) * 0.5 + 0.5;
                                     
-                                    // Sharpness/contrast for clouds
-                                    combined = smoothstep(0.4, 0.7, combined);
+                                    float combined = mix(layer1, layer2, 0.5);
+                                    combined = combined * 0.7 + layer3 * 0.3;
                                     
-                                    // Base color: bright white for clouds
-                                    // Ensure we don't have any greyish fallbacks by using full 1.0 white
+                                    // Sharpness/contrast: make it look like distinct clouds
+                                    combined = smoothstep(0.35, 0.75, combined);
+                                    
                                     vec3 cloudColor = vec3(1.0, 1.0, 1.0);
+                                    texColor = vec4(cloudColor, combined * 0.85);
                                     
-                                    texColor = vec4(cloudColor, combined * 0.8);
-                                    texColor2 = vec4(cloudColor, combined * 0.4);
+                                    // Second wispier layer for depth
+                                    float wisp = fbm(vUv * 12.0 + time * 0.04) * 0.5 + 0.5;
+                                    wisp = smoothstep(0.4, 0.8, wisp);
+                                    texColor2 = vec4(cloudColor, wisp * 0.5);
                                 }
                                 
                                 vec4 finalColor = mix(texColor, texColor2, 0.3);
                                 if (hasTexture) {
                                     finalColor.a *= 0.8; 
                                 }
+
+                                // Fresnel rim effect for atmosphere-like clouds
+                                float fresnel = pow(1.0 - max(dot(normalize(vNormal), normalize(vViewPosition)), 0.0), 3.0);
+                                finalColor.a *= (0.8 + fresnel * 0.4);
                                 
                                 gl_FragColor = finalColor;
                             }
