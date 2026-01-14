@@ -347,6 +347,7 @@
                             precision mediump float;
                             uniform sampler2D cloudTexture;
                             uniform float time;
+                            uniform bool hasTexture;
                             varying vec2 vUv;
 
                             // 2D Noise function for convection/swirl effect
@@ -373,15 +374,34 @@
                                 float n = noise(vUv * 10.0 + time * 0.1);
                                 vec2 distortedUv = vUv + vec2(n * 0.02, n * 0.01);
                                 
-                                // Main cloud texture
-                                vec4 texColor = texture2D(cloudTexture, distortedUv);
+                                vec4 texColor;
+                                vec4 texColor2;
                                 
-                                // Add a secondary layer of movement
-                                float n2 = noise(vUv * 5.0 - time * 0.05);
-                                vec4 texColor2 = texture2D(cloudTexture, vUv + vec2(n2 * 0.01, 0.0));
+                                if (hasTexture) {
+                                    texColor = texture2D(cloudTexture, distortedUv);
+                                    float n2 = noise(vUv * 5.0 - time * 0.05);
+                                    texColor2 = texture2D(cloudTexture, vUv + vec2(n2 * 0.01, 0.0));
+                                } else {
+                                    // Procedural fallback that actually looks like moving clouds
+                                    float cloudBase = noise(vUv * 3.0 + time * 0.05) * 0.5 + 0.5;
+                                    float cloudDetail = noise(vUv * 10.0 - time * 0.1) * 0.5 + 0.5;
+                                    float combined = cloudBase * cloudDetail;
+                                    
+                                    // Sharpness/contrast for clouds
+                                    combined = smoothstep(0.4, 0.7, combined);
+                                    
+                                    // Base color: bright white for clouds
+                                    // Ensure we don't have any greyish fallbacks by using full 1.0 white
+                                    vec3 cloudColor = vec3(1.0, 1.0, 1.0);
+                                    
+                                    texColor = vec4(cloudColor, combined * 0.8);
+                                    texColor2 = vec4(cloudColor, combined * 0.4);
+                                }
                                 
                                 vec4 finalColor = mix(texColor, texColor2, 0.3);
-                                finalColor.a *= 0.8; // Maintain overall transparency
+                                if (hasTexture) {
+                                    finalColor.a *= 0.8; 
+                                }
                                 
                                 gl_FragColor = finalColor;
                             }
@@ -389,7 +409,8 @@
 
                         const cloudUniforms = {
                             cloudTexture: { value: null },
-                            time: { value: 0.0 }
+                            time: { value: 0.0 },
+                            hasTexture: { value: false }
                         };
 
                         const cloudMaterial = new THREE.ShaderMaterial({
@@ -416,8 +437,7 @@
                             function tryNext() {
                                 if (sourceIndex >= cloudSources.length) {
                                     console.warn("All cloud texture sources failed, using procedural fallback");
-                                    // Use a semi-transparent white fallback if no texture loads
-                                    cloudMaterial.fragmentShader = cloudFragmentShader.replace('texture2D(cloudTexture, distortedUv)', 'vec4(1.0, 1.0, 1.0, 0.4)').replace('texture2D(cloudTexture, vUv + vec2(n2 * 0.01, 0.0))', 'vec4(1.0, 1.0, 1.0, 0.2)');
+                                    cloudUniforms.hasTexture.value = false;
                                     cloudMaterial.needsUpdate = true;
                                     return;
                                 }
@@ -429,6 +449,7 @@
                                     function (cloudTexture) {
                                         cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping;
                                         cloudUniforms.cloudTexture.value = cloudTexture;
+                                        cloudUniforms.hasTexture.value = true;
                                         cloudMaterial.needsUpdate = true;
                                         console.log("Cloud layer texture loaded successfully from:", src);
                                     },
