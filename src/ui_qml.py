@@ -2444,6 +2444,7 @@ Window {
                         color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
                         border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
+                        visible: !!(backend && backend.isHighResolution)
 
                         Text {
                             anchors.centerIn: parent
