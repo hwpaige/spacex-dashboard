@@ -375,6 +375,38 @@ EOF
     sleep 1
 }
 
+disable_setup_wizard() {
+    log "Disabling system setup wizards and provisioning screens..."
+    
+    # 1. Remove packages known to trigger setup wizards on Raspberry Pi / Ubuntu
+    local wizard_pkgs=("pi-wiz" "gnome-initial-setup" "oem-config" "oem-config-gtk" "oem-config-slideshow-ubuntu")
+    for pkg in "${wizard_pkgs[@]}"; do
+        if dpkg -l | grep -q "^ii  $pkg "; then
+            log "Removing $pkg..."
+            apt-get remove -y "$pkg" || log "WARNING: Failed to remove $pkg"
+        fi
+    done
+
+    # 2. Disable oem-config service if it exists
+    if systemctl is-enabled oem-config.service 2>/dev/null; then
+        systemctl disable oem-config.service 2>/dev/null || true
+        log "Disabled oem-config.service"
+    fi
+
+    # 3. Create sentinel files to trick wizards into thinking they've already run
+    sudo -u "$USER" mkdir -p "$HOME_DIR/.config"
+    sudo -u "$USER" touch "$HOME_DIR/.config/pi-wiz.done"
+    sudo -u "$USER" touch "$HOME_DIR/.config/gnome-initial-setup-done"
+    
+    # 4. Disable cloud-init installer/configurator if present
+    if [ -d /etc/cloud/cloud.cfg.d ]; then
+        echo "manual_cache_clean: True" > /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+        log "Added cloud-init manual cache clean hint"
+    fi
+
+    log "✓ Setup wizards disabled"
+}
+
 check_qt_version() {
     log "Checking Qt version compatibility..."
     log "Note: This setup is optimized for Qt 6.8.x - Qt 6.9.x+ has GLOzone WebEngine issues"
@@ -708,8 +740,25 @@ hdmi_mode=87
 hdmi_timings=3840 0 160 40 120 1100 0 10 3 10 0 0 0 60 0 297000000 3
 dtoverlay=vc4-kms-v3d,cma-512
 disable_splash=1
+# Enable full USB power for Pi 5
+usb_max_current_enable=1
 # END SPACEX DASHBOARD
 EOF
+    
+    # Configure bootloader EEPROM settings for a clean splash screen experience
+    log "Configuring bootloader EEPROM settings..."
+    if command -v rpi-eeprom-config >/dev/null 2>&1; then
+        local eeprom_cfg=$(mktemp)
+        rpi-eeprom-config > "$eeprom_cfg"
+        # Disable the Raspberry Pi branded splash screen at the bootloader level
+        if ! grep -q "DISABLE_HDMI_PI_SCREEN=1" "$eeprom_cfg"; then
+            echo "DISABLE_HDMI_PI_SCREEN=1" >> "$eeprom_cfg"
+            rpi-eeprom-config --apply "$eeprom_cfg" || log "WARNING: Failed to apply EEPROM config"
+        fi
+        rm -f "$eeprom_cfg"
+    else
+        log "WARNING: rpi-eeprom-config not found, skipping EEPROM splash fix"
+    fi
     
     # Initramfs settings - ensure LZ4 compression is used
     if grep -q "^#\?COMPRESS=" /etc/initramfs-tools/initramfs.conf; then
@@ -1544,6 +1593,7 @@ main() {
     install_packages
     configure_networkmanager
     configure_nm_polkit
+    disable_setup_wizard
     check_qt_version
     setup_python_environment
     create_debug_script

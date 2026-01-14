@@ -118,7 +118,9 @@ Window {
         if (!webView || !webView.runJavaScript) return;
         if (typeof backend !== 'undefined' && backend && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
-        var themeColor = customColor ? customColor : ((backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8");
+        // Default to transparent if no custom color provided, allowing the QML background to show through the corners.
+        // If a specific color is needed (e.g. to hide artifacts), it can be passed in.
+        var themeColor = customColor ? customColor : "transparent";
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
                  "var themeColor='" + themeColor + "';" +
@@ -2061,7 +2063,7 @@ Window {
                     Rectangle {
                         id: tickerBackground
                         anchors.fill: parent
-                        radius: 14
+                        radius: 16
                         color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                         border.width: 1
@@ -2119,6 +2121,7 @@ Window {
                         property point startGlobalPos: Qt.point(0, 0)
                         property real startHeight: 0
                         property bool isDragging: false
+                        property bool moved: false
                         
                         onPressed: {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
@@ -2128,13 +2131,15 @@ Window {
                             }
                             startHeight = narrativeTray.height
                             isDragging = true
+                            moved = false
                         }
                         
                         onPositionChanged: {
                             if (isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
-                                // Dragging UP (negative delta) increases height
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                if (Math.abs(deltaY) > 5) moved = true
+                                // Dragging UP (negative delta) increases height
                                 var newHeight = startHeight - deltaY
                                 
                                 newHeight = Math.max(0, Math.min(narrativeTray.expandedHeight, newHeight))
@@ -2144,10 +2149,40 @@ Window {
                         
                         onReleased: {
                             isDragging = false
-                            if (narrativeTray.height > 50) {
-                                narrativeTray.height = narrativeTray.expandedHeight
-                            } else {
-                                narrativeTray.height = 0
+                            if (moved) {
+                                // 20% threshold logic:
+                                // If we started from closed (startHeight < expandedHeight * 0.5), we need 20% to open.
+                                // If we started from open (startHeight > expandedHeight * 0.5), we need 20% travel to close.
+                                var threshold = narrativeTray.expandedHeight * 0.2
+                                var closedThreshold = threshold
+                                var openThreshold = narrativeTray.expandedHeight - threshold
+                                
+                                if (startHeight < narrativeTray.expandedHeight * 0.5) {
+                                    // Started closed, snap to open if we passed 20%
+                                    if (narrativeTray.height > closedThreshold) {
+                                        narrativeTray.height = narrativeTray.expandedHeight
+                                    } else {
+                                        narrativeTray.height = 0
+                                    }
+                                } else {
+                                    // Started open, snap to closed if we dropped below 80% (20% travel)
+                                    if (narrativeTray.height < openThreshold) {
+                                        narrativeTray.height = 0
+                                    } else {
+                                        narrativeTray.height = narrativeTray.expandedHeight
+                                    }
+                                }
+                            }
+                        }
+
+                        onClicked: {
+                            if (!moved) {
+                                // Toggle logic: if mostly closed, open it; if mostly open, close it.
+                                if (narrativeTray.height > narrativeTray.expandedHeight * 0.5) {
+                                    narrativeTray.height = 0
+                                } else {
+                                    narrativeTray.height = narrativeTray.expandedHeight
+                                }
                             }
                         }
                     }
@@ -2180,8 +2215,8 @@ Window {
                             Rectangle {
                                 id: trayBackground
                                 anchors.fill: parent
-                                // 90% opacity (E6 hex)
-                                color: backend.theme === "dark" ? "#e62a2e2e" : "#e6f0f0f0"
+                                // Matching location drawer opacity (approx 93% / #EE)
+                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
                                 radius: 14
                                 border.width: 1
                                 border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
@@ -2190,7 +2225,7 @@ Window {
                         
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 4
+                            anchors.margins: 0
                             spacing: 0
                             
                             // Drag Handle (Top of tray)
@@ -2214,11 +2249,13 @@ Window {
                                     property point startGlobalPos: Qt.point(0, 0)
                                     property real startHeight: 0
                                     property bool isDragging: false
+                                    property bool moved: false
                                     
                                     onPressed: {
                                         startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                         startHeight = narrativeTray.height
                                         isDragging = true
+                                        moved = false
                                     }
                                     
                                     onPositionChanged: {
@@ -2226,6 +2263,7 @@ Window {
                                             var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                             // Dragging DOWN (positive delta) decreases height since expanding from bottom
                                             var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                            if (Math.abs(deltaY) > 5) moved = true
                                             var newHeight = startHeight - deltaY
                                             
                                             newHeight = Math.max(0, Math.min(narrativeTray.expandedHeight, newHeight))
@@ -2235,10 +2273,35 @@ Window {
                                     
                                     onReleased: {
                                         isDragging = false
-                                        if (narrativeTray.height < narrativeTray.expandedHeight * 0.5) {
-                                            narrativeTray.height = 0
-                                        } else {
-                                            narrativeTray.height = narrativeTray.expandedHeight
+                                        if (moved) {
+                                            var threshold = narrativeTray.expandedHeight * 0.2
+                                            var closedThreshold = threshold
+                                            var openThreshold = narrativeTray.expandedHeight - threshold
+                                            
+                                            if (startHeight < narrativeTray.expandedHeight * 0.5) {
+                                                if (narrativeTray.height > closedThreshold) {
+                                                    narrativeTray.height = narrativeTray.expandedHeight
+                                                } else {
+                                                    narrativeTray.height = 0
+                                                }
+                                            } else {
+                                                if (narrativeTray.height < openThreshold) {
+                                                    narrativeTray.height = 0
+                                                } else {
+                                                    narrativeTray.height = narrativeTray.expandedHeight
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    onClicked: {
+                                        if (!moved) {
+                                            // Tap to close: if mostly open, close it.
+                                            if (narrativeTray.height > narrativeTray.expandedHeight * 0.5) {
+                                                narrativeTray.height = 0
+                                            } else {
+                                                narrativeTray.height = narrativeTray.expandedHeight
+                                            }
                                         }
                                     }
                                 }
@@ -2262,7 +2325,10 @@ Window {
                                     
                                     Rectangle {
                                         anchors.fill: parent
-                                        color: "transparent"
+                                        color: ListView.isCurrentItem ? 
+                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : 
+                                               "transparent"
+                                        radius: 4
                                         
                                         RowLayout {
                                             id: contentLayout
@@ -2278,7 +2344,7 @@ Window {
                                                 text: (typeof modelData === "object" && modelData.date) ? modelData.date : ""
                                                 visible: text !== ""
                                                 color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity
-                                                font.pixelSize: 13
+                                                font.pixelSize: 14
                                                 font.family: "D-DIN"
                                                 font.bold: true
                                                 Layout.alignment: Qt.AlignTop
@@ -2293,9 +2359,10 @@ Window {
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignTop
                                                 wrapMode: Text.Wrap
-                                                color: (backend && backend.theme === "dark") ? "#dddddd" : "#333333"
-                                                font.pixelSize: 13
+                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                font.pixelSize: 14
                                                 font.family: "D-DIN"
+                                                font.bold: true
                                                 lineHeight: 1.2
                                             }
                                         }
@@ -2750,9 +2817,11 @@ Window {
                     }
 
                     // WiFi icon
-                    Rectangle {
-                        width: 28
-                        height: 32
+                }
+
+                Rectangle {
+                    width: 28
+                    height: 32
                         radius: 16
                         color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
@@ -2782,30 +2851,38 @@ Window {
                         width: Math.max(80, locationLabel.implicitWidth + 24)
                         height: 32
                         radius: 16
-                        color: locationDrawer.height > 10 ? 
-                               (backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0") : 
-                               (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-                        border.width: 1
+                        color: "transparent"
+                        clip: false
 
-                        // Location Drawer (Sliding up from button top)
+                        // Fading background for the location trigger bar
+                        Rectangle {
+                            id: locationTriggerBackground
+                            anchors.fill: parent
+                            radius: 16
+                            color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
+                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            border.width: 1
+                            z: 0
+                            // Fade out as drawer expands
+                            opacity: 1.0 - Math.min(1.0, locationDrawer.height / 64.0)
+                        }
+
+                        // Sliding Location Selector Tray
                         Popup {
                             id: locationDrawer
                             x: 0
                             width: parent.width
                             height: 0
-                            y: -height
+                            // Sit at the bottom and grow UP, covering the trigger area
+                            y: parent.height - height
                             modal: false
                             focus: false
                             visible: height > 0
                             closePolicy: Popup.NoAutoClose
                             padding: 0
-                            topPadding: 0
-                            bottomPadding: 0
-                            leftPadding: 0
-                            rightPadding: 0
                             
                             property real expandedHeight: 160
+                            opacity: height / expandedHeight
                             
                             Behavior on height {
                                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
@@ -2815,41 +2892,27 @@ Window {
                                 Rectangle {
                                     anchors.fill: parent
                                     color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
-                                    radius: 12
+                                    radius: 14
                                     border.width: 1
                                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
-
-                                    // Visual Blending: Flatten BOTTOM corners and hide border when drawer is open
-                                    Rectangle {
-                                        anchors.bottom: parent.bottom
-                                        anchors.left: parent.left
-                                        anchors.right: parent.right
-                                        anchors.leftMargin: 1
-                                        anchors.rightMargin: 1
-                                        height: 12
-                                        color: parent.color
-                                        visible: locationDrawer.height > 10
-                                    }
                                 }
                             }
                             
                             ColumnLayout {
                                 anchors.fill: parent
-                                anchors.leftMargin: 4
-                                anchors.rightMargin: 4
-                                anchors.bottomMargin: 4
-                                anchors.topMargin: 0
+                                anchors.margins: 0
                                 spacing: 0
                                 
+                                // Drag Handle (Top of tray)
                                 Rectangle {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: 32
+                                    Layout.preferredHeight: 25
                                     color: "transparent"
                                     Text {
                                         anchors.centerIn: parent
                                         text: "\uf078"
                                         font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 10
+                                        font.pixelSize: 12
                                         color: backend.theme === "dark" ? "white" : "black"
                                     }
                                     MouseArea {
@@ -2859,17 +2922,21 @@ Window {
                                         property point startGlobalPos: Qt.point(0, 0)
                                         property real startHeight: 0
                                         property bool isDragging: false
+                                        property bool moved: false
                                         
                                         onPressed: {
                                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                             startHeight = locationDrawer.height
                                             isDragging = true
+                                            moved = false
                                         }
                                         
                                         onPositionChanged: {
                                             if (isDragging && pressed) {
                                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                                // Dragging DOWN decreases height
                                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                                if (Math.abs(deltaY) > 5) moved = true
                                                 var newHeight = startHeight - deltaY
                                                 newHeight = Math.max(0, Math.min(locationDrawer.expandedHeight, newHeight))
                                                 locationDrawer.height = newHeight
@@ -2878,19 +2945,44 @@ Window {
                                         
                                         onReleased: {
                                             isDragging = false
-                                            if (locationDrawer.height < 120) {
-                                                locationDrawer.height = 0
-                                            } else {
-                                                locationDrawer.height = locationDrawer.expandedHeight
+                                            if (moved) {
+                                                var threshold = locationDrawer.expandedHeight * 0.2
+                                                var closedThreshold = threshold
+                                                var openThreshold = locationDrawer.expandedHeight - threshold
+                                                
+                                                if (startHeight < locationDrawer.expandedHeight * 0.5) {
+                                                    if (locationDrawer.height > closedThreshold) {
+                                                        locationDrawer.height = locationDrawer.expandedHeight
+                                                    } else {
+                                                        locationDrawer.height = 0
+                                                    }
+                                                } else {
+                                                    if (locationDrawer.height < openThreshold) {
+                                                        locationDrawer.height = 0
+                                                    } else {
+                                                        locationDrawer.height = locationDrawer.expandedHeight
+                                                    }
+                                                }
                                             }
                                         }
-                                        onClicked: locationDrawer.height = 0
+
+                                        onClicked: {
+                                            if (!moved) {
+                                                // Tap to close: if mostly open, close it.
+                                                if (locationDrawer.height > locationDrawer.expandedHeight * 0.5) {
+                                                    locationDrawer.height = 0
+                                                } else {
+                                                    locationDrawer.height = locationDrawer.expandedHeight
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 
                                 ListView {
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
+                                    Layout.margins: 0
                                     clip: true
                                     model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
                                     spacing: 2
@@ -2911,23 +3003,14 @@ Window {
                                         }
                                         MouseArea {
                                             anchors.fill: parent
-                                            onClicked: backend.location = modelData
+                                            onClicked: {
+                                                backend.location = modelData
+                                                locationDrawer.height = 0
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
-
-                        // Visual Blending: Flatten TOP corners of button and hide border when drawer is open
-                        Rectangle {
-                            anchors.top: parent.top
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.leftMargin: 1
-                            anchors.rightMargin: 1
-                            height: 12
-                            color: parent.color
-                            visible: locationDrawer.height > 10
                         }
 
                         Text {
@@ -2938,6 +3021,8 @@ Window {
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
+                            // Fade out as drawer expands
+                            opacity: 1.0 - Math.min(1.0, locationDrawer.height / 64.0)
                         }
 
                         MouseArea {
@@ -2971,17 +3056,30 @@ Window {
                             onReleased: {
                                 isDragging = false
                                 if (moved) {
-                                    if (locationDrawer.height > 40) {
-                                        locationDrawer.height = locationDrawer.expandedHeight
+                                    var threshold = locationDrawer.expandedHeight * 0.2
+                                    var closedThreshold = threshold
+                                    var openThreshold = locationDrawer.expandedHeight - threshold
+                                    
+                                    if (startHeight < locationDrawer.expandedHeight * 0.5) {
+                                        if (locationDrawer.height > closedThreshold) {
+                                            locationDrawer.height = locationDrawer.expandedHeight
+                                        } else {
+                                            locationDrawer.height = 0
+                                        }
                                     } else {
-                                        locationDrawer.height = 0
+                                        if (locationDrawer.height < openThreshold) {
+                                            locationDrawer.height = 0
+                                        } else {
+                                            locationDrawer.height = locationDrawer.expandedHeight
+                                        }
                                     }
                                 }
                             }
                             
                             onClicked: {
                                 if (!moved) {
-                                    if (locationDrawer.height > 50) {
+                                    // Toggle logic: if mostly closed, open it; if mostly open, close it.
+                                    if (locationDrawer.height > locationDrawer.expandedHeight * 0.5) {
                                         locationDrawer.height = 0
                                     } else {
                                         locationDrawer.height = locationDrawer.expandedHeight
@@ -2989,7 +3087,7 @@ Window {
                                 }
                             }
                         }
-                        
+
                         ToolTip {
                             text: "Location: " + backend.location + " (Click or Drag up to change)"
                             delay: 500
@@ -3052,48 +3150,45 @@ Window {
                             delay: 500
                         }
                     }
-                }
 
-                // Launch details tray toggle
-                Rectangle {
-                    visible: true
-                    Layout.preferredWidth: 50
-                    Layout.preferredHeight: 32
-                    radius: 16
-                    color: backend.launchTrayManualMode ?
-                        "#FF3838" :
-                        (backend.theme === "dark" ? "#666666" : "#CCCCCC")
-
-                    Behavior on color { ColorAnimation { duration: 200 } }
-
+                    // Launch details tray toggle
                     Rectangle {
-                        width: 26
-                        height: 26
-                        radius: 13
-                        x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
-                        y: 3
-                        color: "white"
-                        border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
-                        border.width: 1
+                        visible: true
+                        Layout.preferredWidth: 50
+                        Layout.preferredHeight: 32
+                        radius: 16
+                        color: backend.launchTrayManualMode ?
+                            "#FF3838" :
+                            (backend.theme === "dark" ? "#666666" : "#CCCCCC")
 
-                        Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                        Behavior on color { ColorAnimation { duration: 200 } }
+
+                        Rectangle {
+                            width: 26
+                            height: 26
+                            radius: 13
+                            x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
+                            y: 3
+                            color: "white"
+                            border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
+                            border.width: 1
+
+                            Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        ToolTip {
+                            text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
+                            delay: 500
+                        }
                     }
 
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                        cursorShape: Qt.PointingHandCursor
-                    }
-
-                    ToolTip {
-                        text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
-                        delay: 500
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // Right pill (countdown, location, theme) - FIXED WIDTH
+                // Right pill (countdown) - FIXED WIDTH
                 Rectangle {
                     Layout.preferredWidth: 120
                     Layout.maximumWidth: 120
@@ -3103,23 +3198,20 @@ Window {
                     border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
                     border.width: 1
 
-
                     Text {
                         anchors.centerIn: parent
                         text: backend.countdown
-                        color: backend.theme === "dark" ? "white" : "black"
+                        color: (backend && backend.theme === "dark") ? "white" : "black"
                         font.pixelSize: 14
                         font.family: "D-DIN"
                         font.bold: true
                     }
-
-
-                                
                 }
             }
         }
+    }
 
-        // WiFi popup
+    // WiFi popup
         Popup {
             id: wifiPopup
             width: 500
@@ -4107,92 +4199,91 @@ Window {
             }
         }
 
-        // Sliding launch details tray
-        Popup {
-            id: launchTray
+    // Sliding launch details tray
+    Popup {
+        id: launchTray
+        width: parent.width
+        height: 25  // Fixed banner height
+        x: 0
+        y: 0  // Position at top of screen
+        modal: false
+        focus: false
+        visible: !!(backend && backend.launchTrayVisible)
+        closePolicy: Popup.NoAutoClose
+
+        leftPadding: 15
+        rightPadding: 15
+        topPadding: 0
+        bottomPadding: 0
+        leftMargin: 0
+        rightMargin: 0
+        topMargin: 0
+        bottomMargin: 0
+
+        property real expandedHeight: 25
+        property real collapsedHeight: 25
+        property var nextLaunch: null
+        property string tMinus: ""
+
+        Connections {
+            target: backend
+            function onCountdownChanged() {
+                launchTray.tMinus = backend.countdown;
+            }
+        }
+
+        Timer {
+            interval: 1000
+            running: true
+            repeat: true
+            onTriggered: {
+                var next = backend.get_next_launch();
+                launchTray.nextLaunch = next;
+                launchTray.tMinus = backend.countdown;
+            }
+        }
+
+        background: Rectangle {
+            color: "#FF3838" // Use the red color for the banner
+            radius: 12
+            border.width: 0
+            opacity: 0.8
+        }
+
+        // Bottom status text - T-minus on left, launch name on right
+        Item {
             width: parent.width
-            height: 25  // Fixed banner height
-            x: 0
-            y: 0  // Position at top of screen
-            modal: false
-            focus: false
-            visible: !!(backend && backend.launchTrayVisible)
-            closePolicy: Popup.NoAutoClose
+            height: 20
+            anchors.verticalCenter: parent.verticalCenter
+            z: 1
 
-            leftPadding: 15
-            rightPadding: 15
-            topPadding: 0
-            bottomPadding: 0
-            leftMargin: 0
-            rightMargin: 0
-            topMargin: 0
-            bottomMargin: 0
-
-            property real expandedHeight: 25
-            property real collapsedHeight: 25
-            property var nextLaunch: null
-            property string tMinus: ""
-
-            Connections {
-                target: backend
-                function onCountdownChanged() {
-                    launchTray.tMinus = backend.countdown;
-                }
-            }
-
-            Timer {
-                interval: 1000
-                running: true
-                repeat: true
-                onTriggered: {
-                    var next = backend.get_next_launch();
-                    launchTray.nextLaunch = next;
-                    launchTray.tMinus = backend.countdown;
-                }
-            }
-
-            background: Rectangle {
-                color: "#FF3838" // Use the red color for the banner
-                radius: 12
-                border.width: 0
-                opacity: 0.8
-            }
-
-            // Bottom status text - T-minus on left, launch name on right
-            Item {
-                width: parent.width
-                height: 20
+            Text {
+                text: launchTray.tMinus || "T-0"
+                font.pixelSize: 14
+                font.bold: true
+                color: "white"
+                anchors.left: parent.left
+                anchors.leftMargin: 0
+                anchors.right: parent.horizontalCenter
+                anchors.rightMargin: 10
                 anchors.verticalCenter: parent.verticalCenter
-                z: 1
+                elide: Text.ElideRight
+                horizontalAlignment: Text.AlignLeft
+            }
 
-                Text {
-                    text: launchTray.tMinus || "T-0"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: "white"
-                    anchors.left: parent.left
-                    anchors.leftMargin: 0
-                    anchors.right: parent.horizontalCenter
-                    anchors.rightMargin: 10
-                    anchors.verticalCenter: parent.verticalCenter
-                    elide: Text.ElideRight
-                    horizontalAlignment: Text.AlignLeft
-                }
-
-                Text {
-                    text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
-                    font.pixelSize: 14
-                    font.bold: true
-                    color: "white"
-                    elide: Text.ElideRight
-                    anchors.right: parent.right
-                    anchors.rightMargin: 0
-                    anchors.verticalCenter: parent.verticalCenter
-                    horizontalAlignment: Text.AlignRight
-                }
+            Text {
+                text: launchTray.nextLaunch ? launchTray.nextLaunch.mission : "No upcoming launches"
+                font.pixelSize: 14
+                font.bold: true
+                color: "white"
+                elide: Text.ElideRight
+                anchors.right: parent.right
+                anchors.rightMargin: 0
+                anchors.verticalCenter: parent.verticalCenter
+                horizontalAlignment: Text.AlignRight
+            }
             }
         }
     }
-}
 }
 """

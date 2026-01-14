@@ -2703,12 +2703,42 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
 def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_obj=None, active_location=None):
     """Orchestrate parallel fetch of launches, narratives, and weather data."""
     profiler.mark("perform_full_dashboard_data_load Start")
+    
+    # State tracking for parallel updates
+    status_state = {
+        'launches': 'Pending',
+        'weather': 'Pending',
+        'narratives': 'Pending'
+    }
+
+    def _emit_combined_status():
+        if not status_callback:
+            return
+            
+        # Prioritize showing what's currently being worked on
+        if status_state['launches'] == 'Loading':
+            msg = "Fetching SpaceX launch data…"
+        elif status_state['weather'] == 'Loading':
+            msg = "Getting live weather for locations…"
+        elif status_state['narratives'] == 'Loading':
+            msg = "Retrieving mission narratives…"
+        elif all(s == 'Complete' for s in status_state.values()):
+            msg = "Data loading complete"
+        else:
+            msg = "Initializing dashboard data…"
+            
+        try:
+            status_callback(msg)
+        except:
+            pass
+
     def _emit(msg):
         if status_callback:
             try: status_callback(msg)
             except: pass
 
-    _emit("Checking launch cache and fetching SpaceX data…")
+    status_state['launches'] = 'Loading'
+    _emit_combined_status()
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
         # Launch data
@@ -2716,26 +2746,36 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
             profiler.mark("Thread: Fetch Launches Start")
             try:
                 res = fetch_launches()
+                status_state['launches'] = 'Complete'
+                _emit_combined_status()
                 profiler.mark("Thread: Fetch Launches End")
                 return res
             except:
+                status_state['launches'] = 'Failed'
+                _emit_combined_status()
                 profiler.mark("Thread: Fetch Launches Failed")
                 return {'previous': [], 'upcoming': []}
 
         # Weather data
         def _fetch_w():
             profiler.mark("Thread: Fetch Weather Start")
-            _emit("Getting live weather for locations…")
+            status_state['weather'] = 'Loading'
+            _emit_combined_status()
             # Pass active_location to fetch_weather_for_all_locations for optimization
             res = fetch_weather_for_all_locations(locations_config, active_location)
+            status_state['weather'] = 'Complete'
+            _emit_combined_status()
             profiler.mark("Thread: Fetch Weather End")
             return res
 
         # Narratives
         def _fetch_n():
             profiler.mark("Thread: Fetch Narratives Start")
-            _emit("Fetching launch narratives…")
+            status_state['narratives'] = 'Loading'
+            _emit_combined_status()
             res = fetch_narratives()
+            status_state['narratives'] = 'Complete'
+            _emit_combined_status()
             profiler.mark("Thread: Fetch Narratives End")
             return res
 
@@ -2752,7 +2792,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         profiler.mark("Narratives received")
 
     profiler.mark("perform_full_dashboard_data_load End")
-    _emit("Data loading complete")
+    _emit("Finalizing dashboard UI…")
     
     # Pre-compute calendar mapping while still in the background
     calendar_mapping = get_calendar_mapping(launch_data, tz_obj=tz_obj)
