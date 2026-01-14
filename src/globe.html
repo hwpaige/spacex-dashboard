@@ -404,11 +404,11 @@
                                 } else {
                                     // High-detail procedural fallback using fBm
                                     // Layer 1: Large slow structures
-                                    float layer1 = fbm(vUv * 3.5 + time * 0.03) * 0.5 + 0.5;
+                                    float layer1 = fbm(vUv * 3.5 + time * 0.05) * 0.5 + 0.5;
                                     // Layer 2: Medium faster wisps
-                                    float layer2 = fbm(vUv * 8.0 - time * 0.06) * 0.5 + 0.5;
+                                    float layer2 = fbm(vUv * 8.0 - time * 0.1) * 0.5 + 0.5;
                                     // Layer 3: Tiny high-freq detail
-                                    float layer3 = noise(vUv * 25.0 + time * 0.1) * 0.5 + 0.5;
+                                    float layer3 = noise(vUv * 25.0 + time * 0.15) * 0.5 + 0.5;
                                     
                                     float combined = mix(layer1, layer2, 0.5);
                                     combined = combined * 0.7 + layer3 * 0.3;
@@ -420,7 +420,7 @@
                                     texColor = vec4(cloudColor, combined * 0.85);
                                     
                                     // Second wispier layer for depth
-                                    float wisp = fbm(vUv * 12.0 + time * 0.04) * 0.5 + 0.5;
+                                    float wisp = fbm(vUv * 12.0 + time * 0.07) * 0.5 + 0.5;
                                     wisp = smoothstep(0.4, 0.8, wisp);
                                     texColor2 = vec4(cloudColor, wisp * 0.5);
                                 }
@@ -455,6 +455,9 @@
                         const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
                         clouds.name = 'clouds';
                         globe.add(clouds);
+                        
+                        // Debug log for cloud creation
+                        console.log("Cloud layer created and added to globe");
 
                         function loadCloudTexture() {
                             const cloudSources = [
@@ -646,11 +649,18 @@
 
         let __lastRenderTs = performance.now();
         let __lastResumeLogTs = 0;
+        let __startTime = performance.now();
+
         function animate() {
             requestAnimationFrame(animate);
 
+            const now = performance.now();
+            const absoluteTime = (now - __startTime) / 1000.0;
+
             // Optimization: Skip all processing if system is paused and no interaction is happening
             if (systemPaused && !userInteracting && !isInMomentum) {
+                // Still update time for clouds so they don't jump when resuming, 
+                // but we aren't rendering anyway so it's just a variable update.
                 return;
             }
 
@@ -659,6 +669,9 @@
                     // Apply momentum directly in the same frame of reference it was recorded
                     // (we bake orientation into momentum at capture time to avoid post-release flips)
                     globe.rotation.y += momentumX;
+                    if (!window.__userRotOffset) window.__userRotOffset = 0;
+                    window.__userRotOffset += momentumX;
+                    
                     globe.rotation.x += momentumY;
                     clampRotationX();
 
@@ -676,16 +689,20 @@
                 } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
                     // Normal auto-rotation (decoupled from OrbitControls)
                     const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
-                    globe.rotation.y += baseSpeed * 0.01;
+                    // Use a separate base for auto-rotation to allow interaction to "offset" it
+                    if (!window.__autoRotBase) window.__autoRotBase = 0;
+                    window.__autoRotBase += baseSpeed * 0.01;
+                    globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
                 }
             }
 
             // Rotate clouds slower than the globe
             const clouds = scene.getObjectByName('clouds');
             if (clouds) {
-                clouds.rotation.y += 0.0005;
+                // Cloud rotation can stay relative or use absolute time for perfect consistency
+                clouds.rotation.y = absoluteTime * 0.05; 
                 if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
-                    clouds.material.uniforms.time.value += 0.01;
+                    clouds.material.uniforms.time.value = absoluteTime;
                 }
             }
 
@@ -694,7 +711,13 @@
             }
 
             // Track last render timestamp for watchdog
-            __lastRenderTs = performance.now();
+            __lastRenderTs = now;
+            
+            // Periodically log animation status (every 5 seconds)
+            if (now - __lastResumeLogTs > 5000) {
+                console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
+                __lastResumeLogTs = now;
+            }
         }
 
         function updateTrajectory(trajectoryData) {
@@ -1140,6 +1163,8 @@
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
+            if (!window.__userRotOffset) window.__userRotOffset = 0;
+            window.__userRotOffset += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
             clampRotationX();
 
@@ -1227,6 +1252,8 @@
             }
 
             globe.rotation.y += deltaX * 0.005 * yDirection;
+            if (!window.__userRotOffset) window.__userRotOffset = 0;
+            window.__userRotOffset += deltaX * 0.005 * yDirection;
             globe.rotation.x += deltaY * 0.005;
             clampRotationX();
 
