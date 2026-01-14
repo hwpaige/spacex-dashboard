@@ -336,6 +336,7 @@
                         // Cloud layer (Shader-based)
                         const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
                         const cloudVertexShader = `
+                            precision mediump float;
                             varying vec2 vUv;
                             void main() {
                                 vUv = uv;
@@ -343,6 +344,7 @@
                             }
                         `;
                         const cloudFragmentShader = `
+                            precision mediump float;
                             uniform sampler2D cloudTexture;
                             uniform float time;
                             varying vec2 vUv;
@@ -390,29 +392,59 @@
                             time: { value: 0.0 }
                         };
 
-                        textureLoader.load(
-                            'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
-                            function (cloudTexture) {
-                                cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping;
-                                cloudUniforms.cloudTexture.value = cloudTexture;
-                                
-                                const cloudMaterial = new THREE.ShaderMaterial({
-                                    uniforms: cloudUniforms,
-                                    vertexShader: cloudVertexShader,
-                                    fragmentShader: cloudFragmentShader,
-                                    transparent: true
-                                });
+                        const cloudMaterial = new THREE.ShaderMaterial({
+                            uniforms: cloudUniforms,
+                            vertexShader: cloudVertexShader,
+                            fragmentShader: cloudFragmentShader,
+                            transparent: true,
+                            depthWrite: false // Good for transparency layers
+                        });
 
-                                const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
-                                clouds.name = 'clouds';
-                                globe.add(clouds);
-                                console.log("Cloud layer added (Shader-based)");
-                            },
-                            undefined,
-                            function (error) {
-                                console.error("Error loading cloud texture:", error);
+                        const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+                        clouds.name = 'clouds';
+                        globe.add(clouds);
+
+                        function loadCloudTexture() {
+                            const cloudSources = [
+                                '../assets/images/earth_clouds_1024.png',
+                                'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
+                                'https://cdn.jsdelivr.net/gh/mrdoob/three.js@dev/examples/textures/planets/earth_clouds_1024.png'
+                            ];
+
+                            let sourceIndex = 0;
+
+                            function tryNext() {
+                                if (sourceIndex >= cloudSources.length) {
+                                    console.warn("All cloud texture sources failed, using procedural fallback");
+                                    // Use a semi-transparent white fallback if no texture loads
+                                    cloudMaterial.fragmentShader = cloudFragmentShader.replace('texture2D(cloudTexture, distortedUv)', 'vec4(1.0, 1.0, 1.0, 0.4)').replace('texture2D(cloudTexture, vUv + vec2(n2 * 0.01, 0.0))', 'vec4(1.0, 1.0, 1.0, 0.2)');
+                                    cloudMaterial.needsUpdate = true;
+                                    return;
+                                }
+
+                                const src = cloudSources[sourceIndex];
+                                console.log("Attempting to load cloud texture from:", src);
+                                textureLoader.load(
+                                    src,
+                                    function (cloudTexture) {
+                                        cloudTexture.wrapS = cloudTexture.wrapT = THREE.RepeatWrapping;
+                                        cloudUniforms.cloudTexture.value = cloudTexture;
+                                        cloudMaterial.needsUpdate = true;
+                                        console.log("Cloud layer texture loaded successfully from:", src);
+                                    },
+                                    undefined,
+                                    function (error) {
+                                        console.warn("Failed to load cloud texture from:", src);
+                                        sourceIndex++;
+                                        tryNext();
+                                    }
+                                );
                             }
-                        );
+
+                            tryNext();
+                        }
+
+                        loadCloudTexture();
 
                         // Lighting
                         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
