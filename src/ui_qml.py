@@ -1013,20 +1013,20 @@ Window {
                             // Globe view for launch card
                             Rectangle {
                                 anchors.fill: parent
-                                anchors.margins: 5
+                                anchors.margins: 0
                                 color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
-                                radius: 6
+                                radius: 0
                                 clip: true
 
                                 WebEngineView {
                                     id: launchGlobeView
                                     anchors.fill: parent
-                                    anchors.margins: 2
+                                    anchors.margins: 0
                                     url: globeUrl
                                     // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                    backgroundColor: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                                    backgroundColor: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                                     onBackgroundColorChanged: {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0, (backend.theme === "dark" ? "#111111" : "#f8f8f8"))
                                     }
                                     zoomFactor: 1.0
                                     layer.enabled: false
@@ -1043,7 +1043,7 @@ Window {
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0, (backend.theme === "dark" ? "#111111" : "#f8f8f8"))
                                         }
                                     }
 
