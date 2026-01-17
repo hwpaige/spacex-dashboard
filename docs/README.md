@@ -75,8 +75,8 @@ The project includes setup scripts for different display configurations on Raspb
       ```bash
       sudo bash scripts/setup_pi.sh
       ```
-2.  **DFR1125 14 inch 4K Bar Display (3840x1100)**
-    - Use the dedicated setup script:
+2.  **DFR1125 14 inch Bar Display (2560x734 2K Mode)**
+    - Use the dedicated setup script (optimized for 2560x734 for better performance on Pi 5):
       ```bash
       sudo bash scripts/setup_pi_dfr1125.sh
       ```

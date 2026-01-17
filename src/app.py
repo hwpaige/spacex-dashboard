@@ -479,10 +479,15 @@ class Backend(QObject):
         detected_w, detected_h = get_rpi_config_resolution()
         is_small_display = (os.environ.get("DASHBOARD_WIDTH") == "1480" or detected_w == 1480 or detected_h == 320)
         is_large_display = (os.environ.get("DASHBOARD_WIDTH") == "3840" or detected_w == 3840 or detected_h == 1100)
+        is_2k_display = (os.environ.get("DASHBOARD_WIDTH") == "2560" or detected_w == 2560 or detected_h == 734)
         
         if platform.system() == 'Windows' or is_small_display:
             # Default to small display resolution (1480x320) and 1x scale
             default_w, default_h, default_s = 1480, 320, "1.0"
+        elif is_2k_display:
+            # Matches DFR1125 in 2K mode (2560x734)
+            default_w, default_h, default_s = 2560, 734, "1.333"
+            is_large_display = True # Treat as large display for DDC/CI features
         elif is_large_display:
             # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
             default_w, default_h, default_s = 3840, 1100, "2.0"

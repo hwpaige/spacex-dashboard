@@ -16,7 +16,11 @@ def identify_modes():
         print("Connected successfully!")
         
         commands = [
-            "echo '--- ddcutil detect ---'",
+            "echo '--- DRM Modes ---'",
+            "for f in /sys/class/drm/card*-*/modes; do echo \"$f:\"; cat \"$f\"; done",
+            "echo '\n--- modetest (connectors) ---'",
+            "sudo modetest -c",
+            "echo '\n--- ddcutil detect ---'",
             "sudo ddcutil detect",
             "echo '\n--- ddcutil capabilities (Bus 13) ---'",
             "sudo ddcutil capabilities --bus=13",

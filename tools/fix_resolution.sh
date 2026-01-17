@@ -1,5 +1,5 @@
 #!/bin/bash
-# fix_resolution.sh - Diagnostic and fix tool for DFR1125 4K Bar Display resolution issues
+# fix_resolution.sh - Diagnostic and fix tool for DFR1125 Bar Display resolution issues (2K Mode)
 
 set -e
 
@@ -72,9 +72,9 @@ fi
 echo "Targeting output: $HDMI_OUT"
 
 # 2. Add custom mode to xrandr
-MODE_NAME="3840x1100_60.00"
-# Modeline for 3840x1100 @ 60Hz (297MHz pixel clock)
-MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
+MODE_NAME="2560x734_60.00"
+# Modeline for 2560x734 @ 60Hz
+MODELINE="132.00 2560 2677 2736 2933 734 736 742 750 -hsync +vsync"
 
 echo "Adding custom mode $MODE_NAME to xrandr..."
 set +e
@@ -106,8 +106,8 @@ if [ -f "$CMDLINE_FILE" ]; then
     
     # Add new video parameter
     # We use 'D' to force digital output and 'e' to force enabled
-    sed -i "s/$/ video=$K_CONNECTOR:3840x1100M@60D/" "$CMDLINE_FILE"
-    echo "✓ Updated $CMDLINE_FILE with video=$K_CONNECTOR:3840x1100M@60D"
+    sed -i "s/$/ video=$K_CONNECTOR:2560x734M@60D/" "$CMDLINE_FILE"
+    echo "✓ Updated $CMDLINE_FILE with video=$K_CONNECTOR:2560x734M@60D"
 fi
 
 # 4. Update config.txt to ensure KMS and ignore EDID if necessary
@@ -139,7 +139,7 @@ if [ -f "$XSESSION" ]; then
     echo "Updating $XSESSION to include xrandr force commands..."
     # Create a temporary file with the xrandr commands
     cat << EOF > /tmp/xrandr_fix.sh
-# Force 3840x1100 resolution
+# Force 2560x734 resolution
 xrandr --newmode "$MODE_NAME" $MODELINE 2>/dev/null || true
 xrandr --addmode $HDMI_OUT "$MODE_NAME" 2>/dev/null || true
 xrandr --output $HDMI_OUT --mode "$MODE_NAME" --rotate normal || true
@@ -152,7 +152,7 @@ EOF
         else
             # Prepend before the last line (usually exec ...)
             sed -i '$i\\' "$XSESSION"
-            sed -i '$i# Force 3840x1100 resolution' "$XSESSION"
+            sed -i '$i# Force 2560x734 resolution' "$XSESSION"
             sed -i '$i'"xrandr --newmode \"$MODE_NAME\" $MODELINE 2>/dev/null || true" "$XSESSION"
             sed -i '$i'"xrandr --addmode $HDMI_OUT \"$MODE_NAME\" 2>/dev/null || true" "$XSESSION"
             sed -i '$i'"xrandr --output $HDMI_OUT --mode \"$MODE_NAME\" --rotate normal || true" "$XSESSION"

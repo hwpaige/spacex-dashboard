@@ -5,8 +5,8 @@ set -o pipefail
 # Trap to handle interrupts gracefully
 trap 'log "Setup interrupted by user"; exit 1' INT TERM
 
-# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 25.04 (DFR1125 4K Bar Display)
-# This script is configured for the 14 inch 3840x1100 display
+# SpaceX Dashboard Setup Script for Raspberry Pi Ubuntu 25.04 (DFR1125 Bar Display - 2K Mode)
+# This script is configured for the 14 inch display in 2560x734 mode
 # Qt 6.9.x and later versions have known GLOzone issues with WebEngine
 
 USER="${SUDO_USER:-harrison}"
@@ -728,16 +728,16 @@ configure_boot() {
     cat << EOF >> "$config_file"
 
 # BEGIN SPACEX DASHBOARD
-# Custom display settings for DFR1125 14 inch 4K Bar Display (3840x1100 landscape)
+# Custom display settings for DFR1125 14 inch Bar Display (2560x734 mode)
 hdmi_force_hotplug=1
 hdmi_ignore_edid=0xa5000080
 hdmi_force_mode=1
 hdmi_drive=1
-max_framebuffer_width=3840
-max_framebuffer_height=1100
+max_framebuffer_width=2560
+max_framebuffer_height=734
 hdmi_group=2
 hdmi_mode=87
-hdmi_timings=3840 0 160 40 120 1100 0 10 3 10 0 0 0 60 0 297000000 3
+hdmi_timings=2560 0 107 27 80 734 0 7 2 7 0 0 0 60 0 124830000 3
 dtoverlay=vc4-kms-v3d,cma-512
 disable_splash=1
 # Enable full USB power for Pi 5
@@ -781,7 +781,7 @@ EOF
         sed -i 's/ video=[^ ]*//g' "$cmdline_file"
         # Add the forced resolution for HDMI-A-1 (standard Pi 5 port 0)
         # We use 'D' to force digital and 'e' to force enable
-        sed -i 's/$/ video=HDMI-A-1:3840x1100M@60D/' "$cmdline_file"
+        sed -i 's/$/ video=HDMI-A-1:2560x734M@60D/' "$cmdline_file"
     fi
 }
 
@@ -1480,9 +1480,9 @@ clear 2>/dev/null || true
 
 # Set display settings
 sleep 2
-# Force 3840x1100 resolution for DFR1125
-# Modeline: 3840x1100 @ 60Hz (297MHz pixel clock)
-MODELINE="297.00  3840 4016 4104 4400  1100 1103 1113 1125 -hsync +vsync"
+# Force 2560x734 resolution for DFR1125 (2K mode)
+# Modeline: 2560x734 @ 60Hz
+MODELINE="132.00 2560 2677 2736 2933 734 736 742 750 -hsync +vsync"
 
 # Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
 OUTPUT=$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
@@ -1494,9 +1494,9 @@ fi
 echo "Using display output: $OUTPUT" >> ~/xsession.log
 
 if [ -n "$OUTPUT" ]; then
-    xrandr --newmode "3840x1100_60.00" $MODELINE 2>/dev/null || true
-    xrandr --addmode "$OUTPUT" "3840x1100_60.00" 2>/dev/null || true
-    xrandr --output "$OUTPUT" --mode 3840x1100_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
+    xrandr --newmode "2560x734_60.00" $MODELINE 2>/dev/null || true
+    xrandr --addmode "$OUTPUT" "2560x734_60.00" 2>/dev/null || true
+    xrandr --output "$OUTPUT" --mode 2560x734_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
 else
     echo "ERROR: No connected display output found" >> ~/xsession.log
 fi
@@ -1513,9 +1513,9 @@ unclutter -idle 0 -root &
 matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
-export DASHBOARD_WIDTH=3840
-export DASHBOARD_HEIGHT=1100
-export DASHBOARD_SCALE=2.0
+export DASHBOARD_WIDTH=2560
+export DASHBOARD_HEIGHT=734
+export DASHBOARD_SCALE=1.333
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen"

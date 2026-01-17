@@ -2906,6 +2906,10 @@ def setup_dashboard_environment():
         default_scale = "2.0"
     elif detected_w == 3840 or detected_h == 1100:
         default_scale = "2.0"
+    elif os.environ.get("DASHBOARD_WIDTH") == "2560":
+        default_scale = "1.333"
+    elif detected_w == 2560 or detected_h == 734:
+        default_scale = "1.333"
     else:
         default_scale = "2.0"
 
