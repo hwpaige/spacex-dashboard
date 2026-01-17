@@ -97,6 +97,7 @@
     <button id="playPauseBtn"><i class="fas fa-play"></i></button>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
+        let cloudUniforms, cloudMaterial, loadCloudTextureFunc;
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
@@ -454,13 +455,13 @@
                             }
                         `;
 
-                        const cloudUniforms = {
+                        cloudUniforms = {
                             cloudTexture: { value: null },
                             time: { value: 0.0 },
                             hasTexture: { value: false }
                         };
 
-                        const cloudMaterial = new THREE.ShaderMaterial({
+                        cloudMaterial = new THREE.ShaderMaterial({
                             uniforms: cloudUniforms,
                             vertexShader: cloudVertexShader,
                             fragmentShader: cloudFragmentShader,
@@ -475,7 +476,7 @@
                         // Debug log for cloud creation
                         console.log("Cloud layer created and added to globe");
 
-                        function loadCloudTexture() {
+                        loadCloudTextureFunc = function() {
                             const cloudSources = [
                                 '../assets/images/earth_clouds_1024.png',
                                 'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
@@ -513,9 +514,9 @@
                             }
 
                             tryNext();
-                        }
+                        };
 
-                        loadCloudTexture();
+                        loadCloudTextureFunc();
 
                         // Lighting
                         const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
@@ -1114,24 +1115,12 @@
         window.addEventListener('online', function () {
             try {
                 if (!globe) return;
-                if (globe.getObjectByName && !globe.getObjectByName('clouds')) {
-                    const textureLoader = new THREE.TextureLoader();
-                    const cloudGeometry = new THREE.SphereGeometry(1.01, 64, 64);
-                    textureLoader.load(
-                        'https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/textures/planets/earth_clouds_1024.png',
-                        function (cloudTexture) {
-                            const cloudMaterial = new THREE.MeshLambertMaterial({
-                                map: cloudTexture,
-                                transparent: true,
-                                opacity: 0.8,
-                                alphaMap: cloudTexture
-                            });
-                            const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
-                            clouds.name = 'clouds';
-                            globe.add(clouds);
-                            console.log('Cloud layer added after going online');
-                        }
-                    );
+                const clouds = globe.getObjectByName('clouds');
+                if (clouds && cloudUniforms && !cloudUniforms.hasTexture.value) {
+                    console.log('Attempting to load cloud texture now that we are online...');
+                    if (typeof loadCloudTextureFunc === 'function') {
+                        loadCloudTextureFunc();
+                    }
                 }
             } catch (e) {
                 console.warn('Failed to add clouds after going online:', e);
