@@ -3182,7 +3182,7 @@ class ChartItem(QQuickPaintedItem):
 
         # Colors - Tesla-inspired dark theme
         if self._theme == "dark":
-            bg_color = QColor("#2a2e2e")  # Match card background
+            bg_color = QColor("#181818")  # Match card background
             text_color = QColor("#ffffff")
             grid_color = QColor("#ffffff")  # Tesla-style white grid lines
             axis_color = QColor("#666666")

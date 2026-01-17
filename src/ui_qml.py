@@ -100,7 +100,7 @@ Window {
         }
     }
     // Use the same background color as the globe view for visual consistency
-    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+    color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
     Behavior on color { ColorAnimation { duration: 300 } }
 
     property bool isWindyFullscreen: false
@@ -207,7 +207,7 @@ Window {
         id: loadingScreen
         anchors.fill: parent
         // Match app background to the globe background
-        color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+        color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
     // Keep this container visible during initial load OR while an update is in progress
     visible: !!(backend && (backend.isLoading || backend.updatingInProgress))
         z: 1
@@ -239,7 +239,7 @@ Window {
             id: updateOverlay
             anchors.fill: parent
             visible: backend && backend.updatingInProgress
-            color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+            color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
             opacity: 0.98
             z: 9999
 
@@ -264,8 +264,8 @@ Window {
                     width: parent.width
                     height: 140
                     radius: 8
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
 
                     ScrollView {
@@ -302,7 +302,7 @@ Window {
                         model: 3
                         Rectangle {
                             width: 8; height: 8; radius: 4
-                            color: backend.theme === "dark" ? "#9ad1d4" : "#2a2e2e"
+                            color: backend.theme === "dark" ? "#9ad1d4" : "#181818"
                             SequentialAnimation on opacity {
                                 running: updateOverlay.visible
                                 loops: Animation.Infinite
@@ -431,8 +431,8 @@ Window {
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
-                       ? (backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8")
-                       : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0")
+                       ? (backend.theme === "dark" ? "#111111" : "#f8f8f8")
+                       : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
                 radius: 8
                 clip: false
                 visible: !isWindyFullscreen && !plotCard.isHighResolution
@@ -557,7 +557,7 @@ Window {
                                         url: globeUrl
                                         // Use theme background color to avoid white corners during load
                                         // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                        backgroundColor: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                        backgroundColor: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                                         onBackgroundColorChanged: {
                                             if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                         }
@@ -630,19 +630,19 @@ Window {
                                     Layout.preferredHeight: 28
                                     color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
                                            (backend && backend.chartType === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")) :
+                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5")) :
                                            (backend && backend.chartViewMode === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"))
+                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5"))
                                     radius: 14
                                     border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
                                                  (backend && backend.chartType === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")) :
+                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")) :
                                                  (backend && backend.chartViewMode === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
                                     border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
                                                  (backend && backend.chartType === modelData.type ? 2 : 1) :
                                                  (backend && backend.chartViewMode === modelData.type ? 2 : 1)
@@ -685,8 +685,8 @@ Window {
                                 width: plotCard.isHighResolution ? 0 : 40
                                 height: 28
                                 radius: 14
-                                color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f5f5f5"
-                                border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                                color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
+                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                                 border.width: 1
 
                                 Behavior on color { ColorAnimation { duration: 200 } }
@@ -733,8 +733,8 @@ Window {
                         width: 40
                         height: 28
                         radius: 14
-                        color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f5f5f5"
-                        border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                        color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
+                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
                         z: 1000
 
@@ -771,7 +771,7 @@ Window {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 // Remove rounded corners/clipping for Windy card to restore animations
                 radius: 0
                 clip: false
@@ -813,7 +813,7 @@ Window {
                                 Rectangle {
                                     anchors.fill: parent
                                     radius: 0
-                                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+                                    color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                     clip: false
                                     // Performance: Disable layers to reduce GPU/Compositor load on Pi
                                     layer.enabled: false
@@ -836,7 +836,7 @@ Window {
                                             layer.enabled: false
                                             layer.smooth: true
                                             // Avoid white square corners by matching parent background
-                                            backgroundColor: (backend && backend.theme === "dark") ? "#1a1e1e" : "#f8f8f8"
+                                            backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                             url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                             onUrlChanged: console.log("WebEngineView URL changed to:", url)
                                             settings.webGLEnabled: true
@@ -943,12 +943,12 @@ Window {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     color: weatherSwipe.currentIndex === index ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                           (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#181818" : "#f5f5f5")
                                     radius: 14
                                     border.color: weatherSwipe.currentIndex === index ?
-                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                                 (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                                     border.width: weatherSwipe.currentIndex === index ? 2 : 1
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
@@ -987,7 +987,7 @@ Window {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
                 visible: !isWindyFullscreen
@@ -1014,7 +1014,7 @@ Window {
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 5
-                                color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                                color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                                 radius: 6
                                 clip: true
 
@@ -1024,9 +1024,9 @@ Window {
                                     anchors.margins: 2
                                     url: globeUrl
                                     // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                    backgroundColor: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                                    backgroundColor: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                                     onBackgroundColorChanged: {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
                                     }
                                     zoomFactor: 1.0
                                     layer.enabled: false
@@ -1043,7 +1043,7 @@ Window {
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 4, (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
                                         }
                                     }
 
@@ -1084,7 +1084,7 @@ Window {
                                 color: (model && model.isGroup) ? "transparent" : 
                                        (backend && backend.selectedLaunch === model.mission ? 
                                         (backend && backend.theme === "dark" ? "#4a5a5a" : "#c0d0d0") : 
-                                        (backend && backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")); 
+                                        (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")); 
                                 radius: (model && model.isGroup) ? 0 : 6;
                                 border.width: (model && !model.isGroup && backend && backend.selectedLaunch === model.mission) ? 2 : 0;
                                 border.color: (backend && backend.theme === "dark") ? "#6a8a8a" : "#80a0a0";
@@ -1386,9 +1386,9 @@ Window {
                                 closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                                 
                                 background: Rectangle {
-                                    color: backend.theme === "dark" ? "#2a2e2e" : "#ffffff"
+                                    color: backend.theme === "dark" ? "#181818" : "#ffffff"
                                     radius: 12
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                                     border.width: 1
                                 }
                                 
@@ -1631,12 +1631,12 @@ Window {
                                                             (launchCard.launchViewMode !== "calendar" && backend.eventType === modelData.type)
                                     
                                     color: isActive ?
-                                           (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
+                                           (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#181818" : "#f5f5f5")
                                     radius: 14
                                     border.color: isActive ?
-                                                 (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                                 (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                                     border.width: isActive ? 2 : 1
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
@@ -1680,7 +1680,7 @@ Window {
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
                 visible: !isWindyFullscreen
@@ -1705,7 +1705,7 @@ Window {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         radius: 8
-                        color: backend.theme === "dark" ? "#1a1e1e" : "#f8f8f8"
+                        color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                         clip: true
                         // Performance: Disable layers to reduce GPU load on Pi
                         layer.enabled: false
@@ -1865,8 +1865,8 @@ Window {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
-                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    color: selected ? (backend.theme === "dark" ? "#303030" : "#e0e0e0") : (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                                     border.width: selected ? 2 : 1
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
@@ -1907,8 +1907,8 @@ Window {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
-                                    color: selected ? (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : (backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5")
-                                    border.color: selected ? (backend.theme === "dark" ? "#5a5e5e" : "#c0c0c0") : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0")
+                                    color: selected ? (backend.theme === "dark" ? "#303030" : "#e0e0e0") : (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                    border.color: selected ? (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                                     border.width: selected ? 2 : 1
 
                                     Behavior on color { ColorAnimation { duration: 200 } }
@@ -1942,8 +1942,8 @@ Window {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
-                                    color: selected ? "#FF0000" : (backend.liveLaunchUrl !== "" ? "#CC0000" : (backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"))
-                                    border.color: selected ? "white" : (backend.liveLaunchUrl !== "" ? "transparent" : (backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"))
+                                    color: selected ? "#FF0000" : (backend.liveLaunchUrl !== "" ? "#CC0000" : (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
+                                    border.color: selected ? "white" : (backend.liveLaunchUrl !== "" ? "transparent" : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
                                     border.width: selected ? 2 : 1
                                     opacity: backend.liveLaunchUrl !== "" ? 1.0 : 0.6
 
@@ -2014,8 +2014,8 @@ Window {
                     Layout.maximumWidth: 200
                     height: 28
                     radius: 14
-                    color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
-                    border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
+                    border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
 
                     Row {
@@ -2064,8 +2064,8 @@ Window {
                         id: tickerBackground
                         anchors.fill: parent
                         radius: 16
-                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
                         z: 0
                         // Fade out as tray expands (starts fading when tray is 2x ticker height)
@@ -2219,7 +2219,7 @@ Window {
                                 color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
                                 radius: 14
                                 border.width: 1
-                                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                             }
                         }
                         
@@ -2326,7 +2326,7 @@ Window {
                                     Rectangle {
                                         anchors.fill: parent
                                         color: ListView.isCurrentItem ? 
-                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : 
+                                               (backend.theme === "dark" ? "#303030" : "#e0e0e0") : 
                                                "transparent"
                                         radius: 4
                                         
@@ -2395,8 +2395,8 @@ Window {
                     width: 28
                     height: 32
                     radius: 16
-                    color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
-                    border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
+                    border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
 
                     Text {
@@ -2426,7 +2426,7 @@ Window {
                         height: 8
                         radius: 4
                         color: "#FF4444"
-                        border.color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
+                        border.color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                         border.width: 1
                         anchors.top: parent.top
                         anchors.right: parent.right
@@ -2441,8 +2441,8 @@ Window {
                         width: 28
                         height: 32
                         radius: 16
-                        color: (backend && backend.theme === "dark") ? "#2a2e2e" : "#f0f0f0"
-                        border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                        color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
+                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
                         visible: !!(backend && backend.isHighResolution)
 
@@ -2824,8 +2824,8 @@ Window {
                     width: 28
                     height: 32
                         radius: 16
-                        color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                        border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                        color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
 
                         Text {
@@ -2860,8 +2860,8 @@ Window {
                             id: locationTriggerBackground
                             anchors.fill: parent
                             radius: 16
-                            color: backend.theme === "dark" ? "#2a2e2e" : "#f5f5f5"
-                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                            color: backend.theme === "dark" ? "#181818" : "#f5f5f5"
+                            border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                             border.width: 1
                             z: 0
                             // Fade out as drawer expands
@@ -2895,7 +2895,7 @@ Window {
                                     color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
                                     radius: 14
                                     border.width: 1
-                                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                                 }
                             }
                             
@@ -2991,7 +2991,7 @@ Window {
                                         width: ListView.view.width
                                         height: 30
                                         color: backend.location === modelData ? 
-                                               (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0") : 
+                                               (backend.theme === "dark" ? "#303030" : "#e0e0e0") : 
                                                "transparent"
                                         radius: 4
                                         Text {
@@ -3195,8 +3195,8 @@ Window {
                     Layout.maximumWidth: 120
                     height: 32
                     radius: 16
-                    color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                    color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
 
                     Text {
@@ -3229,9 +3229,9 @@ Window {
             onClosed: backend.stopWifiTimer()
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
             }
 
@@ -3252,7 +3252,7 @@ Window {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 30
-                    color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                    color: backend.theme === "dark" ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
@@ -3308,7 +3308,7 @@ Window {
                     onClicked: backend.scanWifiNetworks()
 
                     background: Rectangle {
-                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        color: backend.theme === "dark" ? "#303030" : "#d0d0d0"
                         radius: 3
                     }
 
@@ -3338,7 +3338,7 @@ Window {
                     onClicked: debugDialog.open()
 
                     background: Rectangle {
-                        color: backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0"
+                        color: backend.theme === "dark" ? "#2a2a2a" : "#c0c0c0"
                         radius: 3
                     }
 
@@ -3362,7 +3362,7 @@ Window {
                     delegate: Rectangle {
                         width: ListView.view.width
                         height: 32
-                        color: backend.theme === "dark" ? "#1a1e1e" : "#e0e0e0"
+                        color: backend.theme === "dark" ? "#111111" : "#e0e0e0"
                         radius: 3
 
                         RowLayout {
@@ -3449,7 +3449,7 @@ Window {
                                 }
 
                                 background: Rectangle {
-                                    color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                                    color: backend.theme === "dark" ? "#303030" : "#d0d0d0"
                                     radius: 3
                                 }
 
@@ -3486,9 +3486,9 @@ Window {
             }
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
             }
 
@@ -3517,8 +3517,8 @@ Window {
                         Layout.preferredHeight: 28
 
                         background: Rectangle {
-                            color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#ffffff"
-                            border.color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#cccccc"
+                            color: (backend && backend.theme === "dark") ? "#111111" : "#ffffff"
+                            border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#cccccc"
                             border.width: 1
                             radius: 3
                         }
@@ -3536,7 +3536,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: (backend && backend.theme === "dark") ? "#3a3e3e" : "#e0e0e0"
+                            color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                             radius: 3
                         }
 
@@ -3563,7 +3563,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: (backend && backend.theme === "dark") ? "#4a4e4e" : "#d0d0d0"
+                            color: (backend && backend.theme === "dark") ? "#303030" : "#d0d0d0"
                             radius: 3
                         }
 
@@ -3626,9 +3626,9 @@ Window {
             }
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
             }
 
@@ -3654,7 +3654,7 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#303030" : "#d0d0d0")
                                 radius: 3
                                 Behavior on color { ColorAnimation { duration: 100 } }
                             }
@@ -3686,7 +3686,7 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#303030" : "#d0d0d0")
                                 radius: 3
                                 Behavior on color { ColorAnimation { duration: 100 } }
                             }
@@ -3719,7 +3719,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: parent.pressed ? "#FF6B35" : (virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#2a2e2e" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")))
+                            color: parent.pressed ? "#FF6B35" : (virtualKeyboard.numberMode ? (backend.theme === "dark" ? "#181818" : "#e0e0e0") : (virtualKeyboard.shiftPressed ? "#FF9800" : (backend.theme === "dark" ? "#2a2a2a" : "#c0c0c0")))
                             radius: 3
                             Behavior on color { ColorAnimation { duration: 100 } }
                         }
@@ -3744,7 +3744,7 @@ Window {
                             onClicked: passwordField.text += text
 
                             background: Rectangle {
-                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0")
+                                color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#303030" : "#d0d0d0")
                                 radius: 3
                                 Behavior on color { ColorAnimation { duration: 100 } }
                             }
@@ -3800,7 +3800,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#3a3e3e" : "#c0c0c0")
+                            color: parent.pressed ? "#FF6B35" : (backend.theme === "dark" ? "#2a2a2a" : "#c0c0c0")
                             radius: 3
                             Behavior on color { ColorAnimation { duration: 100 } }
                         }
@@ -3823,7 +3823,7 @@ Window {
                         onClicked: passwordField.text += " "
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                            color: backend.theme === "dark" ? "#303030" : "#d0d0d0"
                             radius: 3
                         }
 
@@ -3871,9 +3871,9 @@ Window {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
             }
 
@@ -3906,7 +3906,7 @@ Window {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 45
-                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
@@ -3948,7 +3948,7 @@ Window {
                 Rectangle {
                     Layout.fillWidth: true
                     Layout.preferredHeight: 45
-                    color: (backend && backend.theme === "dark") ? "#1a1e1e" : "#e0e0e0"
+                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
@@ -4032,7 +4032,7 @@ Window {
                         background: Rectangle {
                             color: backend.updateChecking ?
                                 (backend.theme === "dark" ? "#666" : "#ccc") :
-                                (backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0")
+                                (backend.theme === "dark" ? "#303030" : "#e0e0e0")
                             radius: 3
                         }
 
@@ -4055,7 +4055,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0"
+                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
@@ -4075,7 +4075,7 @@ Window {
                         onClicked: updatePopup.close()
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#4a4e4e" : "#e0e0e0"
+                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
@@ -4138,9 +4138,9 @@ Window {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#2a2e2e" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
-                border.color: backend.theme === "dark" ? "#3a3e3e" : "#e0e0e0"
+                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
             }
 
@@ -4167,8 +4167,8 @@ Window {
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#1a1e1e" : "#ffffff"
-                            border.color: backend.theme === "dark" ? "#3a3e3e" : "#cccccc"
+                            color: backend.theme === "dark" ? "#111111" : "#ffffff"
+                            border.color: backend.theme === "dark" ? "#2a2a2a" : "#cccccc"
                             border.width: 1
                             radius: 3
                         }
@@ -4185,7 +4185,7 @@ Window {
                     onClicked: debugText.text = backend.getWifiInterfaceInfo()
 
                     background: Rectangle {
-                        color: backend.theme === "dark" ? "#4a4e4e" : "#d0d0d0"
+                        color: backend.theme === "dark" ? "#303030" : "#d0d0d0"
                         radius: 3
                     }
 
