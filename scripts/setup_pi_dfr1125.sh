@@ -1027,9 +1027,13 @@ EOF
 }
 
 configure_touch_rotation() {
-    log "Disabling autosuspend for ILITEK touch controller..."
-    # Remove any previous touch rotation rules as requested
-    rm -f /etc/udev/rules.d/99-touch-rotation.rules
+    log "Configuring touch rotation and disabling autosuspend for known controllers..."
+    cat << EOF > /etc/udev/rules.d/99-touch-rotation.rules
+# Goodix controller
+SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
+# ILITEK controller (common on some DFR1125 units)
+SUBSYSTEM=="input", ATTRS{name}=="ILITEK ILITEK-TP", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
+EOF
 
     cat << EOF > /etc/udev/rules.d/99-ilitek-touch.rules
 # Disable autosuspend for ILITEK touch controller to prevent disconnects
