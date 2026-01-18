@@ -152,7 +152,7 @@
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let cloudUniforms, cloudMaterial, loadCloudTextureFunc;
-        
+
         const PLUME_VERTEX_SHADER = `
             varying vec2 vUv;
             void main() {
@@ -1294,7 +1294,7 @@
             deck.rotation.x = -Math.PI / 2;
             deck.position.y = 0.0042;
             shipGroup.add(deck);
-            
+
             // "X" marking
             const xGeo = new THREE.PlaneGeometry(0.025, 0.005);
             const xMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
