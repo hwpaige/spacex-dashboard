@@ -1027,12 +1027,17 @@ EOF
 }
 
 configure_touch_rotation() {
-    log "Configuring touch rotation and disabling autosuspend for known controllers..."
-    cat << EOF > /etc/udev/rules.d/99-touch-rotation.rules
-# Goodix controller
-SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
-# ILITEK controller (common on some DFR1125 units)
-SUBSYSTEM=="input", ATTRS{name}=="ILITEK ILITEK-TP", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
+    log "Configuring touch calibration and disabling autosuspend..."
+    # Remove any previous touch rotation rules as requested
+    rm -f /etc/udev/rules.d/99-touch-rotation.rules
+
+    # Apply identity calibration matrix (removing the previous vertical alignment fix as requested)
+    cat << EOF > /etc/udev/rules.d/99-touch-calibration.rules
+# ILITEK controller (common on DFR1125 units)
+SUBSYSTEM=="input", ATTRS{name}=="ILITEK ILITEK-TP", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"
+SUBSYSTEM=="input", ATTRS{name}=="ILITEK ILITEK-TP Mouse", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"
+# Goodix controller (alternate for some units)
+SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"
 EOF
 
     cat << EOF > /etc/udev/rules.d/99-ilitek-touch.rules

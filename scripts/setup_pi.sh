@@ -1018,6 +1018,7 @@ configure_touch_rotation() {
 SUBSYSTEM=="input", ATTRS{name}=="Goodix Capacitive TouchScreen", ENV{LIBINPUT_CALIBRATION_MATRIX}="0 -1 1 1 0 0"
 EOF
     udevadm control --reload-rules
+    udevadm trigger
 }
 
 configure_openbox() {

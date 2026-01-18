@@ -386,6 +386,7 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    versionInfoChanged = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
     brightnessChanged = pyqtSignal()
@@ -1790,25 +1791,25 @@ class Backend(QObject):
             self._update_available = value
             self.updateAvailableChanged.emit()
 
-    @pyqtProperty('QVariantMap', notify=updateDialogRequested)
+    @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def currentVersionInfo(self):
         if self._current_version_info is None:
             self._current_version_info = self.get_current_version_info() or {}
         return self._current_version_info
 
-    @pyqtProperty('QVariantMap', notify=updateDialogRequested)
+    @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def latestVersionInfo(self):
         if self._latest_version_info is None:
             self._latest_version_info = self.get_latest_version_info() or {}
         return self._latest_version_info
 
-    @pyqtProperty(str, notify=updateDialogRequested)
+    @pyqtProperty(str, notify=versionInfoChanged)
     def lastUpdateCheckTime(self):
         if hasattr(self, '_last_update_check') and self._last_update_check:
             return self._last_update_check.strftime("%H:%M:%S")
         return "Never"
 
-    @pyqtProperty(bool, notify=updateDialogRequested)
+    @pyqtProperty(bool, notify=versionInfoChanged)
     def updateChecking(self):
         return self._update_checking
 
@@ -2984,7 +2985,7 @@ class Backend(QObject):
             return
         
         self._update_checking = True
-        self.updateDialogRequested.emit()
+        self.versionInfoChanged.emit()
         threading.Thread(target=self._perform_update_check, daemon=True).start()
 
     def _perform_update_check(self):
@@ -3011,7 +3012,7 @@ class Backend(QObject):
             logger.error(f"Error checking for updates: {e}")
         finally:
             self._update_checking = False
-            self.updateDialogRequested.emit()
+            self.versionInfoChanged.emit()
 
     @pyqtSlot()
     def show_update_dialog(self):
