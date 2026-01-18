@@ -581,6 +581,8 @@ Window {
                                                     plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                                 }
 
+                                                plotGlobeViewInner.runJavaScript("if(typeof setAnnotations !== 'undefined') setAnnotations(" + JSON.stringify(spacexLocations) + ");");
+
                                                 // Enforce rounded corners inside the page itself
                                                 if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                                 // Ensure the plot card globe animation loop starts/resumes on initial load
@@ -1042,6 +1044,7 @@ Window {
                                                 launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            launchGlobeView.runJavaScript("if(typeof setAnnotations !== 'undefined') setAnnotations(" + JSON.stringify(spacexLocations) + ");");
                                             // Enforce rounded corners
                                             if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0, (backend.theme === "dark" ? "#111111" : "#f8f8f8"))
                                         }

@@ -66,6 +66,7 @@ from functions import (
     LAST_CONNECTED_NETWORK_FILE,
     # data constants
     location_settings,
+    spacex_locations,
     radar_locations,
     circuit_coords,
     perform_wifi_scan,
@@ -3552,6 +3553,7 @@ if __name__ == '__main__':
     context = engine.rootContext()
     context.setContextProperty("backend", backend)
     context.setContextProperty("radarLocations", radar_locations)
+    context.setContextProperty("spacexLocations", spacex_locations)
     context.setContextProperty("circuitCoords", circuit_coords)
     context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
     context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
