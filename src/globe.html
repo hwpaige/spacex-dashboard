@@ -1007,18 +1007,18 @@
             if (!locationList) return;
 
             locationList.forEach(loc => {
+                let displayName = loc.name;
+                if (displayName === "Hawthorne HQ") displayName = "Hawthorne";
+                if (displayName === "Kennedy Space Center") displayName = "KSC";
+
                 const el = document.createElement('div');
                 el.className = 'label';
-                el.textContent = loc.name;
+                el.textContent = displayName;
                 container.appendChild(el);
 
                 const dot = document.createElement('div');
                 dot.className = 'label-dot';
                 container.appendChild(dot);
-
-                const line = document.createElement('div');
-                line.className = 'label-line';
-                container.appendChild(line);
 
                 // Convert lat/lon to 3D
                 const phi = (90 - loc.lat) * (Math.PI / 180);
@@ -1029,12 +1029,11 @@
                 const y = radius * Math.cos(phi);
 
                 annotations.push({
-                    name: loc.name,
+                    name: displayName,
                     position: new THREE.Vector3(x, y, z),
                     element: el,
                     dot: dot,
-                    line: line,
-                    width: 0, 
+                    width: 0,
                     height: 0
                 });
             });
@@ -1096,8 +1095,7 @@
             visibleAnnos.forEach(anno => {
                 const el = anno.element;
                 const dot = anno.dot;
-                const line = anno.line;
-                
+
                 el.style.display = 'flex';
                 // Higher z-index for closer labels
                 el.style.zIndex = 100 + Math.floor((2.5 - anno.screenPos.dist) * 10);
@@ -1130,33 +1128,6 @@
                 const opacity = Math.max(0, Math.min(1, (2.2 - anno.screenPos.dist) * 2));
                 el.style.opacity = opacity;
                 if (dot) dot.style.opacity = opacity;
-
-                // Update leader line
-                if (line) {
-                    const anchorX = onRight ? tx : tx + anno.width;
-                    const anchorY = anno.screenPos.y;
-                    const dx = anchorX - anno.screenPos.x;
-                    const dy = anchorY - anno.screenPos.y;
-                    const lineDist = Math.sqrt(dx * dx + dy * dy);
-
-                    if (lineDist > 4) {
-                        line.style.display = 'block';
-                        line.style.width = `${lineDist}px`;
-                        line.style.transform = `translate(${anno.screenPos.x}px, ${anno.screenPos.y}px) rotate(${Math.atan2(dy, dx)}rad)`;
-                        line.style.opacity = opacity * 0.5;
-                    } else {
-                        line.style.display = 'none';
-                    }
-                }
-            });
-
-            // Hide unused lines and dots
-            annotations.forEach(anno => {
-                if (!visibleAnnos.includes(anno)) {
-                    if (anno.element) anno.element.style.display = 'none';
-                    if (anno.dot) anno.dot.style.display = 'none';
-                    if (anno.line) anno.line.style.display = 'none';
-                }
             });
         }
 
@@ -1433,10 +1404,10 @@
                 });
 
                 // Create color gradient for the trajectory
-                // Beautiful multi-stop gradient: Electric Cyan -> White -> Fiery Orange
-                const color1 = new THREE.Color(0x00FFFF); // Cyan
+                // Modern, appealing gradient: Deep Blue -> White -> Hot Red for ascent
+                const color1 = new THREE.Color(0x0000FF); // Deep Blue
                 const color2 = new THREE.Color(0xFFFFFF); // White (hot core)
-                const color3 = new THREE.Color(0xFF4500); // Orange-Red
+                const color3 = new THREE.Color(0xFF0000); // Hot Red
 
                 trajectoryGroup = new THREE.Group();
 
@@ -1479,10 +1450,10 @@
                 });
                 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
                 tubeMesh.renderOrder = 1;
-                trajectoryGroup.add(tubeMesh);
+                // trajectoryGroup.add(tubeMesh); // Removed inner line, keep only glow
 
                 // 2. Glow effect (larger tube, lower opacity, additive pulse)
-                const glowRadius = tubeRadius * 2.2;
+                const glowRadius = 0.006; // Decreased and uniform size
                 const glowGeometry = new THREE.TubeGeometry(curve, tubularSegments, glowRadius, radialSegments, false);
                 glowGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3)); // reuse colors
                 const glowMaterial = new THREE.MeshBasicMaterial({
@@ -1528,23 +1499,40 @@
                     });
 
                     const boosterCurve = new THREE.CatmullRomCurve3(boosterPoints);
-                    const boosterTubeRadius = 0.005; // Thicker orange booster
+                    const boosterTubeRadius = 0.005; // Thicker orange
                     const boosterTubeGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterTubeRadius, 8, false);
+
+                    // Booster color gradient: Yellow -> Red
+                    const boosterColor1 = new THREE.Color(0xFFFF00); // Yellow
+                    const boosterColor2 = new THREE.Color(0xFF0000); // Red
+                    const boosterCount = boosterTubeGeo.attributes.position.count;
+                    const boosterColorArray = new Float32Array(boosterCount * 3);
+                    const boosterUvs = boosterTubeGeo.attributes.uv;
+                    for (let i = 0; i < boosterCount; i++) {
+                        const u = boosterUvs.getX(i);
+                        const c = boosterColor1.clone().lerp(boosterColor2, u);
+                        boosterColorArray[i * 3] = c.r;
+                        boosterColorArray[i * 3 + 1] = c.g;
+                        boosterColorArray[i * 3 + 2] = c.b;
+                    }
+                    boosterTubeGeo.setAttribute('color', new THREE.BufferAttribute(boosterColorArray, 3));
+
                     const boosterMat = new THREE.MeshBasicMaterial({
-                        color: 0xFFA500, // Bright Orange
+                        vertexColors: true,
                         transparent: true,
                         opacity: 0.85,
                         side: THREE.DoubleSide
                     });
                     const boosterMesh = new THREE.Mesh(boosterTubeGeo, boosterMat);
                     boosterMesh.renderOrder = 3; // Ensure it's rendered over the main trajectory if they overlap
-                    trajectoryGroup.add(boosterMesh);
+                    // trajectoryGroup.add(boosterMesh); // Removed inner line, keep only glow
 
                     // Booster Glow
-                    const boosterGlowRadius = boosterTubeRadius * 2.0;
+                    const boosterGlowRadius = 0.006; // Decreased and uniform size
                     const boosterGlowGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterGlowRadius, 8, false);
+                    boosterGlowGeo.setAttribute('color', new THREE.BufferAttribute(boosterColorArray, 3)); // reuse colors
                     const boosterGlowMat = new THREE.MeshBasicMaterial({
-                        color: 0xFFA500,
+                        vertexColors: true,
                         transparent: true,
                         opacity: 0.4,
                         blending: THREE.AdditiveBlending,
@@ -1632,19 +1620,19 @@
 
                     const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, true);
                     const orbitMat = new THREE.MeshBasicMaterial({
-                        color: 0xFF0000, // Explicit Red
+                        color: 0xFFFFFF, // White
                         transparent: true,
                         opacity: 0.9,
                         side: THREE.DoubleSide
                     });
                     const orbitMesh = new THREE.Mesh(orbitTubeGeo, orbitMat);
-                    orbitGroup.add(orbitMesh);
+                    // orbitGroup.add(orbitMesh); // Removed inner line, keep only glow
 
                     // 2. Subtle Glow for Orbit
-                    const orbitGlowRadius = orbitTubeRadius * 2.5;
+                    const orbitGlowRadius = 0.006; // Decreased and uniform size
                     const orbitGlowGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitGlowRadius, 8, true);
                     const orbitGlowMat = new THREE.MeshBasicMaterial({
-                        color: 0xFF0000,
+                        color: 0xFF0000, // Red
                         transparent: true,
                         opacity: 0.3,
                         blending: THREE.AdditiveBlending,
