@@ -57,29 +57,44 @@
         .label {
             position: absolute;
             color: white;
-            padding: 2px 5px;
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 4px;
+            padding: 2px 6px;
+            background: rgba(20, 20, 20, 0.6);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
             font-size: 9px;
             white-space: nowrap;
             pointer-events: none;
-            border: 1px solid rgba(255, 255, 255, 0.3);
             text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: bold;
-            display: flex;
+            letter-spacing: 0.6px;
+            font-weight: 600;
+            display: none;
             align-items: center;
+            z-index: 100;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5);
         }
 
-        .label::before {
-            content: '';
-            display: inline-block;
+        .label-dot {
+            position: absolute;
             width: 4px;
             height: 4px;
             background: #00ffff;
-            margin-right: 5px;
+            border: 1px solid white;
             border-radius: 50%;
-            box-shadow: 0 0 5px #00ffff;
+            box-shadow: 0 0 6px rgba(0, 255, 255, 0.8);
+            pointer-events: none;
+            display: none;
+            z-index: 101;
+        }
+
+        .label-line {
+            position: absolute;
+            height: 1px;
+            background: linear-gradient(to right, rgba(255,255,255,0.8), rgba(255,255,255,0.1));
+            pointer-events: none;
+            display: none;
+            z-index: 99;
+            transform-origin: left center;
         }
 
         #labels-container {
@@ -188,8 +203,12 @@
 
         let annotations = []; // Array of {name, lat, lon, element, position}
         let activeCurves = []; // Array of curves for animation
+        let __startTime = performance.now();
+        let __lastRenderTs = performance.now();
+        let __lastResumeLogTs = performance.now();
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
+        let isMouseDown = false;
         let lastTime = Date.now();
         let isAutoRotatePaused = true; // Start paused
         // Distinguish between user-initiated pause and system-initiated pause (e.g., during app/network events)
@@ -776,9 +795,52 @@
             }
         }
 
-        let __lastRenderTs = performance.now();
-        let __lastResumeLogTs = 0;
-        let __startTime = performance.now();
+        function updateObjectOrientation(object, pos, tangent, isBooster, t_flip) {
+            const radial = pos.clone().normalize(); // Surface normal (up)
+            
+            let desiredDir;
+            if (isBooster) {
+                if (t_flip < 0.15) {
+                    // Stable Boostback Flip (Pitch only)
+                    // Use binormal (perpendicular to flight path and radial) as stable rotation axis
+                    const binormal = new THREE.Vector3().crossVectors(tangent, radial).normalize();
+                    
+                    // Fallback if tangent and radial are perfectly parallel (unlikely but possible)
+                    if (binormal.lengthSq() < 0.0001) {
+                        binormal.set(0, 1, 0);
+                        if (Math.abs(binormal.dot(radial)) > 0.9) binormal.set(1, 0, 0);
+                    }
+
+                    const angle = (t_flip / 0.15) * Math.PI; // 0 to 180 deg
+                    desiredDir = tangent.clone().applyAxisAngle(binormal, angle);
+                } else {
+                    // Engines-first for return
+                    desiredDir = tangent.clone().negate();
+                }
+            } else {
+                // Nose-first for main flight
+                desiredDir = tangent;
+            }
+
+            // Robust look-at with radial up reference to prevent disorienting roll
+            // If desiredDir and radial are parallel (vertical flight), use a stable fallback for 'up'
+            const dot = Math.abs(desiredDir.dot(radial));
+            let up = radial;
+            if (dot > 0.999) {
+                // Use a vector that is definitely not parallel to radial
+                if (Math.abs(radial.y) < 0.9) {
+                    up = new THREE.Vector3(0, 1, 0);
+                } else {
+                    up = new THREE.Vector3(1, 0, 0);
+                }
+            }
+
+            const m = new THREE.Matrix4();
+            m.lookAt(desiredDir, new THREE.Vector3(0,0,0), up);
+            object.quaternion.setFromRotationMatrix(m);
+            // Rocket model is +Y up, lookAt points +Z to target
+            object.rotateX(Math.PI / 2);
+        }
 
         function animate() {
             requestAnimationFrame(animate);
@@ -788,8 +850,6 @@
 
             // Optimization: Skip all processing if system is paused and no interaction is happening
             if (systemPaused && !userInteracting && !isInMomentum) {
-                // Still update time for clouds so they don't jump when resuming, 
-                // but we aren't rendering anyway so it's just a variable update.
                 return;
             }
 
@@ -844,6 +904,7 @@
                         let t;
                         const t_sep = ac.t_sep || 0.2;
                         let plumeVisible = false;
+                        const parts = ac.flare.parts || {};
 
                         if (ac.isBooster) {
                             // Booster only appears after separation
@@ -866,33 +927,46 @@
                             // Plume on during ascent (S1) and after separation (S2)
                             plumeVisible = true;
 
-                            // Separate stages: hide S1 and interstage on main rocket after separation
-                            const s1 = ac.flare.getObjectByName('stage1');
-                            const is = ac.flare.getObjectByName('interstage');
-                            const ow = ac.flare.getObjectByName('octoweb');
-                            if (s1) s1.visible = (t < t_sep);
-                            if (is) is.visible = (t < t_sep);
-                            if (ow) ow.visible = (t < t_sep);
+                            // Separate stages: hide S1, interstage, and octoweb on main rocket after separation
+                            // Using cached parts for perfect frame-sync
+                            if (parts.stage1) parts.stage1.visible = (t < t_sep);
+                            if (parts.interstage) parts.interstage.visible = (t < t_sep);
+                            if (parts.octoweb) parts.octoweb.visible = (t < t_sep);
                         }
 
-                        // Update plume animation
-                        const plume = ac.flare.getObjectByName('plume');
-                        if (plume) {
-                            plume.visible = plumeVisible;
+                        // Update plume animation using cached parts
+                        const plumeS1 = parts.plumeS1;
+                        const plumeS2 = parts.plumeS2;
+                        
+                        // Decide which plume to show
+                        let activePlume = null;
+                        if (ac.isBooster) {
+                            activePlume = plumeS1;
+                            if (plumeS2) plumeS2.visible = false;
+                        } else {
+                            if (t < t_sep) {
+                                activePlume = plumeS1;
+                                if (plumeS2) plumeS2.visible = false;
+                            } else {
+                                activePlume = plumeS2;
+                                if (plumeS1) plumeS1.visible = false;
+                            }
+                        }
+
+                        if (activePlume) {
+                            activePlume.visible = plumeVisible;
                             if (plumeVisible) {
                                 // Altitude-based expansion (simulating vacuum expansion)
-                                // Get current altitude from distance to center
                                 const currentDist = ac.flare.position.length();
-                                // Normalize expansion: 1.0 at sea level (1.0), up to 3.0 at high altitude
                                 const altitudeEffect = Math.max(0, (currentDist - 1.0) * 15.0);
                                 const expansion = 1.0 + Math.min(2.5, altitudeEffect);
                                 
                                 // Organic flicker/pulse for scale
                                 const flicker = 0.95 + Math.random() * 0.1;
                                 const lengthFlicker = 0.95 + Math.random() * 0.15;
-                                plume.scale.set(expansion * flicker, lengthFlicker, expansion * flicker);
+                                activePlume.scale.set(expansion * flicker, lengthFlicker, expansion * flicker);
 
-                                plume.traverse(child => {
+                                activePlume.traverse(child => {
                                     if (child.material && child.material.uniforms) {
                                         child.material.uniforms.time.value = absoluteTime;
                                     }
@@ -903,26 +977,9 @@
                         const pos = ac.curve.getPointAt(t);
                         ac.flare.position.copy(pos);
                         
-                        // Orientation: Point rocket along curve tangent
+                        // Use stable orientation helper
                         const tangent = ac.curve.getTangentAt(t).normalize();
-                        
-                        if (ac.isBooster) {
-                            // Booster flip logic:
-                            // At separation (t=0), it points head-first (+Y) along tangent.
-                            // It then flips to point engines-first (-Y) along tangent for the return flight.
-                            const q_forward = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                            const q_backward = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), tangent);
-                            
-                            if (t < 0.15) {
-                                // Smoothly flip over the first 15% of the return trajectory (Boostback flip)
-                                ac.flare.quaternion.copy(q_forward).slerp(q_backward, t / 0.15);
-                            } else {
-                                ac.flare.quaternion.copy(q_backward);
-                            }
-                        } else {
-                            // Main rocket always points head-first (+Y) along tangent
-                            ac.flare.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                        }
+                        updateObjectOrientation(ac.flare, pos, tangent, ac.isBooster, t);
                     }
                 });
             }
@@ -955,6 +1012,14 @@
                 el.textContent = loc.name;
                 container.appendChild(el);
 
+                const dot = document.createElement('div');
+                dot.className = 'label-dot';
+                container.appendChild(dot);
+
+                const line = document.createElement('div');
+                line.className = 'label-line';
+                container.appendChild(line);
+
                 // Convert lat/lon to 3D
                 const phi = (90 - loc.lat) * (Math.PI / 180);
                 const theta = (loc.lon + 180) * (Math.PI / 180);
@@ -966,9 +1031,16 @@
                 annotations.push({
                     name: loc.name,
                     position: new THREE.Vector3(x, y, z),
-                    element: el
+                    element: el,
+                    dot: dot,
+                    line: line,
+                    width: 0, 
+                    height: 0
                 });
             });
+            
+            // Force a quick layout measurement after a tiny delay if needed, 
+            // but for now we'll just measure in updateLabels if 0.
             console.log(`Set ${annotations.length} annotations`);
         }
 
@@ -979,6 +1051,8 @@
 
             const widthHalf = window.innerWidth / 2;
             const heightHalf = window.innerHeight / 2;
+
+            const visibleAnnos = [];
 
             annotations.forEach(anno => {
                 const pos = anno.position.clone();
@@ -995,45 +1069,114 @@
 
                 if (distToPoint > distToCenter && angle > horizonAngle) {
                     anno.element.style.display = 'none';
+                    if (anno.dot) anno.dot.style.display = 'none';
                     return;
                 }
 
                 // 2. Viewport Frustum / Bound check
-                pos.project(camera);
+                const screenPos = pos.clone();
+                screenPos.project(camera);
                 
-                // If behind camera (z > 1) or outside NDC range (-1 to 1)
-                if (pos.z > 1 || Math.abs(pos.x) > 1.1 || Math.abs(pos.y) > 1.1) {
+                if (screenPos.z > 1 || Math.abs(screenPos.x) > 1.1 || Math.abs(screenPos.y) > 1.1) {
                     anno.element.style.display = 'none';
+                    if (anno.dot) anno.dot.style.display = 'none';
                     return;
                 }
 
-                const x = (pos.x * widthHalf) + widthHalf;
-                const y = -(pos.y * heightHalf) + heightHalf;
+                const x = (screenPos.x * widthHalf) + widthHalf;
+                const y = -(screenPos.y * heightHalf) + heightHalf;
 
-                anno.element.style.display = 'flex';
-                anno.element.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                anno.screenPos = { x, y, z: screenPos.z, dist: distToPoint };
+                visibleAnnos.push(anno);
+            });
+
+            // Use a stable sort order (alphabetical) for consistent rendering.
+            visibleAnnos.sort((a, b) => a.name.localeCompare(b.name));
+
+            visibleAnnos.forEach(anno => {
+                const el = anno.element;
+                const dot = anno.dot;
+                const line = anno.line;
                 
+                el.style.display = 'flex';
+                // Higher z-index for closer labels
+                el.style.zIndex = 100 + Math.floor((2.5 - anno.screenPos.dist) * 10);
+
+                if (dot) {
+                    dot.style.display = 'block';
+                    dot.style.transform = `translate(-50%, -50%) translate(${anno.screenPos.x}px, ${anno.screenPos.y}px)`;
+                }
+
+                // Measure if not cached
+                if (!anno.width || anno.width === 0) {
+                    anno.width = el.offsetWidth;
+                    anno.height = el.offsetHeight;
+                }
+
+                // Fixed position: Right of the dot
+                let tx = anno.screenPos.x + 10;
+                let onRight = true;
+                // If not enough space on right, place on left
+                if (tx + anno.width > window.innerWidth - 10) {
+                    tx = anno.screenPos.x - anno.width - 10;
+                    onRight = false;
+                }
+                // Center vertically on the dot
+                let ty = anno.screenPos.y - anno.height / 2;
+
+                el.style.transform = `translate(${tx}px, ${ty}px)`;
+
                 // Fade based on distance
-                const opacity = Math.max(0, Math.min(1, (2.2 - distToPoint) * 2));
-                anno.element.style.opacity = opacity;
+                const opacity = Math.max(0, Math.min(1, (2.2 - anno.screenPos.dist) * 2));
+                el.style.opacity = opacity;
+                if (dot) dot.style.opacity = opacity;
+
+                // Update leader line
+                if (line) {
+                    const anchorX = onRight ? tx : tx + anno.width;
+                    const anchorY = anno.screenPos.y;
+                    const dx = anchorX - anno.screenPos.x;
+                    const dy = anchorY - anno.screenPos.y;
+                    const lineDist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (lineDist > 4) {
+                        line.style.display = 'block';
+                        line.style.width = `${lineDist}px`;
+                        line.style.transform = `translate(${anno.screenPos.x}px, ${anno.screenPos.y}px) rotate(${Math.atan2(dy, dx)}rad)`;
+                        line.style.opacity = opacity * 0.5;
+                    } else {
+                        line.style.display = 'none';
+                    }
+                }
+            });
+
+            // Hide unused lines and dots
+            annotations.forEach(anno => {
+                if (!visibleAnnos.includes(anno)) {
+                    if (anno.element) anno.element.style.display = 'none';
+                    if (anno.dot) anno.dot.style.display = 'none';
+                    if (anno.line) anno.line.style.display = 'none';
+                }
             });
         }
 
         function createFalcon9Model(isBooster = false) {
             const group = new THREE.Group();
+            group.parts = {};
             
             // Dimensions (scaled for the globe where R=1)
             const height = 0.18; // Even more scale (was 0.12)
             const radius = 0.008; // Even more scale (was 0.005)
             
             // 1. First Stage (Main body)
-            const stage1Height = isBooster ? height * 0.85 : height * 0.65;
+            const stage1Height = height * 0.65; // Consistent 0.65 for seamless transition
             const stage1Geo = new THREE.CylinderGeometry(radius, radius, stage1Height, 12);
             const stage1Mat = new THREE.MeshPhongMaterial({ color: 0xeeeeee }); // Off-white
             const stage1 = new THREE.Mesh(stage1Geo, stage1Mat);
             stage1.name = 'stage1';
             stage1.position.y = stage1Height / 2;
             group.add(stage1);
+            group.parts.stage1 = stage1;
             
             // 2. Interstage (Black part)
             const interstageHeight = height * 0.08;
@@ -1043,6 +1186,53 @@
             interstage.name = 'interstage';
             interstage.position.y = stage1Height + interstageHeight / 2;
             group.add(interstage);
+            group.parts.interstage = interstage;
+
+            const createPlume = (pRadius, pHeight, pName) => {
+                const plumeGroup = new THREE.Group();
+                plumeGroup.name = pName;
+                
+                // Outer plume (wider, softer orange)
+                const outerPlumeGeo = new THREE.ConeGeometry(pRadius * 1.8, pHeight, 16);
+                outerPlumeGeo.translate(0, -pHeight / 2, 0);
+                const outerPlumeMat = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        colorCore: { value: new THREE.Color(0xffaa44) },
+                        colorOuter: { value: new THREE.Color(0xff4400) }
+                    },
+                    vertexShader: PLUME_VERTEX_SHADER,
+                    fragmentShader: PLUME_FRAGMENT_SHADER,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+                const outerPlume = new THREE.Mesh(outerPlumeGeo, outerPlumeMat);
+                plumeGroup.add(outerPlume);
+
+                // Inner core (narrower, brighter cyan-white)
+                const innerPlumeGeo = new THREE.ConeGeometry(pRadius * 0.7, pHeight * 0.8, 16);
+                innerPlumeGeo.translate(0, -pHeight * 0.4, 0);
+                const innerPlumeMat = new THREE.ShaderMaterial({
+                    uniforms: {
+                        time: { value: 0 },
+                        colorCore: { value: new THREE.Color(0xffffff) },
+                        colorOuter: { value: new THREE.Color(0xffffaa) }
+                    },
+                    vertexShader: PLUME_VERTEX_SHADER,
+                    fragmentShader: PLUME_FRAGMENT_SHADER,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    side: THREE.DoubleSide,
+                    depthWrite: false
+                });
+                const innerPlume = new THREE.Mesh(innerPlumeGeo, innerPlumeMat);
+                plumeGroup.add(innerPlume);
+                
+                plumeGroup.visible = false;
+                return plumeGroup;
+            };
             
             if (!isBooster) {
                 // 3. Second Stage
@@ -1053,6 +1243,7 @@
                 stage2.name = 'stage2';
                 stage2.position.y = stage1Height + interstageHeight + stage2Height / 2;
                 group.add(stage2);
+                group.parts.stage2 = stage2;
                 
                 // 4. Fairing (Ogive shape simplified as cone)
                 const fairingHeight = height * 0.15;
@@ -1062,6 +1253,13 @@
                 fairing.name = 'fairing';
                 fairing.position.y = stage1Height + interstageHeight + stage2Height + fairingHeight / 2;
                 group.add(fairing);
+                group.parts.fairing = fairing;
+
+                // 9. Stage 2 Plume
+                const plumeS2 = createPlume(radius * 0.8, height * 0.3, 'plumeS2');
+                plumeS2.position.y = stage1Height + interstageHeight;
+                group.add(plumeS2);
+                group.parts.plumeS2 = plumeS2;
             } else {
                 // 5. Grid Fins (for booster - deployed)
                 const finSize = radius * 1.5;
@@ -1096,52 +1294,13 @@
             octo.name = 'octoweb';
             octo.position.y = -octoHeight / 2;
             group.add(octo);
+            group.parts.octoweb = octo;
 
-            // 8. Engine Plume
-            const plumeGroup = new THREE.Group();
-            plumeGroup.name = 'plume';
-            
-            // Outer plume (wider, softer orange)
-            const outerPlumeGeo = new THREE.ConeGeometry(radius * 1.8, height * 0.45, 16);
-            outerPlumeGeo.translate(0, -height * 0.225, 0);
-            const outerPlumeMat = new THREE.ShaderMaterial({
-                uniforms: {
-                    time: { value: 0 },
-                    colorCore: { value: new THREE.Color(0xffaa44) },
-                    colorOuter: { value: new THREE.Color(0xff4400) }
-                },
-                vertexShader: PLUME_VERTEX_SHADER,
-                fragmentShader: PLUME_FRAGMENT_SHADER,
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            });
-            const outerPlume = new THREE.Mesh(outerPlumeGeo, outerPlumeMat);
-            plumeGroup.add(outerPlume);
-
-            // Inner core (narrower, brighter cyan-white)
-            const innerPlumeGeo = new THREE.ConeGeometry(radius * 0.7, height * 0.35, 16);
-            innerPlumeGeo.translate(0, -height * 0.175, 0);
-            const innerPlumeMat = new THREE.ShaderMaterial({
-                uniforms: {
-                    time: { value: 0 },
-                    colorCore: { value: new THREE.Color(0xffffff) },
-                    colorOuter: { value: new THREE.Color(0xffffaa) }
-                },
-                vertexShader: PLUME_VERTEX_SHADER,
-                fragmentShader: PLUME_FRAGMENT_SHADER,
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            });
-            const innerPlume = new THREE.Mesh(innerPlumeGeo, innerPlumeMat);
-            plumeGroup.add(innerPlume);
-
-            plumeGroup.position.y = -octoHeight;
-            plumeGroup.visible = false;
-            group.add(plumeGroup);
+            // 8. Stage 1 Plume
+            const plumeS1 = createPlume(radius, height * 0.45, 'plumeS1');
+            plumeS1.position.y = -octoHeight;
+            group.add(plumeS1);
+            group.parts.plumeS1 = plumeS1;
             
             return group;
         }
@@ -1253,6 +1412,7 @@
             console.log("Landing type:", trajectoryData.landing_type);
 
             try {
+                __startTime = performance.now();
                 activeCurves = []; // Reset active curves
                 // Create trajectory points from the curved lat/lon data
                 const points = [];
@@ -1588,7 +1748,6 @@
         });
 
         // Make globe interactive
-        let isMouseDown = false;
         let previousMousePosition = { x: 0, y: 0 };
 
         document.addEventListener('mousedown', (event) => {
@@ -1888,3 +2047,4 @@
 </body>
 
 </html>
+

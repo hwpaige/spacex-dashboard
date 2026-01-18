@@ -474,16 +474,20 @@ def save_launch_cache(kind: str, data_list: list, timestamp=None):
 
 
 def _ang_dist_deg(a, b):
-    """Calculate the angular distance between two points in degrees."""
+    """Calculate the angular distance between two points in degrees, handling anti-meridian."""
     lat1 = math.radians(a['lat']); lon1 = math.radians(a['lon'])
     lat2 = math.radians(b['lat']); lon2 = math.radians(b['lon'])
-    h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin((lon2-lon1)/2)**2
+    dlon = math.radians((b['lon'] - a['lon'] + 180) % 360 - 180)
+    h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
     return math.degrees(2 * math.atan2(math.sqrt(h), math.sqrt(max(1e-12, 1-h))))
 
 def _bearing_deg(lat1, lon1, lat2, lon2):
-    """Calculate the initial bearing from point 1 to point 2 in degrees."""
-    phi1 = math.radians(lat1); phi2 = math.radians(lat2); dlon = math.radians(lon2-lon1)
-    return (math.degrees(math.atan2(math.sin(dlon)*math.cos(phi2), math.cos(phi1)*math.sin(phi2)-math.sin(phi1)*math.cos(phi2)*math.cos(dlon))) + 360) % 360
+    """Calculate the initial bearing from point 1 to point 2 in degrees, handling anti-meridian."""
+    phi1 = math.radians(lat1); phi2 = math.radians(lat2)
+    dlon = math.radians((lon2 - lon1 + 180) % 360 - 180)
+    y = math.sin(dlon) * math.cos(phi2)
+    x = math.cos(phi1) * math.sin(phi2) - math.sin(phi1) * math.cos(phi2) * math.cos(dlon)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
 
 def choose_orbit_alt_km(orbit_label):
     """Estimate a physically sensible visual altitude for a given orbit type."""
@@ -1720,7 +1724,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         launch_site.get('lat', 0.0)
     )
 
-    ORBIT_CACHE_VERSION = 'v232-boostback-v1'
+    ORBIT_CACHE_VERSION = 'v240-orientation-flip'
     landing_type = next_launch.get('landing_type')
     landing_loc = next_launch.get('landing_location')
     cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}:{landing_loc}"
@@ -1759,80 +1763,95 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     def get_radius(progress, target_radius, offset=0.0):
         """Calculate visual radius with bulge for a given progress (0-1)."""
         TRAJ_START_RADIUS = 1.012  # Slightly higher to ensure visibility
-        TRAJ_BULGE_MAX = 0.025     # Slightly more bulge for better 3D look
-        base_interp = TRAJ_START_RADIUS + (target_radius - TRAJ_START_RADIUS) * progress
-        bulge = TRAJ_BULGE_MAX * math.sin(progress * math.pi)
-        radius = base_interp + bulge + offset
-        # Keep a tiny margin below target to avoid z-fighting with orbit line
-        if radius > target_radius - 0.0006 + offset:
-            radius = target_radius - 0.0006 + offset
+        # Monotonic radius approach: 
+        # radius = start + (target-start) * (t + bulge_factor * sin(pi*t))
+        # This ensures it's always increasing and never exceeds target_radius.
+        diff = target_radius - TRAJ_START_RADIUS
+        
+        # bulge_factor of 0.3 means at t=0.5, we are at 50% + 30% = 80% of the way to target.
+        # This gives a nice "climb" profile without overshooting.
+        bulge_factor = 0.3
+        radius = TRAJ_START_RADIUS + diff * (progress + bulge_factor * math.sin(progress * math.pi)) + offset
+        
+        # Still keep a tiny margin below target to avoid z-fighting with orbit line
+        if progress > 0.95 and radius > target_radius - 0.0005 + offset:
+            radius = target_radius - 0.0005 + offset
         return radius
 
     def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default', start_bearing_deg=None, end_bearing_deg=None):
         points = []
-        start_lat = start_point['lat']
-        start_lon = start_point['lon']
-        end_lat = end_point['lat']
-        end_lon = end_point['lon']
-
-        if start_bearing_deg is not None:
-            # Project forward from start to get a control point that respects momentum
-            dist = _ang_dist_deg(start_point, end_point)
-            # Carry forward momentum: use a fraction of the distance to the target, 
-            # but cap it to avoid extreme overshoots on short returns.
-            L = max(0.5, dist * 0.3)
-            br = math.radians(start_bearing_deg)
-            cos_lat = max(1e-6, math.cos(math.radians(start_lat)))
-            control_lat = start_lat + L * math.cos(br)
-            control_lon = (start_lon + (L * math.sin(br)) / cos_lat + 180.0) % 360.0 - 180.0
-        elif end_bearing_deg is not None:
-            lat1 = math.radians(start_lat); lon1 = math.radians(start_lon)
-            lat2 = math.radians(end_lat);   lon2 = math.radians(end_lon)
-            dlat = lat2 - lat1
-            dlon = lon2 - lon1
-            a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(max(1e-12, 1-a)))
-            ang_deg = math.degrees(c)
-            L = min(20.0, max(5.0, ang_deg / 3.0))
-            br = math.radians(end_bearing_deg)
-            cos_lat = max(1e-6, math.cos(math.radians(end_lat)))
-            dlat_deg = L * math.cos(br)
-            dlon_deg = (L * math.sin(br)) / cos_lat
-            control_lat = end_lat - dlat_deg
-            control_lon = (end_lon - dlon_deg + 180.0) % 360.0 - 180.0
+        lat0, lon0 = start_point['lat'], start_point['lon']
+        lat3, lon3 = end_point['lat'], end_point['lon']
+        
+        # Calculate angular distance
+        dist = _ang_dist_deg(start_point, end_point)
+        # Control point distance (roughly 1/3 of the total distance)
+        L = min(20.0, max(3.0, dist / 3.0))
+        
+        # Normalize end longitude for shortest path
+        lon3_adj = lon0 + (lon3 - lon0 + 180) % 360 - 180
+        
+        # We use a Cubic Bezier if possible for C1 continuity at both ends
+        if start_bearing_deg is not None or end_bearing_deg is not None:
+            # P1: Start control point
+            if start_bearing_deg is not None:
+                br1 = math.radians(start_bearing_deg)
+                cos0 = max(1e-6, math.cos(math.radians(lat0)))
+                p1_lat = lat0 + L * math.cos(br1)
+                p1_lon = lon0 + (L * math.sin(br1)) / cos0
+            else:
+                # Fallback: simple linear interp
+                p1_lat = lat0 + (lat3 - lat0) / 3
+                p1_lon = lon0 + (lon3_adj - lon0) / 3
+                
+            # P2: End control point
+            if end_bearing_deg is not None:
+                br2 = math.radians(end_bearing_deg)
+                cos3 = max(1e-6, math.cos(math.radians(lat3)))
+                p2_lat = lat3 - L * math.cos(br2)
+                p2_lon = lon3_adj - (L * math.sin(br2)) / cos3
+            else:
+                # Fallback: simple linear interp
+                p2_lat = lat3 - (lat3 - lat0) / 3
+                p2_lon = lon3_adj - (lon3_adj - lon0) / 3
+                
+            for i in range(num_points + 1):
+                t = i / num_points
+                it = 1.0 - t
+                # Cubic Bezier formula: (1-t)^3*P0 + 3(1-t)^2*t*P1 + 3(1-t)*t^2*P2 + t^3*P3
+                lat = it**3 * lat0 + 3*it**2*t * p1_lat + 3*it*t**2 * p2_lat + t**3 * lat3
+                lon = it**3 * lon0 + 3*it**2*t * p1_lon + 3*it*t**2 * p2_lon + t**3 * lon3_adj
+                lon = (lon + 180) % 360 - 180
+                points.append({'lat': lat, 'lon': lon})
         else:
-            mid_lat = (start_lat + end_lat) / 2
-            mid_lon = (start_lon + end_lon) / 2
-            dist = _ang_dist_deg(start_point, end_point)
-            
-            # Scale control point offset based on distance
+            # Fallback to the old quadratic logic for the initial "rough" trajectory
+            mid_lat = (lat0 + lat3) / 2
+            mid_lon = (lon0 + lon3_adj) / 2
             offset = max(5, min(30, dist * 0.4))
             
             if orbit_type == 'polar':
-                control_lat = max(-85.0, mid_lat - offset)
-                control_lon = mid_lon - offset/2
+                c_lat = max(-85.0, mid_lat - offset)
+                c_lon = mid_lon - offset/2
             elif orbit_type == 'equatorial':
-                # Aim more towards equator
-                target_equator_lat = 0
-                control_lat = (mid_lat + target_equator_lat) / 2
-                control_lon = mid_lon + offset
+                c_lat = (mid_lat + 0) / 2
+                c_lon = mid_lon + offset
             elif orbit_type == 'gto':
-                control_lat = mid_lat + offset
-                control_lon = mid_lon + offset * 2
+                c_lat = mid_lat + offset
+                c_lon = mid_lon + offset * 2
             elif orbit_type == 'suborbital':
-                # Suborbital/Booster return needs a tighter arc
-                control_lat = mid_lat + offset/4
-                control_lon = mid_lon + offset/4
+                c_lat = mid_lat + offset/4
+                c_lon = mid_lon + offset/4
             else:
-                control_lat = mid_lat + offset
-                control_lon = mid_lon + offset * 1.5
-
-        for i in range(num_points + 1):
-            t = i / num_points
-            lat = (1-t)**2 * start_lat + 2*(1-t)*t * control_lat + t**2 * end_lat
-            lon = (1-t)**2 * start_lon + 2*(1-t)*t * control_lon + t**2 * end_lon
-            lon = (lon + 180) % 360 - 180
-            points.append({'lat': lat, 'lon': lon})
+                c_lat = mid_lat + offset
+                c_lon = mid_lon + offset * 1.5
+            
+            for i in range(num_points + 1):
+                t = i / num_points
+                it = 1.0 - t
+                lat = it**2 * lat0 + 2*it*t * c_lat + t**2 * lat3
+                lon = it**2 * lon0 + 2*it*t * c_lon + t**2 * lon3_adj
+                lon = (lon + 180) % 360 - 180
+                points.append({'lat': lat, 'lon': lon})
         return points
 
     def generate_orbit_path_inclined(trajectory, orbit_label, inclination_deg, num_points=90):
@@ -1890,22 +1909,33 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             snapped_end = orbit_path[orbit_idx]
             end_bearing = _bearing_deg(snapped_end['lat'], snapped_end['lon'], orbit_path[(orbit_idx+1)%len(orbit_path)]['lat'], orbit_path[(orbit_idx+1)%len(orbit_path)]['lon'])
             
-            densified_n = max(40, int(len(trajectory) * 1.25))
+            # Refined Refinement: Use both start and end bearings for a perfect C1 transition
+            start_bearing = _bearing_deg(trajectory[0]['lat'], trajectory[0]['lon'], trajectory[1]['lat'], trajectory[1]['lon'])
+            densified_n = 120 # High resolution for smooth curves
             new_traj = generate_curved_trajectory(trajectory[0], snapped_end, densified_n, 
                                                 orbit_type=('polar' if normalized_orbit == 'LEO-Polar' else ('equatorial' if normalized_orbit == 'LEO-Equatorial' else ('gto' if normalized_orbit == 'GTO' else 'default'))),
+                                                start_bearing_deg=start_bearing,
                                                 end_bearing_deg=end_bearing)
-            
-            tail_len = max(6, int(0.15 * len(new_traj)))
-            orbit_tail = [orbit_path[(orbit_idx - (tail_len-1-j)) % len(orbit_path)] for j in range(tail_len)]
-            new_traj[-tail_len:] = orbit_tail
             trajectory = new_traj
         except Exception as e:
             logger.warning(f"Tangent match failed: {e}")
 
-    # Add radii to main trajectory
+    # 1. Prepend vertical liftoff segment (10 points)
+    lat0, lon0 = trajectory[0]['lat'], trajectory[0]['lon']
+    vertical_segment = []
+    num_v = 10
+    for i in range(num_v):
+        # Radius from surface (1.0) to start of trajectory (1.012)
+        r = 1.0 + (1.012 - 1.0) * (i / num_v)
+        vertical_segment.append({'lat': lat0, 'lon': lon0, 'r': r})
+    
+    # 2. Add radii to main trajectory
     for i, p in enumerate(trajectory):
         progress = i / (len(trajectory) - 1)
         p['r'] = get_radius(progress, target_r)
+
+    # 3. Combine them
+    trajectory = vertical_segment + trajectory
 
     # Booster Return Trajectory (RTLS vs ASDS vs Expendable simulation)
     booster_trajectory = []
