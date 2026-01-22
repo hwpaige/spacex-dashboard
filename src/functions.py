@@ -102,7 +102,6 @@ __all__ = [
     "LAST_CONNECTED_NETWORK_FILE",
     "F1_TEAM_COLORS",
     "location_settings",
-    "spacex_locations",
     "radar_locations",
     "circuit_coords",
     "get_encryption_key",
@@ -293,15 +292,6 @@ location_settings = {
     'Cape': {'lat': 28.392, 'lon': -80.605, 'timezone': 'America/New_York'},
     'Hawthorne': {'lat': 33.916, 'lon': -118.352, 'timezone': 'America/Los_Angeles'}
 }
-
-spacex_locations = [
-    {'name': 'Starbase', 'lat': 25.9975, 'lon': -97.1566, 'type': 'Launch Site'},
-    {'name': 'Kennedy Space Center', 'lat': 28.608, 'lon': -80.604, 'type': 'Launch Site'},
-    {'name': 'Cape Canaveral', 'lat': 28.488, 'lon': -80.572, 'type': 'Launch Site'},
-    {'name': 'Vandenberg', 'lat': 34.632, 'lon': -120.611, 'type': 'Launch Site'},
-    {'name': 'Hawthorne HQ', 'lat': 33.921, 'lon': -118.327, 'type': 'HQ'},
-    {'name': 'McGregor', 'lat': 31.395, 'lon': -97.461, 'type': 'Test Site'}
-]
 
 # Radar URLs
 radar_locations = {
@@ -1720,7 +1710,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         launch_site.get('lat', 0.0)
     )
 
-    ORBIT_CACHE_VERSION = 'v232-boostback-v1'
+    ORBIT_CACHE_VERSION = 'v230-hybrid-ro'
     landing_type = next_launch.get('landing_type')
     landing_loc = next_launch.get('landing_location')
     cache_key = f"{ORBIT_CACHE_VERSION}:{matched_site_key}:{normalized_orbit}:{round(assumed_incl,1)}:{landing_type}:{landing_loc}"
@@ -1742,8 +1732,6 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'launch_site': cached.get('launch_site', launch_site),
             'trajectory': cached.get('trajectory', []),
             'booster_trajectory': cached.get('booster_trajectory', []),
-            'landing_site_coords': cached.get('landing_site_coords'),
-            'is_asds': cached.get('is_asds', False),
             'sep_idx': cached.get('sep_idx'),
             'orbit_path': cached.get('orbit_path', []),
             'orbit': orbit or cached.get('orbit', normalized_orbit),
@@ -1768,24 +1756,14 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             radius = target_radius - 0.0006 + offset
         return radius
 
-    def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default', start_bearing_deg=None, end_bearing_deg=None):
+    def generate_curved_trajectory(start_point, end_point, num_points, orbit_type='default', end_bearing_deg=None):
         points = []
         start_lat = start_point['lat']
         start_lon = start_point['lon']
         end_lat = end_point['lat']
         end_lon = end_point['lon']
 
-        if start_bearing_deg is not None:
-            # Project forward from start to get a control point that respects momentum
-            dist = _ang_dist_deg(start_point, end_point)
-            # Carry forward momentum: use a fraction of the distance to the target, 
-            # but cap it to avoid extreme overshoots on short returns.
-            L = max(0.5, dist * 0.3)
-            br = math.radians(start_bearing_deg)
-            cos_lat = max(1e-6, math.cos(math.radians(start_lat)))
-            control_lat = start_lat + L * math.cos(br)
-            control_lon = (start_lon + (L * math.sin(br)) / cos_lat + 180.0) % 360.0 - 180.0
-        elif end_bearing_deg is not None:
+        if end_bearing_deg is not None:
             lat1 = math.radians(start_lat); lon1 = math.radians(start_lon)
             lat2 = math.radians(end_lat);   lon2 = math.radians(end_lon)
             dlat = lat2 - lat1
@@ -1924,11 +1902,6 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                 
             sep_point = ascent_part[-1]
             sep_radius = sep_point['r']
-            
-            # Calculate momentum bearing at separation
-            p_prev = trajectory[max(0, sep_idx-1)]
-            p_sep = trajectory[sep_idx]
-            sep_bearing = _bearing_deg(p_prev['lat'], p_prev['lon'], p_sep['lat'], p_sep['lon'])
 
             l_type = (landing_type or '').upper()
             l_loc = (next_launch.get('landing_location') or '').upper()
@@ -1942,7 +1915,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                 # Droneship landing: continues downrange to a point further along the trajectory
                 landing_idx = min(len(trajectory) - 1, max(sep_idx + 3, len(trajectory) // 3))
                 landing_point = trajectory[landing_idx]
-                return_part = generate_curved_trajectory(sep_point, landing_point, 20, orbit_type='suborbital', start_bearing_deg=sep_bearing)
+                return_part = generate_curved_trajectory(sep_point, landing_point, 20, orbit_type='suborbital')
                 
                 # Add radius to return part (ballistic arc)
                 for i, p in enumerate(return_part):
@@ -1951,26 +1924,28 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.02 * math.sin(prog * math.pi)
                 
                 booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated ASDS booster trajectory (info: {combined_landing_info})")
             elif any(k in combined_landing_info for k in rtls_keywords):
                 # RTLS/Catch: returns to launch site
-                # start_bearing_deg=sep_bearing ensures it carries forward before turning back
-                return_part = generate_curved_trajectory(sep_point, launch_site, 25, orbit_type='suborbital', start_bearing_deg=sep_bearing)
+                return_part = generate_curved_trajectory(sep_point, launch_site, 25, orbit_type='suborbital')
                 for i, p in enumerate(return_part):
                     prog = i / (len(return_part) - 1)
                     # Higher arc for RTLS boostback (~300km peak)
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.03 * math.sin(prog * math.pi)
                 
                 booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated RTLS/Catch booster trajectory (info: {combined_landing_info})")
             elif any(k in combined_landing_info for k in ['OCEAN', 'SPLASHDOWN']):
                 landing_idx = min(len(trajectory) - 1, max(sep_idx + 2, len(trajectory) // 4))
                 landing_point = trajectory[landing_idx]
-                return_part = generate_curved_trajectory(sep_point, landing_point, 15, orbit_type='suborbital', start_bearing_deg=sep_bearing)
+                return_part = generate_curved_trajectory(sep_point, landing_point, 15, orbit_type='suborbital')
                 for i, p in enumerate(return_part):
                     prog = i / (len(return_part) - 1)
                     p['r'] = sep_radius + (1.012 - sep_radius) * prog + 0.015 * math.sin(prog * math.pi)
                 booster_trajectory = return_part
+                sep_idx = 0
                 logger.info(f"Generated Ocean splashdown booster trajectory (type: {landing_type})")
             else:
                 # Expendable/Unknown: no return trajectory to show
@@ -1980,23 +1955,10 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         except Exception as e:
             logger.warning(f"Booster trajectory generation failed: {e}")
 
-    # Determine landing site and type for frontend rendering
-    landing_site_coords = None
-    is_asds = False
-    if booster_trajectory:
-        landing_site_coords = booster_trajectory[-1]
-        l_type = (landing_type or '').upper()
-        l_loc = (next_launch.get('landing_location') or '').upper()
-        combined_info = f"{l_type} {l_loc}"
-        asds_keywords = ['ASDS', 'DRONE', 'SHIP', 'OCISLY', 'JRTI', 'ASOG', 'GRAVITAS', 'INSTRUCTIONS', 'STILL LOVE YOU']
-        is_asds = any(k in combined_info for k in asds_keywords)
-
     result = {
         'launch_site': launch_site,
         'trajectory': trajectory,
         'booster_trajectory': booster_trajectory,
-        'landing_site_coords': landing_site_coords,
-        'is_asds': is_asds,
         'sep_idx': sep_idx,
         'orbit_path': orbit_path,
         'orbit': orbit,
@@ -2012,15 +1974,13 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'launch_site': launch_site,
             'trajectory': trajectory,
             'booster_trajectory': booster_trajectory,
-            'landing_site_coords': landing_site_coords,
-            'is_asds': is_asds,
             'sep_idx': sep_idx,
             'orbit_path': orbit_path,
             'orbit': normalized_orbit,
             'inclination_deg': assumed_incl,
             'landing_type': landing_type,
             'landing_location': next_launch.get('landing_location'),
-            'model': 'v11-plume-ready'
+            'model': 'v10-sep-dot-optimized'
         }
         save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
     except Exception as e:

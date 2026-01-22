@@ -53,44 +53,6 @@
         body.light-mode #playPauseBtn:hover {
             color: black;
         }
-
-        .label {
-            position: absolute;
-            color: white;
-            padding: 2px 5px;
-            background: rgba(0, 0, 0, 0.6);
-            border-radius: 4px;
-            font-size: 9px;
-            white-space: nowrap;
-            pointer-events: none;
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            font-weight: bold;
-            display: flex;
-            align-items: center;
-        }
-
-        .label::before {
-            content: '';
-            display: inline-block;
-            width: 4px;
-            height: 4px;
-            background: #00ffff;
-            margin-right: 5px;
-            border-radius: 50%;
-            box-shadow: 0 0 5px #00ffff;
-        }
-
-        #labels-container {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
-            z-index: 100;
-        }
     </style>
     <script>
         // Lightweight loader that ensures THREE is available even if we started offline.
@@ -132,62 +94,10 @@
 </head>
 
 <body>
-    <div id="labels-container"></div>
     <button id="playPauseBtn"><i class="fas fa-play"></i></button>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let cloudUniforms, cloudMaterial, loadCloudTextureFunc;
-        
-        const PLUME_VERTEX_SHADER = `
-            varying vec2 vUv;
-            void main() {
-                vUv = uv;
-                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-            }
-        `;
-
-        const PLUME_FRAGMENT_SHADER = `
-            uniform float time;
-            uniform vec3 colorCore;
-            uniform vec3 colorOuter;
-            varying vec2 vUv;
-
-            float hash(vec2 p) {
-                return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-            }
-
-            void main() {
-                float d = vUv.y; // 1 at tip (nozzle), 0 at base (far end)
-                
-                // Turbulence
-                float t = time * 25.0;
-                float noise = hash(vUv * 5.0 + vec2(0.0, -t * 0.05)) * 0.15;
-                noise += hash(vUv * 10.0 + vec2(0.0, -t * 0.1)) * 0.05;
-                
-                // Shape: bright core that fades out
-                float core = pow(d, 2.5); // Sharp fade from nozzle
-                float alpha = core * (0.8 + noise);
-                
-                // Edge softness (vUv.x is 0..1 around)
-                float edge = sin(vUv.x * 3.14159);
-                alpha *= pow(edge, 0.4);
-
-                // Gradient
-                vec3 color = mix(colorOuter, colorCore, core);
-                
-                // Mach disk simulation (subtle bright pulses along the length)
-                float mach = sin(d * 30.0 - time * 25.0) * 0.5 + 0.5;
-                color += colorCore * pow(mach, 8.0) * core * 0.4;
-                
-                // Flicker pulse
-                color *= (0.85 + 0.15 * sin(time * 50.0));
-
-                gl_FragColor = vec4(color, alpha * 0.9);
-            }
-        `;
-
-        let annotations = []; // Array of {name, lat, lon, element, position}
-        let activeCurves = []; // Array of curves for animation
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
@@ -616,28 +526,6 @@
                         directionalLight.position.set(1, 1, 1);
                         scene.add(directionalLight);
 
-                        // Add Permanent Droneships
-                        console.log("Adding permanent droneships to East and West coasts...");
-                        const droneshipLocations = [
-                            { name: 'OCISLY (East)', lat: 28.45, lon: -79.67 }, // Atlantic
-                            { name: 'JRTI (West)', lat: 33.72, lon: -119.50 }   // Pacific
-                        ];
-
-                        droneshipLocations.forEach(loc => {
-                            const ship = createDroneshipModel();
-                            const phi = (90 - loc.lat) * (Math.PI / 180);
-                            const theta = (loc.lon + 180) * (Math.PI / 180);
-                            const radius = 1.002;
-                            const x = -(radius * Math.sin(phi) * Math.cos(theta));
-                            const z = radius * Math.sin(phi) * Math.sin(theta);
-                            const y = radius * Math.cos(phi);
-                            const pos = new THREE.Vector3(x, y, z);
-                            
-                            ship.position.copy(pos);
-                            ship.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), pos.clone().normalize());
-                            globe.add(ship);
-                        });
-
                         // Start animation
                         animate();
                     }
@@ -835,101 +723,8 @@
                 }
             }
 
-            // Animate trajectory rocket models
-            if (trajectoryGroup) {
-                const t_main = (absoluteTime * 0.05) % 1.0; // Slower speed (was 0.15)
-                
-                activeCurves.forEach(ac => {
-                    if (ac.curve && ac.flare) {
-                        let t;
-                        const t_sep = ac.t_sep || 0.2;
-                        let plumeVisible = false;
-
-                        if (ac.isBooster) {
-                            // Booster only appears after separation
-                            if (t_main < t_sep) {
-                                ac.flare.visible = false;
-                                return;
-                            } else {
-                                ac.flare.visible = true;
-                                // Map t_main [t_sep, 1.0] to t [0.0, 1.0]
-                                t = (t_main - t_sep) / (1.0 - t_sep);
-                                
-                                // Booster Burns: Boostback (start), Entry (mid), and Landing (end)
-                                plumeVisible = (t < 0.12 || (t > 0.45 && t < 0.55) || t > 0.88);
-                            }
-                        } else {
-                            // Main rocket follows t_main
-                            t = t_main;
-                            ac.flare.visible = true;
-                            
-                            // Plume on during ascent (S1) and after separation (S2)
-                            plumeVisible = true;
-
-                            // Separate stages: hide S1 and interstage on main rocket after separation
-                            const s1 = ac.flare.getObjectByName('stage1');
-                            const is = ac.flare.getObjectByName('interstage');
-                            const ow = ac.flare.getObjectByName('octoweb');
-                            if (s1) s1.visible = (t < t_sep);
-                            if (is) is.visible = (t < t_sep);
-                            if (ow) ow.visible = (t < t_sep);
-                        }
-
-                        // Update plume animation
-                        const plume = ac.flare.getObjectByName('plume');
-                        if (plume) {
-                            plume.visible = plumeVisible;
-                            if (plumeVisible) {
-                                // Altitude-based expansion (simulating vacuum expansion)
-                                // Get current altitude from distance to center
-                                const currentDist = ac.flare.position.length();
-                                // Normalize expansion: 1.0 at sea level (1.0), up to 3.0 at high altitude
-                                const altitudeEffect = Math.max(0, (currentDist - 1.0) * 15.0);
-                                const expansion = 1.0 + Math.min(2.5, altitudeEffect);
-                                
-                                // Organic flicker/pulse for scale
-                                const flicker = 0.95 + Math.random() * 0.1;
-                                const lengthFlicker = 0.95 + Math.random() * 0.15;
-                                plume.scale.set(expansion * flicker, lengthFlicker, expansion * flicker);
-
-                                plume.traverse(child => {
-                                    if (child.material && child.material.uniforms) {
-                                        child.material.uniforms.time.value = absoluteTime;
-                                    }
-                                });
-                            }
-                        }
-
-                        const pos = ac.curve.getPointAt(t);
-                        ac.flare.position.copy(pos);
-                        
-                        // Orientation: Point rocket along curve tangent
-                        const tangent = ac.curve.getTangentAt(t).normalize();
-                        
-                        if (ac.isBooster) {
-                            // Booster flip logic:
-                            // At separation (t=0), it points head-first (+Y) along tangent.
-                            // It then flips to point engines-first (-Y) along tangent for the return flight.
-                            const q_forward = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                            const q_backward = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), tangent);
-                            
-                            if (t < 0.15) {
-                                // Smoothly flip over the first 15% of the return trajectory (Boostback flip)
-                                ac.flare.quaternion.copy(q_forward).slerp(q_backward, t / 0.15);
-                            } else {
-                                ac.flare.quaternion.copy(q_backward);
-                            }
-                        } else {
-                            // Main rocket always points head-first (+Y) along tangent
-                            ac.flare.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), tangent);
-                        }
-                    }
-                });
-            }
-
             if (renderer && scene && camera) {
                 renderer.render(scene, camera);
-                updateLabels();
             }
 
             // Track last render timestamp for watchdog
@@ -940,280 +735,6 @@
                 console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
                 __lastResumeLogTs = now;
             }
-        }
-
-        function setAnnotations(locationList) {
-            const container = document.getElementById('labels-container');
-            container.innerHTML = '';
-            annotations = [];
-
-            if (!locationList) return;
-
-            locationList.forEach(loc => {
-                const el = document.createElement('div');
-                el.className = 'label';
-                el.textContent = loc.name;
-                container.appendChild(el);
-
-                // Convert lat/lon to 3D
-                const phi = (90 - loc.lat) * (Math.PI / 180);
-                const theta = (loc.lon + 180) * (Math.PI / 180);
-                const radius = 1.002; // Slightly above surface
-                const x = -(radius * Math.sin(phi) * Math.cos(theta));
-                const z = radius * Math.sin(phi) * Math.sin(theta);
-                const y = radius * Math.cos(phi);
-
-                annotations.push({
-                    name: loc.name,
-                    position: new THREE.Vector3(x, y, z),
-                    element: el
-                });
-            });
-            console.log(`Set ${annotations.length} annotations`);
-        }
-
-        window.setAnnotations = setAnnotations;
-
-        function updateLabels() {
-            if (!globe || !camera || !annotations.length) return;
-
-            const widthHalf = window.innerWidth / 2;
-            const heightHalf = window.innerHeight / 2;
-
-            annotations.forEach(anno => {
-                const pos = anno.position.clone();
-                globe.localToWorld(pos);
-
-                // 1. Perspective Occlusion (Behind the Earth)
-                const cameraToPoint = pos.clone().sub(camera.position);
-                const distToPoint = cameraToPoint.length();
-                const cameraToCenter = new THREE.Vector3(0, 0, 0).sub(camera.position);
-                const distToCenter = cameraToCenter.length();
-                
-                const angle = cameraToCenter.angleTo(cameraToPoint);
-                const horizonAngle = Math.asin(1.0 / distToCenter);
-
-                if (distToPoint > distToCenter && angle > horizonAngle) {
-                    anno.element.style.display = 'none';
-                    return;
-                }
-
-                // 2. Viewport Frustum / Bound check
-                pos.project(camera);
-                
-                // If behind camera (z > 1) or outside NDC range (-1 to 1)
-                if (pos.z > 1 || Math.abs(pos.x) > 1.1 || Math.abs(pos.y) > 1.1) {
-                    anno.element.style.display = 'none';
-                    return;
-                }
-
-                const x = (pos.x * widthHalf) + widthHalf;
-                const y = -(pos.y * heightHalf) + heightHalf;
-
-                anno.element.style.display = 'flex';
-                anno.element.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
-                
-                // Fade based on distance
-                const opacity = Math.max(0, Math.min(1, (2.2 - distToPoint) * 2));
-                anno.element.style.opacity = opacity;
-            });
-        }
-
-        function createFalcon9Model(isBooster = false) {
-            const group = new THREE.Group();
-            
-            // Dimensions (scaled for the globe where R=1)
-            const height = 0.18; // Even more scale (was 0.12)
-            const radius = 0.008; // Even more scale (was 0.005)
-            
-            // 1. First Stage (Main body)
-            const stage1Height = isBooster ? height * 0.85 : height * 0.65;
-            const stage1Geo = new THREE.CylinderGeometry(radius, radius, stage1Height, 12);
-            const stage1Mat = new THREE.MeshPhongMaterial({ color: 0xeeeeee }); // Off-white
-            const stage1 = new THREE.Mesh(stage1Geo, stage1Mat);
-            stage1.name = 'stage1';
-            stage1.position.y = stage1Height / 2;
-            group.add(stage1);
-            
-            // 2. Interstage (Black part)
-            const interstageHeight = height * 0.08;
-            const interstageGeo = new THREE.CylinderGeometry(radius, radius, interstageHeight, 12);
-            const interstageMat = new THREE.MeshPhongMaterial({ color: 0x222222 }); // Black/Dark Grey
-            const interstage = new THREE.Mesh(interstageGeo, interstageMat);
-            interstage.name = 'interstage';
-            interstage.position.y = stage1Height + interstageHeight / 2;
-            group.add(interstage);
-            
-            if (!isBooster) {
-                // 3. Second Stage
-                const stage2Height = height * 0.12;
-                const stage2Geo = new THREE.CylinderGeometry(radius, radius, stage2Height, 12);
-                const stage2Mat = new THREE.MeshPhongMaterial({ color: 0xeeeeee });
-                const stage2 = new THREE.Mesh(stage2Geo, stage2Mat);
-                stage2.name = 'stage2';
-                stage2.position.y = stage1Height + interstageHeight + stage2Height / 2;
-                group.add(stage2);
-                
-                // 4. Fairing (Ogive shape simplified as cone)
-                const fairingHeight = height * 0.15;
-                const fairingGeo = new THREE.CylinderGeometry(0, radius, fairingHeight, 12);
-                const fairingMat = new THREE.MeshPhongMaterial({ color: 0xeeeeee });
-                const fairing = new THREE.Mesh(fairingGeo, fairingMat);
-                fairing.name = 'fairing';
-                fairing.position.y = stage1Height + interstageHeight + stage2Height + fairingHeight / 2;
-                group.add(fairing);
-            } else {
-                // 5. Grid Fins (for booster - deployed)
-                const finSize = radius * 1.5;
-                const finGeo = new THREE.BoxGeometry(finSize, 0.0005, finSize);
-                const finMat = new THREE.MeshPhongMaterial({ color: 0x333333 });
-                for (let i = 0; i < 4; i++) {
-                    const fin = new THREE.Mesh(finGeo, finMat);
-                    fin.position.y = stage1Height + interstageHeight - 0.002;
-                    fin.rotation.y = (i * Math.PI) / 2;
-                    fin.translateZ(radius + finSize / 2);
-                    group.add(fin);
-                }
-
-                // 6. Landing Legs (for booster - folded)
-                const legHeight = stage1Height * 0.35;
-                const legGeo = new THREE.BoxGeometry(radius * 0.4, legHeight, radius * 0.6);
-                const legMat = new THREE.MeshPhongMaterial({ color: 0xdddddd });
-                for (let i = 0; i < 4; i++) {
-                    const leg = new THREE.Mesh(legGeo, legMat);
-                    leg.position.y = legHeight / 2;
-                    leg.rotation.y = (i * Math.PI) / 2 + Math.PI / 4;
-                    leg.translateZ(radius + radius * 0.2);
-                    group.add(leg);
-                }
-            }
-            
-            // 7. Octoweb / Engines (bottom)
-            const octoHeight = height * 0.02;
-            const octoGeo = new THREE.CylinderGeometry(radius, radius * 1.1, octoHeight, 12);
-            const octoMat = new THREE.MeshPhongMaterial({ color: 0x444444 });
-            const octo = new THREE.Mesh(octoGeo, octoMat);
-            octo.name = 'octoweb';
-            octo.position.y = -octoHeight / 2;
-            group.add(octo);
-
-            // 8. Engine Plume
-            const plumeGroup = new THREE.Group();
-            plumeGroup.name = 'plume';
-            
-            // Outer plume (wider, softer orange)
-            const outerPlumeGeo = new THREE.ConeGeometry(radius * 1.8, height * 0.45, 16);
-            outerPlumeGeo.translate(0, -height * 0.225, 0);
-            const outerPlumeMat = new THREE.ShaderMaterial({
-                uniforms: {
-                    time: { value: 0 },
-                    colorCore: { value: new THREE.Color(0xffaa44) },
-                    colorOuter: { value: new THREE.Color(0xff4400) }
-                },
-                vertexShader: PLUME_VERTEX_SHADER,
-                fragmentShader: PLUME_FRAGMENT_SHADER,
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            });
-            const outerPlume = new THREE.Mesh(outerPlumeGeo, outerPlumeMat);
-            plumeGroup.add(outerPlume);
-
-            // Inner core (narrower, brighter cyan-white)
-            const innerPlumeGeo = new THREE.ConeGeometry(radius * 0.7, height * 0.35, 16);
-            innerPlumeGeo.translate(0, -height * 0.175, 0);
-            const innerPlumeMat = new THREE.ShaderMaterial({
-                uniforms: {
-                    time: { value: 0 },
-                    colorCore: { value: new THREE.Color(0xffffff) },
-                    colorOuter: { value: new THREE.Color(0xffffaa) }
-                },
-                vertexShader: PLUME_VERTEX_SHADER,
-                fragmentShader: PLUME_FRAGMENT_SHADER,
-                transparent: true,
-                blending: THREE.AdditiveBlending,
-                side: THREE.DoubleSide,
-                depthWrite: false
-            });
-            const innerPlume = new THREE.Mesh(innerPlumeGeo, innerPlumeMat);
-            plumeGroup.add(innerPlume);
-
-            plumeGroup.position.y = -octoHeight;
-            plumeGroup.visible = false;
-            group.add(plumeGroup);
-            
-            return group;
-        }
-
-        function createDroneshipModel() {
-            // ASDS: Droneship (Rectangle)
-            const shipGroup = new THREE.Group();
-            shipGroup.name = 'droneship';
-            
-            // Hull (larger scale for better visibility: was 0.06, 0.005, 0.03)
-            const shipGeo = new THREE.BoxGeometry(0.1, 0.008, 0.05);
-            const shipMat = new THREE.MeshPhongMaterial({ color: 0x222222 });
-            const ship = new THREE.Mesh(shipGeo, shipMat);
-            shipGroup.add(ship);
-            
-            // Deck marking (Yellow Circle)
-            const deckGeo = new THREE.CircleGeometry(0.02, 32);
-            const deckMat = new THREE.MeshBasicMaterial({ color: 0xffcc00, side: THREE.DoubleSide });
-            const deck = new THREE.Mesh(deckGeo, deckMat);
-            deck.rotation.x = -Math.PI / 2;
-            deck.position.y = 0.0042;
-            shipGroup.add(deck);
-            
-            // "X" marking
-            const xGeo = new THREE.PlaneGeometry(0.025, 0.005);
-            const xMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-            const x1 = new THREE.Mesh(xGeo, xMat);
-            x1.rotation.x = -Math.PI / 2;
-            x1.rotation.z = Math.PI / 4;
-            x1.position.y = 0.0044;
-            shipGroup.add(x1);
-            const x2 = x1.clone();
-            x2.rotation.z = -Math.PI / 4;
-            shipGroup.add(x2);
-
-            return shipGroup;
-        }
-
-        function createLandingPadModel() {
-            // RTLS: Landing Pad (Circle)
-            const padGroup = new THREE.Group();
-            padGroup.name = 'landingPad';
-
-            const padGeo = new THREE.CircleGeometry(0.03, 32);
-            const padMat = new THREE.MeshBasicMaterial({ 
-                color: 0x444444, 
-                transparent: true, 
-                opacity: 0.8,
-                side: THREE.DoubleSide 
-            });
-            const pad = new THREE.Mesh(padGeo, padMat);
-            padGroup.add(pad);
-            
-            // Outer ring
-            const ringGeo = new THREE.RingGeometry(0.025, 0.028, 32);
-            const ringMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-            const ring = new THREE.Mesh(ringGeo, ringMat);
-            ring.position.z = 0.0001;
-            padGroup.add(ring);
-            
-            // "X" center
-            const xGeo = new THREE.PlaneGeometry(0.025, 0.004);
-            const xMat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide });
-            const x1 = new THREE.Mesh(xGeo, xMat);
-            x1.rotation.z = Math.PI / 4;
-            x1.position.z = 0.0002;
-            padGroup.add(x1);
-            const x2 = x1.clone();
-            x2.rotation.z = -Math.PI / 4;
-            padGroup.add(x2);
-
-            return padGroup;
         }
 
         function updateTrajectory(trajectoryData) {
@@ -1253,7 +774,6 @@
             console.log("Landing type:", trajectoryData.landing_type);
 
             try {
-                activeCurves = []; // Reset active curves
                 // Create trajectory points from the curved lat/lon data
                 const points = [];
 
@@ -1273,37 +793,28 @@
                 });
 
                 // Create color gradient for the trajectory
-                // Beautiful multi-stop gradient: Electric Cyan -> White -> Fiery Orange
+                // REVERSED: From Electric Cyan (#00FFFF) at Start to Fiery Orange (#FF4500) at End
+                const colors = [];
                 const color1 = new THREE.Color(0x00FFFF); // Cyan
-                const color2 = new THREE.Color(0xFFFFFF); // White (hot core)
-                const color3 = new THREE.Color(0xFF4500); // Orange-Red
+                const color2 = new THREE.Color(0xFF4500); // Orange
 
                 trajectoryGroup = new THREE.Group();
 
-                const t_sep = (trajectoryData.sep_idx && trajectoryData.trajectory.length > 1) 
-                    ? (trajectoryData.sep_idx / (trajectoryData.trajectory.length - 1)) 
-                    : 0.2; // Fallback to 20% if not provided
-
                 // 1. Trace Core Line using TubeGeometry for thickness
                 const curve = new THREE.CatmullRomCurve3(points);
-                const tubeRadius = 0.004; // Slightly thicker for visibility
+                const tubeRadius = 0.0035; // Sharp main line
                 const radialSegments = 8;
                 const tubularSegments = points.length * 6; // smoothness
                 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
 
-                // Apply vertex colors for gradient
+                // Apply vertex colors for gradient (Cyan -> Orange)
                 const count = tubeGeometry.attributes.position.count;
                 const colorArray = new Float32Array(count * 3);
                 const uvs = tubeGeometry.attributes.uv;
 
                 for (let i = 0; i < count; i++) {
                     const u = uvs.getX(i); // 0 at start, 1 at end
-                    let c;
-                    if (u < 0.5) {
-                        c = color1.clone().lerp(color2, u * 2);
-                    } else {
-                        c = color2.clone().lerp(color3, (u - 0.5) * 2);
-                    }
+                    const c = color1.clone().lerp(color2, u);
                     colorArray[i * 3] = c.r;
                     colorArray[i * 3 + 1] = c.g;
                     colorArray[i * 3 + 2] = c.b;
@@ -1314,41 +825,28 @@
                 const tubeMaterial = new THREE.MeshBasicMaterial({
                     vertexColors: true,
                     transparent: true,
-                    opacity: 0.95,
+                    opacity: 0.9,
                     side: THREE.DoubleSide
                 });
                 const tubeMesh = new THREE.Mesh(tubeGeometry, tubeMaterial);
                 tubeMesh.renderOrder = 1;
                 trajectoryGroup.add(tubeMesh);
 
-                // 2. Glow effect (larger tube, lower opacity, additive pulse)
-                const glowRadius = tubeRadius * 2.2;
+                // 2. Glow effect (slightly larger tube, lower opacity, additive)
+                const glowRadius = tubeRadius * 1.8;
                 const glowGeometry = new THREE.TubeGeometry(curve, tubularSegments, glowRadius, radialSegments, false);
                 glowGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3)); // reuse colors
                 const glowMaterial = new THREE.MeshBasicMaterial({
                     vertexColors: true,
                     transparent: true,
-                    opacity: 0.4,
+                    opacity: 0.3,
                     blending: THREE.AdditiveBlending,
                     side: THREE.DoubleSide,
-                    depthWrite: false 
+                    depthWrite: false // Don't occlude the core
                 });
                 const glowMesh = new THREE.Mesh(glowGeometry, glowMaterial);
-                glowMesh.name = 'trajectoryGlow'; // For animation
                 glowMesh.renderOrder = 2;
                 trajectoryGroup.add(glowMesh);
-
-                // 3. Moving rocket model at the head of the trajectory
-                const flare = createFalcon9Model(false);
-                
-                flare.name = 'trajectoryFlare';
-                trajectoryGroup.add(flare);
-                activeCurves.push({ 
-                    curve: curve, 
-                    flare: flare, 
-                    t_sep: t_sep,
-                    isMain: true 
-                });
 
                 // 3. Booster Return Trajectory (Orange)
                 if (trajectoryData.booster_trajectory && trajectoryData.booster_trajectory.length >= 2) {
@@ -1395,17 +893,87 @@
                     boosterGlowMesh.renderOrder = 4;
                     trajectoryGroup.add(boosterGlowMesh);
 
-                    // Moving rocket model for booster
-                    const bFlare = createFalcon9Model(true);
-                    trajectoryGroup.add(bFlare);
-                    activeCurves.push({ 
-                        curve: boosterCurve, 
-                        flare: bFlare,
-                        t_sep: t_sep,
-                        isBooster: true
-                    });
+                    // 4. Separation Point Dot
+                    if (typeof trajectoryData.sep_idx === 'number' && trajectoryData.sep_idx < boosterPoints.length) {
+                        const sepPoint = boosterPoints[trajectoryData.sep_idx];
+                        const dotRadius = 0.007;
+                        const dotGeo = new THREE.SphereGeometry(dotRadius, 16, 16);
+                        const dotMat = new THREE.MeshBasicMaterial({
+                            color: 0xFFFFFF, // Bright White
+                            transparent: true,
+                            opacity: 0.9
+                        });
+                        const dot = new THREE.Mesh(dotGeo, dotMat);
+                        dot.position.copy(sepPoint);
+                        dot.renderOrder = 5;
+                        trajectoryGroup.add(dot);
 
+                        // Separation Dot Glow
+                        const dotGlowGeo = new THREE.SphereGeometry(dotRadius * 1.8, 16, 16);
+                        const dotGlowMat = new THREE.MeshBasicMaterial({
+                            color: 0xFFFFFF,
+                            transparent: true,
+                            opacity: 0.4,
+                            blending: THREE.AdditiveBlending,
+                            depthWrite: false
+                        });
+                        const dotGlow = new THREE.Mesh(dotGlowGeo, dotGlowMat);
+                        dotGlow.position.copy(sepPoint);
+                        dotGlow.renderOrder = 6;
+                        trajectoryGroup.add(dotGlow);
+                        console.log("Added separation dot at index:", trajectoryData.sep_idx);
+                    }
 
+                    // Add a small landing pad marker if it's an ASDS or RTLS landing
+                    const combinedInfo = ((trajectoryData.landing_type || '') + ' ' + (trajectoryData.landing_location || '')).toUpperCase();
+                    const isASDS = combinedInfo.includes('ASDS') || 
+                                 combinedInfo.includes('DRONE') ||
+                                 combinedInfo.includes('SHIP') ||
+                                 combinedInfo.includes('OCISLY') ||
+                                 combinedInfo.includes('JRTI') ||
+                                 combinedInfo.includes('ASOG') ||
+                                 combinedInfo.includes('GRAVITAS') ||
+                                 combinedInfo.includes('INSTRUCTIONS') ||
+                                 combinedInfo.includes('STILL LOVE YOU');
+                                 
+                    const isRTLS = combinedInfo.includes('RTLS') ||
+                                 combinedInfo.includes('LAUNCH SITE') ||
+                                 combinedInfo.includes('LANDING ZONE') ||
+                                 combinedInfo.includes('LZ-') ||
+                                 combinedInfo.includes('CATCH') ||
+                                 combinedInfo.includes('TOWER');
+
+                    if (isASDS || isRTLS) {
+                        const lastPoint = boosterPoints[boosterPoints.length - 1];
+                        // Create a small circular pad
+                        const padRadius = isASDS ? 0.008 : 0.006;
+                        const padGeo = new THREE.CircleGeometry(padRadius, 16);
+                        const padMat = new THREE.MeshBasicMaterial({ 
+                            color: isASDS ? 0x00FFFF : 0x00FF00, // Cyan for droneship, Green for RTLS
+                            transparent: true,
+                            opacity: 0.8,
+                            side: THREE.DoubleSide 
+                        });
+                        const pad = new THREE.Mesh(padGeo, padMat);
+                        pad.position.copy(lastPoint);
+                        // Orient pad to face away from earth center (up)
+                        pad.lookAt(lastPoint.clone().multiplyScalar(2));
+                        trajectoryGroup.add(pad);
+                        
+                        // Add a subtle glow to the pad
+                        const padGlowGeo = new THREE.CircleGeometry(padRadius * 1.5, 16);
+                        const padGlowMat = new THREE.MeshBasicMaterial({
+                            color: isASDS ? 0x00FFFF : 0x00FF00,
+                            transparent: true,
+                            opacity: 0.3,
+                            blending: THREE.AdditiveBlending,
+                            side: THREE.DoubleSide
+                        });
+                        const padGlow = new THREE.Mesh(padGlowGeo, padGlowMat);
+                        padGlow.position.copy(lastPoint);
+                        padGlow.lookAt(lastPoint.clone().multiplyScalar(2));
+                        trajectoryGroup.add(padGlow);
+                    }
                 }
 
                 // Add trajectory group as a child of the globe
@@ -1501,34 +1069,6 @@
                     }
                     window.currentOrbitLine = orbitGroup;
                     console.log("Orbit group added with glow");
-                }
-
-                // 4. Landing Site Marker (Droneship or Pad)
-                if (trajectoryData.landing_site_coords) {
-                    const lPos = trajectoryData.landing_site_coords;
-                    const phi = (90 - lPos.lat) * (Math.PI / 180);
-                    const theta = (lPos.lon + 180) * (Math.PI / 180);
-                    const radius = 1.002; // Slightly higher for visibility
-                    
-                    const x = -(radius * Math.sin(phi) * Math.cos(theta));
-                    const z = radius * Math.sin(phi) * Math.sin(theta);
-                    const y = radius * Math.cos(phi);
-                    
-                    const markerPos = new THREE.Vector3(x, y, z);
-                    
-                    if (trajectoryData.is_asds) {
-                        const shipGroup = createDroneshipModel();
-                        shipGroup.position.copy(markerPos);
-                        shipGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), markerPos.clone().normalize());
-                        trajectoryGroup.add(shipGroup);
-                        console.log("Added mission-specific droneship marker");
-                    } else {
-                        const padGroup = createLandingPadModel();
-                        padGroup.position.copy(markerPos);
-                        padGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), markerPos.clone().normalize());
-                        trajectoryGroup.add(padGroup);
-                        console.log("Added mission-specific landing pad marker");
-                    }
                 }
 
                 // Force a render
