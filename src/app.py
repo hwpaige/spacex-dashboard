@@ -109,6 +109,8 @@ from functions import (
     get_closest_x_video_url,
     load_theme_settings,
     save_theme_settings,
+    load_branch_setting,
+    save_branch_setting,
     get_rpi_config_resolution
 )
 # DBus imports are now conditional and imported only on Linux
@@ -386,6 +388,7 @@ class Backend(QObject):
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
+    targetBranchChanged = pyqtSignal()
     versionInfoChanged = pyqtSignal()
     liveLaunchUrlChanged = pyqtSignal()
     videoUrlChanged = pyqtSignal()
@@ -426,6 +429,7 @@ class Backend(QObject):
         self._mode = 'spacex'
         self._event_type = 'upcoming'
         self._theme = load_theme_settings()
+        self._target_branch = load_branch_setting()
         self._location = 'Starbase'
         # Initialize timezone based on default location
         self._tz = tzlocal()
@@ -874,7 +878,7 @@ class Backend(QObject):
                     logger.info("BOOT: Starting background update check...")
                     current_info = res[2]
                     current_hash = current_info.get('hash', '')
-                    has_update, latest_info = check_github_for_updates(current_hash)
+                    has_update, latest_info = check_github_for_updates(current_hash, branch=self._target_branch)
                     self.initialUpdateCheckReady.emit(has_update, latest_info or {})
                 except Exception as e:
                     logger.debug(f"BOOT: Background update check failed: {e}")
@@ -1056,6 +1060,19 @@ class Backend(QObject):
             self._theme = value
             save_theme_settings(value)
             self.themeChanged.emit()
+
+    @pyqtProperty(str, notify=targetBranchChanged)
+    def targetBranch(self):
+        return self._target_branch
+
+    @targetBranch.setter
+    def targetBranch(self, value):
+        if self._target_branch != value:
+            self._target_branch = value
+            save_branch_setting(value)
+            self.targetBranchChanged.emit()
+            # Re-check for updates when branch changes
+            self.checkForUpdatesNow()
 
     def _emit_tray_visibility_changed(self):
         """Emit launchTrayVisibilityChanged only if the state has actually changed to reduce UI churn."""
@@ -2877,7 +2894,7 @@ class Backend(QObject):
             self._set_updating_status("Starting updater…")
             self._set_updating_in_progress(True)
 
-            success, result = start_update_script(script_path)
+            success, result = start_update_script(script_path, branch=self._target_branch)
             
             if success:
                 if result.get('pid'):
@@ -2978,6 +2995,10 @@ class Backend(QObject):
         has_update, latest_info = check_github_for_updates(current_hash)
         return latest_info if latest_info else {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
 
+    @pyqtSlot(str)
+    def setTargetBranch(self, branch):
+        self.targetBranch = branch
+
     @pyqtSlot()
     def checkForUpdatesNow(self):
         """Start an asynchronous check for updates"""
@@ -2995,7 +3016,7 @@ class Backend(QObject):
             current_info = get_git_version_info(src_dir)
             current_hash = current_info['hash'] if current_info else ""
             
-            has_update, latest_info = check_github_for_updates(current_hash)
+            has_update, latest_info = check_github_for_updates(current_hash, branch=self._target_branch)
             
             if has_update and latest_info:
                 self._latest_version_info = latest_info

@@ -84,28 +84,41 @@ ensure_repo_writable() {
 
 # Function: perform update via git as EFFECTIVE_USER (returns 0 on success)
 update_via_git() {
+  local target_branch="${1:-master}"
+  
   # Drop any local work so deployment is deterministic
   run_git reset --hard HEAD || true
   run_git clean -fd || true
+  
   echo "Fetching latest changes from repository..."
   if ! run_git fetch origin 2>&1; then
     echo "git fetch failed."
     return 1
   fi
-  echo "Resetting to latest remote version..."
-  if ! run_git reset --hard origin/master 2>&1; then
-    echo "git reset --hard origin/master failed."
+  
+  echo "Checking out/resetting to branch: $target_branch"
+  if ! run_git checkout "$target_branch" 2>&1; then
+    echo "Warning: git checkout $target_branch failed, attempting to reset directly to origin/$target_branch"
+  fi
+  
+  echo "Resetting to latest remote version of origin/$target_branch..."
+  if ! run_git reset --hard "origin/$target_branch" 2>&1; then
+    echo "git reset --hard origin/$target_branch failed."
     return 1
   fi
-  echo "Successfully updated repository via git."
+  
+  echo "Successfully updated repository to $target_branch via git."
   return 0
 }
 
 # Note: We intentionally avoid running git as root to sidestep "dubious ownership" and .git write issues.
 # If update_via_git fails after a permission repair attempt, we abort with guidance.
 
+TARGET_BRANCH="${1:-master}"
+echo "Target update branch: $TARGET_BRANCH"
+
 # Try to ensure repo is writable, then try git update; if it fails, try sudo-elevated git; otherwise stop with guidance
-if ensure_repo_writable && update_via_git; then
+if ensure_repo_writable && update_via_git "$TARGET_BRANCH"; then
   :
 else
   echo "ERROR: Unable to update repository via git due to permissions."

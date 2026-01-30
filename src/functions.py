@@ -230,6 +230,7 @@ WIFI_KEY_FILE = os.path.join(CACHE_DIR_F1, 'wifi_key.bin')
 REMEMBERED_NETWORKS_FILE = os.path.join(CACHE_DIR_F1, 'remembered_networks.json')
 LAST_CONNECTED_NETWORK_FILE = os.path.join(CACHE_DIR_F1, 'last_connected_network.json')
 THEME_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'theme_settings.json')
+BRANCH_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'branch_settings.json')
 TOUCH_CALIBRATION_FILE = "/etc/X11/xorg.conf.d/99-calibration.conf"
 
 def check_touch_calibration_exists():
@@ -270,6 +271,24 @@ def save_theme_settings(new_theme):
         save_cache_to_file(THEME_SETTINGS_FILE, data, datetime.now(pytz.UTC))
     except Exception as e:
         logger.error(f"Failed to save theme settings: {e}")
+
+def load_branch_setting():
+    """Load the target update branch from file."""
+    try:
+        data = load_cache_from_file(BRANCH_SETTINGS_FILE)
+        if data and 'branch' in data['data']:
+            return data['data']['branch']
+    except Exception as e:
+        logger.warning(f"Failed to load branch setting: {e}")
+    return 'master'  # Default fallback
+
+def save_branch_setting(branch):
+    """Save the target update branch to file."""
+    try:
+        data = {'branch': branch}
+        save_cache_to_file(BRANCH_SETTINGS_FILE, data, datetime.now(pytz.UTC))
+    except Exception as e:
+        logger.error(f"Failed to save branch setting: {e}")
 
 # F1 Team colors for visualization
 F1_TEAM_COLORS = {
@@ -1325,11 +1344,11 @@ def get_git_version_info(src_dir):
         return None
 
 
-def check_github_for_updates(current_hash, repo_owner="hwpaige", repo_name="spacex-dashboard"):
+def check_github_for_updates(current_hash, repo_owner="hwpaige", repo_name="spacex-dashboard", branch="master"):
     """Check if a newer version is available on GitHub using urllib for better boot performance."""
     profiler.mark("check_github_for_updates Start")
     try:
-        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/master"
+        api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/{branch}"
         # Use urllib.request with a short timeout to avoid GIL contention during boot
         req = urllib.request.Request(api_url, headers={'User-Agent': 'SpaceX-Dashboard-App'})
         logger.info(f"Checking for updates at {api_url}...")
@@ -1344,7 +1363,8 @@ def check_github_for_updates(current_hash, repo_owner="hwpaige", repo_name="spac
                     'short_hash': latest_hash[:8],
                     'message': latest['commit']['message'],
                     'author': latest['commit']['author']['name'],
-                    'date': latest['commit']['author']['date']
+                    'date': latest['commit']['author']['date'],
+                    'branch': branch
                 }
             else:
                 logger.warning(f"GitHub update check returned status {response.status}")
@@ -2284,7 +2304,7 @@ def get_wifi_debug_info():
     except Exception as e:
         return f"Error getting WiFi debug info: {e}"
 
-def start_update_script(script_path):
+def start_update_script(script_path, branch="master"):
     """Start the update script in a detached process."""
     if not os.path.exists(script_path):
         return False, f"Update script not found at {script_path}"
@@ -2301,7 +2321,7 @@ def start_update_script(script_path):
             child_env['KEEP_APP_RUNNING'] = '1'
 
             proc = subprocess.Popen(
-                ['/bin/bash', script_path],
+                ['/bin/bash', script_path, branch],
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
                 cwd=os.path.dirname(script_path),
@@ -2312,7 +2332,7 @@ def start_update_script(script_path):
             return True, {"pid": proc.pid, "log_path": log_path}
         else:
             subprocess.Popen(
-                ['/bin/bash' if os.path.exists('/bin/bash') else 'bash', script_path],
+                ['/bin/bash' if os.path.exists('/bin/bash') else 'bash', script_path, branch],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 cwd=os.path.dirname(script_path)

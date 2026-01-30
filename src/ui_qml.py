@@ -3863,7 +3863,7 @@ Window {
         Popup {
             id: updatePopup
             width: 450
-            height: 280
+            height: 320
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -3986,18 +3986,74 @@ Window {
                     }
                 }
 
+                // Branch Selection
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignHCenter
+                    spacing: 15
+
+                    Text {
+                        text: "Release Channel:"
+                        font.pixelSize: 12
+                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                    }
+
+                    RowLayout {
+                        spacing: 0
+                        Rectangle {
+                            width: 70
+                            height: 26
+                            color: backend.targetBranch === "master" ? "#2196F3" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
+                            radius: 4
+                            Rectangle { width: 4; height: parent.height; color: parent.color; anchors.right: parent.right; visible: backend.targetBranch === "master" } // square off right
+                            
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Stable"
+                                color: backend.targetBranch === "master" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                font.pixelSize: 11
+                                font.bold: backend.targetBranch === "master"
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: backend.setTargetBranch("master")
+                            }
+                        }
+                        Rectangle {
+                            width: 70
+                            height: 26
+                            color: backend.targetBranch === "beta" ? "#FF9800" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
+                            radius: 4
+                            Rectangle { width: 4; height: parent.height; color: parent.color; anchors.left: parent.left; visible: backend.targetBranch === "beta" } // square off left
+
+                            Text {
+                                anchors.centerIn: parent
+                                text: "Beta"
+                                color: backend.targetBranch === "beta" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                font.pixelSize: 11
+                                font.bold: backend.targetBranch === "beta"
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: backend.setTargetBranch("beta")
+                            }
+                        }
+                    }
+                }
+
                 // Status message - compact
                 Text {
                     text: {
                         if (!backend) return "Initializing..."
                         var current = backend.currentVersionInfo.hash
                         var latest = backend.latestVersionInfo.hash
+                        var branch = backend.targetBranch
                         if (!current || !latest) {
                             return "Unable to check for updates"
                         } else if (current === latest) {
-                            return "✓ You are up to date!"
+                            return "✓ You are up to date (" + (branch === "master" ? "Stable" : "Beta") + ")"
                         } else {
-                            return "⬆ New version available!"
+                            return "⬆ New " + (branch === "master" ? "Stable" : "Beta") + " version available!"
                         }
                     }
                     font.pixelSize: 12
