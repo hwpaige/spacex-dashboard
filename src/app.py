@@ -938,9 +938,11 @@ class Backend(QObject):
     def _apply_initial_update_result(self, update_available, latest_info):
         """Apply the result of the background boot-time update check."""
         try:
-            self.updateAvailable = update_available
+            # Crucially, always set latest_info if available to ensure branch-correct messages
             if latest_info:
                 self._latest_version_info = latest_info
+            self.updateAvailable = update_available
+            self.versionInfoChanged.emit() # Ensure UI sees the new info
             logger.info(f"BOOT: Background update check finished (update_available={update_available})")
         except Exception as e:
             logger.error(f"BOOT: Failed to apply background update result: {e}")
@@ -1071,6 +1073,13 @@ class Backend(QObject):
             self._target_branch = value
             save_branch_setting(value)
             self.targetBranchChanged.emit()
+            
+            # Reset update status and latest info when branch changes to ensure 
+            # "Update Now" disappears while we re-check for the new branch.
+            self.updateAvailable = False
+            self._latest_version_info = None # Trigger fetch on next access
+            self.versionInfoChanged.emit()
+            
             # Re-check for updates when branch changes
             self.checkForUpdatesNow()
 
@@ -1810,13 +1819,15 @@ class Backend(QObject):
 
     @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def currentVersionInfo(self):
-        if self._current_version_info is None:
+        if self._current_version_info is None or self._current_version_info.get('hash') == 'Unknown':
             self._current_version_info = self.get_current_version_info() or {}
         return self._current_version_info
 
     @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def latestVersionInfo(self):
-        if self._latest_version_info is None:
+        # We now trust _latest_version_info to be updated by periodic checks
+        # or manual branch switches. If it's None, we do one initial fetch.
+        if self._latest_version_info is None or self._latest_version_info.get('hash') == 'Unknown':
             self._latest_version_info = self.get_latest_version_info() or {}
         return self._latest_version_info
 
@@ -2992,7 +3003,7 @@ class Backend(QObject):
         current_info = get_git_version_info(src_dir)
         current_hash = current_info['hash'] if current_info else ""
         
-        has_update, latest_info = check_github_for_updates(current_hash)
+        has_update, latest_info = check_github_for_updates(current_hash, branch=self._target_branch)
         return latest_info if latest_info else {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
 
     @pyqtSlot(str)
@@ -3018,13 +3029,17 @@ class Backend(QObject):
             
             has_update, latest_info = check_github_for_updates(current_hash, branch=self._target_branch)
             
-            if has_update and latest_info:
+            if latest_info:
                 self._latest_version_info = latest_info
-                self.updateAvailable = True
-                logger.info(f"New update available: {latest_info['short_hash']}")
+                if has_update:
+                    self.updateAvailable = True
+                    logger.info(f"New update available: {latest_info['short_hash']}")
+                else:
+                    self.updateAvailable = False
+                    logger.debug("No updates available (already on latest)")
             else:
                 self.updateAvailable = False
-                logger.debug("No updates available")
+                logger.debug("No update info retrieved")
                 
             self._last_update_check = datetime.now()
             # Refresh cached version info

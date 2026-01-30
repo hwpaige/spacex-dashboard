@@ -3888,7 +3888,7 @@ Window {
                     spacing: 10
 
                     Text {
-                        text: "Update Available"
+                        text: (backend && backend.updateAvailable) ? "Update Available" : "Software Update"
                         font.pixelSize: 16
                         font.bold: true
                         color: (backend && backend.theme === "dark") ? "white" : "black"
@@ -3986,56 +3986,98 @@ Window {
                     }
                 }
 
-                // Branch Selection
+                // Branch Selection and Update Now
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 15
 
-                    Text {
-                        text: "Release Channel:"
-                        font.pixelSize: 12
-                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                    }
-
-                    RowLayout {
-                        spacing: 0
-                        Rectangle {
-                            width: 70
-                            height: 26
-                            color: backend.targetBranch === "master" ? "#2196F3" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
-                            radius: 4
-                            Rectangle { width: 4; height: parent.height; color: parent.color; anchors.right: parent.right; visible: backend.targetBranch === "master" } // square off right
-                            
-                            Text {
-                                anchors.centerIn: parent
-                                text: "Stable"
-                                color: backend.targetBranch === "master" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
-                                font.pixelSize: 11
-                                font.bold: backend.targetBranch === "master"
+                    Row {
+                        spacing: 15
+                        Layout.alignment: Qt.AlignVCenter
+                        Row {
+                            spacing: 0
+                            anchors.verticalCenter: parent.verticalCenter
+                            Rectangle {
+                                width: 70
+                                height: 26
+                                color: backend.targetBranch === "master" ? "#2196F3" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
+                                radius: 4
+                                Rectangle { width: 4; height: parent.height; color: parent.color; anchors.right: parent.right; visible: backend.targetBranch === "master" } // square off right
+                                
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Stable"
+                                    color: backend.targetBranch === "master" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                    font.pixelSize: 11
+                                    font.bold: backend.targetBranch === "master"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: backend.setTargetBranch("master")
+                                }
                             }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: backend.setTargetBranch("master")
+                            Rectangle {
+                                width: 70
+                                height: 26
+                                color: backend.targetBranch === "beta" ? "#FF9800" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
+                                radius: 4
+                                Rectangle { width: 4; height: parent.height; color: parent.color; anchors.left: parent.left; visible: backend.targetBranch === "beta" } // square off left
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "Beta"
+                                    color: backend.targetBranch === "beta" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                    font.pixelSize: 11
+                                    font.bold: backend.targetBranch === "beta"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: backend.setTargetBranch("beta")
+                                }
                             }
                         }
-                        Rectangle {
-                            width: 70
-                            height: 26
-                            color: backend.targetBranch === "beta" ? "#FF9800" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
-                            radius: 4
-                            Rectangle { width: 4; height: parent.height; color: parent.color; anchors.left: parent.left; visible: backend.targetBranch === "beta" } // square off left
+                    }
 
+                    // "Update Now" moved here next to branch selector
+                    Button {
+                        text: "Update Now"
+                        Layout.preferredWidth: 105
+                        Layout.preferredHeight: 26
+                        Layout.alignment: Qt.AlignVCenter
+                        visible: {
+                            var current = backend.currentVersionInfo.hash
+                            var latest = backend.latestVersionInfo.hash
+                            return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
+                        }
+                        onClicked: {
+                            backend.runUpdateScript()
+                            updatePopup.close()
+                        }
+
+                        background: Rectangle {
+                            color: "#4CAF50"
+                            radius: 3
+                        }
+
+                        contentItem: Row {
+                            spacing: 4
+                            anchors.centerIn: parent
                             Text {
-                                anchors.centerIn: parent
-                                text: "Beta"
-                                color: backend.targetBranch === "beta" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                text: "\uf062"
+                                font.family: "Font Awesome 5 Free"
                                 font.pixelSize: 11
-                                font.bold: backend.targetBranch === "beta"
+                                font.weight: Font.Black
+                                color: "white"
+                                anchors.verticalCenter: parent.verticalCenter
                             }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: backend.setTargetBranch("beta")
+                            Text {
+                                text: "Update Now"
+                                color: "white"
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
                     }
@@ -4121,46 +4163,6 @@ Window {
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
-                        }
-                    }
-
-                    Button {
-                        text: "Update Now"
-                        Layout.preferredWidth: 110
-                        Layout.preferredHeight: 28
-                        visible: {
-                            var current = backend.currentVersionInfo.hash
-                            var latest = backend.latestVersionInfo.hash
-                            return current && latest && current !== latest
-                        }
-                        onClicked: {
-                            backend.runUpdateScript()
-                            updatePopup.close()
-                        }
-
-                        background: Rectangle {
-                            color: "#4CAF50"
-                            radius: 3
-                        }
-
-                        contentItem: RowLayout {
-                            spacing: 4
-                            Text {
-                                text: "\uf062"
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 11
-                                font.weight: Font.Black
-                                color: "white"
-                                Layout.alignment: Qt.AlignVCenter
-                            }
-                            Text {
-                                text: "Update Now"
-                                color: "white"
-                                font.pixelSize: 11
-                                horizontalAlignment: Text.AlignHCenter
-                                verticalAlignment: Text.AlignVCenter
-                                Layout.alignment: Qt.AlignVCenter
-                            }
                         }
                     }
                 }
