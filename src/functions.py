@@ -833,6 +833,45 @@ def fetch_narratives():
         return cache['data']
     return parse_narratives(LAUNCH_DESCRIPTIONS)
 
+# Weather condition codes mapping (WMO Weather interpretation codes)
+WEATHER_CODE_MAP = {
+    0: "Clear sky",
+    1: "Mainly clear",
+    2: "Partly cloudy",
+    3: "Overcast",
+    45: "Fog",
+    48: "Depositing rime fog",
+    51: "Light drizzle",
+    53: "Moderate drizzle",
+    55: "Dense drizzle",
+    56: "Light freezing drizzle",
+    57: "Dense freezing drizzle",
+    61: "Slight rain",
+    63: "Moderate rain",
+    65: "Heavy rain",
+    66: "Light freezing rain",
+    67: "Heavy freezing rain",
+    71: "Slight snow fall",
+    73: "Moderate snow fall",
+    75: "Heavy snow fall",
+    77: "Snow grains",
+    80: "Slight rain showers",
+    81: "Moderate rain showers",
+    82: "Violent rain showers",
+    85: "Slight snow showers",
+    86: "Heavy snow showers",
+    95: "Thunderstorm",
+    96: "Thunderstorm with slight hail",
+    99: "Thunderstorm with heavy hail"
+}
+
+def c_to_f(c):
+    """Convert Celsius to Fahrenheit."""
+    try:
+        return (float(c) * 9/5) + 32
+    except (ValueError, TypeError):
+        return c
+
 def fetch_weather(lat, lon, location):
     """Fetch weather for a single location from the new API."""
     profiler.mark(f"fetch_weather Start ({location})")
@@ -843,13 +882,85 @@ def fetch_weather(lat, lon, location):
         response = requests.get(url, timeout=10)
         response.raise_for_status()
         res_json = response.json()
+        
+        # Post-process forecast data to include condition strings and day names
+        if 'forecast' in res_json and 'daily' in res_json['forecast']:
+            daily = res_json['forecast']['daily']
+            hourly = res_json['forecast'].get('hourly', {})
+            forecast_list = []
+            
+            times = daily.get('time', [])
+            max_temps_c = daily.get('temperature_2m_max', [])
+            min_temps_c = daily.get('temperature_2m_min', [])
+            codes = daily.get('weathercode', [])
+            
+            # Convert to Fahrenheit
+            max_temps = [c_to_f(c) for c in max_temps_c]
+            min_temps = [c_to_f(c) for c in min_temps_c]
+            
+            # Map hourly temps and wind to days for sparklines
+            hourly_times = hourly.get('time', [])
+            hourly_temps_c = hourly.get('temperature_2m', [])
+            hourly_temps = [c_to_f(c) for c in hourly_temps_c]
+            # API documentation says windspeed_10m, but we'll check both for robustness
+            hourly_winds = hourly.get('windspeed_10m', hourly.get('wind_speed_10m', []))
+            
+            for i in range(len(times)):
+                try:
+                    dt = datetime.strptime(times[i], "%Y-%m-%d")
+                    day_name = dt.strftime("%a")
+                    
+                    # Extract 24h of hourly data for this day for sparklines
+                    day_hourly_temps = []
+                    day_hourly_winds = []
+                    day_str = times[i]
+                    for h_idx, h_time in enumerate(hourly_times):
+                        if h_time.startswith(day_str):
+                            day_hourly_temps.append(hourly_temps[h_idx])
+                            if h_idx < len(hourly_winds):
+                                day_hourly_winds.append(hourly_winds[h_idx])
+                    
+                    # If no hourly data for this day, fallback to [min, max] or [0, 0]
+                    if not day_hourly_temps:
+                        day_hourly_temps = [min_temps[i], max_temps[i]]
+                    
+                    # Calculate a representative wind for the day (average speed and direction)
+                    if day_hourly_winds:
+                        avg_wind = sum(day_hourly_winds) / len(day_hourly_winds)
+                        # Find the corresponding wind directions for this day
+                        day_hourly_dirs = []
+                        hourly_dirs = hourly.get('winddirection_10m', [])
+                        for h_idx, h_time in enumerate(hourly_times):
+                            if h_time.startswith(day_str) and h_idx < len(hourly_dirs):
+                                day_hourly_dirs.append(hourly_dirs[h_idx])
+                        
+                        avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
+                        wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
+                    else:
+                        day_hourly_winds = [0, 0]
+                        wind_str = "N/A"
+                    
+                    forecast_list.append({
+                        'day': day_name,
+                        'temp_low': f"{int(min_temps[i])}°",
+                        'temp_high': f"{int(max_temps[i])}°",
+                        'condition': WEATHER_CODE_MAP.get(codes[i], "Unknown"),
+                        'wind': wind_str,
+                        'temps': day_hourly_temps,
+                        'winds': day_hourly_winds
+                    })
+                except Exception as ex:
+                    logger.debug(f"Error parsing forecast day {i}: {ex}")
+            
+            res_json['forecast_processed'] = forecast_list
+            
         profiler.mark(f"fetch_weather End ({location}: Success)")
         return res_json
     except Exception as e:
         logger.warning(f"Failed to fetch weather for {location}: {e}")
         profiler.mark(f"fetch_weather End ({location}: Error)")
         return {
-            'temperature_c': 25, 'temperature_f': 77,
+            'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77,
             'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
             'wind_direction': 90, 'cloud_cover': 50
         }
@@ -2679,7 +2790,7 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
     if not test_network_connectivity():
         if cache and cache.get('data'):
             return cache['data']
-        return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
+        return {loc: {'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
     try:
         emit_loader_status("Fetching global weather data…")
@@ -2700,7 +2811,7 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
             # Fill remaining missing locations with defaults
             for loc in locations_config:
                 if loc not in weather_data:
-                    weather_data[loc] = {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50}
+                    weather_data[loc] = {'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50}
         else:
             # Full fetch via unified endpoint
             url = f"{LAUNCH_API_BASE_URL}/weather_all"
@@ -2708,6 +2819,75 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
             response.raise_for_status()
             data = response.json()
             weather_data = data.get('weather', {})
+            
+            # Post-process forecast data for each location
+            for loc, loc_weather in weather_data.items():
+                if 'forecast' in loc_weather and 'daily' in loc_weather['forecast']:
+                    daily = loc_weather['forecast']['daily']
+                    hourly = loc_weather['forecast'].get('hourly', {})
+                    forecast_list = []
+                    
+                    times = daily.get('time', [])
+                    max_temps_c = daily.get('temperature_2m_max', [])
+                    min_temps_c = daily.get('temperature_2m_min', [])
+                    codes = daily.get('weathercode', [])
+                    
+                    # Convert to Fahrenheit
+                    max_temps = [c_to_f(c) for c in max_temps_c]
+                    min_temps = [c_to_f(c) for c in min_temps_c]
+                    
+                    hourly_times = hourly.get('time', [])
+                    hourly_temps_c = hourly.get('temperature_2m', [])
+                    hourly_temps = [c_to_f(c) for c in hourly_temps_c]
+                    # API documentation says windspeed_10m, but we'll check both for robustness
+                    hourly_winds = hourly.get('windspeed_10m', hourly.get('wind_speed_10m', []))
+                    hourly_dirs = hourly.get('winddirection_10m', [])
+                    
+                    for i in range(len(times)):
+                        try:
+                            dt = datetime.strptime(times[i], "%Y-%m-%d")
+                            day_name = dt.strftime("%a")
+                            
+                            day_hourly_temps = []
+                            day_hourly_winds = []
+                            day_str = times[i]
+                            
+                            for h_idx, h_time in enumerate(hourly_times):
+                                if h_time.startswith(day_str):
+                                    day_hourly_temps.append(hourly_temps[h_idx])
+                                    if h_idx < len(hourly_winds):
+                                        day_hourly_winds.append(hourly_winds[h_idx])
+                            
+                            if not day_hourly_temps:
+                                day_hourly_temps = [min_temps[i], max_temps[i]]
+                            
+                            # Calculate a representative wind for the day
+                            if day_hourly_winds:
+                                avg_wind = sum(day_hourly_winds) / len(day_hourly_winds)
+                                # Find corresponding wind directions
+                                day_hourly_dirs = []
+                                for h_idx, h_time in enumerate(hourly_times):
+                                    if h_time.startswith(day_str) and h_idx < len(hourly_dirs):
+                                        day_hourly_dirs.append(hourly_dirs[h_idx])
+                                avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
+                                wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
+                            else:
+                                day_hourly_winds = [0, 0]
+                                wind_str = "N/A"
+
+                            forecast_list.append({
+                                'day': day_name,
+                                'temp_low': f"{int(min_temps[i])}°",
+                                'temp_high': f"{int(max_temps[i])}°",
+                                'condition': WEATHER_CODE_MAP.get(codes[i], "Unknown"),
+                                'wind': wind_str,
+                                'temps': day_hourly_temps,
+                                'winds': day_hourly_winds
+                            })
+                        except Exception:
+                            continue
+                    
+                    loc_weather['forecast_processed'] = forecast_list
         
         # Save to cache
         save_cache_to_file(CACHE_FILE_WEATHER, weather_data, datetime.now(pytz.UTC))
@@ -2718,7 +2898,7 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
         logger.error(f"Failed to fetch weather from new API: {e}")
         if cache and cache.get('data'):
             return cache['data']
-        return {loc: {'temperature_c': 25, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
+        return {loc: {'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
 
 def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_obj=None, active_location=None):
     """Orchestrate parallel fetch of launches, narratives, and weather data."""

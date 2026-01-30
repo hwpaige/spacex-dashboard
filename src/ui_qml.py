@@ -2010,17 +2010,30 @@ Window {
 
                 // Left pill (time and weather) - FIXED WIDTH
                 Rectangle {
+                    id: weatherPill
                     Layout.preferredWidth: 200
                     Layout.maximumWidth: 200
                     height: 28
                     radius: 14
-                    color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
-                    border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
-                    border.width: 1
+                    color: "transparent"
+                    clip: false
+
+                    // Fading background for the weather pill
+                    Rectangle {
+                        id: weatherPillBackground
+                        anchors.fill: parent
+                        radius: 14
+                        color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
+                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
+                        border.width: 1
+                        z: 0
+                        opacity: 1.0 - Math.min(1.0, weatherTray.height / 56.0)
+                    }
 
                     Row {
                         anchors.centerIn: parent
                         spacing: 10
+                        opacity: 1.0 - Math.min(1.0, weatherTray.height / 56.0)
 
                         Text {
                             text: backend ? backend.currentTime : "--:--:--"
@@ -2043,6 +2056,300 @@ Window {
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
+                        }
+                    }
+
+                    // Sliding Weather Tray
+                    Popup {
+                        id: weatherTray
+                        x: 0
+                        width: 250
+                        height: 0
+                        // Sit at the bottom and grow UP
+                        y: parent.height - height
+                        modal: false
+                        focus: false
+                        visible: height > 0
+                        closePolicy: Popup.NoAutoClose
+                        padding: 0
+                        
+                        property real expandedHeight: 220
+                        opacity: height / expandedHeight
+                        
+                        Behavior on height {
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                        
+                        background: Item {
+                            Rectangle {
+                                anchors.fill: parent
+                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                radius: 14
+                                border.width: 1
+                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                            }
+                        }
+                        
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            spacing: 0
+                            
+                            // Drag Handle (Top of tray)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 25
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf078"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: 12
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    
+                                    property point startGlobalPos: Qt.point(0, 0)
+                                    property real startHeight: 0
+                                    property bool isDragging: false
+                                    property bool moved: false
+                                    
+                                    onPressed: {
+                                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        startHeight = weatherTray.height
+                                        isDragging = true
+                                        moved = false
+                                    }
+                                    
+                                    onPositionChanged: {
+                                        if (isDragging && pressed) {
+                                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                            var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                            if (Math.abs(deltaY) > 5) moved = true
+                                            var newHeight = startHeight - deltaY
+                                            newHeight = Math.max(0, Math.min(weatherTray.expandedHeight, newHeight))
+                                            weatherTray.height = newHeight
+                                        }
+                                    }
+                                    
+                                    onReleased: {
+                                        isDragging = false
+                                        if (moved) {
+                                            var threshold = weatherTray.expandedHeight * 0.2
+                                            var closedThreshold = threshold
+                                            var openThreshold = weatherTray.expandedHeight - threshold
+                                            
+                                            if (startHeight < weatherTray.expandedHeight * 0.5) {
+                                                if (weatherTray.height > closedThreshold) {
+                                                    weatherTray.height = weatherTray.expandedHeight
+                                                } else {
+                                                    weatherTray.height = 0
+                                                }
+                                            } else {
+                                                if (weatherTray.height < openThreshold) {
+                                                    weatherTray.height = 0
+                                                } else {
+                                                    weatherTray.height = weatherTray.expandedHeight
+                                                }
+                                            }
+                                        }
+                                    }
+                                    onClicked: {
+                                        weatherTray.height = 0
+                                    }
+                                }
+                            }
+
+                            // Forecast Header
+                            Text {
+                                Layout.alignment: Qt.AlignHCenter
+                                text: backend ? backend.location + " Forecast" : "Forecast"
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 14
+                                font.family: "D-DIN"
+                                font.bold: true
+                            }
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 1
+                                color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
+                                Layout.leftMargin: 10
+                                Layout.rightMargin: 10
+                                Layout.topMargin: 5
+                                Layout.bottomMargin: 5
+                            }
+
+                            // Forecast List
+                            ListView {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.leftMargin: 10
+                                Layout.rightMargin: 10
+                                Layout.bottomMargin: 10
+                                model: backend ? backend.weatherForecastModel : null
+                                delegate: Item {
+                                    width: parent.width
+                                    height: 30
+                                    RowLayout {
+                                        anchors.fill: parent
+                                        spacing: 1
+                                        Text {
+                                            text: model.day
+                                            Layout.preferredWidth: 30
+                                            color: backend.theme === "dark" ? "#bbffffff" : "#bb000000"
+                                            font.pixelSize: 12
+                                            font.family: "D-DIN"
+                                        }
+                                        Text {
+                                            text: model.tempLow + " / " + model.tempHigh
+                                            Layout.preferredWidth: 60
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 12
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                        }
+                                        
+                                        // Sparkline
+                                        Canvas {
+                                            id: sparkline
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 20
+                                            Layout.leftMargin: 1
+                                            Layout.rightMargin: 1
+                                            onPaint: {
+                                                var ctx = getContext("2d")
+                                                ctx.clearRect(0, 0, width, height)
+                                                
+                                                // 1. Draw Temperature Sparkline (Blue)
+                                                var points = model.temps
+                                                if (points && points.length >= 2) {
+                                                    ctx.strokeStyle = backend.theme === "dark" ? "#4fc3f7" : "#0288d1"
+                                                    ctx.lineWidth = 1.5
+                                                    ctx.setLineDash([]) // Solid line
+                                                    ctx.beginPath()
+                                                    
+                                                    var minTemp = Math.min.apply(Math, points)
+                                                    var maxTemp = Math.max.apply(Math, points)
+                                                    var range = maxTemp - minTemp
+                                                    if (range === 0) range = 1
+                                                    
+                                                    for (var i = 0; i < points.length; i++) {
+                                                        var x = (i / (points.length - 1)) * width
+                                                        var y = height - 2 - ((points[i] - minTemp) / range) * (height - 4)
+                                                        if (i === 0) ctx.moveTo(x, y)
+                                                        else ctx.lineTo(x, y)
+                                                    }
+                                                    ctx.stroke()
+                                                }
+
+                                                // 2. Draw Wind Speed Sparkline (Red Dashed)
+                                                var wPoints = model.winds
+                                                if (wPoints && wPoints.length >= 2) {
+                                                    ctx.strokeStyle = "#ff5252" // Bright red
+                                                    ctx.lineWidth = 1.2
+                                                    ctx.setLineDash([3, 2]) // Dashed line
+                                                    ctx.beginPath()
+
+                                                    var minWind = Math.min.apply(Math, wPoints)
+                                                    var maxWind = Math.max.apply(Math, wPoints)
+                                                    var wRange = maxWind - minWind
+                                                    if (wRange === 0) wRange = 1
+
+                                                    for (var j = 0; j < wPoints.length; j++) {
+                                                        var wx = (j / (wPoints.length - 1)) * width
+                                                        var wy = height - 2 - ((wPoints[j] - minWind) / wRange) * (height - 4)
+                                                        if (j === 0) ctx.moveTo(wx, wy)
+                                                        else ctx.lineTo(wx, wy)
+                                                    }
+                                                    ctx.stroke()
+                                                    ctx.setLineDash([]) // Reset for next paint
+                                                }
+                                            }
+                                            Component.onCompleted: requestPaint()
+                                            Connections {
+                                                target: backend
+                                                function onWeatherChanged() { sparkline.requestPaint() }
+                                            }
+                                        }
+
+                                        Text {
+                                            text: model.wind
+                                            Layout.preferredWidth: 50
+                                            horizontalAlignment: Text.AlignRight
+                                            color: backend.theme === "dark" ? "#bbffffff" : "#bb000000"
+                                            font.pixelSize: 11
+                                            font.family: "D-DIN"
+                                        }
+                                    }
+                                }
+                                interactive: false // small list, no need to scroll internally
+                            }
+                        }
+                    }
+
+                    // MouseArea for the pill to open the tray
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        
+                        property point startGlobalPos: Qt.point(0, 0)
+                        property real startHeight: 0
+                        property bool isDragging: false
+                        property bool moved: false
+
+                        onPressed: {
+                            startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                            if (weatherTray.height === 0) weatherTray.height = 1
+                            startHeight = weatherTray.height
+                            isDragging = true
+                            moved = false
+                        }
+
+                        onPositionChanged: {
+                            if (isDragging && pressed) {
+                                var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                if (Math.abs(deltaY) > 5) moved = true
+                                var newHeight = startHeight - deltaY
+                                newHeight = Math.max(0, Math.min(weatherTray.expandedHeight, newHeight))
+                                weatherTray.height = newHeight
+                            }
+                        }
+
+                        onReleased: {
+                            isDragging = false
+                            if (moved) {
+                                var threshold = weatherTray.expandedHeight * 0.2
+                                var closedThreshold = threshold
+                                var openThreshold = weatherTray.expandedHeight - threshold
+                                
+                                if (startHeight < weatherTray.expandedHeight * 0.5) {
+                                    if (weatherTray.height > closedThreshold) {
+                                        weatherTray.height = weatherTray.expandedHeight
+                                    } else {
+                                        weatherTray.height = 0
+                                    }
+                                } else {
+                                    if (weatherTray.height < openThreshold) {
+                                        weatherTray.height = 0
+                                    } else {
+                                        weatherTray.height = weatherTray.expandedHeight
+                                    }
+                                }
+                            }
+                        }
+
+                        onClicked: {
+                            if (!moved) {
+                                if (weatherTray.height > 0) {
+                                    weatherTray.height = 0
+                                } else {
+                                    weatherTray.height = weatherTray.expandedHeight
+                                }
+                            }
                         }
                     }
                 }

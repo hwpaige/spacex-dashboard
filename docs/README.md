@@ -82,3 +82,14 @@ The project includes setup scripts for different display configurations on Raspb
       ```
 
 The setup scripts handle system dependencies, display timings, Kiosk mode configuration, and boot splash screen setup.
+
+## Weather and Forecast Data
+
+The dashboard features an interactive weather tray that provides real-time METAR data and a 7-day forecast for SpaceX launch and development sites.
+
+- **Real-time Data:** Temperature, wind speed (knots), humidity, and flight category (VFR/IFR).
+- **7-day Forecast:** Daily high/low temperatures and weather conditions.
+- **Hourly Visualization:** Each forecast day includes a sparkline chart showing:
+    - **Temperature (Solid Blue Line):** 24-hour temperature trend.
+    - **Wind Speed (Dashed Red Line):** 24-hour wind speed trend, allowing for quick identification of gusty periods.
+- **Source:** Data is provided by a custom high-performance API aggregating data from the Aviation Weather Center and Open-Meteo.

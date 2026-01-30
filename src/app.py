@@ -58,6 +58,7 @@ from functions import (
     # CACHE_FILE constants
     TRAJECTORY_CACHE_FILE,
     RUNTIME_CACHE_FILE_LAUNCHES,
+    CACHE_FILE_WEATHER,
     RUNTIME_CACHE_FILE_CALENDAR,
     RUNTIME_CACHE_FILE_CHART_TRENDS,
     RUNTIME_CACHE_FILE_NARRATIVES,
@@ -285,6 +286,58 @@ class EventModel(QAbstractListModel):
         self.endResetModel()
         profiler.mark(f"EventModel: update_data End (count: {len(self._grouped_data)})")
 
+class WeatherForecastModel(QAbstractListModel):
+    DayRole = Qt.ItemDataRole.UserRole + 1
+    TempLowRole = Qt.ItemDataRole.UserRole + 2
+    TempHighRole = Qt.ItemDataRole.UserRole + 3
+    ConditionRole = Qt.ItemDataRole.UserRole + 4
+    WindRole = Qt.ItemDataRole.UserRole + 5
+    TempsRole = Qt.ItemDataRole.UserRole + 6
+    WindsRole = Qt.ItemDataRole.UserRole + 7
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._data = []
+
+    def rowCount(self, parent=QModelIndex()):
+        return len(self._data)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        if not index.isValid() or not (0 <= index.row() < len(self._data)):
+            return QVariant()
+        item = self._data[index.row()]
+        if role == self.DayRole:
+            return item.get('day', '')
+        elif role == self.TempLowRole:
+            return item.get('temp_low', '')
+        elif role == self.TempHighRole:
+            return item.get('temp_high', '')
+        elif role == self.ConditionRole:
+            return item.get('condition', '')
+        elif role == self.WindRole:
+            return item.get('wind', '')
+        elif role == self.TempsRole:
+            return item.get('temps', [])
+        elif role == self.WindsRole:
+            return item.get('winds', [])
+        return QVariant()
+
+    def roleNames(self):
+        return {
+            self.DayRole: b"day",
+            self.TempLowRole: b"tempLow",
+            self.TempHighRole: b"tempHigh",
+            self.ConditionRole: b"condition",
+            self.WindRole: b"wind",
+            self.TempsRole: b"temps",
+            self.WindsRole: b"winds"
+        }
+
+    def update_data(self, forecast_list):
+        self.beginResetModel()
+        self._data = forecast_list
+        self.endResetModel()
+
 class DataLoader(QObject):
     finished = pyqtSignal(dict, dict, list, dict)
     statusUpdate = pyqtSignal(str)
@@ -382,6 +435,7 @@ class Backend(QObject):
     # New signals for signal-based startup flow
     launchCacheReady = pyqtSignal()
     firstOnline = pyqtSignal()
+    weatherForecastModelChanged = pyqtSignal()
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
     launchTrayVisibilityChanged = pyqtSignal()
@@ -466,6 +520,23 @@ class Backend(QObject):
         profiler.mark("Backend: get_closest_x_video_url End")
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
         self._weather_data = {}
+        try:
+            profiler.mark("Backend: Loading Weather Cache Start")
+            weather_cache = load_cache_from_file(CACHE_FILE_WEATHER)
+            if weather_cache and 'data' in weather_cache:
+                self._weather_data = weather_cache['data']
+                logger.info(f"Backend: Loaded cached weather for {len(self._weather_data)} locations")
+                # Force timestamp update to ensure UI sees recent data if cache is fresh
+                if 'timestamp' in weather_cache:
+                    logger.info(f"Backend: Weather cache timestamp: {weather_cache['timestamp']}")
+            profiler.mark("Backend: Loading Weather Cache End")
+        except Exception as e:
+            logger.debug(f"Failed to load initial weather cache: {e}")
+
+        self._weather_forecast_model = WeatherForecastModel()
+        # Seed the forecast model from cache immediately if available
+        if self._weather_data:
+            self._on_weather_updated(self._weather_data)
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
         self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
@@ -2417,7 +2488,7 @@ class Backend(QObject):
         weather_data = {}
         for location in location_settings.keys():
             weather_data[location] = {
-                'temperature_c': 25,
+                'temperature_c': (25 - 32) * 5/9,
                 'temperature_f': 77,
                 'wind_speed_ms': 5,
                 'wind_speed_kts': 9.7,
@@ -2491,11 +2562,68 @@ class Backend(QObject):
         # Auto-reconnect to last connected network if not currently connected
         self._auto_reconnect_to_last_network()
 
+    @pyqtProperty(QObject, notify=weatherForecastModelChanged)
+    def weatherForecastModel(self):
+        return self._weather_forecast_model
+
     @pyqtSlot(dict)
     def _on_weather_updated(self, weather_data):
         """Handle weather data update completion"""
+        if not weather_data:
+            logger.warning("Backend: Received empty weather data in _on_weather_updated")
+            return
+
         self._weather_data = weather_data
+        
+        # Extract forecast for active location if available, else use dummy/simulated forecast
+        active_weather = self._weather_data.get(self._location, {})
+        if not active_weather:
+            logger.warning(f"Backend: No weather data for current location '{self._location}'")
+        
+        # Prioritize processed forecast from API
+        forecast = active_weather.get('forecast_processed', [])
+        
+        if not forecast:
+            # Fallback to 'forecast' if 'forecast_processed' is missing for some reason
+            forecast = active_weather.get('forecast', [])
+            
+            if not forecast or isinstance(forecast, dict):
+                logger.info(f"Backend: Generating simulated forecast for {self._location}")
+                # Generate simulated forecast if API doesn't provide it yet
+                # Note: if forecast is a dict, it's the raw API response we haven't processed
+                forecast = []
+                days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+                current_day_idx = datetime.now().weekday()
+                base_temp = active_weather.get('temperature_f', 75)
+                
+                for i in range(1, 6):
+                    day_name = days[(current_day_idx + i) % 7]
+                    low = int(base_temp - 5 - i)
+                    high = int(base_temp + 5 + i)
+                    # Generate simple daily curve: low -> high -> lowish
+                    # 6 points for the sparkline
+                    temps = [low, int(low + (high-low)*0.3), high, int(high - (high-low)*0.2), int(high - (high-low)*0.5), low + 2]
+                    
+                    # Generate simple daily wind curve
+                    base_wind = int(active_weather.get('wind_speed_kts', 10))
+                    winds = [base_wind, base_wind + i, base_wind + i + 2, base_wind + i + 1, base_wind + i - 1, base_wind]
+                    avg_wind = sum(winds) / len(winds)
+                    sim_dir = (90 + i * 10) % 360
+
+                    forecast.append({
+                        'day': day_name,
+                        'temp_low': f"{low}°",
+                        'temp_high': f"{high}°",
+                        'condition': 'Partly Cloudy',
+                        'wind': f"{int(avg_wind)}kt {sim_dir}°",
+                        'temps': temps,
+                        'winds': winds
+                    })
+        
+        logger.info(f"Backend: Updating weather forecast model with {len(forecast)} days")
+        self._weather_forecast_model.update_data(forecast)
         self.weatherChanged.emit()
+        self.weatherForecastModelChanged.emit()
         # Clean up thread
         if hasattr(self, '_weather_updater_thread'):
             self._weather_updater_thread.quit()
