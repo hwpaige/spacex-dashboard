@@ -3863,7 +3863,7 @@ Window {
         Popup {
             id: updatePopup
             width: 450
-            height: 320
+            height: 250
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -4041,38 +4041,6 @@ Window {
                     }
                 }
 
-                // Status message - compact
-                Text {
-                    text: {
-                        if (!backend) return "Initializing..."
-                        var current = backend.currentVersionInfo.hash
-                        var latest = backend.latestVersionInfo.hash
-                        var branch = backend.targetBranch
-                        if (!current || !latest) {
-                            return "Unable to check for updates"
-                        } else if (current === latest) {
-                            return "✓ You are up to date (" + (branch === "master" ? "Stable" : "Beta") + ")"
-                        } else {
-                            return "⬆ New " + (branch === "master" ? "Stable" : "Beta") + " version available!"
-                        }
-                    }
-                    font.pixelSize: 12
-                    font.bold: true
-                    color: {
-                        if (!backend) return "grey"
-                        var current = backend.currentVersionInfo.hash
-                        var latest = backend.latestVersionInfo.hash
-                        if (!current || !latest) {
-                            return "#F44336"
-                        } else if (current === latest) {
-                            return "#4CAF50"
-                        } else {
-                            return "#FF9800"
-                        }
-                    }
-                    Layout.alignment: Qt.AlignHCenter
-                }
-
                 // Buttons - compact horizontal layout
                 RowLayout {
                     Layout.alignment: Qt.AlignHCenter
@@ -4103,7 +4071,7 @@ Window {
 
                     Button {
                         text: "Restart"
-                        Layout.preferredWidth: 70
+                        Layout.preferredWidth: 80
                         Layout.preferredHeight: 28
                         onClicked: {
                             console.log("Restart clicked")
@@ -4115,12 +4083,24 @@ Window {
                             radius: 3
                         }
 
-                        contentItem: Text {
-                            text: parent.text
-                            color: backend.theme === "dark" ? "white" : "black"
-                            font.pixelSize: 11
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: RowLayout {
+                            spacing: 4
+                            Text {
+                                text: "\uf011"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 11
+                                font.weight: Font.Black
+                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+                            Text {
+                                text: "Restart"
+                                color: backend.theme === "dark" ? "white" : "black"
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                Layout.alignment: Qt.AlignVCenter
+                            }
                         }
                     }
 
@@ -4146,7 +4126,7 @@ Window {
 
                     Button {
                         text: "Update Now"
-                        Layout.preferredWidth: 90
+                        Layout.preferredWidth: 110
                         Layout.preferredHeight: 28
                         visible: {
                             var current = backend.currentVersionInfo.hash
@@ -4163,12 +4143,24 @@ Window {
                             radius: 3
                         }
 
-                        contentItem: Text {
-                            text: parent.text
-                            color: "white"
-                            font.pixelSize: 11
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
+                        contentItem: RowLayout {
+                            spacing: 4
+                            Text {
+                                text: "\uf062"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 11
+                                font.weight: Font.Black
+                                color: "white"
+                                Layout.alignment: Qt.AlignVCenter
+                            }
+                            Text {
+                                text: "Update Now"
+                                color: "white"
+                                font.pixelSize: 11
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                                Layout.alignment: Qt.AlignVCenter
+                            }
                         }
                     }
                 }
