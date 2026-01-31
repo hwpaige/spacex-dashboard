@@ -3270,8 +3270,9 @@ def setup_dashboard_environment():
                         os.environ["QSG_RHI_BACKEND"] = "opengl"
                         # Use KMS for rotation if needed, or QT_QPA_EGLFS_ROTATION
                         # The user reports not rotated properly, typically means needs 90 or 270
+                        # DASHBOARD_ORIENTATION=270 (default) or 90
                         if "QT_QPA_EGLFS_ROTATION" not in os.environ:
-                            os.environ["QT_QPA_EGLFS_ROTATION"] = "270"
+                            os.environ["QT_QPA_EGLFS_ROTATION"] = os.environ.get("DASHBOARD_ORIENTATION", "270")
                     else:
                         os.environ["QT_QPA_PLATFORM"] = "xcb"
                 except ValueError:

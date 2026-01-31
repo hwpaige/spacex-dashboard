@@ -714,6 +714,8 @@ Environment=QT_RHI_BACKEND=opengl
 Environment=QT_QPA_EGLFS_KMS_CONFIG=/home/$USER/Desktop/project/src/kms.json
 Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
+# DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
+Environment=DASHBOARD_ORIENTATION=270
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle --disable-vulkan --disable-gpu-memory-buffer-video-frames --disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1
 Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
 Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
@@ -732,6 +734,8 @@ EOF
         log "Ubuntu 25.10 detected: Configuring KMS and enabling EGLFS service."
         
         # Create KMS config for Ubuntu 25.10 EGLFS
+        # Using environment variable placeholder if possible, or just default to 270
+        # NOTE: If display is upside down, change rotation to 90 below
         cat << KMS_EOF > /home/$USER/Desktop/project/src/kms.json
 {
   "device": "/dev/dri/card0",
@@ -1555,7 +1559,16 @@ fi
 echo "Using display output: \$OUTPUT" >> ~/xsession.log
 
 if [ -n "\$OUTPUT" ]; then
-    xrandr --output "\$OUTPUT" --rotate left 2>&1 | tee -a ~/xrandr.log
+    # Use DASHBOARD_ORIENTATION to determine rotation. 
+    # xrandr uses keywords: normal, left (90 CCW), right (90 CW), inverted (180)
+    # DASHBOARD_ORIENTATION=270 (CW) matches 'left' (90 CCW)
+    # DASHBOARD_ORIENTATION=90 (CW) matches 'right' (90 CW)
+    ROT="left"
+    if [ "\$DASHBOARD_ORIENTATION" = "90" ]; then ROT="right"; fi
+    if [ "\$DASHBOARD_ORIENTATION" = "180" ]; then ROT="inverted"; fi
+    if [ "\$DASHBOARD_ORIENTATION" = "0" ]; then ROT="normal"; fi
+    
+    xrandr --output "\$OUTPUT" --rotate \$ROT 2>&1 | tee -a ~/xrandr.log
 else
     echo "ERROR: No connected display output found" >> ~/xsession.log
 fi
@@ -1572,8 +1585,10 @@ unclutter -idle 0 -root &
 matchbox-window-manager -use_titlebar no -use_cursor no &
 
 # Set environment variables
+# DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
 export DASHBOARD_WIDTH=1480
 export DASHBOARD_HEIGHT=320
+export DASHBOARD_ORIENTATION=270
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen$extra_flags"
