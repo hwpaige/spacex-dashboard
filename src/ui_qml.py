@@ -3625,36 +3625,41 @@ Window {
                         }
                     }
 
-                    // Theme Toggle Switch (Matched to launch tray toggle)
+                    // Theme Toggle Switch (Restyled to align with themes)
                     Rectangle {
                         id: themeToggle
                         Layout.preferredWidth: 50
                         Layout.preferredHeight: 32
                         radius: 16
-                        color: backend.theme === "dark" ? "#666666" : "#CCCCCC"
+                        color: backend.theme === "dark" ? "#1a1a1b" : "#f0f0f0"
+                        border.color: backend.theme === "dark" ? "#333" : "#e0e0e0"
+                        border.width: 1
+                        Behavior on color { ColorAnimation { duration: 200 } }
 
                         Text {
                             text: "\uf185" // Sun
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
-                            color: backend.theme === "light" ? (backend.theme === "dark" ? "white" : "black") : "#888888"
+                            color: backend.theme === "light" ? "#f1c40f" : "#555555"
                             anchors.left: parent.left
                             anchors.leftMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
                             opacity: backend.theme === "light" ? 1.0 : 0.5
                             Behavior on opacity { NumberAnimation { duration: 200 } }
+                            Behavior on color { ColorAnimation { duration: 200 } }
                         }
 
                         Text {
                             text: "\uf186" // Moon
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 12
-                            color: backend.theme === "dark" ? "white" : "#888888"
+                            color: backend.theme === "dark" ? "#f5f5f5" : "#888888"
                             anchors.right: parent.right
                             anchors.rightMargin: 8
                             anchors.verticalCenter: parent.verticalCenter
                             opacity: backend.theme === "dark" ? 1.0 : 0.5
                             Behavior on opacity { NumberAnimation { duration: 200 } }
+                            Behavior on color { ColorAnimation { duration: 200 } }
                         }
 
                         Rectangle {
@@ -3662,8 +3667,8 @@ Window {
                             width: 26
                             height: 26
                             radius: 13
-                            color: backend.theme === "dark" ? "#44ffffff" : "#44000000"
-                            border.color: backend.theme === "dark" ? "#33ffffff" : "#33000000"
+                            color: "white"
+                            border.color: backend.theme === "dark" ? "#444" : "#ccc"
                             border.width: 1
                             x: backend.theme === "dark" ? parent.width - width - 3 : 3
                             y: 3
@@ -3682,42 +3687,6 @@ Window {
                         }
                     }
 
-                    // Launch details tray toggle
-                    Rectangle {
-                        visible: true
-                        Layout.preferredWidth: 50
-                        Layout.preferredHeight: 32
-                        radius: 16
-                        color: backend.launchTrayManualMode ?
-                            "#FF3838" :
-                            (backend.theme === "dark" ? "#666666" : "#CCCCCC")
-
-                        Behavior on color { ColorAnimation { duration: 200 } }
-
-                        Rectangle {
-                            width: 26
-                            height: 26
-                            radius: 13
-                            x: backend.launchTrayManualMode ? parent.width - width - 3 : 3
-                            y: 3
-                            color: "white"
-                            border.color: backend.theme === "dark" ? "#333333" : "#E0E0E0"
-                            border.width: 1
-
-                            Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        ToolTip {
-                            text: backend.launchTrayManualMode ? "Manual: Launch banner always shown" : "Auto: Show banner within 1 hour of launch"
-                            delay: 500
-                        }
-                    }
                 }
 
                 // Right pill (countdown) - FIXED WIDTH
@@ -4397,7 +4366,7 @@ Window {
         Popup {
             id: updatePopup
             width: 450
-            height: 250
+            height: 300
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -4439,13 +4408,13 @@ Window {
                 // Current version - compact single line
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 45
+                    Layout.preferredHeight: 40
                     color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 7
                         spacing: 8
 
                         Text {
@@ -4481,13 +4450,13 @@ Window {
                 // Latest version - compact single line
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 45
+                    Layout.preferredHeight: 40
                     color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 8
+                        anchors.margins: 7
                         spacing: 8
 
                         Text {
@@ -4515,6 +4484,68 @@ Window {
                                 color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                            }
+                        }
+                    }
+                }
+
+                // Launch Tray Manual Override
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 40
+                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
+                    radius: 4
+
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 7
+                        spacing: 8
+
+                        Text {
+                            text: "\uf06e"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 14
+                            color: "#FF9800"
+                            Layout.preferredWidth: 20
+                        }
+
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 2
+                            Text {
+                                text: "Always Show Launch Banner"
+                                font.pixelSize: 11
+                                font.bold: true
+                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                            }
+                            Text {
+                                text: "Override automatic 1-hour visibility rule"
+                                font.pixelSize: 9
+                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
+                            }
+                        }
+
+                        Rectangle {
+                            width: 40
+                            height: 20
+                            radius: 10
+                            color: backend.launchTrayManualMode ? "#4CAF50" : (backend.theme === "dark" ? "#333" : "#ccc")
+                            Behavior on color { ColorAnimation { duration: 200 } }
+
+                            Rectangle {
+                                width: 16
+                                height: 16
+                                radius: 8
+                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
+                                y: 2
+                                color: "white"
+                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                            }
+
+                            MouseArea {
+                                anchors.fill: parent
+                                onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                                cursorShape: Qt.PointingHandCursor
                             }
                         }
                     }
