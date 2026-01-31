@@ -684,7 +684,7 @@ Window {
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
-                       ? (backend.theme === "dark" ? "#111111" : "#f8f8f8")
+                       ? "transparent"
                        : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
                 radius: 8
                 clip: false
@@ -809,14 +809,13 @@ Window {
                                         // Ensure the globe view fills all available space in the layout
                                         anchors.fill: parent
                                         url: globeUrl
-                                        // Use theme background color to avoid white corners during load
-                                        // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                        backgroundColor: backend.theme === "dark" ? "#111111" : "#f8f8f8"
+                                        // Performance: Transparency enabled per user request; layers enabled to support it
+                                        backgroundColor: "transparent"
                                         onBackgroundColorChanged: {
                                             if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                         }
                                         zoomFactor: 1.0
-                                        layer.enabled: false
+                                        layer.enabled: true
                                         layer.smooth: true
                                         settings.javascriptCanAccessClipboard: false
                                         settings.allowWindowActivationFromJavaScript: false
@@ -1026,7 +1025,9 @@ Window {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: (1.0 - backgroundWindy.progress)
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                // When in high-resolution mode, the globe is shown at the top, so we make the background 
+                // transparent to allow the globe to sit directly on the app background/Windy view.
+                color: (isHighResolution) ? "transparent" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
                 radius: 8
                 clip: true
                 opacity: 1.0 - backgroundWindy.progress
@@ -1054,7 +1055,7 @@ Window {
                             Rectangle {
                                 anchors.fill: parent
                                 anchors.margins: 0
-                                color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
+                                color: "transparent"
                                 radius: 0
                                 clip: true
 
@@ -1063,13 +1064,13 @@ Window {
                                     anchors.fill: parent
                                     anchors.margins: 0
                                     url: globeUrl
-                                    // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                    backgroundColor: backend.theme === "dark" ? "#111111" : "#f8f8f8"
+                                    // Performance: Transparency enabled per user request; layers enabled to support it
+                                    backgroundColor: "transparent"
                                     onBackgroundColorChanged: {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0, (backend.theme === "dark" ? "#111111" : "#f8f8f8"))
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
                                     }
                                     zoomFactor: 1.0
-                                    layer.enabled: false
+                                    layer.enabled: true
                                     layer.smooth: true
                                     settings.javascriptCanAccessClipboard: false
                                     settings.allowWindowActivationFromJavaScript: false
@@ -1083,7 +1084,7 @@ Window {
                                             }
                                             launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0, (backend.theme === "dark" ? "#111111" : "#f8f8f8"))
+                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
                                         }
                                     }
 
