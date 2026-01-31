@@ -3206,7 +3206,7 @@ def setup_dashboard_environment():
                 "--enable-gpu-rasterization",
                 "--disable-vulkan",
                 "--disable-gpu-memory-buffer-video-frames",
-                "--disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE"
+                "--disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1"
             ])
             logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 ANGLE hardware acceleration fixes.")
         elif platform.machine() == 'aarch64':
@@ -3271,7 +3271,7 @@ def setup_dashboard_environment():
                         # Use KMS for rotation if needed, or QT_QPA_EGLFS_ROTATION
                         # The user reports not rotated properly, typically means needs 90 or 270
                         if "QT_QPA_EGLFS_ROTATION" not in os.environ:
-                            os.environ["QT_QPA_EGLFS_ROTATION"] = "90"
+                            os.environ["QT_QPA_EGLFS_ROTATION"] = "270"
                     else:
                         os.environ["QT_QPA_PLATFORM"] = "xcb"
                 except ValueError:
