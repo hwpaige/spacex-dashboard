@@ -3196,10 +3196,10 @@ def setup_dashboard_environment():
 
         if is_25_10_or_newer:
             # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
-            # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
+            # Use auto-detection for ozone platform to avoid 'Invalid ozone platform: x11' errors
+            # while still forcing EGL for hardware acceleration
             flags.extend([
-                "--ozone-platform-hint=x11",
-                "--ozone-platform=x11",
+                "--ozone-platform-hint=auto",
                 "--use-gl=egl"
             ])
             logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")

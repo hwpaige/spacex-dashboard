@@ -1463,7 +1463,7 @@ EOF
     local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
     local extra_flags=""
     if [ "$ubuntu_version" = "25.10" ]; then
-        extra_flags=" --ozone-platform-hint=x11 --ozone-platform=x11 --use-gl=egl"
+        extra_flags=" --ozone-platform-hint=auto --use-gl=egl"
         log "Ubuntu 25.10 detected: Adding GLOzone compatibility flags to .xsession"
     fi
 
