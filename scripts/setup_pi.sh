@@ -98,6 +98,13 @@ update_system() {
     if ! apt-get install -y software-properties-common; then
         log "WARNING: Could not install software-properties-common, continuing..."
     fi
+    
+    # Check for Ubuntu 25.10 and suggest rollback if necessary
+    if grep -q "25.10" /etc/os-release; then
+        log "⚠ Ubuntu 25.10 detected. This version ships with Qt 6.9+ which has GLOzone issues."
+        log "⚠ It is highly recommended to run scripts/rollback_qt.sh after this setup finishes."
+    fi
+
     add-apt-repository universe -y 2>/dev/null || log "WARNING: Could not add universe repository"
 }
 
