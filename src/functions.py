@@ -978,7 +978,8 @@ def fetch_weather(lat, lon, location):
             hourly_temps = [c_to_f(c) for c in hourly_temps_c]
             # API documentation says windspeed_10m, but we'll check both for robustness
             hourly_winds = hourly.get('windspeed_10m', hourly.get('wind_speed_10m', []))
-            
+            hourly_dirs = hourly.get('winddirection_10m', [])
+
             for i in range(len(times)):
                 try:
                     dt = datetime.strptime(times[i], "%Y-%m-%d")
@@ -998,22 +999,20 @@ def fetch_weather(lat, lon, location):
                     if not day_hourly_temps:
                         day_hourly_temps = [min_temps[i], max_temps[i]]
                     
-                    # Calculate a representative wind for the day (average speed and direction)
+                    # Calculate a representative wind for the day
                     if day_hourly_winds:
                         avg_wind = sum(day_hourly_winds) / len(day_hourly_winds)
-                        # Find the corresponding wind directions for this day
+                        # Find corresponding wind directions
                         day_hourly_dirs = []
-                        hourly_dirs = hourly.get('winddirection_10m', [])
                         for h_idx, h_time in enumerate(hourly_times):
                             if h_time.startswith(day_str) and h_idx < len(hourly_dirs):
                                 day_hourly_dirs.append(hourly_dirs[h_idx])
-                        
                         avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
                         wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
                     else:
                         day_hourly_winds = [0, 0]
                         wind_str = "N/A"
-                    
+
                     forecast_list.append({
                         'day': day_name,
                         'temp_low': f"{int(min_temps[i])}°",
@@ -1023,9 +1022,9 @@ def fetch_weather(lat, lon, location):
                         'temps': day_hourly_temps,
                         'winds': day_hourly_winds
                     })
-                except Exception as ex:
-                    logger.debug(f"Error parsing forecast day {i}: {ex}")
-            
+                except Exception:
+                    continue
+
             res_json['forecast_processed'] = forecast_list
             
         profiler.mark(f"fetch_weather End ({location}: Success)")
@@ -1516,7 +1515,7 @@ def get_git_version_info(src_dir):
         commit_hash = res_hash.stdout.strip()
 
         res_msg = subprocess.run(['git', 'log', '-1', '--pretty=format:%s', commit_hash], capture_output=True, text=True, cwd=src_dir)
-        commit_message = res_msg.stdout.strip() if res_msg.returncode == 0 else "Unknown"
+        commit_message = res_msg.stdout.strip() if res_msg.returncode == 0 : "Unknown"
 
         profiler.mark("get_git_version_info End (Success)")
         return {
@@ -2188,7 +2187,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     }
 
     # Persist to cache
-    try:
+    try {
         traj_cache[cache_key] = {
             'launch_site': launch_site,
             'trajectory': trajectory,
@@ -2202,8 +2201,9 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'model': 'v10-sep-dot-optimized'
         }
         save_cache_to_file(TRAJECTORY_CACHE_FILE, traj_cache, datetime.now(pytz.UTC))
-    except Exception as e:
+    } except Exception as e {
         logger.warning(f"Failed to save trajectory cache: {e}")
+    }
 
     return result
 
@@ -2957,8 +2957,8 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
                                 for h_idx, h_time in enumerate(hourly_times):
                                     if h_time.startswith(day_str) and h_idx < len(hourly_dirs):
                                         day_hourly_dirs.append(hourly_dirs[h_idx])
-                                avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
-                                wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
+                        avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
+                        wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
                             else:
                                 day_hourly_winds = [0, 0]
                                 wind_str = "N/A"
@@ -3276,11 +3276,11 @@ def setup_dashboard_environment():
                             # Some Qt versions may expect integers, others strings.
                             # We use the integer value from DASHBOARD_ORIENTATION if possible.
                             try:
-                                rotation_val = int(os.environ.get("DASHBOARD_ORIENTATION", "270"))
+                                rotation_val = int(os.environ.get("DASHBOARD_ORIENTATION", "90"))
                                 os.environ["QT_QPA_EGLFS_ROTATION"] = str(rotation_val)
                             except ValueError:
-                                os.environ["QT_QPA_EGLFS_ROTATION"] = "270"
-                        
+                                os.environ["QT_QPA_EGLFS_ROTATION"] = "90"
+
                         # Also check if we need to apply this to KMS config dynamically if it exists
                         # though typically KMS config is static on disk.
                     else:

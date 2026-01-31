@@ -670,6 +670,9 @@ Environment=QT_DEBUG_PLUGINS=0
 Environment=QT_LOGGING_RULES=qt.qpa.plugin=false
 Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
+# DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
+Environment=DASHBOARD_ORIENTATION=90
+Environment=QT_QPA_EGLFS_ROTATION=90
 Environment=LIBGL_ALWAYS_SOFTWARE=0
 Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
@@ -715,8 +718,8 @@ Environment=QT_QPA_EGLFS_KMS_CONFIG=/home/$USER/Desktop/project/src/kms.json
 Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
 # DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
-Environment=DASHBOARD_ORIENTATION=270
-Environment=QT_QPA_EGLFS_ROTATION=270
+Environment=DASHBOARD_ORIENTATION=90
+Environment=QT_QPA_EGLFS_ROTATION=90
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle --disable-vulkan --disable-gpu-memory-buffer-video-frames --disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1
 Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
 Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
@@ -739,7 +742,7 @@ EOF
         # Create KMS config for Ubuntu 25.10 EGLFS
         # We use environment variable interpolation via a heredoc to embed the rotation
         # NOTE: If display is upside down, change DASHBOARD_ORIENTATION in the service file
-        local rotation=270
+        local rotation=90
         cat << KMS_EOF > "/home/$USER/Desktop/project/src/kms.json"
 {
   "device": "/dev/dri/card0",
@@ -1571,7 +1574,7 @@ matchbox-window-manager -use_titlebar no -use_cursor no &
 # DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
 export DASHBOARD_WIDTH=1480
 export DASHBOARD_HEIGHT=320
-export DASHBOARD_ORIENTATION=270
+export DASHBOARD_ORIENTATION=90
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
 export QT_QPA_EGLFS_ROTATION=\$DASHBOARD_ORIENTATION
@@ -1650,17 +1653,9 @@ EOF
     # Temporarily disable the systemd service to avoid conflicts during autologin testing
     systemctl disable spacex-dashboard
     
-    # Start LightDM immediately to test autologin only if not on 25.10
-    if [ "$ubuntu_version" != "25.10" ]; then
-        log "Starting LightDM to test autologin configuration..."
-        systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
-    else
-        log "Skipping LightDM start as EGLFS is preferred for 25.10"
-        log "To test the app, run: sudo systemctl start spacex-dashboard-eglfs"
-    fi
-    
-    # Remove old getty override if it exists
-    rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
+    # Start LightDM immediately to test autologin configuration...
+    log "Starting LightDM to test autologin configuration..."
+    systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
 }
 
 optimize_performance() {
@@ -1725,3 +1720,4 @@ main() {
 }
 
 main "$@"
+

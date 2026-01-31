@@ -4,8 +4,8 @@
   "outputs": [
     {
       "name": "HDMI-A-1",
-      "mode": "320x1480",
-      "rotation": 270
+      "mode": "1480x320",
+      "rotation": 90
     }
   ]
 }
