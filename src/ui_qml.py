@@ -417,13 +417,15 @@ Window {
             property bool isDragging: false
             property real manualWidth: minWidth
 
+            readonly property bool isHighRes: backend && backend.isHighResolution
+
             // Width is 1/4 of total safeArea width + extension for fade
             width: isDragging ? manualWidth : (isWindyFullscreen ? root.width : minWidth)
             z: 0 // Behind centralContent
             visible: !!(!backend || !backend.isLoading)
             clip: true
 
-            readonly property real minWidth: (root.width / 4) + 120
+            readonly property real minWidth: (root.width / 4) + (isHighRes ? 120 : 250)
             readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, root.width - minWidth)))
 
             Behavior on width { 
@@ -496,7 +498,7 @@ Window {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 160 // Start fading 40px before the column edge
+                width: 250 
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
                 gradient: Gradient {
