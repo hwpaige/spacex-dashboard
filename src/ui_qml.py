@@ -3714,6 +3714,257 @@ Window {
                         font.pixelSize: 14
                         font.family: "D-DIN"
                         font.bold: true
+                        // Fade out as tray expands
+                        opacity: 1.0 - Math.min(1.0, countdownTray.height / 56.0)
+                    }
+
+                    // Sliding Countdown Tray
+                    Popup {
+                        id: countdownTray
+                        x: parent.width - width
+                        width: parent.width
+                        height: 0
+                        y: parent.height - height
+                        modal: false
+                        focus: false
+                        visible: height > 0
+                        closePolicy: Popup.NoAutoClose
+                        padding: 0
+                        
+                        property real expandedHeight: 180
+                        property bool isDragging: false
+                        opacity: height / expandedHeight
+                        
+                        Behavior on height {
+                            enabled: !countdownTray.isDragging
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+                        }
+                        
+                        background: Item {
+                            Rectangle {
+                                anchors.fill: parent
+                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                radius: 14
+                                border.width: 1
+                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                            }
+                        }
+                        
+                        ColumnLayout {
+                            anchors.fill: parent
+                            anchors.margins: 0
+                            spacing: 0
+                            
+                            // Drag Handle (Top of tray)
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 25
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf078"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: 12
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    
+                                    property point startGlobalPos: Qt.point(0, 0)
+                                    property real startHeight: 0
+                                    property bool moved: false
+                                    
+                                    onPressed: {
+                                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        startHeight = countdownTray.height
+                                        countdownTray.isDragging = true
+                                        moved = false
+                                    }
+                                    
+                                    onPositionChanged: {
+                                        if (countdownTray.isDragging && pressed) {
+                                            var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                            var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                            if (Math.abs(deltaY) > 5) moved = true
+                                            var newHeight = startHeight - deltaY
+                                            newHeight = Math.max(0, Math.min(countdownTray.expandedHeight, newHeight))
+                                            countdownTray.height = newHeight
+                                        }
+                                    }
+                                    
+                                    onReleased: {
+                                        countdownTray.isDragging = false
+                                        if (moved) {
+                                            var threshold = countdownTray.expandedHeight * 0.2
+                                            if (startHeight < countdownTray.expandedHeight * 0.5) {
+                                                countdownTray.height = countdownTray.height > threshold ? countdownTray.expandedHeight : 0
+                                            } else {
+                                                countdownTray.height = countdownTray.height < (countdownTray.expandedHeight - threshold) ? 0 : countdownTray.expandedHeight
+                                            }
+                                        }
+                                    }
+                                    onClicked: {
+                                        if (!moved) {
+                                            countdownTray.height = countdownTray.height > countdownTray.expandedHeight * 0.5 ? 0 : countdownTray.expandedHeight
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Content
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.fillHeight: true
+                                Layout.margins: 10
+                                Layout.topMargin: 0
+                                spacing: 10
+
+                                Text {
+                                    text: (backend.countdownBreakdown.prefix || "T-") + " " + (backend.countdownBreakdown.label || "LAUNCH")
+                                    color: backend.theme === "dark" ? "#aaa" : "#666"
+                                    font.pixelSize: 12
+                                    font.family: "D-DIN"
+                                    font.bold: true
+                                    Layout.alignment: Qt.AlignHCenter
+                                }
+
+                                GridLayout {
+                                    columns: 2
+                                    Layout.fillWidth: true
+                                    columnSpacing: 0
+                                    rowSpacing: 10
+
+                                    // Days
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: backend.countdownBreakdown.days
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 28
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                        Text {
+                                            text: "DAYS"
+                                            color: backend.theme === "dark" ? "#888" : "#999"
+                                            font.pixelSize: 10
+                                            font.family: "D-DIN"
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                    }
+                                    // Hours
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: backend.countdownBreakdown.hours
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 28
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                        Text {
+                                            text: "HOURS"
+                                            color: backend.theme === "dark" ? "#888" : "#999"
+                                            font.pixelSize: 10
+                                            font.family: "D-DIN"
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                    }
+                                    // Minutes
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: backend.countdownBreakdown.minutes
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 28
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                        Text {
+                                            text: "MINUTES"
+                                            color: backend.theme === "dark" ? "#888" : "#999"
+                                            font.pixelSize: 10
+                                            font.family: "D-DIN"
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                    }
+                                    // Seconds
+                                    ColumnLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 2
+                                        Text {
+                                            text: backend.countdownBreakdown.seconds
+                                            color: backend.theme === "dark" ? "white" : "black"
+                                            font.pixelSize: 28
+                                            font.family: "D-DIN"
+                                            font.bold: true
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                        Text {
+                                            text: "SECONDS"
+                                            color: backend.theme === "dark" ? "#888" : "#999"
+                                            font.pixelSize: 10
+                                            font.family: "D-DIN"
+                                            Layout.alignment: Qt.AlignHCenter
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // MouseArea for the pill to open the tray
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        
+                        property point startGlobalPos: Qt.point(0, 0)
+                        property real startHeight: 0
+                        property bool moved: false
+                        
+                        onPressed: {
+                            if (countdownTray.height === 0) countdownTray.height = 1
+                            startHeight = countdownTray.height
+                            countdownTray.isDragging = true
+                            startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                            moved = false
+                        }
+                        
+                        onPositionChanged: {
+                            if (countdownTray.isDragging && pressed) {
+                                var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                if (Math.abs(deltaY) > 5) moved = true
+                                var newHeight = startHeight - deltaY
+                                newHeight = Math.max(0, Math.min(countdownTray.expandedHeight, newHeight))
+                                countdownTray.height = newHeight
+                            }
+                        }
+                        
+                        onReleased: {
+                            countdownTray.isDragging = false
+                            if (moved) {
+                                var threshold = countdownTray.expandedHeight * 0.2
+                                if (startHeight < countdownTray.expandedHeight * 0.5) {
+                                    countdownTray.height = countdownTray.height > threshold ? countdownTray.expandedHeight : 0
+                                } else {
+                                    countdownTray.height = countdownTray.height < (countdownTray.expandedHeight - threshold) ? 0 : countdownTray.expandedHeight
+                                }
+                            }
+                        }
+                        onClicked: {
+                            if (!moved) {
+                                if (countdownTray.height > 0) countdownTray.height = 0
+                                else countdownTray.height = countdownTray.expandedHeight
+                            }
+                        }
                     }
                 }
             }

@@ -3352,6 +3352,78 @@ def get_countdown_string(launch_data, mode, next_launch, tz_obj):
         except Exception:
             return "T- Error"
 
+def get_countdown_breakdown(launch_data, mode, next_launch, tz_obj):
+    """Generate a breakdown of the countdown for the dashboard tray."""
+    now_utc = datetime.now(pytz.UTC)
+    target_time = None
+    is_t_plus = False
+
+    if mode == 'spacex':
+        upcoming = launch_data.get('upcoming', [])
+        try:
+            # Sort upcoming launches by time
+            upcoming_sorted = sorted(
+                [l for l in upcoming if l.get('time') != 'TBD' and l.get('net')],
+                key=lambda x: _get_parsed_dt(x.get('net')) or datetime.min.replace(tzinfo=pytz.UTC)
+            )
+        except Exception:
+            upcoming_sorted = upcoming
+
+        # Check for ongoing/just-launched (not finished regardless of T0)
+        for l in upcoming_sorted:
+            try:
+                lt_utc = _get_parsed_dt(l.get('net'))
+                if not lt_utc: continue
+            except Exception:
+                continue
+            
+            is_finished = is_launch_finished(l.get('status'))
+            if lt_utc <= now_utc and not is_finished:
+                target_time = lt_utc
+                is_t_plus = True
+                break
+
+    if not target_time and next_launch:
+        try:
+            target_time = _get_parsed_dt(next_launch.get('net'))
+        except Exception:
+            pass
+
+    if not target_time:
+        return {
+            'days': '0', 'hours': '00', 'minutes': '00', 'seconds': '00', 'milliseconds': '000',
+            'prefix': 'T-', 'label': 'TBD'
+        }
+
+    target_time_tz = target_time.astimezone(tz_obj)
+    current_time_tz = datetime.now(tz_obj)
+    
+    if is_t_plus:
+        delta = current_time_tz - target_time_tz
+        prefix = 'T+'
+    else:
+        delta = target_time_tz - current_time_tz
+        prefix = 'T-'
+
+    total_seconds = max(delta.total_seconds(), 0)
+    days, rem = divmod(int(total_seconds), 86400)
+    hours, rem = divmod(rem, 3600)
+    minutes, seconds = divmod(rem, 60)
+    # Use fractional seconds to get precise milliseconds
+    milliseconds = int((total_seconds - int(total_seconds)) * 1000)
+    # Alternatively, use delta.microseconds if total_seconds was calculated from delta
+    # milliseconds = int(delta.microseconds / 1000)
+
+    return {
+        'days': str(days),
+        'hours': f"{hours:02d}",
+        'minutes': f"{minutes:02d}",
+        'seconds': f"{seconds:02d}",
+        'milliseconds': f"{milliseconds:03d}",
+        'prefix': prefix,
+        'label': 'LIFTOFF' if is_t_plus else 'LAUNCH'
+    }
+
 def get_update_progress_summary(log_path):
     """Read the last few lines of the update log to provide a status update."""
     if not log_path or not os.path.exists(log_path):

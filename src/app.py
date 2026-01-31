@@ -100,6 +100,7 @@ from functions import (
     format_qt_message,
     get_launch_tray_visibility_state,
     get_countdown_string,
+    get_countdown_breakdown,
     get_update_progress_summary,
     perform_bootstrap_diagnostics,
     disconnect_from_wifi,
@@ -1758,6 +1759,15 @@ class Backend(QObject):
         return get_countdown_string(
             self._launch_data,
             self._mode, 
+            self.get_next_launch(),
+            self._tz
+        )
+
+    @pyqtProperty(QVariant, notify=countdownChanged)
+    def countdownBreakdown(self):
+        return get_countdown_breakdown(
+            self._launch_data,
+            self._mode,
             self.get_next_launch(),
             self._tz
         )
