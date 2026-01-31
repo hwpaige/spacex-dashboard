@@ -414,10 +414,20 @@ check_qt_version() {
     
     # Check PyQt6 version
     local pyqt_version=$(python3 -c "import PyQt6; print(PyQt6.QtCore.PYQT_VERSION_STR)" 2>/dev/null || echo "unknown")
+    
+    # If python detection failed, try dpkg as fallback
+    if [ "$pyqt_version" = "unknown" ]; then
+        pyqt_version=$(dpkg -l python3-pyqt6 2>/dev/null | grep "^ii" | awk '{print $3}' | cut -d'-' -f1 || echo "unknown")
+    fi
     log "PyQt6 version: $pyqt_version"
     
     # Check Qt6 WebEngine version
     local qt_version=$(python3 -c "import PyQt6.QtWebEngine; print(PyQt6.QtWebEngine.PYQT_WEBENGINE_VERSION_STR)" 2>/dev/null || echo "unknown")
+    
+    # If python detection failed, try dpkg as fallback
+    if [ "$qt_version" = "unknown" ]; then
+        qt_version=$(dpkg -l python3-pyqt6.qtwebengine 2>/dev/null | grep "^ii" | awk '{print $3}' | cut -d'-' -f1 || echo "unknown")
+    fi
     log "Qt WebEngine version: $qt_version"
     
     # Extract major.minor version for comparison
@@ -431,12 +441,18 @@ check_qt_version() {
         log "✓ Qt $qt_version detected - this version is known to work with the SpaceX dashboard"
     elif [[ $qt_major_minor == "6.9" ]]; then
         log "✓ Qt $qt_version detected - applying GLOzone compatibility fixes for Ubuntu 25.10"
-    elif [[ $qt_major_minor == "6.10" ]] || [[ $qt_major_minor == "6.11" ]] || [[ $qt_major_minor == "6.12" ]]; then
+    elif [[ -n "$qt_major_minor" ]] && (( $(echo "$qt_major_minor >= 6.10" | bc -l 2>/dev/null || echo 0) )); then
         log "⚠ WARNING: Qt $qt_version detected - this version is newer than tested versions"
         log "⚠ Compatibility is unknown - applying GLOzone fixes as a precaution"
     else
-        log "⚠ WARNING: Unable to determine Qt version or using untested version: $qt_version"
-        log "⚠ This may cause issues with the SpaceX dashboard"
+        # Fallback: If version is still unknown, check Ubuntu version as a proxy
+        local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+        if [ "$ubuntu_version" = "25.10" ]; then
+            log "✓ Ubuntu 25.10 detected - assuming Qt 6.9+ and applying GLOzone compatibility fixes"
+        else
+            log "⚠ WARNING: Unable to determine Qt version or using untested version: $qt_version"
+            log "⚠ This may cause issues with the SpaceX dashboard"
+        fi
     fi
 }
 

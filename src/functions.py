@@ -3140,12 +3140,11 @@ def get_ubuntu_version():
         return None
     try:
         with open('/etc/os-release', 'r') as f:
-            lines = f.readlines()
-            for line in lines:
+            for line in f:
                 if line.startswith('VERSION_ID='):
                     return line.split('=')[1].strip().strip('"')
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error reading /etc/os-release: {e}")
     return None
 
 def setup_dashboard_environment():
@@ -3206,6 +3205,12 @@ def setup_dashboard_environment():
                 "--enable-gpu-rasterization"
             ])
             logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 ANGLE hardware acceleration fixes.")
+        elif platform.machine() == 'aarch64':
+            # Add general RPi flags if not on 25.10
+            flags.extend([
+                "--ozone-platform=x11",
+                "--use-gl=egl"
+            ])
 
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
     else:
