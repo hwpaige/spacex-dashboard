@@ -378,7 +378,7 @@ class LaunchUpdater(QObject):
     def run(self):
         profiler.mark("LaunchUpdater: Starting update")
         launch_data = fetch_launches()
-        narratives = fetch_narratives()
+        narratives = fetch_narratives(launch_data)
         
         # Pre-compute calendar mapping
         from functions import get_calendar_mapping
@@ -1930,8 +1930,9 @@ class Backend(QObject):
             except Exception:
                 pass
 
-    @pyqtProperty(list, notify=launchesChanged)
+    @pyqtProperty(QVariant, notify=launchesChanged)
     def launchDescriptions(self):
+        # Ensure we're returning the latest enriched narratives
         return self._launch_descriptions
 
     @pyqtSlot(result=QVariant)

@@ -2507,6 +2507,12 @@ Window {
                         focus: false
                         visible: height > 0
                         closePolicy: Popup.NoAutoClose
+
+                        padding: 0
+                        leftPadding: 0
+                        rightPadding: 0
+                        topPadding: 0
+                        bottomPadding: 0
                         
                         property real expandedHeight: 220 // Taller list
                         opacity: height / expandedHeight // Fade in/out based on drag position
@@ -2522,6 +2528,9 @@ Window {
                             Rectangle {
                                 id: trayBackground
                                 anchors.fill: parent
+                                anchors.leftMargin: -4
+                                anchors.rightMargin: -4
+                                anchors.bottomMargin: -4
                                 // Matching location drawer opacity (approx 93% / #EE)
                                 color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
                                 radius: 14
@@ -2628,10 +2637,12 @@ Window {
                                 
                                 delegate: Item {
                                     width: ListView.view.width
-                                    height: contentLayout.implicitHeight + 16
+                                    height: contentLayout.implicitHeight + 8
                                     
                                     Rectangle {
                                         anchors.fill: parent
+                                        anchors.leftMargin: 0
+                                        anchors.rightMargin: 0
                                         color: ListView.isCurrentItem ? 
                                                (backend.theme === "dark" ? "#303030" : "#e0e0e0") : 
                                                "transparent"
@@ -2640,37 +2651,191 @@ Window {
                                         RowLayout {
                                             id: contentLayout
                                             anchors.fill: parent
-                                            anchors.margins: 8
-                                            anchors.leftMargin: 12
-                                            anchors.rightMargin: 12
-                                            spacing: 12
+                                            anchors.margins: 0
+                                            anchors.leftMargin: -4
+                                            anchors.rightMargin: 0
+                                            spacing: 8
                                             
-                                            Text {
-                                                id: dateText
-                                                // Handle both structured object and legacy string
-                                                text: (typeof modelData === "object" && modelData.date) ? modelData.date : ""
-                                                visible: text !== ""
-                                                color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity
-                                                font.pixelSize: 14
-                                                font.family: "D-DIN"
-                                                font.bold: true
+                                            ColumnLayout {
+                                                id: dateColumn
                                                 Layout.alignment: Qt.AlignTop
-                                                Layout.preferredWidth: implicitWidth
-                                                Layout.fillHeight: true 
+                                                Layout.minimumWidth: 60
+                                                Layout.maximumWidth: 60
+                                                Layout.preferredWidth: 60
+                                                spacing: 2
+                                                visible: (typeof modelData === "object" && modelData.date) ? true : false
+
+                                                Text {
+                                                    id: timeText
+                                                    // Extract time if it exists in the date string (e.g., "7/1 2104")
+                                                    text: {
+                                                        if (typeof modelData !== "object" || !modelData.date) return ""
+                                                        var parts = modelData.date.split(' ')
+                                                        return parts.length > 1 ? parts[1] : ""
+                                                    }
+                                                    visible: text !== ""
+                                                    color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity to match date
+                                                    font.pixelSize: 14
+                                                    font.family: "D-DIN"
+                                                    font.bold: true
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Text {
+                                                    id: dayOfWeekText
+                                                    text: (typeof modelData === "object" && modelData.day_of_week) ? modelData.day_of_week : ""
+                                                    visible: text !== ""
+                                                    color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity
+                                                    font.pixelSize: 14
+                                                    font.family: "D-DIN"
+                                                    font.bold: true
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Text {
+                                                    id: dateText
+                                                    // Extract date part (e.g., "7/1")
+                                                    text: {
+                                                        if (typeof modelData !== "object" || !modelData.date) return ""
+                                                        var parts = modelData.date.split(' ')
+                                                        return parts[0]
+                                                    }
+                                                    color: (backend && backend.theme === "dark") ? "#88ffffff" : "#88000000" // Muted opacity
+                                                    font.pixelSize: 14 // Increased to match time
+                                                    font.family: "D-DIN"
+                                                    font.bold: true
+                                                    horizontalAlignment: Text.AlignRight
+                                                    Layout.fillWidth: true
+                                                }
                                             }
 
-                                            Text {
-                                                id: narrativeText
-                                                // Handle both structured object and legacy string
-                                                text: (typeof modelData === "object" && modelData.text) ? modelData.text : modelData
+                                            ColumnLayout {
                                                 Layout.fillWidth: true
                                                 Layout.alignment: Qt.AlignTop
-                                                wrapMode: Text.Wrap
-                                                color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                font.pixelSize: 14
-                                                font.family: "D-DIN"
-                                                font.bold: true
-                                                lineHeight: 1.2
+                                                spacing: 2
+
+                                                Text {
+                                                    id: missionNameText
+                                                    text: {
+                                                        if (typeof modelData !== "object" || !modelData.mission) return ""
+                                                        var m = modelData.mission
+                                                        var idx = m.indexOf("|")
+                                                        return idx !== -1 ? m.substring(idx + 1).trim() : m
+                                                    }
+                                                    visible: text !== ""
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                    font.pixelSize: 14
+                                                    font.family: "D-DIN"
+                                                    font.bold: true
+                                                    width: parent.width
+                                                    wrapMode: Text.Wrap
+                                                }
+
+                                                Text {
+                                                    id: narrativeText
+                                                    // Handle both structured object and legacy string
+                                                    text: (typeof modelData === "object" && modelData.text) ? modelData.text : modelData
+                                                    Layout.fillWidth: true
+                                                    wrapMode: Text.Wrap
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                    font.pixelSize: 14
+                                                    font.family: "D-DIN"
+                                                    font.bold: true
+                                                    lineHeight: 1.2
+                                                }
+
+                                                Flow {
+                                                    Layout.fillWidth: true
+                                                    spacing: 6
+                                                    visible: typeof modelData === "object" && (modelData.status || modelData.orbit || modelData.rocket || modelData.landing_location)
+
+                                                    // Mission Status Tag
+                                                    Rectangle {
+                                                        width: statusLabel.implicitWidth + 12
+                                                        height: 18
+                                                        color: root.getStatusColor(modelData.status)
+                                                        radius: 9
+                                                        visible: !!modelData.status
+                                                        Text {
+                                                            id: statusLabel
+                                                            text: modelData.status || ""
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: "white"
+                                                            anchors.centerIn: parent
+                                                        }
+                                                    }
+
+                                                    // Rocket Tag
+                                                    Rectangle {
+                                                        width: rocketLabel.implicitWidth + 12
+                                                        height: 18
+                                                        color: backend.theme === "dark" ? "#444444" : "#dddddd"
+                                                        radius: 9
+                                                        visible: !!modelData.rocket
+                                                        Text {
+                                                            id: rocketLabel
+                                                            text: modelData.rocket || ""
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            anchors.centerIn: parent
+                                                        }
+                                                    }
+
+                                                    // Orbit Tag
+                                                    Rectangle {
+                                                        width: orbitLabel.implicitWidth + 12
+                                                        height: 18
+                                                        color: backend.theme === "dark" ? "#444444" : "#dddddd"
+                                                        radius: 9
+                                                        visible: !!modelData.orbit
+                                                        Text {
+                                                            id: orbitLabel
+                                                            text: modelData.orbit || ""
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            anchors.centerIn: parent
+                                                        }
+                                                    }
+
+                                                    // Landing Location Tag
+                                                    Rectangle {
+                                                        width: landingLabel.implicitWidth + 12
+                                                        height: 18
+                                                        color: backend.theme === "dark" ? "#444444" : "#dddddd"
+                                                        radius: 9
+                                                        visible: !!modelData.landing_location
+                                                        Text {
+                                                            id: landingLabel
+                                                            text: (modelData.landing_type ? (modelData.landing_type + ": ") : "") + (modelData.landing_location || "")
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            anchors.centerIn: parent
+                                                        }
+                                                    }
+
+                                                    // Pad Tag
+                                                    Rectangle {
+                                                        width: padLabel.implicitWidth + 12
+                                                        height: 18
+                                                        color: backend.theme === "dark" ? "#444444" : "#dddddd"
+                                                        radius: 9
+                                                        visible: !!modelData.pad
+                                                        Text {
+                                                            id: padLabel
+                                                            text: modelData.pad || ""
+                                                            font.pixelSize: 10
+                                                            font.bold: true
+                                                            color: backend.theme === "dark" ? "white" : "black"
+                                                            anchors.centerIn: parent
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
 

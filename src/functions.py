@@ -772,8 +772,8 @@ def fetch_launches():
         return {'previous': [], 'upcoming': []}
 
 
-def fetch_narratives():
-    """Fetch witty launch narratives from the new API."""
+def fetch_narratives(launch_data=None):
+    """Fetch witty launch narratives from the new API and optionally enrich with launch metadata."""
     profiler.mark("fetch_narratives Start")
     logger.info("Fetching narratives from new API")
     
@@ -794,21 +794,95 @@ def fetch_narratives():
                 parsed.append({'date': '', 'text': item, 'full': item})
         return parsed
 
+    def enrich_narratives(narratives_list, launches):
+        if not launches:
+            return narratives_list
+        
+        # Combine upcoming and previous
+        all_launches = launches.get('upcoming', []) + launches.get('previous', [])
+        
+        for narr in narratives_list:
+            # Try to match narrative to a launch
+            # Narrative dates are usually M/D HHMM, e.g. "7/1 2104"
+            # Launch 'net' is "2024-07-01T21:04:00Z"
+            
+            narr_date_str = narr.get('date', '')
+            if not narr_date_str:
+                continue
+                
+            try:
+                # Narratives usually have M/D HHMM. Net has YYYY-MM-DDTHH:MM:SSZ
+                # We'll try to match by month, day, and hour/minute if possible.
+                # Example: "7/1 2104" -> month 7, day 1, hour 21, minute 04
+                parts = narr_date_str.split(' ')
+                md = parts[0].split('/')
+                month = int(md[0])
+                day = int(md[1])
+                
+                hour = -1
+                minute = -1
+                if len(parts) > 1 and len(parts[1]) == 4:
+                    hour = int(parts[1][:2])
+                    minute = int(parts[1][2:])
+                
+                best_match = None
+                for l in all_launches:
+                    l_net = l.get('net')
+                    if not l_net: continue
+                    
+                    l_dt = _get_parsed_dt(l_net)
+                    if not l_dt: continue
+                    
+                    # Match month and day
+                    if l_dt.month == month and l_dt.day == day:
+                        # If we have time, check it too (allowing small delta due to TBD changes)
+                        if hour != -1:
+                            if l_dt.hour == hour and abs(l_dt.minute - minute) <= 5:
+                                best_match = l
+                                break
+                        else:
+                            best_match = l
+                            # Don't break, keep looking for better time match if possible? 
+                            # Usually one launch per day per pad, but let's be safe.
+                
+                if best_match:
+                    narr['status'] = best_match.get('status')
+                    narr['landing_location'] = best_match.get('landing_location')
+                    narr['landing_type'] = best_match.get('landing_type')
+                    narr['orbit'] = best_match.get('orbit')
+                    narr['rocket'] = best_match.get('rocket')
+                    narr['pad'] = best_match.get('pad')
+                    narr['mission'] = best_match.get('mission')
+                    
+                    # Add day of week (abbreviated, e.g. "Wed")
+                    try:
+                        l_dt = _get_parsed_dt(best_match.get('net'))
+                        if l_dt:
+                            narr['day_of_week'] = l_dt.strftime('%a')
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Failed to match narrative to launch: {e}")
+                
+        return narratives_list
+
     # Try loading from cache first
+    cache = None
     try:
         cache = load_cache_from_file(RUNTIME_CACHE_FILE_NARRATIVES)
         current_time = datetime.now(pytz.UTC)
         if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_NARRATIVES:
             logger.info("Using cached narratives")
-            return cache['data']
+            # If we don't have launch_data, we can't re-enrich, but we might have cached enriched data
+            return enrich_narratives(cache['data'], launch_data)
     except Exception as e:
         logger.warning(f"Failed to load narratives cache: {e}")
 
     # Check network
     if not test_network_connectivity():
         if cache and cache.get('data'):
-            return cache['data']
-        return parse_narratives(LAUNCH_DESCRIPTIONS)
+            return enrich_narratives(cache['data'], launch_data)
+        return enrich_narratives(parse_narratives(LAUNCH_DESCRIPTIONS), launch_data)
 
     try:
         url = f"{LAUNCH_API_BASE_URL}/recent_launches_narratives"
@@ -823,15 +897,15 @@ def fetch_narratives():
             narratives = parse_narratives(raw_narratives)
             save_cache_to_file(RUNTIME_CACHE_FILE_NARRATIVES, narratives, datetime.now(pytz.UTC))
             profiler.mark("fetch_narratives End (Success)")
-            return narratives
+            return enrich_narratives(narratives, launch_data)
 
     except Exception as e:
         logger.warning(f"Failed to fetch narratives from API: {e}")
         profiler.mark("fetch_narratives End (Error)")
 
     if cache and cache.get('data'):
-        return cache['data']
-    return parse_narratives(LAUNCH_DESCRIPTIONS)
+        return enrich_narratives(cache['data'], launch_data)
+    return enrich_narratives(parse_narratives(LAUNCH_DESCRIPTIONS), launch_data)
 
 # Weather condition codes mapping (WMO Weather interpretation codes)
 WEATHER_CODE_MAP = {
@@ -2990,6 +3064,9 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         profiler.mark("Weather data received")
         narratives = f_narratives.result()
         profiler.mark("Narratives received")
+        
+        # Enrich narratives with launch data now that both are available
+        narratives = fetch_narratives(launch_data)
 
     profiler.mark("perform_full_dashboard_data_load End")
     _emit("Finalizing dashboard UI…")
