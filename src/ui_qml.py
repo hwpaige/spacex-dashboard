@@ -422,7 +422,226 @@ Window {
             Layout.fillHeight: true
             spacing: 5
 
-            // Column 1: Launch Trends or Driver Standings
+            // Column 1: Radar
+            Rectangle {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                Layout.preferredWidth: 1
+                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                // Remove rounded corners/clipping for Windy card to restore animations
+                radius: 0
+                clip: false
+                // Layers can remain enabled; no clipping applied
+                layer.enabled: true
+                layer.smooth: true
+
+                Item {
+                    anchors.fill: parent
+
+                        SwipeView {
+                            id: weatherSwipe
+                            anchors.fill: parent
+                            anchors.margins: 10
+                            visible: !!backend
+                            orientation: Qt.Vertical
+                            // Do not clip; allow Windy WebGL to render freely
+                            clip: false
+                            // Keep layer enabled for performance but without clipping
+                            layer.enabled: true
+                            layer.smooth: true
+                            interactive: true
+                            currentIndex: 1
+                            property int loadedMask: (1 << 1)
+                            // Removed auto-loading of all weather views to reduce WebEngine processes
+                            onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
+
+                        Component.onCompleted: {
+                            console.log("SwipeView completed, count:", count);
+                        }
+
+                        Repeater {
+                            model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
+
+                            Item {
+                                // Container without rounded corners or clipping for Windy views
+                                Rectangle {
+                                    anchors.fill: parent
+                                    radius: 0
+                                    color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
+                                    clip: false
+                                    // Performance: Disable layers to reduce GPU/Compositor load on Pi
+                                    layer.enabled: false
+                                    layer.smooth: true
+
+                                    // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
+
+                                    Loader {
+                                        id: webViewLoader
+                                        anchors.fill: parent
+                                        // Only load the currently active weather tool to reduce WebEngine processes
+                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
+                                        visible: active
+
+                                        sourceComponent: WebEngineView {
+                                            id: webView
+                                            objectName: "webView"
+                                            anchors.fill: parent
+                                            // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
+                                            layer.enabled: false
+                                            layer.smooth: true
+                                            // Avoid white square corners by matching parent background
+                                            backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
+                                            url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                            onUrlChanged: console.log("WebEngineView URL changed to:", url)
+                                            settings.webGLEnabled: true
+                                            settings.accelerated2dCanvasEnabled: true
+                                            settings.allowRunningInsecureContent: true
+                                            settings.javascriptEnabled: true
+                                            settings.localContentCanAccessRemoteUrls: true
+                                            onFullScreenRequested: function(request) {
+                                                request.accept();
+                                                root.visibility = Window.FullScreen
+                                            }
+                                            onLoadingChanged: function(loadRequest) {
+                                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                                    console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
+                                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                                    console.log("WebEngineView loaded successfully for", modelData);
+                                                    // No rounding injection for Windy to preserve animations
+                                                }
+                                            }
+
+                                            // Staggered reload for weather views
+                                            Connections {
+                                                target: backend
+                                                function onReloadWebContent() {
+                                                    // Stagger based on index to prevent freeze
+                                                    var delay = 1500 + (index * 500)
+                                                    reloadTimer.interval = delay
+                                                    reloadTimer.start()
+                                                }
+                                            }
+                                            Timer {
+                                                id: reloadTimer
+                                                repeat: false
+                                                onTriggered: {
+                                                    if (parent.visible) { // Only reload if visible or about to be? 
+                                                        // Actually, reload all but staggered is safer.
+                                                        webView.reload()
+                                                        console.log("Weather view", index, "reloaded (staggered)")
+                                                    } else {
+                                                        // If not visible, just reload anyway, staggered.
+                                                        webView.reload()
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    // overlay mask removed
+                                }
+
+                                // Removed top-center icon overlay for Windy views as requested
+
+                                // Fullscreen button for weather views
+                                Rectangle {
+                                    anchors.top: parent.top
+                                    anchors.topMargin: 90
+                                    anchors.right: parent.right
+                                    anchors.rightMargin: 5
+                                    width: 30
+                                    height: 30
+                                    color: "transparent"
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
+                                        font.family: "Font Awesome 5 Free"
+                                        font.pixelSize: 16
+                                        color: "white"
+                                        style: Text.Outline
+                                        styleColor: "black"
+                                    }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        onClicked: isWindyFullscreen = !isWindyFullscreen
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+
+                    // Weather view buttons container (YouTube style overlay)
+                    Rectangle {
+                        id: weatherButtonsOverlay
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 15
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: weatherButtonsRow.implicitWidth + 20
+                        height: 34
+                        // Semi-transparent background for overlay look
+                        color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                        radius: 17
+                        visible: !!backend
+                        z: 10
+
+                        RowLayout {
+                            id: weatherButtonsRow
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "radar", "icon": "\uf7c0", "tooltip": "Weather Radar"},
+                                    {"type": "wind", "icon": "\uf72e", "tooltip": "Wind Speed"},
+                                    {"type": "gust", "icon": "\uf72e", "tooltip": "Wind Gusts"},
+                                    {"type": "clouds", "icon": "\uf0c2", "tooltip": "Cloud Cover"},
+                                    {"type": "temp", "icon": "\uf2c7", "tooltip": "Temperature"},
+                                    {"type": "pressure", "icon": "\uf6c4", "tooltip": "Pressure"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: weatherSwipe.currentIndex === index ?
+                                           (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                           (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                    radius: 14
+                                    border.color: weatherSwipe.currentIndex === index ?
+                                                 (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                 (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
+                                    border.width: weatherSwipe.currentIndex === index ? 2 : 1
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: backend.theme === "dark" ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: weatherSwipe.currentIndex = index
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+            }
+
+            // Column 2: Launch Trends or Driver Standings
             Rectangle {
                 id: plotCard
                 Layout.fillWidth: true
@@ -764,221 +983,6 @@ Window {
                         ToolTip { text: "Show Plot"; delay: 500 }
                     }
                 }
-            }
-
-            // Column 2: Radar
-            Rectangle {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                Layout.preferredWidth: 1
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
-                // Remove rounded corners/clipping for Windy card to restore animations
-                radius: 0
-                clip: false
-                // Layers can remain enabled; no clipping applied
-                layer.enabled: true
-                layer.smooth: true
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    spacing: 0
-
-                        SwipeView {
-                            id: weatherSwipe
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            anchors.margins: 10
-                            visible: !!backend
-                            orientation: Qt.Vertical
-                            // Do not clip; allow Windy WebGL to render freely
-                            clip: false
-                            // Keep layer enabled for performance but without clipping
-                            layer.enabled: true
-                            layer.smooth: true
-                            interactive: true
-                            currentIndex: 1
-                            property int loadedMask: (1 << 1)
-                            // Removed auto-loading of all weather views to reduce WebEngine processes
-                            onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
-
-                        Component.onCompleted: {
-                            console.log("SwipeView completed, count:", count);
-                        }
-
-                        Repeater {
-                            model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
-
-                            Item {
-                                // Container without rounded corners or clipping for Windy views
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 0
-                                    color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                    clip: false
-                                    // Performance: Disable layers to reduce GPU/Compositor load on Pi
-                                    layer.enabled: false
-                                    layer.smooth: true
-
-                                    // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
-
-                                    Loader {
-                                        id: webViewLoader
-                                        anchors.fill: parent
-                                        // Only load the currently active weather tool to reduce WebEngine processes
-                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
-                                        visible: active
-
-                                        sourceComponent: WebEngineView {
-                                            id: webView
-                                            objectName: "webView"
-                                            anchors.fill: parent
-                                            // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                            layer.enabled: false
-                                            layer.smooth: true
-                                            // Avoid white square corners by matching parent background
-                                            backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                            url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
-                                            onUrlChanged: console.log("WebEngineView URL changed to:", url)
-                                            settings.webGLEnabled: true
-                                            settings.accelerated2dCanvasEnabled: true
-                                            settings.allowRunningInsecureContent: true
-                                            settings.javascriptEnabled: true
-                                            settings.localContentCanAccessRemoteUrls: true
-                                            onFullScreenRequested: function(request) {
-                                                request.accept();
-                                                root.visibility = Window.FullScreen
-                                            }
-                                            onLoadingChanged: function(loadRequest) {
-                                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                                    console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
-                                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                                    console.log("WebEngineView loaded successfully for", modelData);
-                                                    // No rounding injection for Windy to preserve animations
-                                                }
-                                            }
-
-                                            // Staggered reload for weather views
-                                            Connections {
-                                                target: backend
-                                                function onReloadWebContent() {
-                                                    // Stagger based on index to prevent freeze
-                                                    var delay = 1500 + (index * 500)
-                                                    reloadTimer.interval = delay
-                                                    reloadTimer.start()
-                                                }
-                                            }
-                                            Timer {
-                                                id: reloadTimer
-                                                repeat: false
-                                                onTriggered: {
-                                                    if (parent.visible) { // Only reload if visible or about to be? 
-                                                        // Actually, reload all but staggered is safer.
-                                                        webView.reload()
-                                                        console.log("Weather view", index, "reloaded (staggered)")
-                                                    } else {
-                                                        // If not visible, just reload anyway, staggered.
-                                                        webView.reload()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // overlay mask removed
-                                }
-
-                                // Removed top-center icon overlay for Windy views as requested
-
-                                // Fullscreen button for weather views
-                                Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.topMargin: 90
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: 5
-                                    width: 30
-                                    height: 30
-                                    color: "transparent"
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 16
-                                        color: "white"
-                                        style: Text.Outline
-                                        styleColor: "black"
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: isWindyFullscreen = !isWindyFullscreen
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-
-                    // Weather view buttons container
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        Layout.maximumHeight: 30
-                        Layout.alignment: Qt.AlignTop
-                        color: "transparent"
-                        visible: !!backend
-
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Repeater {
-                                model: [
-                                    {"type": "radar", "icon": "\uf7c0", "tooltip": "Weather Radar"},
-                                    {"type": "wind", "icon": "\uf72e", "tooltip": "Wind Speed"},
-                                    {"type": "gust", "icon": "\uf72e", "tooltip": "Wind Gusts"},
-                                    {"type": "clouds", "icon": "\uf0c2", "tooltip": "Cloud Cover"},
-                                    {"type": "temp", "icon": "\uf2c7", "tooltip": "Temperature"},
-                                    {"type": "pressure", "icon": "\uf6c4", "tooltip": "Pressure"}
-                                ]
-                                Rectangle {
-                                    Layout.preferredWidth: 40
-                                    Layout.preferredHeight: 28
-                                    color: weatherSwipe.currentIndex === index ?
-                                           (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#181818" : "#f5f5f5")
-                                    radius: 14
-                                    border.color: weatherSwipe.currentIndex === index ?
-                                                 (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
-                                    border.width: weatherSwipe.currentIndex === index ? 2 : 1
-
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: weatherSwipe.currentIndex = index
-                                    }
-
-                                    ToolTip {
-                                        text: modelData.tooltip
-                                        delay: 500
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
             }
 
             // Column 3: Launches or Races
