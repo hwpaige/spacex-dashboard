@@ -2203,10 +2203,7 @@ Window {
                                     xAxis.enabled: false
                                     onActiveChanged: {
                                         if (active) {
-                                            if (weatherListView.contentY <= 0) {
-                                                weatherTray.isDragging = true
-                                                weatherListView.dragStartY = centroid.scenePosition.y
-                                            }
+                                            weatherListView.dragStartY = centroid.scenePosition.y
                                         } else {
                                             if (weatherTray.isDragging) {
                                                 weatherTray.isDragging = false
@@ -2218,19 +2215,24 @@ Window {
                                                     }
                                                 }
                                             }
+                                            enabled = true
                                         }
                                     }
                                     onCentroidChanged: {
+                                        var delta = centroid.scenePosition.y - weatherListView.dragStartY
                                         if (weatherTray.isDragging) {
-                                            var delta = centroid.scenePosition.y - weatherListView.dragStartY
                                             if (delta > 0) {
                                                 weatherTray.height = Math.max(0, weatherTray.expandedHeight - delta)
                                             } else {
                                                 weatherTray.height = weatherTray.expandedHeight
                                             }
-                                        } else if (weatherListView.dragging && weatherListView.contentY <= 0 && centroid.scenePosition.y > weatherListView.dragStartY) {
-                                            weatherTray.isDragging = true
-                                            weatherListView.dragStartY = centroid.scenePosition.y
+                                        } else if (active) {
+                                            if (delta > 10 && weatherListView.atYBeginning) {
+                                                weatherTray.isDragging = true
+                                                weatherListView.dragStartY = centroid.scenePosition.y
+                                            } else if (delta < -5) {
+                                                enabled = false
+                                            }
                                         }
                                     }
                                 }
@@ -2707,10 +2709,7 @@ Window {
                                     xAxis.enabled: false
                                     onActiveChanged: {
                                         if (active) {
-                                            if (narrativeListView.contentY <= 0) {
-                                                narrativeTray.isDragging = true
-                                                narrativeListView.dragStartY = centroid.scenePosition.y
-                                            }
+                                            narrativeListView.dragStartY = centroid.scenePosition.y
                                         } else {
                                             if (narrativeTray.isDragging) {
                                                 narrativeTray.isDragging = false
@@ -2722,19 +2721,24 @@ Window {
                                                     }
                                                 }
                                             }
+                                            enabled = true
                                         }
                                     }
                                     onCentroidChanged: {
+                                        var delta = centroid.scenePosition.y - narrativeListView.dragStartY
                                         if (narrativeTray.isDragging) {
-                                            var delta = centroid.scenePosition.y - narrativeListView.dragStartY
                                             if (delta > 0) {
                                                 narrativeTray.height = Math.max(0, narrativeTray.expandedHeight - delta)
                                             } else {
                                                 narrativeTray.height = narrativeTray.expandedHeight
                                             }
-                                        } else if (narrativeListView.dragging && narrativeListView.contentY <= 0 && centroid.scenePosition.y > narrativeListView.dragStartY) {
-                                            narrativeTray.isDragging = true
-                                            narrativeListView.dragStartY = centroid.scenePosition.y
+                                        } else if (active) {
+                                            if (delta > 10 && narrativeListView.atYBeginning) {
+                                                narrativeTray.isDragging = true
+                                                narrativeListView.dragStartY = centroid.scenePosition.y
+                                            } else if (delta < -5) {
+                                                enabled = false
+                                            }
                                         }
                                     }
                                 }
@@ -3592,10 +3596,7 @@ Window {
                                         xAxis.enabled: false
                                         onActiveChanged: {
                                             if (active) {
-                                                if (locationListView.contentY <= 0) {
-                                                    locationDrawer.isDragging = true
-                                                    locationListView.dragStartY = centroid.scenePosition.y
-                                                }
+                                                locationListView.dragStartY = centroid.scenePosition.y
                                             } else {
                                                 if (locationDrawer.isDragging) {
                                                     locationDrawer.isDragging = false
@@ -3607,19 +3608,24 @@ Window {
                                                         }
                                                     }
                                                 }
+                                                enabled = true
                                             }
                                         }
                                         onCentroidChanged: {
+                                            var delta = centroid.scenePosition.y - locationListView.dragStartY
                                             if (locationDrawer.isDragging) {
-                                                var delta = centroid.scenePosition.y - locationListView.dragStartY
                                                 if (delta > 0) {
                                                     locationDrawer.height = Math.max(0, locationDrawer.expandedHeight - delta)
                                                 } else {
                                                     locationDrawer.height = locationDrawer.expandedHeight
                                                 }
-                                            } else if (locationListView.dragging && locationListView.contentY <= 0 && centroid.scenePosition.y > locationListView.dragStartY) {
-                                                locationDrawer.isDragging = true
-                                                locationListView.dragStartY = centroid.scenePosition.y
+                                            } else if (active) {
+                                                if (delta > 10 && locationListView.atYBeginning) {
+                                                    locationDrawer.isDragging = true
+                                                    locationListView.dragStartY = centroid.scenePosition.y
+                                                } else if (delta < -5) {
+                                                    enabled = false
+                                                }
                                             }
                                         }
                                     }
