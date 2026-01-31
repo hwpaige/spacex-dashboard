@@ -716,6 +716,7 @@ Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
 # DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
 Environment=DASHBOARD_ORIENTATION=270
+Environment=QT_QPA_EGLFS_ROTATION=270
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle --disable-vulkan --disable-gpu-memory-buffer-video-frames --disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1
 Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
 Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
@@ -734,17 +735,18 @@ EOF
         log "Ubuntu 25.10 detected: Configuring KMS and enabling EGLFS service."
         
         # Create KMS config for Ubuntu 25.10 EGLFS
-        # Using environment variable placeholder if possible, or just default to 270
-        # NOTE: If display is upside down, change rotation to 90 below
+        # We use environment variable interpolation via a heredoc to embed the rotation
+        # NOTE: If display is upside down, change DASHBOARD_ORIENTATION in the service file
+        local rotation=270
         cat << KMS_EOF > /home/$USER/Desktop/project/src/kms.json
 {
   "device": "/dev/dri/card0",
   "hwcursor": false,
   "outputs": [
     {
-      "name": "HDMI1",
+      "name": "HDMI-A-1",
       "mode": "1480x320",
-      "rotation": 270
+      "rotation": \$rotation
     }
   ]
 }
@@ -1553,6 +1555,21 @@ clear 2>/dev/null || true
 # Set display settings
 sleep 2
 
+# Set environment variables
+# DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
+export DASHBOARD_WIDTH=1480
+export DASHBOARD_HEIGHT=320
+export DASHBOARD_ORIENTATION=270
+export QT_QPA_PLATFORM=xcb
+export XAUTHORITY=~/.Xauthority
+export QT_QPA_EGLFS_ROTATION=\$DASHBOARD_ORIENTATION
+
+# For X11 (XCB), the logical width/height should match what the app expects
+# after xrandr has applied the rotation. For the 1480x320 panel:
+# If unrotated: width=320, height=1480 (portrait)
+# If rotated 90 or 270: width=1480, height=320 (landscape)
+# Our app expects 1480x320 landscape.
+
 # Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
 OUTPUT=\$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
 if [ -z "\$OUTPUT" ]; then
@@ -1571,30 +1588,14 @@ if [ -n "\$OUTPUT" ]; then
     if [ "\$DASHBOARD_ORIENTATION" = "90" ]; then ROT="right"; fi
     if [ "\$DASHBOARD_ORIENTATION" = "180" ]; then ROT="inverted"; fi
     if [ "\$DASHBOARD_ORIENTATION" = "0" ]; then ROT="normal"; fi
-    
+        
+    echo "Applying xrandr rotation: \$ROT" >> ~/xsession.log
     xrandr --output "\$OUTPUT" --rotate \$ROT 2>&1 | tee -a ~/xrandr.log
 else
     echo "ERROR: No connected display output found" >> ~/xsession.log
 fi
 
 # Set X settings
-xset s off
-xset -dpms
-xset s noblank
-
-# Hide cursor
-unclutter -idle 0 -root &
-
-# Start a lightweight window manager for kiosk (Matchbox)
-matchbox-window-manager -use_titlebar no -use_cursor no &
-
-# Set environment variables
-# DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
-export DASHBOARD_WIDTH=1480
-export DASHBOARD_HEIGHT=320
-export DASHBOARD_ORIENTATION=270
-export QT_QPA_PLATFORM=xcb
-export XAUTHORITY=~/.Xauthority
 export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen$extra_flags"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0

@@ -3273,6 +3273,9 @@ def setup_dashboard_environment():
                         # DASHBOARD_ORIENTATION=270 (default) or 90
                         if "QT_QPA_EGLFS_ROTATION" not in os.environ:
                             os.environ["QT_QPA_EGLFS_ROTATION"] = os.environ.get("DASHBOARD_ORIENTATION", "270")
+                        
+                        # Also check if we need to apply this to KMS config dynamically if it exists
+                        # though typically KMS config is static on disk.
                     else:
                         os.environ["QT_QPA_PLATFORM"] = "xcb"
                 except ValueError:
