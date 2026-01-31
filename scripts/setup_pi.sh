@@ -709,9 +709,12 @@ User=$USER
 Group=video
 SupplementaryGroups=render input tty
 Environment=QT_QPA_PLATFORM=eglfs
+Environment=QSG_RHI_BACKEND=opengl
+Environment=QT_RHI_BACKEND=opengl
+Environment=QT_QPA_EGLFS_KMS_CONFIG=/home/$USER/Desktop/project/src/kms.json
 Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle --disable-vulkan --disable-gpu-memory-buffer-video-frames --disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1
 Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
 Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
 WorkingDirectory=/home/$USER/Desktop/project/src
@@ -726,7 +729,24 @@ EOF
     
     local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
     if [ "$ubuntu_version" = "25.10" ]; then
-        log "Ubuntu 25.10 detected: EGLFS service enabled automatically."
+        log "Ubuntu 25.10 detected: Configuring KMS and enabling EGLFS service."
+        
+        # Create KMS config for Ubuntu 25.10 EGLFS
+        cat << KMS_EOF > /home/$USER/Desktop/project/src/kms.json
+{
+  "device": "/dev/dri/card0",
+  "hwcursor": false,
+  "outputs": [
+    {
+      "name": "HDMI1",
+      "mode": "1480x320",
+      "rotation": 270
+    }
+  ]
+}
+KMS_EOF
+        chown $USER:$USER /home/$USER/Desktop/project/src/kms.json
+        
         systemctl enable spacex-dashboard-eglfs.service 2>/dev/null || true
     else
         log "EGLFS service created (disabled by default). To use EGLFS: systemctl disable lightdm; systemctl enable --now spacex-dashboard-eglfs"
