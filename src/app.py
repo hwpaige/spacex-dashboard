@@ -3722,6 +3722,8 @@ if __name__ == '__main__':
     
     profiler.mark("Initializing QML Engine")
     engine = QQmlApplicationEngine()
+    # Keep a reference to the backend on the engine to prevent it from being garbage collected
+    engine.backend = backend
     # Connect QML warnings signal (list of QQmlError objects)
     def _log_qml_warnings(errors):
         for e in errors:

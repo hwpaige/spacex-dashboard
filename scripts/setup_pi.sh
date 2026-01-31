@@ -1555,6 +1555,16 @@ clear 2>/dev/null || true
 # Set display settings
 sleep 2
 
+xset s off
+xset -dpms
+xset s noblank
+
+# Hide cursor
+unclutter -idle 0 -root &
+
+# Start a lightweight window manager for kiosk (Matchbox)
+matchbox-window-manager -use_titlebar no -use_cursor no &
+
 # Set environment variables
 # DASHBOARD_ORIENTATION: 270 (landscape, default) or 90 (upside-down landscape)
 export DASHBOARD_WIDTH=1480
