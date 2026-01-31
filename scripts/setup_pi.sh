@@ -707,7 +707,14 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload
-    log "EGLFS service created (disabled by default). To use EGLFS: systemctl disable lightdm; systemctl enable --now spacex-dashboard-eglfs"
+    
+    local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+    if [ "$ubuntu_version" = "25.10" ]; then
+        log "Ubuntu 25.10 detected: EGLFS service enabled automatically."
+        systemctl enable spacex-dashboard-eglfs.service 2>/dev/null || true
+    else
+        log "EGLFS service created (disabled by default). To use EGLFS: systemctl disable lightdm; systemctl enable --now spacex-dashboard-eglfs"
+    fi
 }
 
 configure_boot() {
@@ -1554,12 +1561,11 @@ exec python3 app.py >> ~/app.log 2>&1
 EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
     
-    # If 25.10, we prefer EGLFS so we disable LightDM and enable the EGLFS service
+    # If 25.10, we prefer EGLFS so we disable LightDM and ensure the system default is multi-user.target
     # NOTE: If EGLFS fails to find a screen, re-enable LightDM and ensure libxcb-cursor0 and related xcb libs are installed
     if [ "$ubuntu_version" = "25.10" ]; then
         log "Ubuntu 25.10 detected: Switching to EGLFS as primary platform"
         systemctl disable lightdm 2>/dev/null || true
-        systemctl enable spacex-dashboard-eglfs.service 2>/dev/null || true
         # We do NOT start LightDM if we're on 25.10 and using EGLFS
         systemctl set-default multi-user.target
     else
