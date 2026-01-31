@@ -3246,7 +3246,14 @@ def setup_dashboard_environment():
     os.environ["QT_SCALE_FACTOR"] = dashboard_scale
 
     if platform.system() == 'Linux':
-        os.environ["QT_QPA_PLATFORM"] = "xcb"
+        if "QT_QPA_PLATFORM" not in os.environ:
+            # Check if we should use eglfs for Ubuntu 25.10
+            ubuntu_version = get_ubuntu_version()
+            if ubuntu_version and float(ubuntu_version) >= 25.10:
+                os.environ["QT_QPA_PLATFORM"] = "eglfs"
+            else:
+                os.environ["QT_QPA_PLATFORM"] = "xcb"
+        
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
         os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
         os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
