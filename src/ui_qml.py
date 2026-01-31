@@ -2028,7 +2028,14 @@ Window {
                                         }
                                     }
                                     onClicked: {
-                                        weatherTray.height = 0
+                                        if (!moved) {
+                                            // Tap to close: if mostly open, close it.
+                                            if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
+                                                weatherTray.height = 0
+                                            } else {
+                                                weatherTray.height = weatherTray.expandedHeight
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -2278,7 +2285,8 @@ Window {
 
                         onClicked: {
                             if (!moved) {
-                                if (weatherTray.height > 0) {
+                                // Toggle logic: if mostly closed, open it; if mostly open, close it.
+                                if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
                                     weatherTray.height = 0
                                 } else {
                                     weatherTray.height = weatherTray.expandedHeight
