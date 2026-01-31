@@ -405,8 +405,7 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
-        anchors.rightMargin: isWindyFullscreen ? 0 : 12
-        Behavior on anchors.rightMargin { NumberAnimation { duration: 800; easing.type: Easing.InOutQuad } }
+        anchors.rightMargin: (1.0 - backgroundWindy.progress) * 12
 
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
@@ -414,16 +413,23 @@ Window {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: parent.bottom
+            
+            property bool isDragging: false
+            property real manualWidth: minWidth
+
             // Width is 1/4 of total safeArea width + extension for fade
-            width: isWindyFullscreen ? parent.width : (parent.width / 4) + 120
+            width: isDragging ? manualWidth : (isWindyFullscreen ? root.width : minWidth)
             z: 0 // Behind centralContent
             visible: !!(!backend || !backend.isLoading)
             clip: true
 
-            readonly property real minWidth: (parent.width / 4) + 120
-            readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, parent.width - minWidth)))
+            readonly property real minWidth: (root.width / 4) + 120
+            readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, root.width - minWidth)))
 
-            Behavior on width { NumberAnimation { duration: 800; easing.type: Easing.InOutQuad } }
+            Behavior on width { 
+                enabled: !backgroundWindy.isDragging
+                NumberAnimation { duration: 500; easing.type: Easing.OutCubic } 
+            }
 
             SwipeView {
                 id: weatherSwipe
@@ -491,7 +497,8 @@ Window {
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
                 width: 160 // Start fading 40px before the column edge
-                visible: !isWindyFullscreen
+                opacity: 1.0 - backgroundWindy.progress
+                visible: opacity > 0
                 gradient: Gradient {
                     orientation: Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
@@ -536,28 +543,41 @@ Window {
                         z: 5 // Below buttons but above the spacer
                         
                         property real startX: 0
-                        property bool dragActive: false
+                        property real initialWidth: 0
                         
                         onPressed: (mouse) => {
-                            startX = mouse.x
-                            dragActive = false
+                            startX = mapToItem(safeArea, mouse.x, mouse.y).x
+                            initialWidth = backgroundWindy.width
+                            backgroundWindy.manualWidth = initialWidth
+                            backgroundWindy.isDragging = true
                         }
                         
                         onPositionChanged: (mouse) => {
-                            var deltaX = mouse.x - startX
-                            // Threshold for swipe detection
-                            if (!dragActive && Math.abs(deltaX) > 20) {
-                                dragActive = true
+                            if (backgroundWindy.isDragging) {
+                                var currentX = mapToItem(safeArea, mouse.x, mouse.y).x
+                                var deltaX = currentX - startX
+                                backgroundWindy.manualWidth = Math.max(backgroundWindy.minWidth, Math.min(root.width, initialWidth + deltaX))
                             }
-                            
-                            if (dragActive) {
-                                if (deltaX > 80 && !isWindyFullscreen) {
-                                    isWindyFullscreen = true
-                                    dragActive = false // Triggered
-                                } else if (deltaX < -80 && isWindyFullscreen) {
-                                    isWindyFullscreen = false
-                                    dragActive = false // Triggered
+                        }
+                        
+                        onReleased: (mouse) => {
+                            if (backgroundWindy.isDragging) {
+                                // Snap logic: if moved more than 20% from the starting state, snap to the other state
+                                // Must check progress BEFORE setting isDragging = false
+                                var progress = backgroundWindy.progress
+                                var threshold = 0.2
+                                if (!isWindyFullscreen) {
+                                    if (progress > threshold) isWindyFullscreen = true
+                                } else {
+                                    if (progress < (1.0 - threshold)) isWindyFullscreen = false
                                 }
+                                backgroundWindy.isDragging = false
+                            }
+                        }
+                        
+                        onCanceled: {
+                            if (backgroundWindy.isDragging) {
+                                backgroundWindy.isDragging = false
                             }
                         }
                     }
