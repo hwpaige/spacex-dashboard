@@ -3134,6 +3134,20 @@ def get_rpi_config_resolution():
                 
     return None, None
 
+def get_ubuntu_version():
+    """Returns the Ubuntu version as a string (e.g. '25.04' or '25.10'), or None if not on Ubuntu."""
+    if not os.path.exists('/etc/os-release'):
+        return None
+    try:
+        with open('/etc/os-release', 'r') as f:
+            lines = f.readlines()
+            for line in lines:
+                if line.startswith('VERSION_ID='):
+                    return line.split('=')[1].strip().strip('"')
+    except Exception:
+        pass
+    return None
+
 def setup_dashboard_environment():
     """Set environment variables for Qt and hardware acceleration."""
     # Check if flags are already set (e.g. by .xsession or systemd)
@@ -3151,24 +3165,46 @@ def setup_dashboard_environment():
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         )
     elif platform.system() == 'Linux':
-        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-            "--enable-gpu --ignore-gpu-blocklist --enable-webgl "
-            "--disable-gpu-sandbox --no-sandbox "
-            "--disable-dev-shm-usage --enable-accelerated-video-decode "
-            "--enable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas "
-            "--enable-gpu-rasterization --enable-zero-copy "
-            "--enable-native-gpu-memory-buffers --enable-features=VaapiVideoDecoder "
-            "--disable-web-security --allow-running-insecure-content "
-            "--gpu-testing-vendor-id=0xFFFF --gpu-testing-device-id=0xFFFF "
-            "--disable-gpu-driver-bug-workarounds "
-            "--memory-pressure-off --max_old_space_size=2048 --memory-reducer "
-            "--gpu-memory-buffer-size-mb=512 --max-tiles-for-interest-area=512 "
-            "--num-raster-threads=2 --disable-background-timer-throttling "
-            "--disable-renderer-backgrounding --disable-backgrounding-occluded-windows "
-            "--autoplay-policy=no-user-gesture-required "
-            "--no-user-gesture-required-for-fullscreen "
+        ubuntu_version = get_ubuntu_version()
+        is_25_10_or_newer = False
+        if ubuntu_version:
+            try:
+                version_float = float(ubuntu_version)
+                if version_float >= 25.10:
+                    is_25_10_or_newer = True
+            except ValueError:
+                pass
+
+        flags = [
+            "--enable-gpu", "--ignore-gpu-blocklist", "--enable-webgl",
+            "--disable-gpu-sandbox", "--no-sandbox",
+            "--disable-dev-shm-usage", "--enable-accelerated-video-decode",
+            "--enable-gpu-memory-buffer-video-frames", "--enable-accelerated-2d-canvas",
+            "--enable-gpu-rasterization", "--enable-zero-copy",
+            "--enable-native-gpu-memory-buffers", "--enable-features=VaapiVideoDecoder",
+            "--disable-web-security", "--allow-running-insecure-content",
+            "--gpu-testing-vendor-id=0xFFFF", "--gpu-testing-device-id=0xFFFF",
+            "--disable-gpu-driver-bug-workarounds",
+            "--memory-pressure-off", "--max_old_space_size=2048", "--memory-reducer",
+            "--gpu-memory-buffer-size-mb=512", "--max-tiles-for-interest-area=512",
+            "--num-raster-threads=2", "--disable-background-timer-throttling",
+            "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
+            "--autoplay-policy=no-user-gesture-required",
+            "--no-user-gesture-required-for-fullscreen",
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
-        )
+        ]
+
+        if is_25_10_or_newer:
+            # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
+            # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
+            flags.extend([
+                "--ozone-platform-hint=x11",
+                "--ozone-platform=x11",
+                "--use-gl=egl"
+            ])
+            logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
+
+        os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --enable-webgl --disable-web-security"
 
