@@ -405,7 +405,8 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
-        anchors.rightMargin: 12
+        anchors.rightMargin: isWindyFullscreen ? 0 : 12
+        Behavior on anchors.rightMargin { NumberAnimation { duration: 800; easing.type: Easing.InOutQuad } }
 
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
@@ -419,7 +420,10 @@ Window {
             visible: !!(!backend || !backend.isLoading)
             clip: true
 
-            Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
+            readonly property real minWidth: (parent.width / 4) + 120
+            readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, parent.width - minWidth)))
+
+            Behavior on width { NumberAnimation { duration: 800; easing.type: Easing.InOutQuad } }
 
             SwipeView {
                 id: weatherSwipe
@@ -429,7 +433,7 @@ Window {
                 clip: false
                 layer.enabled: true
                 layer.smooth: true
-                interactive: true
+                interactive: false
                 currentIndex: 1
                 property int loadedMask: (1 << 1)
                 onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
@@ -452,6 +456,7 @@ Window {
                                     anchors.fill: parent
                                     layer.enabled: false
                                     layer.smooth: true
+                                    enabled: false
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                     url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                     settings.webGLEnabled: true
@@ -513,6 +518,7 @@ Window {
 
             // Column 1: Radar (Transparent Spacer with UI Overlay)
             Rectangle {
+                id: radarColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
@@ -522,6 +528,39 @@ Window {
 
                 Item {
                     anchors.fill: parent
+
+                    // Tesla-style drag expansion MouseArea
+                    MouseArea {
+                        id: expansionGestureArea
+                        anchors.fill: parent
+                        z: 5 // Below buttons but above the spacer
+                        
+                        property real startX: 0
+                        property bool dragActive: false
+                        
+                        onPressed: (mouse) => {
+                            startX = mouse.x
+                            dragActive = false
+                        }
+                        
+                        onPositionChanged: (mouse) => {
+                            var deltaX = mouse.x - startX
+                            // Threshold for swipe detection
+                            if (!dragActive && Math.abs(deltaX) > 20) {
+                                dragActive = true
+                            }
+                            
+                            if (dragActive) {
+                                if (deltaX > 80 && !isWindyFullscreen) {
+                                    isWindyFullscreen = true
+                                    dragActive = false // Triggered
+                                } else if (deltaX < -80 && isWindyFullscreen) {
+                                    isWindyFullscreen = false
+                                    dragActive = false // Triggered
+                                }
+                            }
+                        }
+                    }
 
                     // Fullscreen button for weather views (Single button in foreground)
                     Rectangle {
@@ -621,7 +660,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (1.0 - backgroundWindy.progress)
                 // When showing the globe inside this card, match the app background
                 // so the globe appears to sit directly on the window background.
                 color: plotCard.plotCardShowsGlobe
@@ -629,7 +668,8 @@ Window {
                        : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
                 radius: 8
                 clip: false
-                visible: !isWindyFullscreen && !plotCard.isHighResolution
+                opacity: 1.0 - backgroundWindy.progress
+                visible: opacity > 0 && !plotCard.isHighResolution
                 // Toggle to switch between plot and globe within this card
                 // On high resolution displays, globe is shown in launch card instead
                 property bool isHighResolution: backend && backend.isHighResolution
@@ -965,11 +1005,12 @@ Window {
                 id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1
+                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
                 color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
-                visible: !isWindyFullscreen
+                opacity: 1.0 - backgroundWindy.progress
+                visible: opacity > 0
                 property string launchViewMode: "list"
                 property bool calendarLoaded: false
 
@@ -1664,12 +1705,15 @@ Window {
 
             // Column 4: Videos or Next Race Location
             Rectangle {
+                id: videoCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
                 color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
-                visible: !isWindyFullscreen
+                opacity: 1.0 - backgroundWindy.progress
+                visible: opacity > 0
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -1834,7 +1878,8 @@ Window {
                             id: youtubeOverlay
                             anchors.fill: parent
                             z: 2
-                            visible: backend && !isWindyFullscreen
+                            opacity: 1.0 - backgroundWindy.progress
+                            visible: backend && opacity > 0
 
                             RowLayout {
                                 id: youtubePills
@@ -1986,7 +2031,7 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
             color: "transparent"
-            visible: !isWindyFullscreen
+            visible: true
 
             RowLayout {
                 anchors.fill: parent
