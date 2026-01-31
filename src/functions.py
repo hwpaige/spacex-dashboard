@@ -1746,7 +1746,20 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
     """Process launch data into series for charting using plain Python (no pandas for better performance)"""
     profiler.mark("get_launch_trends_series Start")
     rocket_types = ['Starship', 'Falcon 9', 'Falcon Heavy']
-    all_months = [f"{current_year}-{m:02d}" for m in range(1, current_month + 1)]
+    
+    if chart_view_mode == 'cumulative':
+        # Cumulative plots show Jan to current month of the current year (yearly goal progress)
+        all_months = [f"{current_year}-{m:02d}" for m in range(1, current_month + 1)]
+    else:
+        # Non-cumulative plots show a rolling 12-month period
+        all_months = []
+        for i in range(11, -1, -1):
+            m = current_month - i
+            y = current_year
+            while m <= 0:
+                m += 12
+                y -= 1
+            all_months.append(f"{y}-{m:02d}")
     
     # Initialize counts: { month: { rocket: count } }
     counts = {m: {r: 0 for r in rocket_types} for m in all_months}
@@ -1759,13 +1772,14 @@ def get_launch_trends_series(launches, chart_view_mode, current_year, current_mo
         try:
             # Assuming date format is YYYY-MM-DD
             year = int(date_str[:4])
-            if year != current_year:
-                continue
             month_idx = int(date_str[5:7])
-            if month_idx > current_month:
+            
+            month_key = f"{year}-{month_idx:02d}"
+            
+            # Check if this month is in our range
+            if month_key not in counts:
                 continue
             
-            month_key = f"{current_year}-{month_idx:02d}"
             rocket = launch.get('rocket', 'Unknown')
             
             # Match rocket types (partial match for flexibility)

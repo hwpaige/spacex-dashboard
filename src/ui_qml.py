@@ -653,71 +653,19 @@ Window {
                 }
             }
 
-            // Column 2: Launch Trends or Driver Standings
+            // Column 2: Globe Card (Now simplified, Plot moved to Launch Card)
             Rectangle {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: plotCard.isHighResolution ? 0 : (1.0 - backgroundWindy.progress)
                 // When showing the globe inside this card, match the app background
-                // so the globe appears to sit directly on the window background.
-                color: plotCard.plotCardShowsGlobe
-                       ? "transparent"
-                       : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
+                color: "transparent"
                 radius: 8
                 clip: false
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0 && !plotCard.isHighResolution
-                // Toggle to switch between plot and globe within this card
-                // On high resolution displays, globe is shown in launch card instead
                 property bool isHighResolution: backend && backend.isHighResolution
-                // Default to globe view on app load, but not on high resolution displays
-                property bool plotCardShowsGlobe: !isHighResolution
-                // Cache bar-toggle absolute position so overlay toggle can appear at the exact same spot
-                property real toggleAbsX: 0
-                property real toggleAbsY: 0
-                function cacheToggleAbsPos() {
-                    // If the bar toggle is visible, use its real position
-                    if (globeToggle && globeToggle.visible) {
-                        var pt = globeToggle.mapToItem(plotCard, 0, 0)
-                        toggleAbsX = pt.x
-                        toggleAbsY = pt.y
-                    } else {
-                        // Fallback for initial globe mode (bar hidden): compute exact position
-                        // to match where the toggle would be inside the centered RowLayout.
-                        // Row composition (as currently defined):
-                        // - 5 chart buttons @ 40px each
-                        // - RowLayout spacing: 6px between items (6 gaps before toggle)
-                        // - spacer Item: 8px
-                        // - toggle button: 40px (matches other buttons)
-                        var btnCount = 5;
-                        var btnW = 40;
-                        var spacerW = 8;
-                        var toggleW = 40;
-                        var spacing = 6;
-                        var gapsBeforeToggle = btnCount /*buttons*/ + 1 /*spacer*/; // number of items before toggle
-                        var spacingBeforeToggle = gapsBeforeToggle * spacing; // gaps before toggle
-                        var widthBeforeToggle = (btnCount * btnW) + spacerW + spacingBeforeToggle;
-                        var totalRowWidth = widthBeforeToggle + toggleW + spacing; // include last spacing after toggle for symmetry (harmless)
-
-                        // The RowLayout is centered in the bar, so compute its left edge
-                        var rowLeftX = Math.max(0, (plotCard.width - totalRowWidth) / 2);
-                        // Toggle's left X inside the card
-                        toggleAbsX = rowLeftX + widthBeforeToggle;
-
-                        // Vertically align within the (hidden) bar area at the bottom of the card
-                        var pillH = 28; // match button height
-                        var barH = 30;
-                        toggleAbsY = Math.max(2, plotCard.height - barH + (barH - pillH) / 2);
-                    }
-                }
-                Component.onCompleted: {
-                    cacheToggleAbsPos()
-                    // Defer once more to ensure layout metrics are finalized
-                    Qt.callLater(cacheToggleAbsPos)
-                }
-                onWidthChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
-                onHeightChanged: if (plotCard.plotCardShowsGlobe) cacheToggleAbsPos()
 
                 ColumnLayout {
                     anchors.fill: parent
@@ -728,271 +676,61 @@ Window {
                         Layout.fillHeight: true
                         visible: !!backend
 
-                        ColumnLayout {
+                        // Globe view
+                        Item {
+                            id: plotGlobeView
                             anchors.fill: parent
-                            anchors.margins: 0
-                            // Remove spacing in globe mode so no background strip remains
-                            spacing: plotCard.plotCardShowsGlobe ? 0 : 5
-
-                            // Plot view (default)
-                            ChartItem {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                visible: !plotCard.plotCardShowsGlobe
-
-                                chartType: backend ? backend.chartType : "line"
-                                viewMode: backend ? backend.chartViewMode : "actual"
-                                series: backend ? backend.launchTrendsSeries : []
-                                months: backend ? backend.launchTrendsMonths : []
-                                maxValue: backend ? backend.launchTrendsMaxValue : 10
-                                theme: backend ? backend.theme : "dark"
-
-                                opacity: showAnimated
-
-                                property real showAnimated: 0
-
-                                Component.onCompleted: showAnimated = 1
-
-                                Behavior on showAnimated {
-                                    NumberAnimation {
-                                        duration: 500
-                                        easing.type: Easing.InOutQuad
-                                    }
-                                }
+                            property bool _loaded: false
+                            function runJavaScript(script) {
+                                if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
                             }
-
-                            // Globe view (reuses the upcoming launch tray globe)
-                            // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
-
-                            Item {
-                                id: plotGlobeView
-                                // Ensure the globe view fills all available space in the layout
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                visible: plotCard.plotCardShowsGlobe
-                                onVisibleChanged: {
-                                    if (visible) runJavaScript("if(window.resumeSpin) resumeSpin();")
-                                    else runJavaScript("if(window.pauseSpin) pauseSpin();")
-                                }
-                                property bool _loaded: false
-                                function runJavaScript(script) {
-                                    if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
-                                }
-                                Loader {
-                                    id: plotGlobeLoader
+                            Loader {
+                                id: plotGlobeLoader
+                                anchors.fill: parent
+                                active: true || plotGlobeView._loaded
+                                sourceComponent: WebEngineView {
+                                    id: plotGlobeViewInner
                                     anchors.fill: parent
-                                    active: plotCard.plotCardShowsGlobe || plotGlobeView._loaded
-                                    sourceComponent: WebEngineView {
-                                        id: plotGlobeViewInner
-                                        // Ensure the globe view fills all available space in the layout
-                                        anchors.fill: parent
-                                        url: globeUrl
-                                        // Performance: Transparency enabled per user request; layers enabled to support it
-                                        backgroundColor: "transparent"
-                                        onBackgroundColorChanged: {
+                                    url: globeUrl
+                                    backgroundColor: "transparent"
+                                    onBackgroundColorChanged: {
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
+                                    }
+                                    zoomFactor: 1.0
+                                    layer.enabled: true
+                                    layer.smooth: true
+                                    settings.javascriptCanAccessClipboard: false
+                                    settings.allowWindowActivationFromJavaScript: false
+                                    onContextMenuRequested: function(request) { request.accepted = true }
+
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            plotGlobeView._loaded = true;
+                                            var trajectoryData = backend ? backend.get_launch_trajectory() : null;
+                                            if (trajectoryData) {
+                                                plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                            }
+                                            if (backend) {
+                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            }
                                             if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
+                                            try {
+                                                plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
+                                            } catch (e) { console.log("Plot globe JS nudge error:", e); }
                                         }
-                                        zoomFactor: 1.0
-                                        layer.enabled: true
-                                        layer.smooth: true
-                                        settings.javascriptCanAccessClipboard: false
-                                        settings.allowWindowActivationFromJavaScript: false
-                                        // Disable any default context menu (long-press/right-click)
-                                        onContextMenuRequested: function(request) { request.accepted = true }
+                                    }
 
-                                        onLoadingChanged: function(loadRequest) {
-                                            if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                                plotGlobeView._loaded = true;
-                                                var trajectoryData = backend ? backend.get_launch_trajectory() : null;
-                                                if (trajectoryData) {
-                                                    plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                                                }
-                                                // Set initial theme
-                                                if (backend) {
-                                                    plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                                }
-
-                                                // Enforce rounded corners inside the page itself
-                                                if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
-                                                // Ensure the plot card globe animation loop starts/resumes on initial load
-                                                try {
-                                                    plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){console.log('Plot globe animation start failed', e);}})();");
-                                                } catch (e) { console.log("Plot globe JS nudge error:", e); }
-                                            }
-                                        }
-
-                                        Connections {
-                                            target: backend
-                                            function onThemeChanged() {
-                                                if (backend) {
-                                                    plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                                }
+                                    Connections {
+                                        target: backend
+                                        function onThemeChanged() {
+                                            if (backend) {
+                                                plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                             }
                                         }
                                     }
                                 }
                             }
                         }
-                    }
-
-                    // Chart control buttons container (hidden in globe view)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: plotCard.plotCardShowsGlobe ? 0 : 30
-                        Layout.maximumHeight: plotCard.plotCardShowsGlobe ? 0 : 30
-                        Layout.alignment: Qt.AlignTop
-                        color: "transparent"
-                        visible: backend && !plotCard.plotCardShowsGlobe
-
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Repeater {
-                                model: [
-                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
-                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
-                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
-                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
-                                ]
-                                Rectangle {
-                                    Layout.preferredWidth: 40
-                                    Layout.preferredHeight: 28
-                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                           (backend && backend.chartType === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5")) :
-                                           (backend && backend.chartViewMode === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5"))
-                                    radius: 14
-                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")) :
-                                                 (backend && backend.chartViewMode === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
-                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ? 2 : 1) :
-                                                 (backend && backend.chartViewMode === modelData.type ? 2 : 1)
-
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                  (backend ? backend.chartType = modelData.type : null) :
-                                                  (backend ? backend.chartViewMode = modelData.type : null)
-                                    }
-
-                                    ToolTip {
-                                        text: modelData.tooltip
-                                        delay: 500
-                                    }
-                                }
-                            }
-
-                            // Toggle button between Plot and Globe (matches bar button style)
-                            // Hidden on high resolution displays where globe is in launch card
-                            Item { Layout.preferredWidth: plotCard.isHighResolution ? 0 : 8; Layout.preferredHeight: 1 } // spacer
-                            Rectangle {
-                                id: globeToggle
-                                visible: !plotCard.isHighResolution
-                                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 40
-                                Layout.preferredHeight: 28
-                                width: plotCard.isHighResolution ? 0 : 40
-                                height: 28
-                                radius: 14
-                                color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
-                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
-                                border.width: 1
-
-                                Behavior on color { ColorAnimation { duration: 200 } }
-                                Behavior on border.color { ColorAnimation { duration: 200 } }
-                                Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    // In plot view (globe hidden), show globe icon; if ever visible otherwise, show plot icon
-                                    text: plotCard.plotCardShowsGlobe ? "\uf201" : "\uf0ac"
-                                    font.pixelSize: 14
-                                    font.family: "Font Awesome 5 Free"
-                                    color: (backend && backend.theme === "dark") ? "white" : "black"
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
-                                        // Cache absolute position before switching modes so overlay button can match position
-                                        plotCard.cacheToggleAbsPos()
-                                        plotCard.plotCardShowsGlobe = true
-                                    }
-                                    cursorShape: Qt.PointingHandCursor
-                                }
-
-                                ToolTip { text: "Show Globe"; delay: 500 }
-                                // Keep cached position updated when layout changes while visible
-                                onXChanged: plotCard.cacheToggleAbsPos()
-                                onYChanged: plotCard.cacheToggleAbsPos()
-                                onWidthChanged: plotCard.cacheToggleAbsPos()
-                                onHeightChanged: plotCard.cacheToggleAbsPos()
-                                onVisibleChanged: if (visible) plotCard.cacheToggleAbsPos()
-                            }
-                        }
-                    }
-
-                    // Overlay toggle button (same style as bar buttons), positioned absolutely using cached coordinates
-                    Rectangle {
-                        id: globeOverlayToggle
-                        parent: plotCard
-                        visible: backend && plotCard.plotCardShowsGlobe && !plotCard.isHighResolution
-                        x: plotCard.toggleAbsX
-                        y: plotCard.toggleAbsY
-                        width: 40
-                        height: 28
-                        radius: 14
-                        color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
-                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
-                        border.width: 1
-                        z: 1000
-
-                        Behavior on color { ColorAnimation { duration: 200 } }
-                        Behavior on border.color { ColorAnimation { duration: 200 } }
-                        Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                        Text {
-                            anchors.centerIn: parent
-                            // In globe view (overlay visible), show plot icon to switch back
-                            text: "\uf201"
-                            font.pixelSize: 14
-                            font.family: "Font Awesome 5 Free"
-                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                        }
-
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                // Restore bar; cache position in case layout shifts back
-                                plotCard.plotCardShowsGlobe = false
-                                plotCard.cacheToggleAbsPos()
-                            }
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        ToolTip { text: "Show Plot"; delay: 500 }
                     }
                 }
             }
@@ -1012,6 +750,7 @@ Window {
                 visible: opacity > 0
                 property string launchViewMode: "list"
                 property bool calendarLoaded: false
+                property bool chartLoaded: false
 
                 // Check if this is a high resolution display
                 property bool isHighResolution: backend && backend.isHighResolution
@@ -1080,7 +819,7 @@ Window {
                     StackLayout {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
-                        currentIndex: launchCard.launchViewMode === "calendar" ? 1 : 0
+                        currentIndex: launchCard.launchViewMode === "calendar" ? 1 : (launchCard.launchViewMode === "chart" ? 2 : 0)
                         clip: true
 
                         // View 0: Existing List View
@@ -1626,7 +1365,101 @@ Window {
                             }
                         }
                         }
+                        
+                        // View 2: Launch Trends Chart (Moved from Plot Card)
+                        Item {
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
+                            
+                            ChartItem {
+                                anchors.fill: parent
+                                anchors.margins: 10
+                                chartType: backend ? backend.chartType : "line"
+                                viewMode: backend ? backend.chartViewMode : "actual"
+                                series: backend ? backend.launchTrendsSeries : []
+                                months: backend ? backend.launchTrendsMonths : []
+                                maxValue: backend ? backend.launchTrendsMaxValue : 10
+                                theme: backend ? backend.theme : "dark"
+                                
+                                opacity: launchCard.launchViewMode === "chart" ? 1 : 0
+                                Behavior on opacity { NumberAnimation { duration: 250 } }
+                            }
+                        }
                     } // End StackLayout
+
+                    // Chart control buttons container (moved from plotCard)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: launchCard.launchViewMode === "chart" ? 30 : 0
+                        Layout.maximumHeight: launchCard.launchViewMode === "chart" ? 30 : 0
+                        color: "transparent"
+                        visible: launchCard.launchViewMode === "chart"
+                        clip: true
+                        
+                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+
+                        RowLayout {
+                            anchors.centerIn: parent
+                            spacing: 6
+
+                            Repeater {
+                                model: [
+                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
+                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
+                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
+                                ]
+                                Rectangle {
+                                    Layout.preferredWidth: 40
+                                    Layout.preferredHeight: 28
+                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                           (backend && backend.chartType === modelData.type ?
+                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5")) :
+                                           (backend && backend.chartViewMode === modelData.type ?
+                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5"))
+                                    radius: 14
+                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend && backend.chartType === modelData.type ?
+                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")) :
+                                                 (backend && backend.chartViewMode === modelData.type ?
+                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
+                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                 (backend && backend.chartType === modelData.type ? 2 : 1) :
+                                                 (backend && backend.chartViewMode === modelData.type ? 2 : 1)
+
+                                    Behavior on color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.color { ColorAnimation { duration: 200 } }
+                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+
+                                    Text {
+                                        anchors.centerIn: parent
+                                        text: modelData.icon
+                                        font.pixelSize: 14
+                                        font.family: "Font Awesome 5 Free"
+                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                    }
+
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                                  (backend ? backend.chartType = modelData.type : null) :
+                                                  (backend ? backend.chartViewMode = modelData.type : null)
+                                    }
+
+                                    ToolTip {
+                                        text: modelData.tooltip
+                                        delay: 500
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Launch view buttons container
                     Rectangle {
@@ -1644,17 +1477,21 @@ Window {
                                 model: [
                                     {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
                                     {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"},
-                                    {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"} 
+                                    {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"},
+                                    {"type": "chart", "icon": "\uf201", "tooltip": "Launch Trends"}
                                 ]
                                 Rectangle {
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     // Highlight if:
                                     // 1. We are in 'calendar' mode and this button is the calendar button
-                                    // 2. We are in 'list' mode and this button matches backend.eventType (upcoming/past)
-                                    property bool isActive: (modelData.type === "calendar") ? 
-                                                            (launchCard.launchViewMode === "calendar") : 
-                                                            (launchCard.launchViewMode !== "calendar" && backend.eventType === modelData.type)
+                                    // 2. We are in 'chart' mode and this button is the chart button
+                                    // 3. We are in 'list' mode and this button matches backend.eventType (upcoming/past)
+                                    property bool isActive: {
+                                        if (modelData.type === "calendar") return launchCard.launchViewMode === "calendar"
+                                        if (modelData.type === "chart") return launchCard.launchViewMode === "chart"
+                                        return launchCard.launchViewMode === "list" && backend.eventType === modelData.type
+                                    }
                                     
                                     color: isActive ?
                                            (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
@@ -1664,7 +1501,7 @@ Window {
                                                  (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
                                                  (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                                     border.width: isActive ? 2 : 1
-
+                                    
                                     Behavior on color { ColorAnimation { duration: 200 } }
                                     Behavior on border.color { ColorAnimation { duration: 200 } }
                                     Behavior on border.width { NumberAnimation { duration: 200 } }
@@ -1684,6 +1521,8 @@ Window {
                                         onClicked: {
                                             if (modelData.type === "calendar") {
                                                 launchCard.launchViewMode = "calendar"
+                                            } else if (modelData.type === "chart") {
+                                                launchCard.launchViewMode = "chart"
                                             } else {
                                                 launchCard.launchViewMode = "list"
                                                 backend.eventType = modelData.type
