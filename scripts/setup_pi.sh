@@ -720,6 +720,8 @@ Environment=QT_QPA_EGLFS_ROTATION=270
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle --disable-vulkan --disable-gpu-memory-buffer-video-frames --disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE,WaylandFractionalScaleV1
 Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
 Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
+Environment=QT_QPA_EGLFS_NO_LIBINPUT=1
+Environment=QT_QPA_EGLFS_ROTATION_COMMAND=1
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
 Restart=always
@@ -738,7 +740,7 @@ EOF
         # We use environment variable interpolation via a heredoc to embed the rotation
         # NOTE: If display is upside down, change DASHBOARD_ORIENTATION in the service file
         local rotation=270
-        cat << KMS_EOF > /home/$USER/Desktop/project/src/kms.json
+        cat << KMS_EOF > "/home/$USER/Desktop/project/src/kms.json"
 {
   "device": "/dev/dri/card0",
   "hwcursor": false,
@@ -746,7 +748,7 @@ EOF
     {
       "name": "HDMI-A-1",
       "mode": "1480x320",
-      "rotation": \$rotation
+      "rotation": $rotation
     }
   ]
 }

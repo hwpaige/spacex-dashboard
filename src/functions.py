@@ -3272,7 +3272,14 @@ def setup_dashboard_environment():
                         # The user reports not rotated properly, typically means needs 90 or 270
                         # DASHBOARD_ORIENTATION=270 (default) or 90
                         if "QT_QPA_EGLFS_ROTATION" not in os.environ:
-                            os.environ["QT_QPA_EGLFS_ROTATION"] = os.environ.get("DASHBOARD_ORIENTATION", "270")
+                            # Valid EGLFS rotation values are 0, 90, 180, 270.
+                            # Some Qt versions may expect integers, others strings.
+                            # We use the integer value from DASHBOARD_ORIENTATION if possible.
+                            try:
+                                rotation_val = int(os.environ.get("DASHBOARD_ORIENTATION", "270"))
+                                os.environ["QT_QPA_EGLFS_ROTATION"] = str(rotation_val)
+                            except ValueError:
+                                os.environ["QT_QPA_EGLFS_ROTATION"] = "270"
                         
                         # Also check if we need to apply this to KMS config dynamically if it exists
                         # though typically KMS config is static on disk.
