@@ -2059,7 +2059,6 @@ Window {
                         }
                     }
 
-                    // Sliding Weather Tray
                     Popup {
                         id: weatherTray
                         x: 0
@@ -2074,9 +2073,11 @@ Window {
                         padding: 0
                         
                         property real expandedHeight: 220
+                        property bool isDragging: false
                         opacity: height / expandedHeight
                         
                         Behavior on height {
+                            enabled: !weatherTray.isDragging && (weatherListView ? !weatherListView.dragging : true)
                             NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
                         }
                         
@@ -2119,12 +2120,12 @@ Window {
                                     onPressed: {
                                         startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                         startHeight = weatherTray.height
-                                        isDragging = true
+                                        weatherTray.isDragging = true
                                         moved = false
                                     }
                                     
                                     onPositionChanged: {
-                                        if (isDragging && pressed) {
+                                        if (weatherTray.isDragging && pressed) {
                                             var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                             var deltaY = currentGlobalPos.y - startGlobalPos.y
                                             if (Math.abs(deltaY) > 5) moved = true
@@ -2135,7 +2136,7 @@ Window {
                                     }
                                     
                                     onReleased: {
-                                        isDragging = false
+                                        weatherTray.isDragging = false
                                         if (moved) {
                                             var threshold = weatherTray.expandedHeight * 0.2
                                             var closedThreshold = threshold
@@ -2184,12 +2185,55 @@ Window {
 
                             // Forecast List
                             ListView {
+                                id: weatherListView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 Layout.leftMargin: 10
                                 Layout.rightMargin: 10
                                 Layout.bottomMargin: 10
                                 model: backend ? backend.weatherForecastModel : null
+                                clip: true
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                property real dragStartY: 0
+
+                                DragHandler {
+                                    id: weatherListDrag
+                                    target: null
+                                    xAxis.enabled: false
+                                    onActiveChanged: {
+                                        if (active) {
+                                            if (weatherListView.contentY <= 0) {
+                                                weatherTray.isDragging = true
+                                                weatherListView.dragStartY = centroid.scenePosition.y
+                                            }
+                                        } else {
+                                            if (weatherTray.isDragging) {
+                                                weatherTray.isDragging = false
+                                                if (weatherTray.height < weatherTray.expandedHeight) {
+                                                    if (weatherTray.height < weatherTray.expandedHeight * 0.8) {
+                                                        weatherTray.height = 0
+                                                    } else {
+                                                        weatherTray.height = weatherTray.expandedHeight
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    onCentroidChanged: {
+                                        if (weatherTray.isDragging) {
+                                            var delta = centroid.scenePosition.y - weatherListView.dragStartY
+                                            if (delta > 0) {
+                                                weatherTray.height = Math.max(0, weatherTray.expandedHeight - delta)
+                                            } else {
+                                                weatherTray.height = weatherTray.expandedHeight
+                                            }
+                                        } else if (weatherListView.dragging && weatherListView.contentY <= 0 && centroid.scenePosition.y > weatherListView.dragStartY) {
+                                            weatherTray.isDragging = true
+                                            weatherListView.dragStartY = centroid.scenePosition.y
+                                        }
+                                    }
+                                }
                                 delegate: Item {
                                     width: parent.width
                                     height: 30
@@ -2285,7 +2329,26 @@ Window {
                                         }
                                     }
                                 }
-                                interactive: false // small list, no need to scroll internally
+                                // interactive: false removed to allow overscroll for closing
+                            }
+                        }
+                        
+                        // Bottom fade-out effect
+                        Rectangle {
+                            id: weatherBottomFade
+                            anchors.left: parent.left
+                            anchors.right: parent.right
+                            anchors.bottom: parent.bottom
+                            height: 30
+                            z: 10
+                            enabled: false
+                            visible: weatherTray.height > 40
+                            gradient: Gradient {
+                                GradientStop { position: 0.0; color: "transparent" }
+                                GradientStop { 
+                                    position: 1.0; 
+                                    color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                }
                             }
                         }
                     }
@@ -2297,19 +2360,18 @@ Window {
                         
                         property point startGlobalPos: Qt.point(0, 0)
                         property real startHeight: 0
-                        property bool isDragging: false
                         property bool moved: false
 
                         onPressed: {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                             if (weatherTray.height === 0) weatherTray.height = 1
                             startHeight = weatherTray.height
-                            isDragging = true
+                            weatherTray.isDragging = true
                             moved = false
                         }
 
                         onPositionChanged: {
-                            if (isDragging && pressed) {
+                            if (weatherTray.isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
                                 if (Math.abs(deltaY) > 5) moved = true
@@ -2320,7 +2382,7 @@ Window {
                         }
 
                         onReleased: {
-                            isDragging = false
+                            weatherTray.isDragging = false
                             if (moved) {
                                 var threshold = weatherTray.expandedHeight * 0.2
                                 var closedThreshold = threshold
@@ -2494,7 +2556,6 @@ Window {
                         }
                     }
 
-                    // Sliding Launch Narratives Tray (Bottom)
                     Popup {
                         id: narrativeTray
                         // Now child of tickerRect, so x:0 aligns perfectly
@@ -2515,9 +2576,11 @@ Window {
                         bottomPadding: 0
                         
                         property real expandedHeight: 220 // Taller list
+                        property bool isDragging: false
                         opacity: height / expandedHeight // Fade in/out based on drag position
                         
                         Behavior on height {
+                            enabled: !narrativeTray.isDragging && (narrativeListView ? !narrativeListView.dragging : true)
                             NumberAnimation {
                                 duration: 300
                                 easing.type: Easing.OutCubic
@@ -2570,12 +2633,12 @@ Window {
                                     onPressed: {
                                         startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                         startHeight = narrativeTray.height
-                                        isDragging = true
+                                        narrativeTray.isDragging = true
                                         moved = false
                                     }
                                     
                                     onPositionChanged: {
-                                        if (isDragging && pressed) {
+                                        if (narrativeTray.isDragging && pressed) {
                                             var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                             // Dragging DOWN (positive delta) decreases height since expanding from bottom
                                             var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -2588,7 +2651,7 @@ Window {
                                     }
                                     
                                     onReleased: {
-                                        isDragging = false
+                                        narrativeTray.isDragging = false
                                         if (moved) {
                                             var threshold = narrativeTray.expandedHeight * 0.2
                                             var closedThreshold = threshold
@@ -2625,15 +2688,56 @@ Window {
                             
                             // Narratives List
                             ListView {
+                                id: narrativeListView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
                                 Layout.margins: 0
-                                // Extend right to the bottom edge
                                 Layout.bottomMargin: 0 
                                 Layout.topMargin: 0
                                 clip: true
                                 model: backend.launchDescriptions
                                 spacing: 0
+                                boundsBehavior: Flickable.StopAtBounds
+
+                                property real dragStartY: 0
+
+                                DragHandler {
+                                    id: narrativeListDrag
+                                    target: null
+                                    xAxis.enabled: false
+                                    onActiveChanged: {
+                                        if (active) {
+                                            if (narrativeListView.contentY <= 0) {
+                                                narrativeTray.isDragging = true
+                                                narrativeListView.dragStartY = centroid.scenePosition.y
+                                            }
+                                        } else {
+                                            if (narrativeTray.isDragging) {
+                                                narrativeTray.isDragging = false
+                                                if (narrativeTray.height < narrativeTray.expandedHeight) {
+                                                    if (narrativeTray.height < narrativeTray.expandedHeight * 0.8) {
+                                                        narrativeTray.height = 0
+                                                    } else {
+                                                        narrativeTray.height = narrativeTray.expandedHeight
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    onCentroidChanged: {
+                                        if (narrativeTray.isDragging) {
+                                            var delta = centroid.scenePosition.y - narrativeListView.dragStartY
+                                            if (delta > 0) {
+                                                narrativeTray.height = Math.max(0, narrativeTray.expandedHeight - delta)
+                                            } else {
+                                                narrativeTray.height = narrativeTray.expandedHeight
+                                            }
+                                        } else if (narrativeListView.dragging && narrativeListView.contentY <= 0 && centroid.scenePosition.y > narrativeListView.dragStartY) {
+                                            narrativeTray.isDragging = true
+                                            narrativeListView.dragStartY = centroid.scenePosition.y
+                                        }
+                                    }
+                                }
                                 
                                 delegate: Item {
                                     width: ListView.view.width
@@ -2853,7 +2957,24 @@ Window {
                                     }
                                 }
 
-
+                                // Bottom fade-out effect
+                                Rectangle {
+                                    id: narrativeBottomFade
+                                    anchors.left: parent.left
+                                    anchors.right: parent.right
+                                    anchors.bottom: parent.bottom
+                                    height: 40
+                                    z: 10
+                                    enabled: false
+                                    visible: narrativeTray.height > 60
+                                    gradient: Gradient {
+                                        GradientStop { position: 0.0; color: "transparent" }
+                                        GradientStop { 
+                                            position: 1.0; 
+                                            color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -2863,7 +2984,8 @@ Window {
                 RowLayout {
                     Layout.alignment: Qt.AlignRight
                     spacing: 8
-                Rectangle {
+
+                    Rectangle {
                     width: 28
                     height: 32
                     radius: 16
@@ -3290,11 +3412,9 @@ Window {
                     }
 
                     // WiFi icon
-                }
-
-                Rectangle {
-                    width: 28
-                    height: 32
+                    Rectangle {
+                        width: 28
+                        height: 32
                         radius: 16
                         color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
@@ -3355,9 +3475,11 @@ Window {
                             padding: 0
                             
                             property real expandedHeight: 160
+                            property bool isDragging: false
                             opacity: height / expandedHeight
                             
                             Behavior on height {
+                                enabled: !locationDrawer.isDragging && (locationListView ? !locationListView.dragging : true)
                                 NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
                             }
                             
@@ -3400,12 +3522,12 @@ Window {
                                         onPressed: {
                                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                             startHeight = locationDrawer.height
-                                            isDragging = true
+                                            locationDrawer.isDragging = true
                                             moved = false
                                         }
                                         
                                         onPositionChanged: {
-                                            if (isDragging && pressed) {
+                                            if (locationDrawer.isDragging && pressed) {
                                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                                 // Dragging DOWN decreases height
                                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -3417,7 +3539,7 @@ Window {
                                         }
                                         
                                         onReleased: {
-                                            isDragging = false
+                                            locationDrawer.isDragging = false
                                             if (moved) {
                                                 var threshold = locationDrawer.expandedHeight * 0.2
                                                 var closedThreshold = threshold
@@ -3453,12 +3575,54 @@ Window {
                                 }
                                 
                                 ListView {
+                                    id: locationListView
                                     Layout.fillWidth: true
                                     Layout.fillHeight: true
                                     Layout.margins: 0
                                     clip: true
                                     model: ["Starbase", "Vandy", "Cape", "Hawthorne"]
                                     spacing: 2
+                                    boundsBehavior: Flickable.StopAtBounds
+
+                                    property real dragStartY: 0
+
+                                    DragHandler {
+                                        id: locationListDrag
+                                        target: null
+                                        xAxis.enabled: false
+                                        onActiveChanged: {
+                                            if (active) {
+                                                if (locationListView.contentY <= 0) {
+                                                    locationDrawer.isDragging = true
+                                                    locationListView.dragStartY = centroid.scenePosition.y
+                                                }
+                                            } else {
+                                                if (locationDrawer.isDragging) {
+                                                    locationDrawer.isDragging = false
+                                                    if (locationDrawer.height < locationDrawer.expandedHeight) {
+                                                        if (locationDrawer.height < locationDrawer.expandedHeight * 0.8) {
+                                                            locationDrawer.height = 0
+                                                        } else {
+                                                            locationDrawer.height = locationDrawer.expandedHeight
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        onCentroidChanged: {
+                                            if (locationDrawer.isDragging) {
+                                                var delta = centroid.scenePosition.y - locationListView.dragStartY
+                                                if (delta > 0) {
+                                                    locationDrawer.height = Math.max(0, locationDrawer.expandedHeight - delta)
+                                                } else {
+                                                    locationDrawer.height = locationDrawer.expandedHeight
+                                                }
+                                            } else if (locationListView.dragging && locationListView.contentY <= 0 && centroid.scenePosition.y > locationListView.dragStartY) {
+                                                locationDrawer.isDragging = true
+                                                locationListView.dragStartY = centroid.scenePosition.y
+                                            }
+                                        }
+                                    }
                                     delegate: Rectangle {
                                         width: ListView.view.width
                                         height: 30
@@ -3484,6 +3648,25 @@ Window {
                                     }
                                 }
                             }
+                            
+                            // Bottom fade-out effect
+                            Rectangle {
+                                id: locationBottomFade
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: 30
+                                z: 10
+                                enabled: false
+                                visible: locationDrawer.height > 40
+                                gradient: Gradient {
+                                    GradientStop { position: 0.0; color: "transparent" }
+                                    GradientStop { 
+                                        position: 1.0; 
+                                        color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                    }
+                                }
+                            }
                         }
 
                         Text {
@@ -3504,19 +3687,18 @@ Window {
                             
                             property point startGlobalPos: Qt.point(0, 0)
                             property real startHeight: 0
-                            property bool isDragging: false
                             property bool moved: false
                             
                             onPressed: {
                                 startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 if (locationDrawer.height === 0) locationDrawer.height = 1
                                 startHeight = locationDrawer.height
-                                isDragging = true
+                                locationDrawer.isDragging = true
                                 moved = false
                             }
                             
                             onPositionChanged: {
-                                if (isDragging && pressed) {
+                                if (locationDrawer.isDragging && pressed) {
                                     var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                     var deltaY = currentGlobalPos.y - startGlobalPos.y
                                     if (Math.abs(deltaY) > 5) moved = true
@@ -3527,7 +3709,7 @@ Window {
                             }
                             
                             onReleased: {
-                                isDragging = false
+                                locationDrawer.isDragging = false
                                 if (moved) {
                                     var threshold = locationDrawer.expandedHeight * 0.2
                                     var closedThreshold = threshold
@@ -3660,6 +3842,7 @@ Window {
                             delay: 500
                         }
                     }
+                }
 
                 // Right pill (countdown) - FIXED WIDTH
                 Rectangle {
