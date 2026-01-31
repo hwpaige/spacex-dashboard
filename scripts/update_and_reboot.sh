@@ -84,7 +84,16 @@ ensure_repo_writable() {
 
 # Function: perform update via git as EFFECTIVE_USER (returns 0 on success)
 update_via_git() {
-  local target_branch="${1:-master}"
+  # Try to detect the default branch if not specified
+  local target_branch="$1"
+  if [ -z "$target_branch" ]; then
+    # Get the default branch from the remote
+    target_branch=$(run_git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's|^refs/remotes/origin/||')
+    # Fallback to current local branch if remote HEAD is not set
+    [ -z "$target_branch" ] && target_branch=$(run_git branch --show-current 2>/dev/null)
+    # Final fallback to master
+    [ -z "$target_branch" ] && target_branch="master"
+  fi
   
   # Drop any local work so deployment is deterministic
   run_git reset --hard HEAD || true
@@ -114,7 +123,15 @@ update_via_git() {
 # Note: We intentionally avoid running git as root to sidestep "dubious ownership" and .git write issues.
 # If update_via_git fails after a permission repair attempt, we abort with guidance.
 
-TARGET_BRANCH="${1:-master}"
+# Detect default branch if not passed as $1
+DETECTED_BRANCH="$1"
+if [ -z "$DETECTED_BRANCH" ]; then
+    # Use whatever branch we are currently tracking, or fallback to master
+    DETECTED_BRANCH=$(run_git branch --show-current 2>/dev/null)
+    [ -z "$DETECTED_BRANCH" ] && DETECTED_BRANCH="master"
+fi
+
+TARGET_BRANCH="${DETECTED_BRANCH}"
 echo "Target update branch: $TARGET_BRANCH"
 
 # Try to ensure repo is writable, then try git update; if it fails, try sudo-elevated git; otherwise stop with guidance

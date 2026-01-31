@@ -848,7 +848,11 @@ setup_repository() {
             log "Existing repository found, updating..."
             cd "$REPO_DIR"
             sudo -u "$USER" git fetch --all
-            sudo -u "$USER" git reset --hard origin/main || sudo -u "$USER" git reset --hard origin/master
+            # Try to detect the default branch or current branch
+            local branch=$(sudo -u "$USER" git branch --show-current 2>/dev/null)
+            [ -z "$branch" ] && branch="master"
+            
+            sudo -u "$USER" git reset --hard "origin/$branch" || sudo -u "$USER" git reset --hard origin/master || sudo -u "$USER" git reset --hard origin/main
         else
             log "Cloning repository..."
             [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
