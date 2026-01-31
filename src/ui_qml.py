@@ -103,7 +103,6 @@ Window {
     color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
     Behavior on color { ColorAnimation { duration: 300 } }
 
-    property bool isWindyFullscreen: false
     property bool autoFullScreen: false
     // Track the currently selected YouTube URL for the video card.
     // Initialized to the default playlist URL provided by the backend.
@@ -416,11 +415,12 @@ Window {
             
             property bool isDragging: false
             property real manualWidth: minWidth
+            property real expansionFactor: 0.0
 
             readonly property bool isHighRes: backend && backend.isHighResolution
 
-            // Width is 1/4 of total safeArea width + extension for fade
-            width: isDragging ? manualWidth : (isWindyFullscreen ? root.width : minWidth)
+            // Width is 1/4 of total safeArea width + expansion based on drag
+            width: isDragging ? manualWidth : (minWidth + expansionFactor * (root.width - minWidth))
             z: 0 // Behind centralContent
             visible: !!(!backend || !backend.isLoading)
             clip: true
@@ -564,15 +564,16 @@ Window {
                         
                         onReleased: (mouse) => {
                             if (backgroundWindy.isDragging) {
-                                // Snap logic: if moved more than 20% from the starting state, snap to the other state
-                                // Must check progress BEFORE setting isDragging = false
-                                var progress = backgroundWindy.progress
+                                // Snap logic: if moved more than 20% from the starting state, snap to the other state.
+                                // This restores the "snap open and close" functionality.
+                                var p = backgroundWindy.progress
                                 var threshold = 0.2
-                                if (!isWindyFullscreen) {
-                                    if (progress > threshold) isWindyFullscreen = true
+                                if (backgroundWindy.expansionFactor === 0.0) {
+                                    backgroundWindy.expansionFactor = (p > threshold) ? 1.0 : 0.0
                                 } else {
-                                    if (progress < (1.0 - threshold)) isWindyFullscreen = false
+                                    backgroundWindy.expansionFactor = (p < (1.0 - threshold)) ? 0.0 : 1.0
                                 }
+                                
                                 backgroundWindy.isDragging = false
                             }
                         }
@@ -581,31 +582,6 @@ Window {
                             if (backgroundWindy.isDragging) {
                                 backgroundWindy.isDragging = false
                             }
-                        }
-                    }
-
-                    // Fullscreen button for weather views (Single button in foreground)
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.topMargin: 90
-                        anchors.right: parent.right
-                        anchors.rightMargin: 15
-                        width: 30
-                        height: 30
-                        color: "transparent"
-                        z: 15
-                        Text {
-                            anchors.centerIn: parent
-                            text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 16
-                            color: "white"
-                            style: Text.Outline
-                            styleColor: "black"
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: isWindyFullscreen = !isWindyFullscreen
                         }
                     }
 
