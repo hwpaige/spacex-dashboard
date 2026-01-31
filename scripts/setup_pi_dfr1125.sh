@@ -416,7 +416,7 @@ disable_setup_wizard() {
 
 check_qt_version() {
     log "Checking Qt version compatibility..."
-    log "Note: This setup is optimized for Qt 6.8.x - Qt 6.9.x+ has GLOzone WebEngine issues"
+    log "Note: This setup is optimized for Qt 6.8.x and includes fixes for Qt 6.9.x+ (Ubuntu 25.10)"
     
     # Check PyQt6 version
     local pyqt_version=$(python3 -c "import PyQt6; print(PyQt6.QtCore.PYQT_VERSION_STR)" 2>/dev/null || echo "unknown")
@@ -436,12 +436,10 @@ check_qt_version() {
     if [[ $qt_major_minor == "6.8" ]]; then
         log "✓ Qt $qt_version detected - this version is known to work with the SpaceX dashboard"
     elif [[ $qt_major_minor == "6.9" ]]; then
-        log "⚠ WARNING: Qt $qt_version detected - this version (6.9.x) has known GLOzone issues with WebEngine"
-        log "⚠ It is recommended to use Ubuntu 25.04 with Qt 6.8.x for best compatibility"
-        log "⚠ The app may not start or may crash with GLOzone errors"
+        log "✓ Qt $qt_version detected - applying GLOzone compatibility fixes for Ubuntu 25.10"
     elif [[ $qt_major_minor == "6.10" ]] || [[ $qt_major_minor == "6.11" ]] || [[ $qt_major_minor == "6.12" ]]; then
         log "⚠ WARNING: Qt $qt_version detected - this version is newer than tested versions"
-        log "⚠ Compatibility is unknown - the app may not work correctly"
+        log "⚠ Compatibility is unknown - applying GLOzone fixes as a precaution"
     else
         log "⚠ WARNING: Unable to determine Qt version or using untested version: $qt_version"
         log "⚠ This may cause issues with the SpaceX dashboard"
@@ -1496,12 +1494,19 @@ Type=Application
 EOF
     
     # Create .xsession for the user
-    sudo -u "$USER" tee "$HOME_DIR/.xsession" > /dev/null << 'EOF'
+    local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+    local extra_flags=""
+    if [ "$ubuntu_version" = "25.10" ]; then
+        extra_flags=" --ozone-platform-hint=x11 --ozone-platform=x11 --use-gl=egl"
+        log "Ubuntu 25.10 detected: Adding GLOzone compatibility flags to .xsession"
+    fi
+
+    sudo -u "$USER" tee "$HOME_DIR/.xsession" > /dev/null << EOF
 #!/bin/bash
 export SHELL=/bin/bash
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-echo "Starting X session at $(date)" > ~/xsession.log
+echo "Starting X session at \$(date)" > ~/xsession.log
 
 # Clear any console text and switch to X tty
 chvt 7 2>/dev/null || true
@@ -1514,18 +1519,18 @@ sleep 2
 MODELINE="132.00 2560 2677 2736 2933 734 736 742 750 -hsync +vsync"
 
 # Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
-OUTPUT=$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
-if [ -z "$OUTPUT" ]; then
+OUTPUT=\$(xrandr | grep -E "^HDMI-A?-1 connected" | cut -d' ' -f1)
+if [ -z "\$OUTPUT" ]; then
     # Fallback to first connected output if HDMI-1/HDMI-A-1 not found
-    OUTPUT=$(xrandr | grep " connected" | cut -d' ' -f1 | head -n1)
+    OUTPUT=\$(xrandr | grep " connected" | cut -d' ' -f1 | head -n1)
 fi
 
-echo "Using display output: $OUTPUT" >> ~/xsession.log
+echo "Using display output: \$OUTPUT" >> ~/xsession.log
 
-if [ -n "$OUTPUT" ]; then
-    xrandr --newmode "2560x734_60.00" $MODELINE 2>/dev/null || true
-    xrandr --addmode "$OUTPUT" "2560x734_60.00" 2>/dev/null || true
-    xrandr --output "$OUTPUT" --mode 2560x734_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
+if [ -n "\$OUTPUT" ]; then
+    xrandr --newmode "2560x734_60.00" \$MODELINE 2>/dev/null || true
+    xrandr --addmode "\$OUTPUT" "2560x734_60.00" 2>/dev/null || true
+    xrandr --output "\$OUTPUT" --mode 2560x734_60.00 --rotate normal 2>&1 | tee -a ~/xrandr.log
 else
     echo "ERROR: No connected display output found" >> ~/xsession.log
 fi
@@ -1547,7 +1552,7 @@ export DASHBOARD_HEIGHT=734
 export DASHBOARD_SCALE=1.333
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen"
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen$extra_flags"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
@@ -1561,7 +1566,7 @@ if [ -f ~/app.log ]; then
 fi
 > ~/app.log
 
-echo "Starting SpaceX Dashboard at $(date)" >> ~/app.log
+echo "Starting SpaceX Dashboard at \$(date)" >> ~/app.log
 
 # Start the application
 exec python3 app.py >> ~/app.log 2>&1
