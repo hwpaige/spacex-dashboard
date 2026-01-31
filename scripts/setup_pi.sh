@@ -295,7 +295,7 @@ install_packages() {
         libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0t64
         libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1
         libasound2t64 libgtk-3-0t64 lz4 plymouth-theme-spinner
-        qt6-webengine-dev-tools libxcb-cursor0
+        qt6-webengine-dev-tools libxcb-cursor0 libxcb-xinerama0
     )
     
     # First try to install all packages at once for speed
@@ -1463,7 +1463,7 @@ EOF
     local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
     local extra_flags=""
     if [ "$ubuntu_version" = "25.10" ]; then
-        extra_flags=" --ozone-platform-hint=auto --use-gl=egl"
+        extra_flags=" --ozone-platform-hint=auto --use-gl=angle"
         log "Ubuntu 25.10 detected: Adding GLOzone compatibility flags to .xsession"
     fi
 
@@ -1532,6 +1532,14 @@ echo "Starting SpaceX Dashboard at \$(date)" >> ~/app.log
 exec python3 app.py >> ~/app.log 2>&1
 EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
+    
+    # If 25.10, we prefer EGLFS so we disable LightDM and enable the EGLFS service
+    # NOTE: If EGLFS fails to find a screen, re-enable LightDM and ensure libxcb-cursor0 is installed
+    if [ "$ubuntu_version" = "25.10" ]; then
+        log "Ubuntu 25.10 detected: Switching to EGLFS as primary platform"
+        systemctl disable lightdm 2>/dev/null || true
+        systemctl enable spacex-dashboard-eglfs.service 2>/dev/null || true
+    fi
     
     # Fix X authority permissions
     sudo -u "$USER" touch "$HOME_DIR/.Xauthority"
