@@ -296,7 +296,7 @@ install_packages() {
         libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0t64
         libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1
         libasound2t64 libgtk-3-0t64 lz4 plymouth-theme-spinner
-        qt6-webengine-dev-tools libxcb-cursor0 libxcb-xinerama0
+        qt6-webengine-dev-tools
     )
     
     # First try to install all packages at once for speed
