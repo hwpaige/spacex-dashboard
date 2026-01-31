@@ -3198,11 +3198,15 @@ def setup_dashboard_environment():
             # Use ANGLE with auto-detection for ozone platform as requested by logs
             # 'Only --use-gl=angle is supported on this platform'
             # Note: --ozone-platform-hint=auto is essential for GLOzone to find a backend
+            # --disable-vulkan and --disable-gpu-compositing help with 'Compositor returned null texture'
             flags.extend([
                 "--ozone-platform-hint=auto",
                 "--use-gl=angle",
                 "--ignore-gpu-blocklist",
-                "--enable-gpu-rasterization"
+                "--enable-gpu-rasterization",
+                "--disable-vulkan",
+                "--disable-gpu-memory-buffer-video-frames",
+                "--disable-features=Vulkan,UseSkiaRenderer,VulkanFromANGLE"
             ])
             logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 ANGLE hardware acceleration fixes.")
         elif platform.machine() == 'aarch64':
@@ -3261,6 +3265,13 @@ def setup_dashboard_environment():
                     version_float = float(ubuntu_version)
                     if version_float >= 25.10:
                         os.environ["QT_QPA_PLATFORM"] = "eglfs"
+                        # Rotation and RHI fixes for Ubuntu 25.10 EGLFS
+                        # RHI_BACKEND=opengl avoids Vulkan/Null texture issues
+                        os.environ["QSG_RHI_BACKEND"] = "opengl"
+                        # Use KMS for rotation if needed, or QT_QPA_EGLFS_ROTATION
+                        # The user reports not rotated properly, typically means needs 90 or 270
+                        if "QT_QPA_EGLFS_ROTATION" not in os.environ:
+                            os.environ["QT_QPA_EGLFS_ROTATION"] = "90"
                     else:
                         os.environ["QT_QPA_PLATFORM"] = "xcb"
                 except ValueError:

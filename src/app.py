@@ -3687,6 +3687,14 @@ if __name__ == '__main__':
         sys.argv.append('--disable-background-timer-throttling')
     if '--memory-pressure-off' not in sys.argv:
         sys.argv.append('--memory-pressure-off')
+    
+    # Fix for Ubuntu 25.10 / Qt 6.9: force OpenGL RHI to avoid Vulkan null texture issues
+    # This must be set before QApplication is instantiated or at least before windows are created
+    if platform.system() == 'Linux':
+        ubuntu_version = funcs.get_ubuntu_version()
+        if ubuntu_version and float(ubuntu_version) >= 25.10:
+            QQuickWindow.setGraphicsApi(QSGRendererInterface.GraphicsApi.OpenGL)
+            logger.info("Ubuntu 25.10 detected: Forcing Qt Quick Graphics API to OpenGL")
         
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
