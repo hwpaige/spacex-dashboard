@@ -407,9 +407,98 @@ Window {
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
         anchors.rightMargin: 12
 
+        // Expanded Windy/Radar Background (Tesla Style)
+        Item {
+            id: backgroundWindy
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            // Width is 1/4 of total safeArea width + extension for fade
+            width: isWindyFullscreen ? parent.width : (parent.width / 4) + 120
+            z: 0 // Behind centralContent
+            visible: !!(!backend || !backend.isLoading)
+            clip: true
+
+            Behavior on width { NumberAnimation { duration: 500; easing.type: Easing.InOutQuad } }
+
+            SwipeView {
+                id: weatherSwipe
+                anchors.fill: parent
+                visible: !!backend
+                orientation: Qt.Vertical
+                clip: false
+                layer.enabled: true
+                layer.smooth: true
+                interactive: true
+                currentIndex: 1
+                property int loadedMask: (1 << 1)
+                onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
+
+                Repeater {
+                    model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
+                    Item {
+                        Rectangle {
+                            anchors.fill: parent
+                            color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
+                            clip: false
+                            Loader {
+                                id: webViewLoader
+                                anchors.fill: parent
+                                active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
+                                visible: active
+                                sourceComponent: WebEngineView {
+                                    id: webView
+                                    objectName: "webView"
+                                    anchors.fill: parent
+                                    layer.enabled: false
+                                    layer.smooth: true
+                                    backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
+                                    url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                    settings.webGLEnabled: true
+                                    settings.accelerated2dCanvasEnabled: true
+                                    settings.allowRunningInsecureContent: true
+                                    settings.javascriptEnabled: true
+                                    settings.localContentCanAccessRemoteUrls: true
+
+                                    Connections {
+                                        target: backend
+                                        function onReloadWebContent() {
+                                            var delay = 1500 + (index * 500)
+                                            reloadTimer.interval = delay
+                                            reloadTimer.start()
+                                        }
+                                    }
+                                    Timer {
+                                        id: reloadTimer
+                                        repeat: false
+                                        onTriggered: webView.reload()
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Right-side fade effect
+            Rectangle {
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                anchors.right: parent.right
+                width: 160 // Start fading 40px before the column edge
+                visible: !isWindyFullscreen
+                gradient: Gradient {
+                    orientation: Gradient.Horizontal
+                    GradientStop { position: 0.0; color: "transparent" }
+                    GradientStop { position: 1.0; color: root.color }
+                }
+            }
+        }
+
         ColumnLayout {
             id: centralContent
             anchors.fill: parent
+            z: 1  // Ensure cards sit on top of background Windy view
             anchors.leftMargin: 5
             // No rightMargin here — safeArea already reduces width on the right
             anchors.topMargin: 5
@@ -422,154 +511,42 @@ Window {
             Layout.fillHeight: true
             spacing: 5
 
-            // Column 1: Radar
+            // Column 1: Radar (Transparent Spacer with UI Overlay)
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.preferredWidth: 1
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
-                // Remove rounded corners/clipping for Windy card to restore animations
+                color: "transparent"
                 radius: 0
                 clip: false
-                // Layers can remain enabled; no clipping applied
-                layer.enabled: true
-                layer.smooth: true
 
                 Item {
                     anchors.fill: parent
 
-                        SwipeView {
-                            id: weatherSwipe
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            visible: !!backend
-                            orientation: Qt.Vertical
-                            // Do not clip; allow Windy WebGL to render freely
-                            clip: false
-                            // Keep layer enabled for performance but without clipping
-                            layer.enabled: true
-                            layer.smooth: true
-                            interactive: true
-                            currentIndex: 1
-                            property int loadedMask: (1 << 1)
-                            // Removed auto-loading of all weather views to reduce WebEngine processes
-                            onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
-
-                        Component.onCompleted: {
-                            console.log("SwipeView completed, count:", count);
+                    // Fullscreen button for weather views (Single button in foreground)
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: 90
+                        anchors.right: parent.right
+                        anchors.rightMargin: 15
+                        width: 30
+                        height: 30
+                        color: "transparent"
+                        z: 15
+                        Text {
+                            anchors.centerIn: parent
+                            text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 16
+                            color: "white"
+                            style: Text.Outline
+                            styleColor: "black"
                         }
-
-                        Repeater {
-                            model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
-
-                            Item {
-                                // Container without rounded corners or clipping for Windy views
-                                Rectangle {
-                                    anchors.fill: parent
-                                    radius: 0
-                                    color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                    clip: false
-                                    // Performance: Disable layers to reduce GPU/Compositor load on Pi
-                                    layer.enabled: false
-                                    layer.smooth: true
-
-                                    // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
-
-                                    Loader {
-                                        id: webViewLoader
-                                        anchors.fill: parent
-                                        // Only load the currently active weather tool to reduce WebEngine processes
-                                        active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
-                                        visible: active
-
-                                        sourceComponent: WebEngineView {
-                                            id: webView
-                                            objectName: "webView"
-                                            anchors.fill: parent
-                                            // Performance: Disable transparency and layers to reduce GPU/Compositor load on Pi
-                                            layer.enabled: false
-                                            layer.smooth: true
-                                            // Avoid white square corners by matching parent background
-                                            backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                            url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
-                                            onUrlChanged: console.log("WebEngineView URL changed to:", url)
-                                            settings.webGLEnabled: true
-                                            settings.accelerated2dCanvasEnabled: true
-                                            settings.allowRunningInsecureContent: true
-                                            settings.javascriptEnabled: true
-                                            settings.localContentCanAccessRemoteUrls: true
-                                            onFullScreenRequested: function(request) {
-                                                request.accept();
-                                                root.visibility = Window.FullScreen
-                                            }
-                                            onLoadingChanged: function(loadRequest) {
-                                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                                    console.log("WebEngineView load failed for", modelData, ":", loadRequest.errorString);
-                                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                                    console.log("WebEngineView loaded successfully for", modelData);
-                                                    // No rounding injection for Windy to preserve animations
-                                                }
-                                            }
-
-                                            // Staggered reload for weather views
-                                            Connections {
-                                                target: backend
-                                                function onReloadWebContent() {
-                                                    // Stagger based on index to prevent freeze
-                                                    var delay = 1500 + (index * 500)
-                                                    reloadTimer.interval = delay
-                                                    reloadTimer.start()
-                                                }
-                                            }
-                                            Timer {
-                                                id: reloadTimer
-                                                repeat: false
-                                                onTriggered: {
-                                                    if (parent.visible) { // Only reload if visible or about to be? 
-                                                        // Actually, reload all but staggered is safer.
-                                                        webView.reload()
-                                                        console.log("Weather view", index, "reloaded (staggered)")
-                                                    } else {
-                                                        // If not visible, just reload anyway, staggered.
-                                                        webView.reload()
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-
-                                    // overlay mask removed
-                                }
-
-                                // Removed top-center icon overlay for Windy views as requested
-
-                                // Fullscreen button for weather views
-                                Rectangle {
-                                    anchors.top: parent.top
-                                    anchors.topMargin: 90
-                                    anchors.right: parent.right
-                                    anchors.rightMargin: 5
-                                    width: 30
-                                    height: 30
-                                    color: "transparent"
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: isWindyFullscreen ? "\uf066" : "\uf065"  // collapse or expand
-                                        font.family: "Font Awesome 5 Free"
-                                        font.pixelSize: 16
-                                        color: "white"
-                                        style: Text.Outline
-                                        styleColor: "black"
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        onClicked: isWindyFullscreen = !isWindyFullscreen
-                                    }
-                                }
-                            }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: isWindyFullscreen = !isWindyFullscreen
                         }
                     }
-
 
                     // Weather view buttons container (YouTube style overlay)
                     Rectangle {
@@ -579,7 +556,6 @@ Window {
                         anchors.horizontalCenter: parent.horizontalCenter
                         width: weatherButtonsRow.implicitWidth + 20
                         height: 34
-                        // Semi-transparent background for overlay look
                         color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
                         radius: 17
                         visible: !!backend
@@ -638,7 +614,6 @@ Window {
                         }
                     }
                 }
-
             }
 
             // Column 2: Launch Trends or Driver Standings
@@ -2011,6 +1986,7 @@ Window {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
             color: "transparent"
+            visible: !isWindyFullscreen
 
             RowLayout {
                 anchors.fill: parent
