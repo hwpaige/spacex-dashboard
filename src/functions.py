@@ -3198,9 +3198,12 @@ def setup_dashboard_environment():
             # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
             # Use ANGLE with auto-detection for ozone platform as requested by logs
             # 'Only --use-gl=angle is supported on this platform'
+            # Note: --ozone-platform-hint=auto is essential for GLOzone to find a backend
             flags.extend([
                 "--ozone-platform-hint=auto",
-                "--use-gl=angle"
+                "--use-gl=angle",
+                "--ignore-gpu-blocklist",
+                "--enable-gpu-rasterization"
             ])
             logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 ANGLE hardware acceleration fixes.")
 
@@ -3247,7 +3250,18 @@ def setup_dashboard_environment():
 
     if platform.system() == 'Linux':
         if "QT_QPA_PLATFORM" not in os.environ:
-            os.environ["QT_QPA_PLATFORM"] = "xcb"
+            ubuntu_version = get_ubuntu_version()
+            if ubuntu_version:
+                try:
+                    version_float = float(ubuntu_version)
+                    if version_float >= 25.10:
+                        os.environ["QT_QPA_PLATFORM"] = "eglfs"
+                    else:
+                        os.environ["QT_QPA_PLATFORM"] = "xcb"
+                except ValueError:
+                    os.environ["QT_QPA_PLATFORM"] = "xcb"
+            else:
+                os.environ["QT_QPA_PLATFORM"] = "xcb"
         
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
         os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")

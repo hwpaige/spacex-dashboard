@@ -292,6 +292,7 @@ install_packages() {
         libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1
         libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-sync1
         libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0 python3-xdg
+        libxcb-util1 libxcb-glx0 libxcb-shm0
         libqt6webenginecore6 libqt6webenginequick6 libnss3 libatk-bridge2.0-0t64
         libxcomposite1 libxdamage1 libxrandr2 libgbm1 libxss1
         libasound2t64 libgtk-3-0t64 lz4 plymouth-theme-spinner
@@ -690,10 +691,15 @@ Wants=network-online.target
 [Service]
 Type=simple
 User=$USER
+Group=video
+SupplementaryGroups=render input tty
 Environment=QT_QPA_PLATFORM=eglfs
-Environment=DASHBOARD_WIDTH=3840
-Environment=DASHBOARD_HEIGHT=1100
-Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen
+Environment=DASHBOARD_WIDTH=2560
+Environment=DASHBOARD_HEIGHT=734
+Environment=DASHBOARD_SCALE=1.333
+Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --ozone-platform-hint=auto --use-gl=angle
+Environment=QT_QPA_EGLFS_ALWAYS_SET_MODE=1
+Environment=QT_QPA_EGLFS_KMS_ATOMIC=1
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
 Restart=always
@@ -787,9 +793,9 @@ setup_repository() {
     log "Setting up repository..."
     
     mkdir -p "$HOME_DIR/Desktop"
-    # Change to home directory before deleting project directory to avoid working directory issues
+    # Change to home directory before working with project directory
     cd "$HOME_DIR"
-    [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
+    
     # Check connectivity before cloning to avoid hard failure when DNS/network is not ready
     local can_reach=0
     if command -v curl >/dev/null 2>&1; then
@@ -802,16 +808,26 @@ setup_repository() {
             can_reach=1
         fi
     fi
+    
     if [ $can_reach -eq 0 ]; then
-        log "WARNING: Network/DNS not ready; skipping git clone for now. You can rerun setup_repository later or run: git clone $REPO_URL $REPO_DIR"
+        log "WARNING: Network/DNS not ready; skipping git operations for now."
     else
-        # Temporarily disable 'exit on error' for clone, then restore
-        set +e
-        sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
-        local clone_rc=$?
-        set -e
-        if [ $clone_rc -ne 0 ]; then
-            log "WARNING: git clone failed (possibly transient network). You can clone manually later: git clone $REPO_URL $REPO_DIR"
+        if [ -d "$REPO_DIR/.git" ]; then
+            log "Existing repository found, updating..."
+            cd "$REPO_DIR"
+            sudo -u "$USER" git fetch --all
+            sudo -u "$USER" git reset --hard origin/main || sudo -u "$USER" git reset --hard origin/master
+        else
+            log "Cloning repository..."
+            [ -d "$REPO_DIR" ] && rm -rf "$REPO_DIR"
+            # Temporarily disable 'exit on error' for clone, then restore
+            set +e
+            sudo -u "$USER" git clone "$REPO_URL" "$REPO_DIR"
+            local clone_rc=$?
+            set -e
+            if [ $clone_rc -ne 0 ]; then
+                log "WARNING: git clone failed (possibly transient network). You can clone manually later: git clone $REPO_URL $REPO_DIR"
+            fi
         fi
     fi
     if [ -d "$REPO_DIR" ]; then
@@ -860,7 +876,13 @@ configure_plymouth() {
     mkdir -p "$THEME_DIR"
 
     # Copy the SpaceX logo
-    cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
+    if [ -f "$REPO_DIR/assets/images/spacex_logo.png" ]; then
+        cp "$REPO_DIR/assets/images/spacex_logo.png" "$THEME_DIR/spacex_logo.png"
+    else
+        log "WARNING: SpaceX logo not found in $REPO_DIR/assets/images/spacex_logo.png"
+        # Use a placeholder or just skip the processing
+        touch "$THEME_DIR/spacex_logo.png"
+    fi
 
     # Scale the logo for the 4K bar display (3840x1100)
     # No rotation needed as the display is naturally landscape.
@@ -1567,11 +1589,17 @@ EOF
     sudo -u "$USER" chmod +x "$HOME_DIR/.xsession"
     
     # If 25.10, we prefer EGLFS so we disable LightDM and enable the EGLFS service
-    # NOTE: If EGLFS fails to find a screen, re-enable LightDM and ensure libxcb-cursor0 is installed
+    # NOTE: If EGLFS fails to find a screen, re-enable LightDM and ensure libxcb-cursor0 and related xcb libs are installed
     if [ "$ubuntu_version" = "25.10" ]; then
         log "Ubuntu 25.10 detected: Switching to EGLFS as primary platform"
         systemctl disable lightdm 2>/dev/null || true
         systemctl enable spacex-dashboard-eglfs.service 2>/dev/null || true
+        # We do NOT start LightDM if we're on 25.10 and using EGLFS
+        systemctl set-default multi-user.target
+    else
+        # Ensure LightDM is enabled for other versions (or if user wants to switch back)
+        systemctl enable lightdm 2>/dev/null || true
+        systemctl set-default graphical.target
     fi
     
     # Fix X authority permissions
@@ -1579,16 +1607,17 @@ EOF
     sudo -u "$USER" chmod 600 "$HOME_DIR/.Xauthority"
     chown "$USER:$USER" "$HOME_DIR/.Xauthority"
     
-    # Enable LightDM
-    systemctl enable lightdm
-    systemctl set-default graphical.target
-    
     # Temporarily disable the systemd service to avoid conflicts during autologin testing
     systemctl disable spacex-dashboard
     
-    # Start LightDM immediately to test autologin
-    log "Starting LightDM to test autologin configuration..."
-    systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
+    # Start LightDM immediately to test autologin only if not on 25.10
+    if [ "$ubuntu_version" != "25.10" ]; then
+        log "Starting LightDM to test autologin configuration..."
+        systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
+    else
+        log "Skipping LightDM start as EGLFS is preferred for 25.10"
+        log "To test the app, run: sudo systemctl start spacex-dashboard-eglfs"
+    fi
     
     # Remove old getty override if it exists
     rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
