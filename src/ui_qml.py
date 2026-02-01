@@ -503,7 +503,7 @@ Window {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 100 
+                width: 250 
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
                 gradient: Gradient {
