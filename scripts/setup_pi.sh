@@ -966,12 +966,22 @@ EOF
     fi
 
     # Configure kernel command line for Plymouth
-    CMDLINE_FILE="/boot/firmware/cmdline.txt"
+    # Ubuntu 25.10+ and some recent versions use os_prefix=current/ in config.txt
+    # which means the actual cmdline.txt is in /boot/firmware/current/
+    local fw_dir="/boot/firmware"
+    if grep -q "os_prefix=current/" "$fw_dir/config.txt" 2>/dev/null; then
+        fw_dir="/boot/firmware/current"
+    fi
+
+    CMDLINE_FILE="$fw_dir/cmdline.txt"
     if [ -f "$CMDLINE_FILE" ]; then
         # Remove any existing Plymouth-related parameters and other potentially conflicting console settings
         # We want a clean slate for quiet splash boot to ensure only our desired console is used
-        sed -i 's/ quiet//g; s/ splash//g; s/ loglevel=[0-9]//g; s/ vt\.global_cursor_default=[0-9]//g; s/ plymouth\.ignore-serial-consoles//g; s/ logo\.nologo//g; s/ rd\.systemd\.show_status=[a-z]*//g; s/ plymouth\.display-rotation=[0-9]//g; s/ fbcon=rotate:[0-9]//g' "$CMDLINE_FILE"
-        sed -i 's/ console=tty[0-9]//g; s/ console=serial0,[0-9]*//g' "$CMDLINE_FILE"
+        # Using a more robust sed pattern to avoid leading/double spaces
+        sed -i -E 's/\s*(quiet|splash|loglevel=[0-9]|vt\.global_cursor_default=[0-9]|plymouth\.ignore-serial-consoles|logo\.nologo|rd\.systemd\.show_status=[a-z]*|plymouth\.display-rotation=[0-9]|fbcon=rotate:[0-9])//g' "$CMDLINE_FILE"
+        sed -i -E 's/\s*(console=tty[0-9]|console=serial0,[0-9]*)//g' "$CMDLINE_FILE"
+        # Clean up leading/trailing/double spaces
+        sed -i 's/  */ /g; s/^ //; s/ $//' "$CMDLINE_FILE"
 
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
