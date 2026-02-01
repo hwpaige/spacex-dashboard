@@ -503,7 +503,7 @@ Window {
                 anchors.top: parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 250 
+                width: 100 
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
                 gradient: Gradient {
@@ -839,6 +839,13 @@ Window {
                                 interactive: true
                                 boundsBehavior: Flickable.StopAtBounds
                                 flickableDirection: Flickable.VerticalFlick
+                                cacheBuffer: 1500
+                                layer.enabled: true
+                                layer.smooth: true
+                                layer.textureSize: Qt.size(width, height)
+                                // Use a fixed height for delegates to help with performance
+                                property real delegateHeight: 120
+                                reuseItems: true
 
                         delegate: Item {
                             width: ListView.view.width

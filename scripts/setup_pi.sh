@@ -668,6 +668,8 @@ Environment=GALLIUM_DRIVER=v3d
 Environment=MESA_GL_VERSION_OVERRIDE=3.3
 Environment=MESA_GLSL_VERSION_OVERRIDE=330
 Environment=vblank_mode=3
+Environment=QSG_RHI_SYNC_TO_RENDER_LOOP=1
+Environment=__GL_SYNC_TO_VBLANK=1
 Environment=QT_QPA_PLATFORM_PLUGIN_PATH=/usr/lib/aarch64-linux-gnu/qt6/plugins/platforms
 WorkingDirectory=/home/$USER/Desktop/project/src
 
@@ -705,6 +707,8 @@ Environment=QSG_RENDER_LOOP=threaded
 Environment=DASHBOARD_WIDTH=1480
 Environment=DASHBOARD_HEIGHT=320
 Environment=vblank_mode=3
+Environment=QSG_RHI_SYNC_TO_RENDER_LOOP=1
+Environment=__GL_SYNC_TO_VBLANK=1
 Environment=QTWEBENGINE_CHROMIUM_FLAGS=--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --use-gl=egl --disable-dev-shm-usage --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen --enable-gpu-rasterization --enable-native-gpu-memory-buffers
 WorkingDirectory=/home/$USER/Desktop/project/src
 ExecStart=/usr/bin/python3 /home/$USER/Desktop/project/src/app.py
