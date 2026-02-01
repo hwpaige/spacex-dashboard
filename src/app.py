@@ -108,6 +108,7 @@ from functions import (
     sync_remembered_networks,
     fetch_narratives,
     remove_nm_connection,
+    degrees_to_cardinal,
     get_closest_x_video_url,
     load_theme_settings,
     save_theme_settings,
@@ -419,6 +420,7 @@ class Backend(QObject):
     countdownChanged = pyqtSignal()
     timeChanged = pyqtSignal()
     weatherChanged = pyqtSignal()
+    weatherUpdated = pyqtSignal()
     launchesChanged = pyqtSignal()
     chartViewModeChanged = pyqtSignal()
     chartTypeChanged = pyqtSignal()
@@ -1040,7 +1042,7 @@ class Backend(QObject):
         # Timers
         self.weather_timer = QTimer(self)
         self.weather_timer.timeout.connect(self.update_weather)
-        self.weather_timer.start(300000)
+        self.weather_timer.start(60000) # 1 minute for high-frequency live wind data
 
         self.launch_timer = QTimer(self)
         self.launch_timer.timeout.connect(self.update_launches_periodic)
@@ -1773,7 +1775,21 @@ class Backend(QObject):
 
     @pyqtProperty(QVariant, notify=weatherChanged)
     def weather(self):
-        return self._weather_data.get(self._location, {})
+        active_weather = self._weather_data.get(self._location, {})
+        # Enrich with wind_direction_cardinal
+        # Prioritize live_wind if available
+        if 'live_wind' in active_weather and active_weather['live_wind']:
+            live = active_weather['live_wind']
+            active_weather['wind_speed_kts'] = live.get('speed_kts', active_weather.get('wind_speed_kts', 0))
+            active_weather['wind_gusts_kts'] = live.get('gust_kts', active_weather.get('wind_gusts_kts', 0))
+            active_weather['wind_direction'] = live.get('direction', active_weather.get('wind_direction', 0))
+            active_weather['is_live_wind'] = True
+        else:
+            active_weather['is_live_wind'] = False
+
+        if 'wind_direction' in active_weather:
+            active_weather['wind_direction_cardinal'] = degrees_to_cardinal(active_weather['wind_direction'])
+        return active_weather
 
     @pyqtProperty(str, notify=countdownChanged)
     def countdown(self):
@@ -2639,14 +2655,15 @@ class Backend(QObject):
                     base_wind = int(active_weather.get('wind_speed_kts', 10))
                     winds = [base_wind, base_wind + i, base_wind + i + 2, base_wind + i + 1, base_wind + i - 1, base_wind]
                     avg_wind = sum(winds) / len(winds)
-                    sim_dir = (90 + i * 10) % 360
+                    sim_dir_deg = (90 + i * 10) % 360
+                    sim_dir = funcs.degrees_to_cardinal(sim_dir_deg)
 
                     forecast.append({
                         'day': day_name,
                         'temp_low': f"{low}°",
                         'temp_high': f"{high}°",
                         'condition': 'Partly Cloudy',
-                        'wind': f"{int(avg_wind)}kt {sim_dir}°",
+                        'wind': f"{int(avg_wind)}kt {sim_dir}",
                         'temps': temps,
                         'winds': winds
                     })
@@ -2654,6 +2671,7 @@ class Backend(QObject):
         logger.info(f"Backend: Updating weather forecast model with {len(forecast)} days")
         self._weather_forecast_model.update_data(forecast)
         self.weatherChanged.emit()
+        self.weatherUpdated.emit()
         self.weatherForecastModelChanged.emit()
         # Clean up thread
         if hasattr(self, '_weather_updater_thread'):

@@ -1835,8 +1835,8 @@ Window {
                 // Left pill (time and weather) - FIXED WIDTH
                 Rectangle {
                     id: weatherPill
-                    Layout.preferredWidth: 200
-                    Layout.maximumWidth: 200
+                    Layout.preferredWidth: 250
+                    Layout.maximumWidth: 250
                     height: 28
                     radius: 14
                     color: "transparent"
@@ -1854,9 +1854,10 @@ Window {
                         opacity: 1.0 - Math.min(1.0, weatherTray.height / 56.0)
                     }
 
-                    Row {
+                    RowLayout {
                         anchors.centerIn: parent
-                        spacing: 10
+                        anchors.horizontalCenterOffset: 0
+                        spacing: 0
                         opacity: 1.0 - Math.min(1.0, weatherTray.height / 56.0)
 
                         Text {
@@ -1865,13 +1866,89 @@ Window {
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
+                            font.styleName: "Regular"
+                            // Use tabular numbers to prevent jitter as the clock ticks
+                            font.features: { "tnum": 1 }
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: 58
+                            horizontalAlignment: Text.AlignLeft
+                        }
+                        Item {
+                            Layout.preferredWidth: 14
+                            Layout.preferredHeight: 14
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.rightMargin: 8 // Add margin between indicator and weather text
+
+                            Canvas {
+                                id: weatherProgressRing
+                                anchors.fill: parent
+                                antialiasing: true
+
+                                property real progress: {
+                                    if (!backend || !backend.currentTime) return 0.0;
+                                    var timeParts = backend.currentTime.split(':');
+                                    if (timeParts.length < 3) return 0.0;
+                                    var seconds = parseInt(timeParts[2]);
+                                    return (seconds % 60) / 60.0;
+                                }
+                                onProgressChanged: requestPaint()
+
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+
+                                    var centerX = width / 2;
+                                    var centerY = height / 2;
+                                    var radius = Math.min(width, height) / 2 - 1;
+
+                                    // Draw background ring (optional, faint)
+                                    ctx.beginPath();
+                                    ctx.strokeStyle = (backend && backend.theme === "dark") ? "#33ffffff" : "#33000000";
+                                    ctx.lineWidth = 1.5;
+                                    ctx.arc(centerX, centerY, radius, 0, 2 * Math.PI);
+                                    ctx.stroke();
+
+                                    // Draw progress arc
+                                    ctx.beginPath();
+                                    ctx.strokeStyle = weatherIndicator.color;
+                                    ctx.lineWidth = 1.5;
+                                    ctx.lineCap = "round";
+                                    // Start from top (-90 degrees)
+                                    var startAngle = -Math.PI / 2;
+                                    var endAngle = startAngle + (2 * Math.PI * progress);
+                                    ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+                                    ctx.stroke();
+                                }
+                            }
+
+                            Rectangle {
+                                id: weatherIndicator
+                                anchors.centerIn: parent
+                                width: 6
+                                height: 6
+                                radius: 3
+                                color: {
+                                    var weather = backend ? backend.weather : null;
+                                    if (weather && weather.is_live_wind) {
+                                        return "#4CAF50"; // Green (matching WiFi/Lock icons)
+                                    }
+                                    return "#F44336"; // Red (matching WiFi/Lock disconnected/locked)
+                                }
+                                visible: {
+                                    var weather = backend ? backend.weather : null;
+                                    return weather && weather.temperature_f !== undefined;
+                                }
+                            }
                         }
                         Text {
                             id: weatherText
                             text: {
                                 var weather = backend ? backend.weather : null;
                                 if (weather && weather.temperature_f !== undefined) {
-                                    return "Wind " + (weather.wind_speed_kts || 0).toFixed(1) + " kts | " +
+                                    var wind = (weather.wind_speed_kts || 0).toFixed(1);
+                                    var gusts = (weather.wind_gusts_kts || 0).toFixed(1);
+                                    var direction = weather.wind_direction_cardinal || "";
+                                    return wind + "g" + gusts + " kts " + direction + " | " +
                                            (weather.temperature_f || 0).toFixed(1) + "°F";
                                 }
                                 return "Weather loading...";
@@ -1880,6 +1957,7 @@ Window {
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
+                            Layout.alignment: Qt.AlignVCenter
                         }
                     }
 
@@ -3288,11 +3366,11 @@ Window {
                         }
                     }
 
-                    // WiFi icon
                     Rectangle {
-                        width: 28
-                        height: 32
-                        radius: 16
+                        Layout.preferredWidth: 28
+                        Layout.preferredHeight: 28
+                        Layout.alignment: Qt.AlignVCenter
+                        radius: 14
                         color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
@@ -3318,9 +3396,10 @@ Window {
                     // Location Selector (Relocated and Restyled)
                     Rectangle {
                         id: locationTrigger
-                        width: Math.max(80, locationLabel.implicitWidth + 24)
-                        height: 32
-                        radius: 16
+                        Layout.preferredWidth: Math.max(80, locationLabel.implicitWidth + 24)
+                        Layout.preferredHeight: 28
+                        Layout.alignment: Qt.AlignVCenter
+                        radius: 14
                         color: "transparent"
                         clip: false
 
@@ -3328,7 +3407,7 @@ Window {
                         Rectangle {
                             id: locationTriggerBackground
                             anchors.fill: parent
-                            radius: 16
+                            radius: 14
                             color: backend.theme === "dark" ? "#181818" : "#f5f5f5"
                             border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                             border.width: 1
@@ -3696,8 +3775,9 @@ Window {
                 Rectangle {
                     Layout.preferredWidth: 120
                     Layout.maximumWidth: 120
-                    height: 32
-                    radius: 16
+                    Layout.preferredHeight: 28
+                    Layout.alignment: Qt.AlignVCenter
+                    radius: 14
                     color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                     border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
@@ -3709,6 +3789,8 @@ Window {
                         font.pixelSize: 14
                         font.family: "D-DIN"
                         font.bold: true
+                        // Use tabular numbers to prevent jitter as the clock ticks
+                        font.features: { "tnum": 1 }
                         // Fade out as tray expands
                         opacity: 1.0 - Math.min(1.0, countdownTray.height / 56.0)
                     }

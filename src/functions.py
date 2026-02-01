@@ -939,6 +939,20 @@ WEATHER_CODE_MAP = {
     99: "Thunderstorm with heavy hail"
 }
 
+def degrees_to_cardinal(degrees):
+    """Convert wind direction in degrees to cardinal direction (N, NNE, NE, etc.)"""
+    try:
+        degrees = float(degrees)
+        # List of 16 cardinal directions
+        cardinals = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", 
+                     "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+        # Each direction covers a 22.5 degree arc (360 / 16 = 22.5)
+        # Shift by 11.25 to center the North arc around 0 degrees
+        idx = int(((degrees + 11.25) / 22.5) % 16)
+        return cardinals[idx]
+    except (ValueError, TypeError):
+        return "N/A"
+
 def c_to_f(c):
     """Convert Celsius to Fahrenheit."""
     try:
@@ -1009,7 +1023,8 @@ def fetch_weather(lat, lon, location):
                                 day_hourly_dirs.append(hourly_dirs[h_idx])
                         
                         avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
-                        wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
+                        cardinal_dir = degrees_to_cardinal(avg_dir)
+                        wind_str = f"{int(avg_wind)}kt {cardinal_dir}"
                     else:
                         day_hourly_winds = [0, 0]
                         wind_str = "N/A"
@@ -1036,6 +1051,7 @@ def fetch_weather(lat, lon, location):
         return {
             'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77,
             'wind_speed_ms': 5, 'wind_speed_kts': 9.7,
+            'wind_gusts_kts': 12.1,
             'wind_direction': 90, 'cloud_cover': 50
         }
 
@@ -2869,16 +2885,31 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
         current_time = datetime.now(pytz.UTC)
         if cache and (current_time - cache['timestamp']).total_seconds() < CACHE_REFRESH_INTERVAL_WEATHER:
             logger.info("Using cached weather data for all locations")
+            
+            # Ensure wind_gusts_kts is present in cached data
+            data = cache['data']
+            for loc in data:
+                if 'wind_gusts_kts' not in data[loc]:
+                    data[loc]['wind_gusts_kts'] = data[loc].get('wind_speed_kts', 0) * 1.2
+            
             profiler.mark("fetch_weather_for_all_locations End (Cache Hit)")
-            return cache['data']
+            return data
     except Exception as e:
         logger.warning(f"Failed to load weather cache: {e}")
 
     # Check network connectivity
     if not test_network_connectivity():
         if cache and cache.get('data'):
-            return cache['data']
-        return {loc: {'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50} for loc in locations_config}
+            data = cache['data']
+            for loc in data:
+                if 'wind_gusts_kts' not in data[loc]:
+                    data[loc]['wind_gusts_kts'] = data[loc].get('wind_speed_kts', 0) * 1.2
+            return data
+        return {loc: {
+            'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 
+            'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_gusts_kts': 12.1,
+            'wind_direction': 90, 'cloud_cover': 50
+        } for loc in locations_config}
 
     try:
         emit_loader_status("Fetching global weather data…")
@@ -2888,6 +2919,10 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
             logger.info(f"Optimization: Fetching weather only for active location: {active_location}")
             loc_data = locations_config[active_location]
             single_weather = fetch_weather(loc_data.get('lat'), loc_data.get('lon'), active_location)
+            
+            # Ensure wind_gusts_kts is present (API might not provide it yet)
+            if 'wind_gusts_kts' not in single_weather:
+                single_weather['wind_gusts_kts'] = single_weather.get('wind_speed_kts', 0) * 1.2
             
             # Use cached data for other locations if available, otherwise use defaults
             weather_data = {}
@@ -2899,7 +2934,11 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
             # Fill remaining missing locations with defaults
             for loc in locations_config:
                 if loc not in weather_data:
-                    weather_data[loc] = {'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_direction': 90, 'cloud_cover': 50}
+                    weather_data[loc] = {
+                        'temperature_c': (77 - 32) * 5/9, 'temperature_f': 77, 
+                        'wind_speed_ms': 5, 'wind_speed_kts': 9.7, 'wind_gusts_kts': 12.1,
+                        'wind_direction': 90, 'cloud_cover': 50
+                    }
         else:
             # Full fetch via unified endpoint
             url = f"{LAUNCH_API_BASE_URL}/weather_all"
@@ -2910,6 +2949,10 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
             
             # Post-process forecast data for each location
             for loc, loc_weather in weather_data.items():
+                # Ensure wind_gusts_kts is present
+                if 'wind_gusts_kts' not in loc_weather:
+                    loc_weather['wind_gusts_kts'] = loc_weather.get('wind_speed_kts', 0) * 1.2
+
                 if 'forecast' in loc_weather and 'daily' in loc_weather['forecast']:
                     daily = loc_weather['forecast']['daily']
                     hourly = loc_weather['forecast'].get('hourly', {})
@@ -2958,7 +3001,8 @@ def fetch_weather_for_all_locations(locations_config, active_location=None):
                                     if h_time.startswith(day_str) and h_idx < len(hourly_dirs):
                                         day_hourly_dirs.append(hourly_dirs[h_idx])
                                 avg_dir = sum(day_hourly_dirs) / len(day_hourly_dirs) if day_hourly_dirs else 0
-                                wind_str = f"{int(avg_wind)}kt {int(avg_dir)}°"
+                                cardinal_dir = degrees_to_cardinal(avg_dir)
+                                wind_str = f"{int(avg_wind)}kt {cardinal_dir}"
                             else:
                                 day_hourly_winds = [0, 0]
                                 wind_str = "N/A"
