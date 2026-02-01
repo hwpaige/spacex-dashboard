@@ -2496,11 +2496,11 @@ Window {
                                 model: backend.launchDescriptions
                                 spacing: 0
                                 interactive: true
-                                boundsBehavior: Flickable.StopAtBounds
+                                boundsBehavior: Flickable.DragOverBounds
                                 flickableDirection: Flickable.VerticalFlick
-
                                 property real dragStartY: 0
-
+                                // Collapse logic will be handled by ListView signals
+                                /*
                                 DragHandler {
                                     id: narrativeListDrag
                                     target: null
@@ -2543,7 +2543,43 @@ Window {
                                         }
                                     }
                                 }
+                                */
                                 
+                                onDraggingChanged: {
+                                    if (dragging) {
+                                        dragStartY = contentY
+                                    } else {
+                                        if (narrativeTray.isDragging) {
+                                            narrativeTray.isDragging = false
+                                            if (narrativeTray.height < narrativeTray.expandedHeight) {
+                                                if (narrativeTray.height < narrativeTray.expandedHeight * 0.7) {
+                                                    narrativeTray.height = 0
+                                                } else {
+                                                    narrativeTray.height = narrativeTray.expandedHeight
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                onContentYChanged: {
+                                    if (dragging && !narrativeTray.isDragging) {
+                                        if (contentY < -10 && contentY < dragStartY) {
+                                            narrativeTray.isDragging = true
+                                        }
+                                    }
+                                    
+                                    if (narrativeTray.isDragging) {
+                                        var delta = -contentY
+                                        if (delta > 0) {
+                                            narrativeTray.height = Math.max(0, narrativeTray.expandedHeight - delta)
+                                        } else {
+                                            // Ensure it stays at full height if user drags back up while still dragging
+                                            narrativeTray.height = narrativeTray.expandedHeight
+                                        }
+                                    }
+                                }
+
                                 delegate: Item {
                                     width: ListView.view.width
                                     height: contentLayout.implicitHeight + 8
