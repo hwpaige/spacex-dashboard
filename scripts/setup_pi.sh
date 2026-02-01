@@ -1488,7 +1488,7 @@ EOF
     local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
     local extra_flags=""
     if [ "$ubuntu_version" = "25.10" ]; then
-        extra_flags=" --ozone-platform-hint=auto --use-gl=egl"
+        extra_flags=" --use-gl=egl"
         log "Ubuntu 25.10 detected: Adding compatibility flags to .xsession"
     fi
 
@@ -1537,7 +1537,7 @@ export DASHBOARD_WIDTH=1480
 export DASHBOARD_HEIGHT=320
 export QT_QPA_PLATFORM=xcb
 export XAUTHORITY=~/.Xauthority
-export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen$extra_flags"
+export QTWEBENGINE_CHROMIUM_FLAGS="--enable-gpu --ignore-gpu-blocklist --enable-webgl --disable-gpu-sandbox --no-sandbox --disable-dev-shm-usage --disable-accelerated-video-decode --disable-gpu-memory-buffer-video-frames --enable-accelerated-2d-canvas --enable-gpu-rasterization --memory-pressure-off --max_old_space_size=1024 --memory-reducer --gpu-memory-buffer-size-mb=256 --max-tiles-for-interest-area=256 --num-raster-threads=2 --disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows --autoplay-policy=no-user-gesture-required --no-user-gesture-required-for-fullscreen$extra_flags"
 export PYQTGRAPH_QT_LIB=PyQt6
 export QT_DEBUG_PLUGINS=0
 export QT_LOGGING_RULES="qt.qpa.plugin=false"
