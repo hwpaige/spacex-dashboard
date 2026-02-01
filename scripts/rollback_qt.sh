@@ -22,13 +22,13 @@ EOF
 
 log "Creating APT pinning policy for Qt 6.8..."
 cat << EOF > /etc/apt/preferences.d/pin-qt68
-# Force downgrade and pin to Qt 6.8 from Noble
-Package: python3-pyqt6* libqt6* qt6-base*
-Pin: release n=noble
-Pin-Priority: 1001
-
-Package: python3-pyqt6* libqt6* qt6-base*
+# Force downgrade and pin to Qt versions from Noble
+Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
 Pin: release n=noble-updates
+Pin-Priority: 1002
+
+Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
+Pin: release n=noble
 Pin-Priority: 1001
 
 # Allow everything else to use Plucky (25.10)
@@ -40,9 +40,50 @@ EOF
 log "Updating package lists..."
 apt-get update
 
-log "Executing downgrade to Qt 6.8 (this may take a few minutes)..."
-# We use dist-upgrade/full-upgrade to allow the pin-priority 1001 to trigger downgrades
-apt-get full-upgrade -y
+log "Executing downgrade to Qt 6.x (this may take a few minutes)..."
+# Explicitly list packages to ensure they are targeted for downgrade
+# We use a more broad list and let full-upgrade handle the pinning
+apt-get install -y --allow-downgrades \
+    python3-pyqt6 \
+    python3-pyqt6.qtwebengine \
+    libqt6webengine6-data \
+    libqt6webenginecore6 \
+    libqt6webenginecore6-bin \
+    libqt6webenginewidgets6 \
+    libqt6gui6t64 \
+    libqt6core6t64 \
+    libqt6widgets6t64 \
+    libqt6opengl6t64 \
+    libqt6dbus6t64 \
+    libqt6network6t64 \
+    libqt6qml6 \
+    libqt6quick6 \
+    libqt6qmlmodels6 \
+    libqt6positioning6 \
+    libqt6webchannel6 \
+    libqt6jsonrpc6 \
+    libqt6languageserver6 \
+    qml6-module-qtwebengine \
+    qml6-module-qtqml \
+    qml6-module-qtquick \
+    qml6-module-qtpositioning \
+    libqt6positioning6-plugins \
+    libqt6positioningquick6 \
+    qml6-module-qtqml-models \
+    qml6-module-qtqml-workerscript \
+    libqt6quicktemplates2-6 \
+    libqt6quickcontrols2-6 \
+    qml6-module-qtquick-templates \
+    qml6-module-qtquick-controls \
+    qml6-module-qtquick-layouts \
+    qml6-module-qtquick-window \
+    qml6-module-qtwebchannel
+
+# We also use dist-upgrade/full-upgrade to handle any remaining dependencies
+apt-get full-upgrade -y --allow-downgrades
+
+log "Installing common Qt dependencies..."
+apt-get install -y libxcb-cursor0 libxkbcommon-x11-0
 
 log "Verifying installed Qt version..."
 INSTALLED_VER=$(python3 -c "from PyQt6.QtCore import QT_VERSION_STR; print(QT_VERSION_STR)" 2>/dev/null || echo "Unknown")
