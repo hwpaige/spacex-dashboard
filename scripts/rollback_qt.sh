@@ -13,27 +13,35 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-log "Adding Ubuntu 25.04 (Noble) repositories..."
-cat << EOF > /etc/apt/sources.list.d/noble-rollback.list
+log "Adding Ubuntu 25.04 (Plucky) and 24.04 (Noble) repositories..."
+cat << EOF > /etc/apt/sources.list.d/rollback.list
+deb http://ports.ubuntu.com/ubuntu-ports plucky main universe
+deb http://ports.ubuntu.com/ubuntu-ports plucky-updates main universe
+deb http://ports.ubuntu.com/ubuntu-ports plucky-security main universe
 deb http://ports.ubuntu.com/ubuntu-ports noble main universe
 deb http://ports.ubuntu.com/ubuntu-ports noble-updates main universe
 deb http://ports.ubuntu.com/ubuntu-ports noble-security main universe
 EOF
 
-log "Creating APT pinning policy for Qt 6.8..."
+log "Creating APT pinning policy for Qt 6.8 (Plucky)..."
 cat << EOF > /etc/apt/preferences.d/pin-qt68
-# Force downgrade and pin to Qt versions from Noble
+# Force upgrade and pin to Qt versions from Plucky (25.04) for Qt 6.8
 Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
-Pin: release n=noble-updates
+Pin: release n=plucky-updates
 Pin-Priority: 1002
 
 Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
-Pin: release n=noble
+Pin: release n=plucky
 Pin-Priority: 1001
 
-# Allow everything else to use Plucky (25.10)
+# Forcefully block Noble (24.04) versions to prevent ABI conflicts
+Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
+Pin: release n=noble
+Pin-Priority: -1
+
+# Allow everything else to use Questing (25.10)
 Package: *
-Pin: release n=plucky
+Pin: release n=questing
 Pin-Priority: 500
 EOF
 
@@ -41,46 +49,55 @@ log "Updating package lists..."
 apt-get update
 
 log "Executing downgrade to Qt 6.x (this may take a few minutes)..."
-# Explicitly list packages to ensure they are targeted for downgrade
-# We use a more broad list and let full-upgrade handle the pinning
+# Forcefully clear existing Qt6 packages to resolve ABI conflicts
+log "Purging existing Qt6 packages..."
+apt-get purge -y "libqt6*" "qml6-module-qt*" "python3-pyqt6*" "qt6-*" || true
+apt-get autoremove -y
+
+log "Installing Qt 6.8 from Plucky..."
 apt-get install -y --allow-downgrades \
-    python3-pyqt6 \
-    python3-pyqt6.qtwebengine \
-    libqt6webengine6-data \
-    libqt6webenginecore6 \
-    libqt6webenginecore6-bin \
-    libqt6webenginewidgets6 \
-    libqt6gui6t64 \
-    libqt6core6t64 \
-    libqt6widgets6t64 \
-    libqt6opengl6t64 \
-    libqt6dbus6t64 \
-    libqt6network6t64 \
+    libqt6core6 \
+    libqt6gui6 \
+    libqt6widgets6 \
+    libqt6network6 \
+    libqt6dbus6 \
+    libqt6opengl6 \
+    libqt6openglwidgets6 \
+    libqt6printsupport6 \
+    libqt6sql6 \
+    libqt6xml6 \
     libqt6qml6 \
     libqt6quick6 \
-    libqt6qmlmodels6 \
-    libqt6positioning6 \
+    libqt6webenginecore6 \
+    libqt6webenginequick6 \
+    libqt6webenginewidgets6 \
     libqt6webchannel6 \
-    libqt6jsonrpc6 \
-    libqt6languageserver6 \
+    libqt6positioning6 \
+    libqt6svg6 \
+    python3-pyqt6 \
+    python3-pyqt6.qtwebengine \
+    python3-pyqt6.qtqml \
+    python3-pyqt6.qtquick \
+    python3-pyqt6.qtpositioning \
+    python3-pyqt6.qtwebchannel \
+    python3-pyqt6.qtsvg \
+    python3-pyqt6.qtcharts \
     qml6-module-qtwebengine \
-    qml6-module-qtqml \
     qml6-module-qtquick \
-    qml6-module-qtpositioning \
-    libqt6positioning6-plugins \
-    libqt6positioningquick6 \
-    qml6-module-qtqml-models \
-    qml6-module-qtqml-workerscript \
-    libqt6quicktemplates2-6 \
-    libqt6quickcontrols2-6 \
-    qml6-module-qtquick-templates \
+    qml6-module-qtqml \
     qml6-module-qtquick-controls \
     qml6-module-qtquick-layouts \
     qml6-module-qtquick-window \
-    qml6-module-qtwebchannel
-
-# We also use dist-upgrade/full-upgrade to handle any remaining dependencies
-apt-get full-upgrade -y --allow-downgrades
+    qml6-module-qtpositioning \
+    qml6-module-qtwebchannel \
+    qml6-module-qtquick-shapes \
+    qml6-module-qtquick-templates \
+    qml6-module-qtqml-models \
+    libqt6quickshapes6 \
+    libqt6quicktemplates2-6 \
+    libqt6webchannelquick6 \
+    qml6-module-qtquick-dialogs \
+    libqt6quickcontrols2-6
 
 log "Installing common Qt dependencies..."
 apt-get install -y libxcb-cursor0 libxkbcommon-x11-0
