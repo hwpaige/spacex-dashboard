@@ -382,6 +382,71 @@ EOF
     sleep 1
 }
 
+rollback_qt_version() {
+    local ubuntu_version=$(grep "VERSION_ID" /etc/os-release | cut -d'=' -f2 | tr -d '"')
+    if [ "$ubuntu_version" != "25.10" ]; then
+        return 0
+    fi
+
+    log "Ubuntu 25.10 detected. Checking if Qt rollback is needed..."
+    local qt_ver=$(python3 -c "from PyQt6.QtCore import QT_VERSION_STR; print(QT_VERSION_STR)" 2>/dev/null || echo "0.0.0")
+    
+    if [[ "$qt_ver" == 6.8* ]]; then
+        log "Qt 6.8.x already installed. Skipping rollback."
+        return 0
+    fi
+
+    log "Rolling back Qt to 6.8 from Plucky repositories to avoid GLOzone issues..."
+    
+    # Add Plucky repositories
+    cat << EOF > /etc/apt/sources.list.d/plucky-rollback.list
+deb http://ports.ubuntu.com/ubuntu-ports plucky main universe
+deb http://ports.ubuntu.com/ubuntu-ports plucky-updates main universe
+deb http://ports.ubuntu.com/ubuntu-ports plucky-security main universe
+EOF
+
+    # Create APT pinning policy
+    cat << EOF > /etc/apt/preferences.d/pin-qt68
+Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
+Pin: release n=plucky-updates
+Pin-Priority: 1002
+
+Package: python3-pyqt6* libqt6* qt6-* qml6-module-*
+Pin: release n=plucky
+Pin-Priority: 1001
+
+Package: *
+Pin: release n=questing
+Pin-Priority: 500
+EOF
+
+    apt-get update
+    
+    log "Purging existing Qt6 packages..."
+    apt-get purge -y "libqt6*" "qml6-module-qt*" "python3-pyqt6*" "qt6-*" || true
+    apt-get autoremove -y
+
+    log "Installing Qt 6.8 from Plucky..."
+    apt-get install -y --allow-downgrades \
+        libqt6core6 libqt6gui6 libqt6widgets6 libqt6network6 libqt6dbus6 \
+        libqt6opengl6 libqt6openglwidgets6 libqt6printsupport6 libqt6sql6 \
+        libqt6xml6 libqt6qml6 libqt6quick6 libqt6webenginecore6 \
+        libqt6webenginequick6 libqt6webenginewidgets6 libqt6webchannel6 \
+        libqt6positioning6 libqt6svg6 python3-pyqt6 python3-pyqt6.qtwebengine \
+        python3-pyqt6.qtqml python3-pyqt6.qtquick python3-pyqt6.qtpositioning \
+        python3-pyqt6.qtwebchannel python3-pyqt6.qtsvg python3-pyqt6.qtcharts \
+        qml6-module-qtwebengine qml6-module-qtquick qml6-module-qtqml \
+        qml6-module-qtquick-controls qml6-module-qtquick-layouts \
+        qml6-module-qtquick-window qml6-module-qtpositioning \
+        qml6-module-qtwebchannel qml6-module-qtquick-shapes \
+        qml6-module-qtquick-templates qml6-module-qtqml-models \
+        libqt6quickshapes6 libqt6quicktemplates2-6 libqt6webchannelquick6 \
+        qml6-module-qtquick-dialogs libqt6quickcontrols2-6 \
+        libxcb-cursor0 libxkbcommon-x11-0
+
+    log "Qt rollback complete."
+}
+
 disable_setup_wizard() {
     log "Disabling system setup wizards and provisioning screens..."
     
@@ -1613,6 +1678,7 @@ main() {
     configure_networkmanager
     configure_nm_polkit
     disable_setup_wizard
+    rollback_qt_version
     check_qt_version
     setup_python_environment
     create_debug_script
