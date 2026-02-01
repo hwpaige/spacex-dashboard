@@ -108,6 +108,39 @@ Window {
     // Initialized to the default playlist URL provided by the backend.
     property url currentVideoUrl: backend ? backend.videoUrl : ""
 
+    // UI Ready tracking
+    property int _pendingCriticalLoads: (backend && backend.isHighResolution) ? 2 : 1
+    function _onCriticalComponentLoaded() {
+        _pendingCriticalLoads--;
+        console.log("Critical UI component loaded. Pending: " + _pendingCriticalLoads);
+        if (_pendingCriticalLoads <= 0) {
+            _checkAndNotifyReady();
+        }
+    }
+    function _checkAndNotifyReady() {
+        if (backend && backend.isLoading) {
+            console.log("All critical UI components loaded. Notifying backend.");
+            backend.notifyUiReady();
+        }
+    }
+    // Safety timer in case some component fails to load or we miscounted
+    Timer {
+        id: uiReadySafetyTimer
+        interval: 5000 // 5 seconds after QML completion should be plenty
+        running: true
+        onTriggered: {
+            console.log("UI ready safety timer triggered.");
+            _checkAndNotifyReady();
+        }
+    }
+
+    Connections {
+        target: backend
+        function onUiReady() {
+            uiReadySafetyTimer.stop();
+        }
+    }
+
     // Alignment guide removed after calibration; margins are now fixed below.
 
     // Helper to enforce rounded corners inside WebEngine pages themselves.
@@ -709,7 +742,10 @@ Window {
 
                                     onLoadingChanged: function(loadRequest) {
                                         if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            plotGlobeView._loaded = true;
+                                            if (!plotGlobeView._loaded) {
+                                                plotGlobeView._loaded = true;
+                                                if (typeof root !== 'undefined') root._onCriticalComponentLoaded();
+                                            }
                                             var trajectoryData = backend ? backend.get_launch_trajectory() : null;
                                             if (trajectoryData) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
@@ -759,93 +795,33 @@ Window {
                 // Check if this is a high resolution display
                 property bool isHighResolution: backend && backend.isHighResolution
 
-                ColumnLayout {
+                Item {
                     anchors.fill: parent
-                    spacing: 0
-
-                    // On high resolution displays, show globe above launch list
-                    Loader {
-                        id: launchGlobeLoader
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: parent.height * 0.5  // Globe takes 50% of height
-                        active: launchCard.isHighResolution
-                        visible: active
-
-                        sourceComponent: Item {
-                            // Globe view for launch card
-                            Rectangle {
-                                anchors.fill: parent
-                                anchors.margins: 0
-                                color: "transparent"
-                                radius: 0
-                                clip: true
-
-                                WebEngineView {
-                                    id: launchGlobeView
-                                    anchors.fill: parent
-                                    anchors.margins: 0
-                                    url: globeUrl
-                                    // Performance: Transparency enabled per user request; layers enabled to support it
-                                    backgroundColor: "transparent"
-                                    onBackgroundColorChanged: {
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
-                                    }
-                                    zoomFactor: 1.0
-                                    layer.enabled: true
-                                    layer.smooth: true
-                                    settings.javascriptCanAccessClipboard: false
-                                    settings.allowWindowActivationFromJavaScript: false
-                                    onContextMenuRequested: function(request) { request.accepted = true }
-
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            var trajectoryData = backend.get_launch_trajectory();
-                                            if (trajectoryData) {
-                                                launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                                            }
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                            // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
-                                        }
-                                    }
-
-                                    Connections {
-                                        target: backend
-                                        function onThemeChanged() {
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    anchors.margins: 0
 
                     StackLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        anchors.fill: parent
                         currentIndex: launchCard.launchViewMode === "calendar" ? 1 : (launchCard.launchViewMode === "chart" ? 2 : 0)
                         clip: true
+                        // Ensure it takes all space including what was ColumnLayout spacing
+                        anchors.bottomMargin: 0 
 
-                        // View 0: Existing List View
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-
-                            ListView {
-                                anchors.fill: parent
-                                model: backend.eventModel
-                                clip: true
-                                spacing: 5
-                                interactive: true
-                                boundsBehavior: Flickable.StopAtBounds
-                                flickableDirection: Flickable.VerticalFlick
-                                cacheBuffer: 1500
-                                layer.enabled: true
-                                layer.smooth: true
-                                layer.textureSize: Qt.size(width, height)
-                                // Use a fixed height for delegates to help with performance
-                                property real delegateHeight: 120
-                                reuseItems: true
+                    // View 0: Existing List View
+                        ListView {
+                            anchors.fill: parent
+                            model: backend.eventModel
+                            clip: true
+                            spacing: 5
+                            interactive: true
+                            boundsBehavior: Flickable.StopAtBounds
+                            flickableDirection: Flickable.VerticalFlick
+                            cacheBuffer: 1500
+                            layer.enabled: true
+                            layer.smooth: true
+                            layer.textureSize: Qt.size(width, height)
+                            // Use a fixed height for delegates to help with performance
+                            property real delegateHeight: 120
+                            reuseItems: true
 
                         delegate: Item {
                             width: ListView.view.width
@@ -980,12 +956,9 @@ Window {
                         }
                     }
 
-                        } // End Item (List Container)
-
                         // View 1: Swipeable Calendar View (Loaded Lazily)
                         Loader {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            anchors.fill: parent
                             active: launchCard.launchViewMode === "calendar" || launchCard.calendarLoaded
                             onActiveChanged: if (active) launchCard.calendarLoaded = true
                             asynchronous: false // Synchronous to ensure properties like currentIndex are applied before render
@@ -1379,8 +1352,7 @@ Window {
                         
                         // View 2: Launch Trends Chart (Moved from Plot Card)
                         Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
+                            anchors.fill: parent
                             
                             ChartItem {
                                 anchors.fill: parent
@@ -1398,89 +1370,22 @@ Window {
                         }
                     } // End StackLayout
 
-                    // Chart control buttons container (moved from plotCard)
+                    // Launch view buttons overlay (Windy style)
                     Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: launchCard.launchViewMode === "chart" ? 30 : 0
-                        Layout.maximumHeight: launchCard.launchViewMode === "chart" ? 30 : 0
-                        color: "transparent"
-                        visible: launchCard.launchViewMode === "chart"
-                        clip: true
-                        
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+                        id: launchButtonsOverlay
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: 10
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: launchPills.implicitWidth + 20
+                        height: 34
+                        color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                        radius: 17
+                        z: 10
+                        visible: !!backend
+                        opacity: 1.0 - backgroundWindy.progress
 
                         RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
-
-                            Repeater {
-                                model: [
-                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
-                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
-                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
-                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
-                                ]
-                                Rectangle {
-                                    Layout.preferredWidth: 40
-                                    Layout.preferredHeight: 28
-                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                           (backend && backend.chartType === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5")) :
-                                           (backend && backend.chartViewMode === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5"))
-                                    radius: 14
-                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")) :
-                                                 (backend && backend.chartViewMode === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
-                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ? 2 : 1) :
-                                                 (backend && backend.chartViewMode === modelData.type ? 2 : 1)
-
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
-
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                    }
-
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                  (backend ? backend.chartType = modelData.type : null) :
-                                                  (backend ? backend.chartViewMode = modelData.type : null)
-                                    }
-
-                                    ToolTip {
-                                        text: modelData.tooltip
-                                        delay: 500
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Launch view buttons container
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        Layout.maximumHeight: 30
-                        Layout.alignment: Qt.AlignTop
-                        color: "transparent"
-
-                        RowLayout {
+                            id: launchPills
                             anchors.centerIn: parent
                             spacing: 6
 
@@ -1564,9 +1469,8 @@ Window {
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
 
-                ColumnLayout {
+                Item {
                     anchors.fill: parent
-                    spacing: 0
 
                     WebEngineProfile {
                         id: youtubeProfile
@@ -1581,8 +1485,7 @@ Window {
 
                     // Rounded-corner container to ensure YouTube/map view corners are clipped
                     Rectangle {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        anchors.fill: parent
                         radius: 8
                         color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                         clip: true
@@ -1718,23 +1621,27 @@ Window {
                             font.pixelSize: 24
                             font.bold: true
                             color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                            visible: !root.currentVideoUrl || root.currentVideoUrl === ""
+                            visible: !root.currentVideoUrl || root.currentVideoUrl === "" || root.currentVideoUrl === "about:blank"
                             z: 1
                         }
 
                         // Overlay for quick-action buttons floating on top of the video
-                        Item {
-                            id: youtubeOverlay
-                            anchors.fill: parent
+                        Rectangle {
+                            id: youtubeButtonsOverlay
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 10
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: youtubePills.implicitWidth + 20
+                            height: 34
+                            color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                            radius: 17
                             z: 2
                             opacity: 1.0 - backgroundWindy.progress
                             visible: backend && opacity > 0
 
                             RowLayout {
                                 id: youtubePills
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: 6
+                                anchors.centerIn: parent
                                 spacing: 6
 
                                 // Starship playlist (current YouTube URL)

@@ -3003,17 +3003,20 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         if not status_callback:
             return
             
-        # Prioritize showing what's currently being worked on
+        loading_tasks = []
         if status_state['launches'] == 'Loading':
-            msg = "Fetching SpaceX launch data…"
-        elif status_state['weather'] == 'Loading':
-            msg = "Getting live weather for locations…"
-        elif status_state['narratives'] == 'Loading':
-            msg = "Retrieving mission narratives…"
+            loading_tasks.append("Launch data")
+        if status_state['weather'] == 'Loading':
+            loading_tasks.append("Weather")
+        if status_state['narratives'] == 'Loading':
+            loading_tasks.append("Narratives")
+            
+        if loading_tasks:
+            msg = "Fetching " + " & ".join(loading_tasks) + "..."
         elif all(s == 'Complete' for s in status_state.values()):
-            msg = "Data loading complete"
+            msg = "Data loaded successfully"
         else:
-            msg = "Initializing dashboard data…"
+            msg = "Initializing..."
             
         try:
             status_callback(msg)
@@ -3083,7 +3086,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         narratives = fetch_narratives(launch_data)
 
     profiler.mark("perform_full_dashboard_data_load End")
-    _emit("Finalizing dashboard UI…")
+    _emit("Synchronizing dashboard...")
     
     # Pre-compute calendar mapping while still in the background
     calendar_mapping = get_calendar_mapping(launch_data, tz_obj=tz_obj)

@@ -477,6 +477,7 @@ class Backend(QObject):
     touchCalibrationExistsChanged = pyqtSignal()
     calibrationStarted = pyqtSignal()
     calibrationFinished = pyqtSignal()
+    uiReady = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -501,7 +502,9 @@ class Backend(QObject):
         self._boot_mode = True
         self._isLoading = True
         self._loading_status = "Initializing..."
+        profiler.mark("Backend: isLoading=True set")
         self._online_load_in_progress = False
+        self._is_high_resolution = False # Added to ensure property availability
         # Try to load initial data from cache to avoid empty UI on first load
         try:
             profiler.mark("Backend: Loading Launch Cache Start")
@@ -575,6 +578,7 @@ class Backend(QObject):
         self._width = int(os.environ.get("DASHBOARD_WIDTH", default_w))
         self._height = int(os.environ.get("DASHBOARD_HEIGHT", default_h))
         self._is_large_display = is_large_display
+        self._is_high_resolution = is_large_display
         self._brightness = 100
         self._target_brightness = 100
         self._last_applied_brightness = -1
@@ -980,7 +984,7 @@ class Backend(QObject):
                 # Clear deferred flag if we have connectivity
                 logger.info("BOOT: Network connectivity available - clearing deferred flag")
                 self._data_loading_deferred = False
-                self.setLoadingStatus("Loading SpaceX launch data...")
+                # self.setLoadingStatus("Loading SpaceX launch data...") # Let DataLoader status emitters handle this
             else:
                 logger.warning("BOOT: No network connectivity detected - staying with seed/runtime cache; will wait for firstOnline signal")
                 # We no longer return here. Proceed to start DataLoader so cached data is processed.
@@ -1180,6 +1184,23 @@ class Backend(QObject):
         else:
             self._launch_tray_manual_override = None
         self._emit_tray_visibility_changed()
+
+    @pyqtSlot()
+    def notifyUiReady(self):
+        """Called by QML when the UI is fully loaded and ready to be shown."""
+        if self._isLoading:
+            logger.info("BOOT: UI notified ready. Dismissing splash screen.")
+            self._isLoading = False
+            profiler.mark("Backend: Emitting UI update signals Start")
+            self.loadingFinished.emit()
+            self.launchesChanged.emit()
+            self._emit_tray_visibility_changed()
+            self.weatherChanged.emit()
+            self.eventModelChanged.emit()
+            profiler.mark("Backend: Emitting UI update signals End")
+            self.uiReady.emit()
+        else:
+            logger.debug("BOOT: UI notified ready but splash already dismissed.")
 
     @pyqtProperty(bool, notify=loadingFinished)
     def isLoading(self):
@@ -2219,7 +2240,9 @@ class Backend(QObject):
     def on_data_loaded(self, launch_data, weather_data, narratives, calendar_mapping=None):
         profiler.mark("Backend: on_data_loaded Start")
         logger.info("Backend: on_data_loaded called")
+        # Ensure status is visible for a moment before moving to synchronization
         self.setLoadingStatus("Data loaded successfully")
+        
         logger.info(f"Backend: Received {len(launch_data.get('upcoming', []))} upcoming launches")
         self._launch_data = launch_data
         self._launch_descriptions = narratives
@@ -2242,15 +2265,16 @@ class Backend(QObject):
         profiler.mark("Backend: EventModel updated")
         
         # Exit loading state after data is loaded and processed
-        self.setLoadingStatus("Application loaded...")
-        self._isLoading = False
-        profiler.mark("Backend: Emitting UI update signals Start")
-        self.loadingFinished.emit()
-        self.launchesChanged.emit()
-        self._emit_tray_visibility_changed()
-        self.weatherChanged.emit()
-        self.eventModelChanged.emit()
-        profiler.mark("Backend: Emitting UI update signals End")
+        # Use a small delay for the final message so it's readable
+        def _set_final_status():
+            self.setLoadingStatus("Initializing UI")
+            # We no longer trigger splash dismissal here. 
+            # It will be triggered by notifyUiReady() called from QML.
+        
+        QTimer.singleShot(500, _set_final_status)
+        
+        # Add a safety timeout to dismiss splash screen if QML fails to notify
+        QTimer.singleShot(10000, self.notifyUiReady)
 
         # Update trajectory now that data is loaded (debounced) and precompute in background
         profiler.mark("Backend: Scheduling trajectory recompute")
@@ -2292,20 +2316,15 @@ class Backend(QObject):
         self._event_model.update_data()
 
         # Exit loading state after offline data is loaded
-        self.setLoadingStatus("Application loaded...")
-        self._isLoading = False
-        self.loadingFinished.emit()
-        # Mirror the same UI update signals as online path so QML refreshes lists and trajectory
-        try:
-            self.launchesChanged.emit()
-            self._emit_tray_visibility_changed()
-            self.weatherChanged.emit()
-            self.eventModelChanged.emit()
-            # Update trajectory now that cached data is applied
-            self._emit_update_globe_trajectory_debounced()
-            self._schedule_trajectory_recompute()
-        except Exception as _e:
-            logger.debug(f"BOOT: Error emitting offline refresh signals: {_e}")
+        # Use a small delay for the final message so it's readable
+        def _set_final_status_offline():
+            self.setLoadingStatus("Initializing UI")
+        
+        QTimer.singleShot(500, _set_final_status_offline)
+
+        # Add a safety timeout to dismiss splash screen if QML fails to notify
+        QTimer.singleShot(10000, self.notifyUiReady)
+
         logger.info("BOOT: Offline mode activated - app should now show cached data")
         profiler.mark("Backend: _on_loading_timeout End")
 
@@ -3688,6 +3707,7 @@ if __name__ == '__main__':
     if '--memory-pressure-off' not in sys.argv:
         sys.argv.append('--memory-pressure-off')
         
+    profiler.mark("QApplication setup")
     app = QApplication(sys.argv)
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
@@ -3707,10 +3727,13 @@ if __name__ == '__main__':
     profiler.mark("Creating Backend")
     logger.info("BOOT: Creating Backend instance...")
     backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
-    # Now start the data loader which will kick off background checks
-    profiler.mark("Starting Data Loader")
-    logger.info("BOOT: Starting data loader...")
-    backend.startDataLoader()
+    
+    # Notify that backend is ready but QML hasn't loaded yet
+    backend.setLoadingStatus("Connecting to network...")
+    
+    # Small delay to ensure "Connecting to network..." is actually seen
+    # as startDataLoader kicks off background checks immediately.
+    QTimer.singleShot(800, backend.startDataLoader)
     
     profiler.mark("Initializing QML Engine")
     engine = QQmlApplicationEngine()
@@ -3740,6 +3763,12 @@ if __name__ == '__main__':
 
     from ui_qml import qml_code  # Load QML from external module
     profiler.mark("Engine LoadData Start")
+    # Increase delay for QML loading status so it's not immediately overwritten 
+    # if DataLoader finished very quickly.
+    def _set_ui_loading():
+        backend.setLoadingStatus("Preparing UI components...")
+    QTimer.singleShot(1500, _set_ui_loading)
+    
     engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
     profiler.mark("Engine LoadData End")
     if not engine.rootObjects():
