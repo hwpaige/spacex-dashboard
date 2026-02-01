@@ -429,8 +429,13 @@ Window {
             readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, root.width - minWidth)))
 
             Behavior on width { 
+                id: widthBehavior
                 enabled: !backgroundWindy.isDragging
-                NumberAnimation { duration: 500; easing.type: Easing.OutCubic } 
+                NumberAnimation { 
+                    id: widthAnimation
+                    duration: 300 
+                    easing.type: Easing.OutQuart 
+                } 
             }
 
             SwipeView {
@@ -456,13 +461,13 @@ Window {
                             Loader {
                                 id: webViewLoader
                                 anchors.fill: parent
-                                active: index === weatherSwipe.currentIndex && (weatherSwipe.loadedMask & (1 << index))
-                                visible: active
+                                active: (weatherSwipe.loadedMask & (1 << index))
+                                visible: index === weatherSwipe.currentIndex
                                 sourceComponent: WebEngineView {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    layer.enabled: false
+                                    layer.enabled: backgroundWindy.isDragging || (typeof widthAnimation !== 'undefined' && widthAnimation.running)
                                     layer.smooth: true
                                     enabled: false
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
@@ -564,10 +569,9 @@ Window {
                         
                         onReleased: (mouse) => {
                             if (backgroundWindy.isDragging) {
-                                // Snap logic: if moved more than 20% from the starting state, snap to the other state.
-                                // This restores the "snap open and close" functionality.
+                                // Snap logic: if moved more than 15% (was 20%) from the starting state, snap to the other state.
                                 var p = backgroundWindy.progress
-                                var threshold = 0.2
+                                var threshold = 0.15
                                 if (backgroundWindy.expansionFactor === 0.0) {
                                     backgroundWindy.expansionFactor = (p > threshold) ? 1.0 : 0.0
                                 } else {
