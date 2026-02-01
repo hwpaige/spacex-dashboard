@@ -449,6 +449,7 @@ Window {
             property bool isDragging: false
             property real manualWidth: minWidth
             property real expansionFactor: 0.0
+            property bool isLocked: true
 
             readonly property bool isHighRes: backend && backend.isHighResolution
 
@@ -479,7 +480,7 @@ Window {
                 clip: false
                 layer.enabled: true
                 layer.smooth: true
-                interactive: false
+                interactive: !backgroundWindy.isLocked
                 currentIndex: 1
                 property int loadedMask: (1 << 1)
                 onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
@@ -502,7 +503,7 @@ Window {
                                     anchors.fill: parent
                                     layer.enabled: backgroundWindy.isDragging || (typeof widthAnimation !== 'undefined' && widthAnimation.running)
                                     layer.smooth: true
-                                    enabled: false
+                                    enabled: !backgroundWindy.isLocked
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                     url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                     settings.webGLEnabled: true
@@ -581,6 +582,7 @@ Window {
                         id: expansionGestureArea
                         anchors.fill: parent
                         z: 5 // Below buttons but above the spacer
+                        enabled: backgroundWindy.isLocked
                         
                         property real startX: 0
                         property real initialWidth: 0
@@ -670,6 +672,7 @@ Window {
                                         text: modelData.icon
                                         font.pixelSize: 14
                                         font.family: "Font Awesome 5 Free"
+                                        font.weight: Font.Black
                                         color: backend.theme === "dark" ? "white" : "black"
                                     }
 
@@ -683,6 +686,39 @@ Window {
                                         text: modelData.tooltip
                                         delay: 500
                                     }
+                                }
+                            }
+
+                            // Interaction Lock/Unlock Button
+                            Rectangle {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                color: (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                radius: 14
+                                border.color: (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
+                                border.width: 1
+
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: backgroundWindy.isLocked ? "\uf023" : "\uf09c"
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    font.weight: Font.Black
+                                    color: backgroundWindy.isLocked ? "#F44336" : "#4CAF50"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: backgroundWindy.isLocked = !backgroundWindy.isLocked
+                                }
+
+                                ToolTip {
+                                    text: backgroundWindy.isLocked ? "Unlock Interaction" : "Lock Interaction"
+                                    delay: 500
                                 }
                             }
                         }
