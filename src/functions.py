@@ -3174,6 +3174,7 @@ def setup_dashboard_environment():
 
     os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
     os.environ["QSG_RHI_BACKEND"] = "gl"
+    os.environ.setdefault("QSG_RENDER_LOOP", "threaded")
 
     # High DPI Scaling support
     # Detect physical resolution from config file if environment variables are missing
@@ -3214,6 +3215,8 @@ def setup_dashboard_environment():
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
         os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
         os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
+        # Help eliminate screen tearing on Pi
+        os.environ.setdefault("vblank_mode", "3")
 
 def setup_dashboard_logging(module_file):
     """Initialize logging with file and console handlers."""
