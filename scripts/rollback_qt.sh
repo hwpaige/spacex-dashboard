@@ -64,4 +64,15 @@ if [ -f "$XSESSION" ]; then
     fi
 fi
 
+log "Disabling Wayland to force X11 usage..."
+if [ -f /etc/gdm3/custom.conf ]; then
+    sed -i 's/^#WaylandEnable=false/WaylandEnable=false/' /etc/gdm3/custom.conf
+    # Also handle cases where it might already be uncommented but set to true
+    sed -i 's/^WaylandEnable=true/WaylandEnable=false/' /etc/gdm3/custom.conf
+    log "Wayland disabled in /etc/gdm3/custom.conf"
+elif [ -f /etc/gdm3/daemon.conf ]; then
+    sed -i 's/^#WaylandEnable=false/WaylandEnable=false/' /etc/gdm3/daemon.conf
+    log "Wayland disabled in /etc/gdm3/daemon.conf"
+fi
+
 log "Rollback complete. Please reboot your Pi to ensure all GPU buffers are cleared."
