@@ -2225,6 +2225,7 @@ class Backend(QObject):
         if (now - self._last_live_url_update >= 60) or (current_tray_visible and not self._last_tray_visible):
             self._update_live_launch_url()
 
+        self.timeChanged.emit()
         self.countdownChanged.emit()
         self._emit_tray_visibility_changed()
 
