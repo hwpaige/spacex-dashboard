@@ -1034,23 +1034,27 @@ EOF
     # Ubuntu 25.10+ and some recent versions use os_prefix=current/ in config.txt
     # which means the actual cmdline.txt is in /boot/firmware/current/
     local fw_dir="/boot/firmware"
-    if grep -q "os_prefix=current/" "$fw_dir/config.txt" 2>/dev/null; then
-        fw_dir="/boot/firmware/current"
+    if grep -q "^os_prefix=" "$fw_dir/config.txt" 2>/dev/null; then
+        local prefix=$(grep "^os_prefix=" "$fw_dir/config.txt" | cut -d= -f2)
+        if [ -d "$fw_dir/$prefix" ]; then
+            fw_dir="$fw_dir/$prefix"
+        fi
     fi
 
     CMDLINE_FILE="$fw_dir/cmdline.txt"
     if [ -f "$CMDLINE_FILE" ]; then
+        log "Updating $CMDLINE_FILE..."
         # Remove any existing Plymouth-related parameters and other potentially conflicting console settings
         # We want a clean slate for quiet splash boot to ensure only our desired console is used
         # Using a more robust sed pattern to avoid leading/double spaces
-        sed -i -E 's/\s*(quiet|splash|loglevel=[0-9]|vt\.global_cursor_default=[0-9]|plymouth\.ignore-serial-consoles|logo\.nologo|rd\.systemd\.show_status=[a-z]*|plymouth\.display-rotation=[0-9]|fbcon=rotate:[0-9])//g' "$CMDLINE_FILE"
+        sed -i -E 's/\s*(quiet|splash|loglevel=[0-9]|vt\.global_cursor_default=[0-9]|plymouth\.ignore-serial-consoles|logo\.nologo|rd\.systemd\.show_status=[a-z]*|systemd\.show_status=[a-z]*|plymouth\.display-rotation=[0-9]|fbcon=rotate:[0-9])//g' "$CMDLINE_FILE"
         sed -i -E 's/\s*(console=tty[0-9]|console=serial0,[0-9]*)//g' "$CMDLINE_FILE"
         # Clean up leading/trailing/double spaces
         sed -i 's/  */ /g; s/^ //; s/ $//' "$CMDLINE_FILE"
 
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
-            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false/' "$CMDLINE_FILE"
+            sed -i 's/$/ quiet splash loglevel=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false systemd.show_status=false/' "$CMDLINE_FILE"
         fi
 
         # Ensure console is moved to tty3 (avoid kernel logs on Plymouth tty)
@@ -1083,6 +1087,8 @@ EOF
 [Manager]
 ShowStatus=no
 StatusUnitFormat=off
+LogLevel=notice
+LogTarget=journal
 EOF
 
     # Create Plymouth configuration
