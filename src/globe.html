@@ -1033,12 +1033,12 @@
                     // Create curve from points
                     const orbitCurve = new THREE.CatmullRomCurve3(orbitPoints);
                     // Close the curve if it loops? Usually orbit_path is a full loop segment, but let's leave open to match points.
-                    orbitCurve.closed = true;
+                    orbitCurve.closed = false;
 
                     const orbitTubeRadius = 0.003;
                     const orbitSegments = orbitPoints.length * 6;
 
-                    const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, true);
+                    const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, false);
                     const orbitMat = new THREE.MeshBasicMaterial({
                         color: 0xFF0000, // Explicit Red
                         transparent: true,
@@ -1050,7 +1050,7 @@
 
                     // 2. Subtle Glow for Orbit
                     const orbitGlowRadius = orbitTubeRadius * 2.5;
-                    const orbitGlowGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitGlowRadius, 8, true);
+                    const orbitGlowGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitGlowRadius, 8, false);
                     const orbitGlowMat = new THREE.MeshBasicMaterial({
                         color: 0xFF0000,
                         transparent: true,
