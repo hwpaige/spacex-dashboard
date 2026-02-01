@@ -755,61 +755,57 @@ Window {
                 // Check if this is a high resolution display
                 property bool isHighResolution: backend && backend.isHighResolution
 
-                ColumnLayout {
+                // Internal container for clipping content with rounded corners
+                Rectangle {
+                    id: launchClippedContent
                     anchors.fill: parent
-                    spacing: 0
+                    color: "transparent"
+                    radius: 8
+                    clip: true
+                    layer.enabled: true
 
                     // On high resolution displays, show globe above launch list
                     Loader {
                         id: launchGlobeLoader
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: parent.height * 0.5  // Globe takes 50% of height
+                        anchors.top: parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: parent.height * 0.5
                         active: launchCard.isHighResolution
                         visible: active
 
                         sourceComponent: Item {
                             // Globe view for launch card
-                            Rectangle {
+                            WebEngineView {
+                                id: launchGlobeView
                                 anchors.fill: parent
-                                anchors.margins: 0
-                                color: "transparent"
-                                radius: 0
-                                clip: true
+                                url: globeUrl
+                                backgroundColor: "transparent"
+                                onBackgroundColorChanged: {
+                                    if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
+                                }
+                                zoomFactor: 1.0
+                                layer.enabled: true
+                                layer.smooth: true
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: false
+                                onContextMenuRequested: function(request) { request.accepted = true }
 
-                                WebEngineView {
-                                    id: launchGlobeView
-                                    anchors.fill: parent
-                                    anchors.margins: 0
-                                    url: globeUrl
-                                    // Performance: Transparency enabled per user request; layers enabled to support it
-                                    backgroundColor: "transparent"
-                                    onBackgroundColorChanged: {
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        var trajectoryData = backend.get_launch_trajectory();
+                                        if (trajectoryData) {
+                                            launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                        }
+                                        launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                         if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
                                     }
-                                    zoomFactor: 1.0
-                                    layer.enabled: true
-                                    layer.smooth: true
-                                    settings.javascriptCanAccessClipboard: false
-                                    settings.allowWindowActivationFromJavaScript: false
-                                    onContextMenuRequested: function(request) { request.accepted = true }
+                                }
 
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            var trajectoryData = backend.get_launch_trajectory();
-                                            if (trajectoryData) {
-                                                launchGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                                            }
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                            // Enforce rounded corners
-                                            if (typeof root !== 'undefined') root._injectRoundedCorners(launchGlobeView, 0)
-                                        }
-                                    }
-
-                                    Connections {
-                                        target: backend
-                                        function onThemeChanged() {
-                                            launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                        }
+                                Connections {
+                                    target: backend
+                                    function onThemeChanged() {
+                                        launchGlobeView.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
                                     }
                                 }
                             }
@@ -817,16 +813,15 @@ Window {
                     }
 
                     StackLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
+                        anchors.top: launchGlobeLoader.active ? launchGlobeLoader.bottom : parent.top
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        anchors.bottom: parent.bottom
                         currentIndex: launchCard.launchViewMode === "calendar" ? 1 : (launchCard.launchViewMode === "chart" ? 2 : 0)
                         clip: true
 
                         // View 0: Existing List View
                         Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-
                             ListView {
                                 anchors.fill: parent
                                 model: backend.eventModel
@@ -836,7 +831,7 @@ Window {
                                 boundsBehavior: Flickable.StopAtBounds
                                 flickableDirection: Flickable.VerticalFlick
 
-                        delegate: Item {
+                                delegate: Item {
                             width: ListView.view.width
                             height: model && model.isGroup ? 30 : launchColumn.height + 20
 
@@ -1386,154 +1381,164 @@ Window {
                             }
                         }
                     } // End StackLayout
+                } // End Rectangle (launchClippedContent)
 
-                    // Chart control buttons container (moved from plotCard)
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: launchCard.launchViewMode === "chart" ? 30 : 0
-                        Layout.maximumHeight: launchCard.launchViewMode === "chart" ? 30 : 0
-                        color: "transparent"
-                        visible: launchCard.launchViewMode === "chart"
-                        clip: true
-                        
-                        Behavior on Layout.preferredHeight { NumberAnimation { duration: 200 } }
+                // Chart control buttons container (Windy style overlay)
+                Rectangle {
+                    id: chartButtonsOverlay
+                    anchors.bottom: launchButtonsOverlay.top
+                    anchors.bottomMargin: 6
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: chartButtonsRow.implicitWidth + 20
+                    height: 34
+                    color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                    radius: 17
+                    visible: launchCard.launchViewMode === "chart"
+                    z: 11  // Ensure it's above other elements
+                    opacity: visible ? 1.0 : 0.0
+                    Behavior on opacity { NumberAnimation { duration: 200 } }
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
+                    // MouseArea to prevent clicks from passing through the overlay to the chart
+                    MouseArea { anchors.fill: parent }
 
-                            Repeater {
-                                model: [
-                                    {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
-                                    {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
-                                    {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
-                                    {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
-                                    {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
-                                ]
-                                Rectangle {
-                                    Layout.preferredWidth: 40
-                                    Layout.preferredHeight: 28
-                                    color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                           (backend && backend.chartType === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5")) :
-                                           (backend && backend.chartViewMode === modelData.type ?
-                                            (backend && backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                            (backend && backend.theme === "dark" ? "#181818" : "#f5f5f5"))
-                                    radius: 14
-                                    border.color: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")) :
-                                                 (backend && backend.chartViewMode === modelData.type ?
-                                                  (backend && backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                  (backend && backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
-                                    border.width: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                 (backend && backend.chartType === modelData.type ? 2 : 1) :
-                                                 (backend && backend.chartViewMode === modelData.type ? 2 : 1)
+                    RowLayout {
+                        id: chartButtonsRow
+                        anchors.centerIn: parent
+                        spacing: 6
 
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+                        Repeater {
+                            model: [
+                                {"type": "bar", "icon": "\uf080", "tooltip": "Bar Chart"},
+                                {"type": "line", "icon": "\uf201", "tooltip": "Line Chart"},
+                                {"type": "area", "icon": "\uf1fe", "tooltip": "Area Chart"},
+                                {"type": "actual", "icon": "\uf201", "tooltip": "Monthly View"},
+                                {"type": "cumulative", "icon": "\uf0cb", "tooltip": "Cumulative View"}
+                            ]
+                            Rectangle {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                property bool isActive: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                       (backend && backend.chartType === modelData.type) :
+                                       (backend && backend.chartViewMode === modelData.type)
 
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                    }
+                                color: isActive ?
+                                       (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                       (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                radius: 14
+                                border.color: isActive ?
+                                             (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                             (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
+                                border.width: isActive ? 2 : 1
 
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
-                                                  (backend ? backend.chartType = modelData.type : null) :
-                                                  (backend ? backend.chartViewMode = modelData.type : null)
-                                    }
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                                    ToolTip {
-                                        text: modelData.tooltip
-                                        delay: 500
-                                    }
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.icon
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: (modelData.type === "bar" || modelData.type === "line" || modelData.type === "area") ?
+                                              (backend ? backend.chartType = modelData.type : null) :
+                                              (backend ? backend.chartViewMode = modelData.type : null)
+                                }
+
+                                ToolTip {
+                                    text: modelData.tooltip
+                                    delay: 500
                                 }
                             }
                         }
                     }
+                }
 
-                    // Launch view buttons container
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 30
-                        Layout.maximumHeight: 30
-                        Layout.alignment: Qt.AlignTop
-                        color: "transparent"
+                // Launch view buttons container (Windy style overlay)
+                Rectangle {
+                    id: launchButtonsOverlay
+                    anchors.bottom: parent.bottom
+                    anchors.bottomMargin: 15
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: launchButtonsRow.implicitWidth + 20
+                    height: 34
+                    color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                    radius: 17
+                    z: 11
 
-                        RowLayout {
-                            anchors.centerIn: parent
-                            spacing: 6
+                    // MouseArea to prevent clicks from passing through
+                    MouseArea { anchors.fill: parent }
 
-                            Repeater {
-                                model: [
-                                    {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
-                                    {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"},
-                                    {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"},
-                                    {"type": "chart", "icon": "\uf201", "tooltip": "Launch Trends"}
-                                ]
-                                Rectangle {
-                                    Layout.preferredWidth: 40
-                                    Layout.preferredHeight: 28
-                                    // Highlight if:
-                                    // 1. We are in 'calendar' mode and this button is the calendar button
-                                    // 2. We are in 'chart' mode and this button is the chart button
-                                    // 3. We are in 'list' mode and this button matches backend.eventType (upcoming/past)
-                                    property bool isActive: {
-                                        if (modelData.type === "calendar") return launchCard.launchViewMode === "calendar"
-                                        if (modelData.type === "chart") return launchCard.launchViewMode === "chart"
-                                        return launchCard.launchViewMode === "list" && backend.eventType === modelData.type
-                                    }
-                                    
-                                    color: isActive ?
-                                           (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
-                                           (backend.theme === "dark" ? "#181818" : "#f5f5f5")
-                                    radius: 14
-                                    border.color: isActive ?
-                                                 (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
-                                                 (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
-                                    border.width: isActive ? 2 : 1
-                                    
-                                    Behavior on color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.color { ColorAnimation { duration: 200 } }
-                                    Behavior on border.width { NumberAnimation { duration: 200 } }
+                    RowLayout {
+                        id: launchButtonsRow
+                        anchors.centerIn: parent
+                        spacing: 6
 
-                                    Text {
-                                        anchors.centerIn: parent
-                                        text: modelData.icon
-                                        font.pixelSize: 14
-                                        font.family: "Font Awesome 5 Free"
-                                        color: backend.theme === "dark" ? "white" : "black"
-                                    }
+                        Repeater {
+                            model: [
+                                {"type": "upcoming", "icon": "\uf135", "tooltip": "Upcoming Launches"},
+                                {"type": "past", "icon": "\uf1da", "tooltip": "Past Launches"},
+                                {"type": "calendar", "icon": "\uf073", "tooltip": "Calendar View"},
+                                {"type": "chart", "icon": "\uf201", "tooltip": "Launch Trends"}
+                            ]
+                            Rectangle {
+                                Layout.preferredWidth: 40
+                                Layout.preferredHeight: 28
+                                // Highlight if:
+                                // 1. We are in 'calendar' mode and this button is the calendar button
+                                // 2. We are in 'chart' mode and this button is the chart button
+                                // 3. We are in 'list' mode and this button matches backend.eventType (upcoming/past)
+                                property bool isActive: {
+                                    if (modelData.type === "calendar") return launchCard.launchViewMode === "calendar"
+                                    if (modelData.type === "chart") return launchCard.launchViewMode === "chart"
+                                    return launchCard.launchViewMode === "list" && backend.eventType === modelData.type
+                                }
+                                
+                                color: isActive ?
+                                       (backend.theme === "dark" ? "#303030" : "#e0e0e0") :
+                                       (backend.theme === "dark" ? "#181818" : "#f5f5f5")
+                                radius: 14
+                                border.color: isActive ?
+                                             (backend.theme === "dark" ? "#3a3a3a" : "#c0c0c0") :
+                                             (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
+                                border.width: isActive ? 2 : 1
+                                
+                                Behavior on color { ColorAnimation { duration: 200 } }
+                                Behavior on border.color { ColorAnimation { duration: 200 } }
+                                Behavior on border.width { NumberAnimation { duration: 200 } }
 
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: modelData.icon
+                                    font.pixelSize: 14
+                                    font.family: "Font Awesome 5 Free"
+                                    color: backend.theme === "dark" ? "white" : "black"
+                                }
 
-                                        onClicked: {
-                                            if (modelData.type === "calendar") {
-                                                launchCard.launchViewMode = "calendar"
-                                            } else if (modelData.type === "chart") {
-                                                launchCard.launchViewMode = "chart"
-                                            } else {
-                                                launchCard.launchViewMode = "list"
-                                                backend.eventType = modelData.type
-                                            }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+
+                                    onClicked: {
+                                        if (modelData.type === "calendar") {
+                                            launchCard.launchViewMode = "calendar"
+                                        } else if (modelData.type === "chart") {
+                                            launchCard.launchViewMode = "chart"
+                                        } else {
+                                            launchCard.launchViewMode = "list"
+                                            backend.eventType = modelData.type
                                         }
                                     }
+                                }
 
-                                    ToolTip {
-                                        text: modelData.tooltip
-                                        delay: 500
-                                    }
+                                ToolTip {
+                                    text: modelData.tooltip
+                                    delay: 500
                                 }
                             }
                         }
@@ -1707,23 +1712,27 @@ Window {
                             font.pixelSize: 24
                             font.bold: true
                             color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                            visible: !root.currentVideoUrl || root.currentVideoUrl === ""
+                            visible: !root.currentVideoUrl || root.currentVideoUrl === "" || root.currentVideoUrl.toString() === "about:blank"
                             z: 1
                         }
 
-                        // Overlay for quick-action buttons floating on top of the video
-                        Item {
-                            id: youtubeOverlay
-                            anchors.fill: parent
-                            z: 2
+                        // Floating button bar container (Windy style)
+                        Rectangle {
+                            id: youtubeButtonsOverlay
+                            anchors.bottom: parent.bottom
+                            anchors.bottomMargin: 15
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: youtubePills.implicitWidth + 20
+                            height: 34
+                            color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                            radius: 17
+                            z: 10
                             opacity: 1.0 - backgroundWindy.progress
                             visible: backend && opacity > 0
 
                             RowLayout {
                                 id: youtubePills
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                anchors.bottom: parent.bottom
-                                anchors.bottomMargin: 6
+                                anchors.centerIn: parent
                                 spacing: 6
 
                                 // Starship playlist (current YouTube URL)
@@ -1837,7 +1846,7 @@ Window {
                                                         "var tryFS = function() {" +
                                                         "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
                                                         "  if(el && el.requestFullscreen) {" +
-                                                        "    el.requestFullscreen().catch(function(e){" +
+                                                        "  el.requestFullscreen().catch(function(e){" +
                                                         "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
                                                         "      else console.log('Manual auto-fullscreen failed:', e);" +
                                                         "    });" +

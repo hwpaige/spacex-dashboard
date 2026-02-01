@@ -866,7 +866,7 @@
                     });
 
                     const boosterCurve = new THREE.CatmullRomCurve3(boosterPoints);
-                    const boosterTubeRadius = 0.005; // Thicker orange booster
+                    const boosterTubeRadius = 0.0035; // Sharp line to match main trajectory
                     const boosterTubeGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterTubeRadius, 8, false);
                     const boosterMat = new THREE.MeshBasicMaterial({
                         color: 0xFFA500, // Bright Orange
@@ -879,7 +879,7 @@
                     trajectoryGroup.add(boosterMesh);
 
                     // Booster Glow
-                    const boosterGlowRadius = boosterTubeRadius * 2.0;
+                    const boosterGlowRadius = boosterTubeRadius * 1.8;
                     const boosterGlowGeo = new THREE.TubeGeometry(boosterCurve, boosterPoints.length * 4, boosterGlowRadius, 8, false);
                     const boosterGlowMat = new THREE.MeshBasicMaterial({
                         color: 0xFFA500,
@@ -893,36 +893,6 @@
                     boosterGlowMesh.renderOrder = 4;
                     trajectoryGroup.add(boosterGlowMesh);
 
-                    // 4. Separation Point Dot
-                    if (typeof trajectoryData.sep_idx === 'number' && trajectoryData.sep_idx < boosterPoints.length) {
-                        const sepPoint = boosterPoints[trajectoryData.sep_idx];
-                        const dotRadius = 0.007;
-                        const dotGeo = new THREE.SphereGeometry(dotRadius, 16, 16);
-                        const dotMat = new THREE.MeshBasicMaterial({
-                            color: 0xFFFFFF, // Bright White
-                            transparent: true,
-                            opacity: 0.9
-                        });
-                        const dot = new THREE.Mesh(dotGeo, dotMat);
-                        dot.position.copy(sepPoint);
-                        dot.renderOrder = 5;
-                        trajectoryGroup.add(dot);
-
-                        // Separation Dot Glow
-                        const dotGlowGeo = new THREE.SphereGeometry(dotRadius * 1.8, 16, 16);
-                        const dotGlowMat = new THREE.MeshBasicMaterial({
-                            color: 0xFFFFFF,
-                            transparent: true,
-                            opacity: 0.4,
-                            blending: THREE.AdditiveBlending,
-                            depthWrite: false
-                        });
-                        const dotGlow = new THREE.Mesh(dotGlowGeo, dotGlowMat);
-                        dotGlow.position.copy(sepPoint);
-                        dotGlow.renderOrder = 6;
-                        trajectoryGroup.add(dotGlow);
-                        console.log("Added separation dot at index:", trajectoryData.sep_idx);
-                    }
 
                     // Add a small landing pad marker if it's an ASDS or RTLS landing
                     const combinedInfo = ((trajectoryData.landing_type || '') + ' ' + (trajectoryData.landing_location || '')).toUpperCase();

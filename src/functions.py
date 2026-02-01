@@ -2092,9 +2092,6 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
                                                 orbit_type=('polar' if normalized_orbit == 'LEO-Polar' else ('equatorial' if normalized_orbit == 'LEO-Equatorial' else ('gto' if normalized_orbit == 'GTO' else 'default'))),
                                                 end_bearing_deg=end_bearing)
             
-            tail_len = max(6, int(0.15 * len(new_traj)))
-            orbit_tail = [orbit_path[(orbit_idx - (tail_len-1-j)) % len(orbit_path)] for j in range(tail_len)]
-            new_traj[-tail_len:] = orbit_tail
             trajectory = new_traj
         except Exception as e:
             logger.warning(f"Tangent match failed: {e}")
