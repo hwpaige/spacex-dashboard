@@ -2596,12 +2596,10 @@ Window {
                                     id: narrativeListDrag
                                     target: null
                                     xAxis.enabled: false
+                                    grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlers | PointerHandler.ApprovesTakeOverByAnything
                                     onActiveChanged: {
                                         if (active) {
-                                            if (narrativeListView.contentY <= 0) {
-                                                narrativeTray.isDragging = true
-                                                narrativeListView.dragStartY = centroid.scenePosition.y
-                                            }
+                                            narrativeListView.dragStartY = centroid.scenePosition.y
                                         } else {
                                             if (narrativeTray.isDragging) {
                                                 narrativeTray.isDragging = false
@@ -2616,16 +2614,23 @@ Window {
                                         }
                                     }
                                     onCentroidChanged: {
-                                        if (narrativeTray.isDragging) {
-                                            var delta = centroid.scenePosition.y - narrativeListView.dragStartY
-                                            if (delta > 0) {
-                                                narrativeTray.height = Math.max(0, narrativeTray.expandedHeight - delta)
-                                            } else {
-                                                narrativeTray.height = narrativeTray.expandedHeight
+                                        if (active) {
+                                            if (!narrativeTray.isDragging) {
+                                                if (narrativeListView.contentY <= 0 && centroid.scenePosition.y > narrativeListView.dragStartY + 20) {
+                                                    // Start dragging tray down ONLY if at top and moving down significantly
+                                                    narrativeTray.isDragging = true
+                                                    narrativeListView.dragStartY = centroid.scenePosition.y
+                                                }
                                             }
-                                        } else if (narrativeListView.dragging && narrativeListView.contentY <= 0 && centroid.scenePosition.y > narrativeListView.dragStartY) {
-                                            narrativeTray.isDragging = true
-                                            narrativeListView.dragStartY = centroid.scenePosition.y
+
+                                            if (narrativeTray.isDragging) {
+                                                var delta = centroid.scenePosition.y - narrativeListView.dragStartY
+                                                if (delta > 0) {
+                                                    narrativeTray.height = Math.max(0, narrativeTray.expandedHeight - delta)
+                                                } else {
+                                                    narrativeTray.height = narrativeTray.expandedHeight
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -3983,8 +3988,8 @@ Window {
     // WiFi popup
         Popup {
             id: wifiPopup
-            width: 500
-            height: 300
+            width: 450
+            height: 240
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -3997,16 +4002,25 @@ Window {
             onClosed: backend.stopWifiTimer()
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
-                radius: 8
-                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
-                border.width: 1
+                color: "#414141"
+                topLeftRadius: 0
+                topRightRadius: 8
+                bottomLeftRadius: 0
+                bottomRightRadius: 0
+                // Inner shadow approximation
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    radius: parent.radius
+                    border.color: Qt.rgba(0, 0, 0, 0.1)
+                    border.width: 1
+                }
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 10
-                spacing: 5
+                anchors.margins: 12
+                spacing: 8
 
                 Text {
                     text: "WiFi Networks"
@@ -4102,7 +4116,7 @@ Window {
                 Button {
                     text: "Interface Info"
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 22
+                    Layout.preferredHeight: 18
                     onClicked: debugDialog.open()
 
                     background: Rectangle {
@@ -4113,7 +4127,7 @@ Window {
                     contentItem: Text {
                         text: parent.text
                         color: backend.theme === "dark" ? "#cccccc" : "#666666"
-                        font.pixelSize: 9
+                        font.pixelSize: 8
                         horizontalAlignment: Text.AlignHCenter
                         verticalAlignment: Text.AlignVCenter
                     }
@@ -4132,7 +4146,7 @@ Window {
 
                     delegate: Rectangle {
                         width: ListView.view.width
-                        height: 32
+                        height: 28
                         color: backend.theme === "dark" ? "#111111" : "#e0e0e0"
                         radius: 3
 
@@ -4634,7 +4648,7 @@ Window {
         Popup {
             id: updatePopup
             width: 450
-            height: 300
+            height: 240
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -4642,16 +4656,25 @@ Window {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
-                radius: 8
-                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
-                border.width: 1
+                color: "#414141"
+                topLeftRadius: 0
+                topRightRadius: 8
+                bottomLeftRadius: 0
+                bottomRightRadius: 0
+                // Inner shadow approximation
+                Rectangle {
+                    anchors.fill: parent
+                    color: "transparent"
+                    radius: parent.radius
+                    border.color: Qt.rgba(0, 0, 0, 0.1)
+                    border.width: 1
+                }
             }
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 15
-                spacing: 10
+                anchors.margins: 12
+                spacing: 8
 
                 // Title and last checked
                 RowLayout {
@@ -4676,37 +4699,37 @@ Window {
                 // Current version - compact single line
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 32
                     color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 7
+                        anchors.margins: 5
                         spacing: 8
 
                         Text {
                             text: "\uf126"
                             font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 14
+                            font.pixelSize: 12
                             color: "#2196F3"
                             Layout.preferredWidth: 20
                         }
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 0
 
                             Text {
                                 text: "Current: " + (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
-                                font.pixelSize: 11
+                                font.pixelSize: 10
                                 font.bold: true
                                 color: (backend && backend.theme === "dark") ? "white" : "black"
                             }
 
                             Text {
                                 text: (backend && backend.currentVersionInfo) ? (backend.currentVersionInfo.message || "Unable to retrieve current version") : "Waiting for backend..."
-                                font.pixelSize: 9
+                                font.pixelSize: 8
                                 color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
@@ -4718,37 +4741,37 @@ Window {
                 // Latest version - compact single line
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 40
+                    Layout.preferredHeight: 32
                     color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                     radius: 4
 
                     RowLayout {
                         anchors.fill: parent
-                        anchors.margins: 7
+                        anchors.margins: 5
                         spacing: 8
 
                         Text {
                             text: "\uf062"
                             font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 14
+                            font.pixelSize: 12
                             color: "#4CAF50"
                             Layout.preferredWidth: 20
                         }
 
                         ColumnLayout {
                             Layout.fillWidth: true
-                            spacing: 2
+                            spacing: 0
 
                             Text {
                                 text: "Latest: " + (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
-                                font.pixelSize: 11
+                                font.pixelSize: 10
                                 font.bold: true
                                 color: (backend && backend.theme === "dark") ? "white" : "black"
                             }
 
                             Text {
                                 text: (backend && backend.latestVersionInfo) ? (backend.latestVersionInfo.message || "Unable to retrieve latest version") : "Waiting for backend..."
-                                font.pixelSize: 9
+                                font.pixelSize: 8
                                 color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
