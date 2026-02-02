@@ -438,6 +438,13 @@ Window {
         anchors.right: parent.right
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
         anchors.rightMargin: (1.0 - backgroundWindy.progress) * 12
+        
+        Binding {
+            target: backgroundWindy
+            property: "anchors.right"
+            value: videoCard.left
+            when: typeof videoCard !== 'undefined'
+        }
 
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
@@ -454,6 +461,9 @@ Window {
             readonly property bool isHighRes: backend && backend.isHighResolution
 
             // Width is 1/4 of total safeArea width + expansion based on drag
+            // When anchors.right is bound to videoCard.left, we don't need explicit width
+            // but we must ensure it doesn't conflict. 
+            // If anchors.right is set, width is ignored in favor of anchors.
             width: isDragging ? manualWidth : (minWidth + expansionFactor * (root.width - minWidth))
             z: 0 // Behind centralContent
             visible: !!(!backend || !backend.isLoading)
@@ -569,7 +579,7 @@ Window {
                 id: radarColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1
+                Layout.preferredWidth: Math.max(0.01, 1.0 - videoCard.progress)
                 color: "transparent"
                 radius: 0
                 clip: false
@@ -636,6 +646,7 @@ Window {
                         radius: 17
                         visible: !!backend
                         z: 10
+                        opacity: 1.0 - videoCard.progress
 
                         RowLayout {
                             id: weatherButtonsRow
@@ -731,12 +742,12 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (1.0 - backgroundWindy.progress)
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1.0
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
                 clip: false
-                opacity: 1.0 - backgroundWindy.progress
+                opacity: (1.0 - backgroundWindy.progress)
                 visible: opacity > 0 && !plotCard.isHighResolution
                 property bool isHighResolution: backend && backend.isHighResolution
 
@@ -816,13 +827,13 @@ Window {
                 id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
+                Layout.preferredWidth: 1.0
                 // When in high-resolution mode, the globe is shown at the top, so we make the background 
                 // transparent to allow the globe to sit directly on the app background/Windy view.
                 color: (isHighResolution) ? "transparent" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
                 radius: 8
                 clip: true
-                opacity: 1.0 - backgroundWindy.progress
+                opacity: (1.0 - backgroundWindy.progress)
                 visible: opacity > 0
                 property string launchViewMode: "list"
                 property bool calendarLoaded: false
@@ -1496,14 +1507,31 @@ Window {
             // Column 4: Videos or Next Race Location
             Rectangle {
                 id: videoCard
-                Layout.fillWidth: true
+                // Original width logic: 25% of screen when not expanded, 50% when expanded.
+                // We use fixed width for dragging, but it must account for Windy expansion.
+                readonly property real baseWidth: root.width / 4
+                readonly property real currentMinWidth: baseWidth * (1.0 - backgroundWindy.progress)
+                readonly property real currentMaxWidth: Math.min(490, (root.width / 2) * (1.0 - backgroundWindy.progress))
+
+                width: videoCard.isDragging ? videoCard.manualWidth : (currentMinWidth + videoCard.videoExpansionFactor * (currentMaxWidth - currentMinWidth))
+                Layout.fillWidth: false
                 Layout.fillHeight: true
-                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
+                Layout.preferredWidth: width
                 color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
+
+                property bool isDragging: false
+                property real manualWidth: currentMinWidth
+                property real videoExpansionFactor: 0.0
+                readonly property real progress: Math.max(0, Math.min(1, (width - currentMinWidth) / Math.max(1, currentMaxWidth - currentMinWidth)))
+
+                Behavior on width { 
+                    enabled: !videoCard.isDragging
+                    NumberAnimation { duration: 300; easing.type: Easing.OutQuart } 
+                }
 
                 Item {
                     anchors.fill: parent
@@ -1535,6 +1563,53 @@ Window {
                             id: youtubeView
                             profile: youtubeProfile
                             anchors.fill: parent
+                            
+                            // MouseArea for expansion gesture
+                            MouseArea {
+                                anchors.left: parent.left
+                                anchors.top: parent.top
+                                anchors.bottom: parent.bottom
+                                width: 40
+                                z: 10
+                                
+                                property real startX: 0
+                                property real initialWidth: 0
+                                
+                                onPressed: (mouse) => {
+                                    startX = mapToItem(safeArea, mouse.x, mouse.y).x
+                                    initialWidth = videoCard.width
+                                    videoCard.manualWidth = initialWidth
+                                    videoCard.isDragging = true
+                                }
+                                
+                                onPositionChanged: (mouse) => {
+                                    if (videoCard.isDragging) {
+                                        var currentX = mapToItem(safeArea, mouse.x, mouse.y).x
+                                        var deltaX = startX - currentX // Dragging left increases width
+                                        videoCard.manualWidth = Math.max(videoCard.currentMinWidth, Math.min(videoCard.currentMaxWidth, initialWidth + deltaX))
+                                    }
+                                }
+                                
+                                onReleased: (mouse) => {
+                                    if (videoCard.isDragging) {
+                                        var p = videoCard.progress
+                                        var threshold = 0.15
+                                        if (videoCard.videoExpansionFactor === 0.0) {
+                                            videoCard.videoExpansionFactor = (p > threshold) ? 1.0 : 0.0
+                                        } else {
+                                            videoCard.videoExpansionFactor = (p < (1.0 - threshold)) ? 0.0 : 1.0
+                                        }
+                                        videoCard.isDragging = false
+                                    }
+                                }
+                                
+                                onCanceled: {
+                                    if (videoCard.isDragging) {
+                                        videoCard.isDragging = false
+                                    }
+                                }
+                            }
+
                             // Performance: Disable layers to reduce GPU/Compositor load on Pi
                             layer.enabled: false
                             layer.smooth: true
