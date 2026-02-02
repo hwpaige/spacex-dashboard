@@ -579,7 +579,7 @@ Window {
                 id: radarColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(0.01, 1.0 - videoCard.progress)
+                Layout.preferredWidth: Math.max(0.01, (1.0 - videoCard.progress) * (1.0 - backgroundWindy.progress))
                 color: "transparent"
                 radius: 0
                 clip: false
@@ -742,7 +742,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1.0
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1.0 - backgroundWindy.progress
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
@@ -827,7 +827,7 @@ Window {
                 id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1.0
+                Layout.preferredWidth: 1.0 - backgroundWindy.progress
                 // When in high-resolution mode, the globe is shown at the top, so we make the background 
                 // transparent to allow the globe to sit directly on the app background/Windy view.
                 color: (isHighResolution) ? "transparent" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
