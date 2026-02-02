@@ -1947,11 +1947,78 @@ Window {
                                 if (weather && weather.temperature_f !== undefined) {
                                     var wind = (weather.wind_speed_kts || 0).toFixed(1);
                                     var gusts = (weather.wind_gusts_kts || 0).toFixed(1);
-                                    var direction = weather.wind_direction_cardinal || "";
-                                    return wind + "g" + gusts + " kts " + direction + " | " +
-                                           (weather.temperature_f || 0).toFixed(1) + "°F";
+                                    return wind + "g" + gusts + " kts";
                                 }
                                 return "Weather loading...";
+                            }
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                            font.pixelSize: 14
+                            font.family: "D-DIN"
+                            font.bold: true
+                            Layout.alignment: Qt.AlignVCenter
+                        }
+
+                        // Compass Rose for Wind Direction
+                        Item {
+                            width: 24
+                            height: 24
+                            Layout.alignment: Qt.AlignVCenter
+                            Layout.leftMargin: 4
+                            Layout.rightMargin: 4
+                            visible: {
+                                var weather = backend ? backend.weather : null;
+                                return weather && weather.wind_direction_cardinal !== undefined;
+                            }
+
+                            Rectangle {
+                                anchors.fill: parent
+                                radius: width / 2
+                                color: "transparent"
+                                border.color: (backend && backend.theme === "dark") ? "#66ffffff" : "#66000000"
+                                border.width: 1
+
+                                // Inner cardinal letter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: {
+                                        var weather = backend ? backend.weather : null;
+                                        return weather ? (weather.wind_direction_cardinal || "") : "";
+                                    }
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                    font.pixelSize: 10
+                                    font.family: "D-DIN"
+                                    font.bold: true
+                                }
+
+                                // Direction arrow/pointer
+                                Item {
+                                    anchors.centerIn: parent
+                                    width: parent.width
+                                    height: parent.height
+                                    rotation: {
+                                        var weather = backend ? backend.weather : null;
+                                        return weather ? (weather.wind_direction || 0) : 0;
+                                    }
+
+                                    Text {
+                                        anchors.top: parent.top
+                                        anchors.topMargin: -2
+                                        anchors.horizontalCenter: parent.horizontalCenter
+                                        text: "▼"
+                                        font.pixelSize: 8
+                                        color: "#4CAF50"
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            text: {
+                                var weather = backend ? backend.weather : null;
+                                if (weather && weather.temperature_f !== undefined) {
+                                    return (weather.temperature_f || 0).toFixed(1) + "°F";
+                                }
+                                return "";
                             }
                             color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 14
