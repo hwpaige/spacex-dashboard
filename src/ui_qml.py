@@ -1835,8 +1835,8 @@ Window {
                 // Left pill (time and weather) - FIXED WIDTH
                 Rectangle {
                     id: weatherPill
-                    Layout.preferredWidth: 250
-                    Layout.maximumWidth: 250
+                    Layout.preferredWidth: 300
+                    Layout.maximumWidth: 300
                     height: 28
                     radius: 14
                     color: "transparent"
@@ -1860,24 +1860,11 @@ Window {
                         spacing: 0
                         opacity: 1.0 - Math.min(1.0, weatherTray.height / 56.0)
 
-                        Text {
-                            text: backend ? backend.currentTime : "--:--:--"
-                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                            font.pixelSize: 14
-                            font.family: "D-DIN"
-                            font.bold: true
-                            font.styleName: "Regular"
-                            // Use tabular numbers to prevent jitter as the clock ticks
-                            font.features: { "tnum": 1 }
-                            Layout.alignment: Qt.AlignVCenter
-                            Layout.preferredWidth: 58
-                            horizontalAlignment: Text.AlignLeft
-                        }
                         Item {
                             Layout.preferredWidth: 14
                             Layout.preferredHeight: 14
                             Layout.alignment: Qt.AlignVCenter
-                            Layout.rightMargin: 8 // Add margin between indicator and weather text
+                            Layout.rightMargin: 8 // Space between indicator and time
 
                             Canvas {
                                 id: weatherProgressRing
@@ -1941,21 +1928,120 @@ Window {
                             }
                         }
                         Text {
-                            id: weatherText
-                            text: {
-                                var weather = backend ? backend.weather : null;
-                                if (weather && weather.temperature_f !== undefined) {
-                                    var wind = (weather.wind_speed_kts || 0).toFixed(1);
-                                    var gusts = (weather.wind_gusts_kts || 0).toFixed(1);
-                                    return wind + "g" + gusts + " kts";
-                                }
-                                return "Weather loading...";
-                            }
+                            text: backend ? backend.currentTime : "--:--:--"
                             color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 14
                             font.family: "D-DIN"
                             font.bold: true
+                            font.styleName: "Regular"
+                            // Use tabular numbers to prevent jitter as the clock ticks
+                            font.features: { "tnum": 1 }
                             Layout.alignment: Qt.AlignVCenter
+                            Layout.preferredWidth: 58
+                            Layout.rightMargin: 4 // Space between time and gauge
+                            horizontalAlignment: Text.AlignLeft
+                        }
+                        // Graphical Wind Indicator
+                        Item {
+                            id: graphicalWindIndicator
+                            width: 125
+                            height: 28
+                            Layout.alignment: Qt.AlignVCenter
+                            visible: {
+                                var weather = backend ? backend.weather : null;
+                                return weather && weather.temperature_f !== undefined;
+                            }
+
+                            property real sustainedWind: {
+                                var weather = backend ? backend.weather : null;
+                                return weather ? (weather.wind_speed_kts || 0) : 0;
+                            }
+                            property real gustSpeed: {
+                                var weather = backend ? backend.weather : null;
+                                return weather ? (weather.wind_gusts_kts || 0) : 0;
+                            }
+                            property real maxScale: {
+                                var baseMax = Math.max(sustainedWind, gustSpeed);
+                                if (baseMax < 5) return 5;
+                                return Math.ceil((baseMax + 0.1) / 5) * 5;
+                            }
+
+                            // Background bar
+                            Rectangle {
+                                x: 5; y: 4; width: 100; height: 10
+                                radius: 5
+                                color: (backend && backend.theme === "dark") ? "#333333" : "#E0E0E0"
+                            }
+
+                            // Sustained wind fill
+                            Rectangle {
+                                id: sustainedFill
+                                x: 5; y: 4
+                                height: 10
+                                radius: 5
+                                width: Math.min(100, (graphicalWindIndicator.sustainedWind / graphicalWindIndicator.maxScale) * 100)
+                                visible: width > 0
+                                gradient: Gradient {
+                                    orientation: Gradient.Horizontal
+                                    GradientStop { position: 0.0; color: "#26A69A" }
+                                    GradientStop { position: 1.0; color: "#FFB917" }
+                                }
+                            }
+
+                            // Vertical gust bar
+                            Rectangle {
+                                x: 5 + Math.min(100, (graphicalWindIndicator.gustSpeed / graphicalWindIndicator.maxScale) * 100) - 1.5
+                                y: 4.5
+                                width: 3
+                                height: 9
+                                color: {
+                                    var ratio = graphicalWindIndicator.gustSpeed / graphicalWindIndicator.maxScale;
+                                    if (ratio < 0.33) return "#26A69A"; // Low wind color
+                                    if (ratio < 0.66) return "#FFB917"; // Medium wind color
+                                    return "#FB8A10"; // High wind (gust) color
+                                }
+                                visible: graphicalWindIndicator.gustSpeed > 0
+                            }
+
+                            // Scale labels and ticks
+                            Repeater {
+                                model: {
+                                    var count = 4;
+                                    var step = graphicalWindIndicator.maxScale / (count - 1);
+                                    var labels = [];
+                                    for (var i = 0; i < count; i++) {
+                                        labels.push(Math.round(step * i));
+                                    }
+                                    return labels;
+                                }
+                                Item {
+                                    property real xPos: 5 + (modelData / graphicalWindIndicator.maxScale) * 100
+                                    
+                                    // Scale labels
+                                    Text {
+                                        x: parent.xPos - width/2
+                                        y: 14
+                                        text: modelData
+                                        font.pixelSize: 10
+                                        font.family: "D-DIN"
+                                        color: (backend && backend.theme === "dark") ? "#AAAAAA" : "#666666"
+                                    }
+                                }
+                            }
+
+                            // "kts" label aligned with bar
+                            Text {
+                                x: 107
+                                y: 4
+                                width: 18
+                                height: 10
+                                text: "kts"
+                                font.pixelSize: 10
+                                font.family: "D-DIN"
+                                color: (backend && backend.theme === "dark") ? "#AAAAAA" : "#555555"
+                                horizontalAlignment: Text.AlignRight
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
 
                         // Compass Rose for Wind Direction
@@ -2031,7 +2117,7 @@ Window {
                     Popup {
                         id: weatherTray
                         x: 0
-                        width: 250
+                        width: 300
                         height: 0
                         // Sit at the bottom and grow UP
                         y: parent.height - height
@@ -2053,10 +2139,10 @@ Window {
                         background: Item {
                             Rectangle {
                                 anchors.fill: parent
-                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                                 radius: 14
                                 border.width: 1
-                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                             }
                         }
                         
@@ -2325,7 +2411,7 @@ Window {
                                 GradientStop { position: 0.0; color: "transparent" }
                                 GradientStop { 
                                     position: 1.0; 
-                                    color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                    color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0" 
                                 }
                             }
                         }
@@ -2573,11 +2659,10 @@ Window {
                                 anchors.leftMargin: -4
                                 anchors.rightMargin: -4
                                 anchors.bottomMargin: -4
-                                // Matching location drawer opacity (approx 93% / #EE)
-                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                                 radius: 14
                                 border.width: 1
-                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                             }
                         }
                         
@@ -2993,7 +3078,7 @@ Window {
                                         GradientStop { position: 0.0; color: "transparent" }
                                         GradientStop { 
                                             position: 1.0; 
-                                            color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                            color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0" 
                                         }
                                     }
                                 }
@@ -3509,10 +3594,10 @@ Window {
                             background: Item {
                                 Rectangle {
                                     anchors.fill: parent
-                                    color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                    color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
                                     radius: 14
                                     border.width: 1
-                                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                                    border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                                 }
                             }
                             
@@ -3688,7 +3773,7 @@ Window {
                                     GradientStop { position: 0.0; color: "transparent" }
                                     GradientStop { 
                                         position: 1.0; 
-                                        color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0" 
+                                        color: (backend && backend.theme === "dark") ? "#181818" : "#f5f5f5"
                                     }
                                 }
                             }
@@ -3887,10 +3972,10 @@ Window {
                         background: Item {
                             Rectangle {
                                 anchors.fill: parent
-                                color: backend.theme === "dark" ? "#ee2a2e2e" : "#eef0f0f0"
+                                color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                                 radius: 14
                                 border.width: 1
-                                border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                             }
                         }
                         
