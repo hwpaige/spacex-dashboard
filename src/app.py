@@ -550,6 +550,7 @@ class Backend(QObject):
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
         profiler.mark("Backend: Initializing EventModel End")
         self._launch_trends_cache = {}  # Cache for launch trends series
+        self._first_weather_fetched = False
         try:
             trends_cache = load_cache_from_file(RUNTIME_CACHE_FILE_CHART_TRENDS)
             if trends_cache:
@@ -1778,7 +1779,7 @@ class Backend(QObject):
         active_weather = self._weather_data.get(self._location, {})
         # Enrich with wind_direction_cardinal
         # Prioritize live_wind if available
-        if 'live_wind' in active_weather and active_weather['live_wind']:
+        if self._first_weather_fetched and 'live_wind' in active_weather and active_weather['live_wind']:
             live = active_weather['live_wind']
             active_weather['wind_speed_kts'] = live.get('speed_kts', active_weather.get('wind_speed_kts', 0))
             active_weather['wind_gusts_kts'] = live.get('gust_kts', active_weather.get('wind_gusts_kts', 0))
@@ -2620,6 +2621,7 @@ class Backend(QObject):
             logger.warning("Backend: Received empty weather data in _on_weather_updated")
             return
 
+        self._first_weather_fetched = True
         self._weather_data = weather_data
         
         # Extract forecast for active location if available, else use dummy/simulated forecast

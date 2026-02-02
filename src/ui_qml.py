@@ -1917,9 +1917,9 @@ Window {
                                 color: {
                                     var weather = backend ? backend.weather : null;
                                     if (weather && weather.is_live_wind) {
-                                        return "#4CAF50"; // Green (matching WiFi/Lock icons)
+                                        return "#4CAF50"; // Green (Live)
                                     }
-                                    return "#F44336"; // Red (matching WiFi/Lock disconnected/locked)
+                                    return "#F44336"; // Red (METAR)
                                 }
                                 visible: {
                                     var weather = backend ? backend.weather : null;
@@ -1938,13 +1938,13 @@ Window {
                             font.features: { "tnum": 1 }
                             Layout.alignment: Qt.AlignVCenter
                             Layout.preferredWidth: 58
-                            Layout.rightMargin: 4 // Space between time and gauge
+                            Layout.rightMargin: 0 // Space between time and gauge
                             horizontalAlignment: Text.AlignLeft
                         }
                         // Graphical Wind Indicator
                         Item {
                             id: graphicalWindIndicator
-                            width: 125
+                            width: 120
                             height: 28
                             Layout.alignment: Qt.AlignVCenter
                             visible: {
@@ -1968,7 +1968,7 @@ Window {
 
                             // Background bar
                             Rectangle {
-                                x: 5; y: 4; width: 100; height: 10
+                                x: 0; y: 4; width: 100; height: 10
                                 radius: 5
                                 color: (backend && backend.theme === "dark") ? "#333333" : "#E0E0E0"
                             }
@@ -1976,7 +1976,7 @@ Window {
                             // Sustained wind fill
                             Rectangle {
                                 id: sustainedFill
-                                x: 5; y: 4
+                                x: 0; y: 4
                                 height: 10
                                 radius: 5
                                 width: Math.min(100, (graphicalWindIndicator.sustainedWind / graphicalWindIndicator.maxScale) * 100)
@@ -1990,7 +1990,7 @@ Window {
 
                             // Vertical gust bar
                             Rectangle {
-                                x: 5 + Math.min(100, (graphicalWindIndicator.gustSpeed / graphicalWindIndicator.maxScale) * 100) - 1.5
+                                x: 0 + Math.min(100, (graphicalWindIndicator.gustSpeed / graphicalWindIndicator.maxScale) * 100) - 1.5
                                 y: 4.5
                                 width: 3
                                 height: 9
@@ -2015,7 +2015,7 @@ Window {
                                     return labels;
                                 }
                                 Item {
-                                    property real xPos: 5 + (modelData / graphicalWindIndicator.maxScale) * 100
+                                    property real xPos: 0 + (modelData / graphicalWindIndicator.maxScale) * 100
                                     
                                     // Scale labels
                                     Text {
@@ -2031,7 +2031,7 @@ Window {
 
                             // "kts" label aligned with bar
                             Text {
-                                x: 107
+                                x: 98
                                 y: 4
                                 width: 18
                                 height: 10
@@ -4217,7 +4217,7 @@ Window {
             onClosed: backend.stopWifiTimer()
 
             background: Rectangle {
-                color: "#414141"
+                color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
                 topLeftRadius: 0
                 topRightRadius: 8
                 bottomLeftRadius: 0
@@ -4486,7 +4486,7 @@ Window {
             }
 
             background: Rectangle {
-                color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
                 radius: 8
                 border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
                 border.width: 1
@@ -4863,7 +4863,7 @@ Window {
         Popup {
             id: updatePopup
             width: 450
-            height: 240
+            height: 220
             x: (parent.width - width) / 2
             y: (parent.height - height) / 2
             modal: true
@@ -4871,7 +4871,7 @@ Window {
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
 
             background: Rectangle {
-                color: "#414141"
+                color: (backend && backend.theme === "dark") ? "#cc181818" : "#ccf5f5f5"
                 topLeftRadius: 0
                 topRightRadius: 8
                 bottomLeftRadius: 0
@@ -4888,8 +4888,8 @@ Window {
 
             ColumnLayout {
                 anchors.fill: parent
-                anchors.margins: 12
-                spacing: 8
+                anchors.margins: 10
+                spacing: 6
 
                 // Title and last checked
                 RowLayout {
@@ -4898,7 +4898,7 @@ Window {
 
                     Text {
                         text: (backend && backend.updateAvailable) ? "Update Available" : "Software Update"
-                        font.pixelSize: 16
+                        font.pixelSize: 15
                         font.bold: true
                         color: (backend && backend.theme === "dark") ? "white" : "black"
                     }
@@ -4911,206 +4911,251 @@ Window {
                     }
                 }
 
-                // Current version - compact single line
-                Rectangle {
+                // Compact Quick Options Grid (Tesla style)
+                GridLayout {
+                    columns: 2
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
-                    radius: 4
+                    columnSpacing: 8
+                    rowSpacing: 6
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        spacing: 8
+                    // Current version
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
+                        radius: 6
 
-                        Text {
-                            text: "\uf126"
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 12
-                            color: "#2196F3"
-                            Layout.preferredWidth: 20
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 6
 
                             Text {
-                                text: "Current: " + (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
-                                font.pixelSize: 10
-                                font.bold: true
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                text: "\uf126"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 12
+                                color: "#2196F3"
+                                Layout.preferredWidth: 15
                             }
 
-                            Text {
-                                text: (backend && backend.currentVersionInfo) ? (backend.currentVersionInfo.message || "Unable to retrieve current version") : "Waiting for backend..."
-                                font.pixelSize: 8
-                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                elide: Text.ElideRight
+                            ColumnLayout {
                                 Layout.fillWidth: true
+                                spacing: 0
+                                Text {
+                                    text: "Current"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                }
+                                Text {
+                                    text: (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: (backend && backend.currentVersionInfo) ? (backend.currentVersionInfo.message || "") : ""
+                                    font.pixelSize: 8
+                                    color: (backend && backend.theme === "dark") ? "#999999" : "#777777"
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                    visible: text !== ""
+                                }
                             }
                         }
                     }
-                }
 
-                // Latest version - compact single line
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 32
-                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
-                    radius: 4
+                    // Latest version
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
+                        radius: 6
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 5
-                        spacing: 8
-
-                        Text {
-                            text: "\uf062"
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 12
-                            color: "#4CAF50"
-                            Layout.preferredWidth: 20
-                        }
-
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 0
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 6
 
                             Text {
-                                text: "Latest: " + (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
-                                font.pixelSize: 10
-                                font.bold: true
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                text: "\uf062"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 12
+                                color: "#4CAF50"
+                                Layout.preferredWidth: 15
                             }
 
-                            Text {
-                                text: (backend && backend.latestVersionInfo) ? (backend.latestVersionInfo.message || "Unable to retrieve latest version") : "Waiting for backend..."
-                                font.pixelSize: 8
-                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                elide: Text.ElideRight
+                            ColumnLayout {
                                 Layout.fillWidth: true
+                                spacing: 0
+                                Text {
+                                    text: "Latest"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                }
+                                Text {
+                                    text: (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
+                                    font.pixelSize: 10
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                }
+                                Text {
+                                    text: (backend && backend.latestVersionInfo) ? (backend.latestVersionInfo.message || "") : ""
+                                    font.pixelSize: 8
+                                    color: (backend && backend.theme === "dark") ? "#999999" : "#777777"
+                                    elide: Text.ElideRight
+                                    Layout.fillWidth: true
+                                    visible: text !== ""
+                                }
                             }
                         }
                     }
-                }
 
-                // Launch Tray Manual Override
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 40
-                    color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
-                    radius: 4
+                    // Always Show Launch Banner (Tesla style toggle box)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
+                        radius: 6
 
-                    RowLayout {
-                        anchors.fill: parent
-                        anchors.margins: 7
-                        spacing: 8
-
-                        Text {
-                            text: "\uf06e"
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 14
-                            color: "#FF9800"
-                            Layout.preferredWidth: 20
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                            cursorShape: Qt.PointingHandCursor
                         }
 
-                        ColumnLayout {
-                            Layout.fillWidth: true
-                            spacing: 2
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 4
+
                             Text {
-                                text: "Always Show Launch Banner"
+                                text: "\uf06e"
+                                font.family: "Font Awesome 5 Free"
                                 font.pixelSize: 11
-                                font.bold: true
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                color: "#FF9800"
+                                Layout.preferredWidth: 14
                             }
-                            Text {
-                                text: "Override automatic 1-hour visibility rule"
-                                font.pixelSize: 9
-                                color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                            }
-                        }
 
-                        Rectangle {
-                            width: 40
-                            height: 20
-                            radius: 10
-                            color: backend.launchTrayManualMode ? "#4CAF50" : (backend.theme === "dark" ? "#333" : "#ccc")
-                            Behavior on color { ColorAnimation { duration: 200 } }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 0
+                                Text {
+                                    text: "Banner"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+                                Text {
+                                    text: "Always"
+                                    font.pixelSize: 8
+                                    color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                }
+                            }
 
                             Rectangle {
-                                width: 16
-                                height: 16
-                                radius: 8
-                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
-                                y: 2
-                                color: "white"
-                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                width: 26
+                                height: 14
+                                radius: 7
+                                color: backend.launchTrayManualMode ? "#4CAF50" : (backend.theme === "dark" ? "#333" : "#ccc")
+                                Behavior on color { ColorAnimation { duration: 200 } }
+
+                                Rectangle {
+                                    width: 10
+                                    height: 10
+                                    radius: 5
+                                    x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
+                                    y: 2
+                                    color: "white"
+                                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                }
+                            }
+                        }
+                    }
+
+                    // Stable/Beta Selector (Tesla style tile)
+                    Rectangle {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 50
+                        color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
+                        radius: 6
+
+                        RowLayout {
+                            anchors.fill: parent
+                            anchors.margins: 6
+                            spacing: 4
+
+                            Text {
+                                text: "\uf121"
+                                font.family: "Font Awesome 5 Free"
+                                font.pixelSize: 11
+                                color: backend.targetBranch === "master" ? "#2196F3" : "#FF9800"
+                                Layout.preferredWidth: 14
                             }
 
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                                cursorShape: Qt.PointingHandCursor
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                spacing: 1
+                                Text {
+                                    text: "Branch"
+                                    font.pixelSize: 9
+                                    font.bold: true
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+                                Row {
+                                    spacing: 0
+                                    Rectangle {
+                                        width: 45
+                                        height: 18
+                                        color: backend.targetBranch === "master" ? "#2196F3" : (backend.theme === "dark" ? "#303030" : "#d0d0d0")
+                                        radius: 4
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Stable"
+                                            color: backend.targetBranch === "master" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                            font.pixelSize: 9
+                                            font.bold: backend.targetBranch === "master"
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: backend.setTargetBranch("master")
+                                        }
+                                    }
+                                    Rectangle {
+                                        width: 45
+                                        height: 18
+                                        color: backend.targetBranch === "beta" ? "#FF9800" : (backend.theme === "dark" ? "#303030" : "#d0d0d0")
+                                        radius: 4
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: "Beta"
+                                            color: backend.targetBranch === "beta" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
+                                            font.pixelSize: 9
+                                            font.bold: backend.targetBranch === "beta"
+                                        }
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: backend.setTargetBranch("beta")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                 }
 
-                // Branch Selection and Update Now
+                // Update Now button
                 RowLayout {
                     Layout.fillWidth: true
                     Layout.alignment: Qt.AlignHCenter
                     spacing: 15
 
-                    Row {
-                        spacing: 15
-                        Layout.alignment: Qt.AlignVCenter
-                        Row {
-                            spacing: 0
-                            anchors.verticalCenter: parent.verticalCenter
-                            Rectangle {
-                                width: 70
-                                height: 26
-                                color: backend.targetBranch === "master" ? "#2196F3" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
-                                radius: 4
-                                Rectangle { width: 4; height: parent.height; color: parent.color; anchors.right: parent.right; visible: backend.targetBranch === "master" } // square off right
-                                
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Stable"
-                                    color: backend.targetBranch === "master" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
-                                    font.pixelSize: 11
-                                    font.bold: backend.targetBranch === "master"
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: backend.setTargetBranch("master")
-                                }
-                            }
-                            Rectangle {
-                                width: 70
-                                height: 26
-                                color: backend.targetBranch === "beta" ? "#FF9800" : (backend.theme === "dark" ? "#303030" : "#e0e0e0")
-                                radius: 4
-                                Rectangle { width: 4; height: parent.height; color: parent.color; anchors.left: parent.left; visible: backend.targetBranch === "beta" } // square off left
-
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: "Beta"
-                                    color: backend.targetBranch === "beta" ? "white" : (backend.theme === "dark" ? "#aaa" : "#555")
-                                    font.pixelSize: 11
-                                    font.bold: backend.targetBranch === "beta"
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: backend.setTargetBranch("beta")
-                                }
-                            }
-                        }
-                    }
-
-                    // "Update Now" moved here next to branch selector
+                    // "Update Now"
                     Button {
                         text: "Update Now"
                         Layout.preferredWidth: 105
@@ -5132,7 +5177,7 @@ Window {
                         }
 
                         contentItem: Row {
-                            spacing: 4
+                            spacing: 6
                             anchors.centerIn: parent
                             Text {
                                 text: "\uf062"
@@ -5146,6 +5191,7 @@ Window {
                                 text: "Update Now"
                                 color: "white"
                                 font.pixelSize: 11
+                                font.bold: true
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
                                 anchors.verticalCenter: parent.verticalCenter
@@ -5184,7 +5230,7 @@ Window {
 
                     Button {
                         text: "Restart"
-                        Layout.preferredWidth: 80
+                        Layout.preferredWidth: 85
                         Layout.preferredHeight: 28
                         onClicked: {
                             console.log("Restart clicked")
@@ -5196,23 +5242,24 @@ Window {
                             radius: 3
                         }
 
-                        contentItem: RowLayout {
-                            spacing: 4
+                        contentItem: Row {
+                            spacing: 6
+                            anchors.centerIn: parent
                             Text {
                                 text: "\uf011"
                                 font.family: "Font Awesome 5 Free"
                                 font.pixelSize: 11
                                 font.weight: Font.Black
                                 color: (backend && backend.theme === "dark") ? "white" : "black"
-                                Layout.alignment: Qt.AlignVCenter
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                             Text {
                                 text: "Restart"
-                                color: backend.theme === "dark" ? "white" : "black"
+                                color: (backend && backend.theme === "dark") ? "white" : "black"
                                 font.pixelSize: 11
                                 horizontalAlignment: Text.AlignHCenter
                                 verticalAlignment: Text.AlignVCenter
-                                Layout.alignment: Qt.AlignVCenter
+                                anchors.verticalCenter: parent.verticalCenter
                             }
                         }
                     }
