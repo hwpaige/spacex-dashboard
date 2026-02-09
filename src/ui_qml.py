@@ -570,16 +570,17 @@ Window {
             visible: !!(!backend || !backend.isLoading)
 
             RowLayout {
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            spacing: 5
+                id: mainRowLayout
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                spacing: 5
 
             // Column 1: Radar (Transparent Spacer with UI Overlay)
             Rectangle {
                 id: radarColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: Math.max(0.01, (1.0 - videoCard.progress) * (1.0 - backgroundWindy.progress))
+                Layout.preferredWidth: 1.0
                 color: "transparent"
                 radius: 0
                 clip: false
@@ -644,9 +645,11 @@ Window {
                         height: 34
                         color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
                         radius: 17
-                        visible: !!backend
+                        visible: !!backend && opacity > 0
                         z: 10
-                        opacity: 1.0 - videoCard.progress
+                        opacity: 1.0
+                        layer.enabled: backgroundWindy.isDragging || widthAnimation.running || videoCard.isDragging || videoWidthAnimation.running
+                        layer.smooth: true
 
                         RowLayout {
                             id: weatherButtonsRow
@@ -742,7 +745,7 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : 1.0 - backgroundWindy.progress
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (1.0 - backgroundWindy.progress)
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
@@ -827,7 +830,7 @@ Window {
                 id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1.0 - backgroundWindy.progress
+                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
                 // When in high-resolution mode, the globe is shown at the top, so we make the background 
                 // transparent to allow the globe to sit directly on the app background/Windy view.
                 color: (isHighResolution) ? "transparent" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
@@ -1530,7 +1533,11 @@ Window {
 
                 Behavior on width { 
                     enabled: !videoCard.isDragging
-                    NumberAnimation { duration: 300; easing.type: Easing.OutQuart } 
+                    NumberAnimation { 
+                        id: videoWidthAnimation
+                        duration: 300 
+                        easing.type: Easing.OutQuart 
+                    } 
                 }
 
                 Item {
@@ -1553,8 +1560,8 @@ Window {
                         radius: 8
                         color: backend.theme === "dark" ? "#111111" : "#f8f8f8"
                         clip: true
-                        // Performance: Disable layers to reduce GPU load on Pi
-                        layer.enabled: false
+                        // Performance: Enable layer during animations to keep it smooth
+                        layer.enabled: videoCard.isDragging || videoWidthAnimation.running
                         layer.smooth: true
 
                         // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
@@ -1610,8 +1617,8 @@ Window {
                                 }
                             }
 
-                            // Performance: Disable layers to reduce GPU/Compositor load on Pi
-                            layer.enabled: false
+                            // Performance: Enable layer during animations to keep it smooth
+                            layer.enabled: videoCard.isDragging || videoWidthAnimation.running
                             layer.smooth: true
                             backgroundColor: "black"
                             onBackgroundColorChanged: {
@@ -1749,6 +1756,8 @@ Window {
                             z: 2
                             opacity: 1.0 - backgroundWindy.progress
                             visible: backend && opacity > 0
+                            layer.enabled: backgroundWindy.isDragging || widthAnimation.running || videoCard.isDragging || videoWidthAnimation.running
+                            layer.smooth: true
 
                             RowLayout {
                                 id: youtubePills

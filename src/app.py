@@ -564,7 +564,7 @@ class Backend(QObject):
         is_large_display = (os.environ.get("DASHBOARD_WIDTH") == "3840" or detected_w == 3840 or detected_h == 1100)
         is_2k_display = (os.environ.get("DASHBOARD_WIDTH") == "2560" or detected_w == 2560 or detected_h == 734)
         
-        if platform.system() == 'Windows' or is_small_display:
+        if platform.system() in ('Windows', 'Darwin') or is_small_display:
             # Default to small display resolution (1480x320) and 1x scale
             default_w, default_h, default_s = 1480, 320, "1.0"
         elif is_2k_display:
@@ -1938,16 +1938,14 @@ class Backend(QObject):
 
     @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def currentVersionInfo(self):
-        if self._current_version_info is None or self._current_version_info.get('hash') == 'Unknown':
-            self._current_version_info = self.get_current_version_info() or {}
+        if self._current_version_info is None:
+            return {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
         return self._current_version_info
 
     @pyqtProperty('QVariantMap', notify=versionInfoChanged)
     def latestVersionInfo(self):
-        # We now trust _latest_version_info to be updated by periodic checks
-        # or manual branch switches. If it's None, we do one initial fetch.
-        if self._latest_version_info is None or self._latest_version_info.get('hash') == 'Unknown':
-            self._latest_version_info = self.get_latest_version_info() or {}
+        if self._latest_version_info is None:
+            return {'hash': 'Unknown', 'short_hash': 'Unknown', 'message': 'Unknown'}
         return self._latest_version_info
 
     @pyqtProperty(str, notify=versionInfoChanged)
@@ -2021,7 +2019,9 @@ class Backend(QObject):
                 logger.info(f"get_launch_trajectory: Set selected launch to next upcoming: {mission}")
         
         # Use the centralized trajectory calculator in functions.py
-        result = get_launch_trajectory_data(upcoming, previous)
+        # Pass the full launch objects to preserve trajectory_data from API
+        upcoming_full = self._launch_data.get('upcoming', [])
+        result = get_launch_trajectory_data(upcoming_full, previous)
         if result and 'booster_trajectory' in result:
             logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points and {len(result['booster_trajectory'])} booster points")
         elif result:
@@ -2030,7 +2030,7 @@ class Backend(QObject):
             logger.info("get_launch_trajectory: Returning None")
         return result
 
-    @pyqtSlot(str, str, str, str)
+    @pyqtSlot(str, str, str, str, result=bool)
     def loadLaunchTrajectory(self, mission, pad, orbit, landing_type):
         """Load trajectory data for a specific launch"""
         try:
@@ -2041,16 +2041,22 @@ class Backend(QObject):
                 self._selected_launch_mission = mission
                 self.selectedLaunchChanged.emit()
             
-            # Create a launch object for the trajectory calculator
-            launch_data = {
-                'mission': mission,
-                'pad': pad,
-                'orbit': orbit,
-                'landing_type': landing_type
-            }
+            # Find the actual launch object in our data to get trajectory_data
+            all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
+            launch_obj = next((l for l in all_launches if l.get('mission') == mission), None)
             
-            # Use the trajectory calculator with this specific launch
-            result = get_launch_trajectory_data(launch_data)
+            if launch_obj:
+                # Use the full launch object which contains trajectory_data from API
+                result = get_launch_trajectory_data(launch_obj)
+            else:
+                # Fallback to creating a minimal object if not found
+                launch_data = {
+                    'mission': mission,
+                    'pad': pad,
+                    'orbit': orbit,
+                    'landing_type': landing_type
+                }
+                result = get_launch_trajectory_data(launch_data)
             
             if result:
                 # Store the trajectory data for the globe
@@ -2059,11 +2065,14 @@ class Backend(QObject):
                 
                 # Emit signal to update globe
                 self.updateGlobeTrajectory.emit()
+                return True
             else:
                 logger.warning(f"Failed to generate trajectory for {mission}")
+                return False
                 
         except Exception as e:
             logger.error(f"Error loading trajectory for {mission}: {e}")
+            return False
 
     @pyqtSlot(str, result=str)
     def getConvertedVideoUrl(self, video_url):
@@ -3389,7 +3398,6 @@ class ChartItem(QQuickPaintedItem):
         if not self._series:
             return
 
-        profiler.mark("ChartItem: paint Start")
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         width = self.width()
@@ -3524,8 +3532,6 @@ class ChartItem(QQuickPaintedItem):
         elif self._chart_type == "area":
             self._draw_area_chart(painter, width, height, margin, colors, actual_max)
         
-        profiler.mark("ChartItem: paint End")
-
     def _draw_bar_chart(self, painter, width, height, margin, colors, actual_max):
         if not self._months:
             return
@@ -3689,8 +3695,6 @@ class ChartItem(QQuickPaintedItem):
             painter.setPen(QPen(color, 1.5, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
             painter.drawPolygon(points)
         
-        profiler.mark("ChartItem: paint End")
-
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 if __name__ == '__main__':
@@ -3730,6 +3734,9 @@ if __name__ == '__main__':
         
     profiler.mark("QApplication setup")
     app = QApplication(sys.argv)
+    app.setApplicationName("SpaceXDashboard")
+    app.setOrganizationName("Harrison")
+    
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 

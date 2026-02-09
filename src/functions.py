@@ -666,6 +666,7 @@ def parse_launch_data(launch: dict, is_detailed: bool = False) -> dict:
         'x_video_url': next((v.get('url', '') for v in launch.get('vidURLs', []) if v.get('url') and ('x.com' in v['url'].lower() or 'twitter.com' in v['url'].lower())), ''),
         'landing_type': landing_type,
         'landing_location': landing_location,
+        'trajectory_data': launch.get('trajectory_data'),
         'is_detailed': is_detailed
     }
 
@@ -1874,6 +1875,30 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
     pad = next_launch.get('pad', '')
     orbit = next_launch.get('orbit', '')
     logger.info(f"Next launch: {mission_name} from {pad}")
+
+    # --- NEW: Use API trajectory data if available ---
+    api_traj = next_launch.get('trajectory_data')
+    if api_traj and isinstance(api_traj, dict):
+        logger.info(f"Using API-provided trajectory data for {mission_name}")
+        # Build response compatible with dashboard expectations
+        # Note: the API provides {lat, lon, r} points, which the dashboard uses
+        return {
+            'launch_site': {
+                'lat': api_traj['trajectory'][0]['lat'] if api_traj.get('trajectory') else 28.6,
+                'lon': api_traj['trajectory'][0]['lon'] if api_traj.get('trajectory') else -80.6,
+                'name': pad
+            },
+            'trajectory': api_traj.get('trajectory', []),
+            'booster_trajectory': api_traj.get('booster_trajectory', []),
+            'sep_idx': len(api_traj.get('trajectory', [])) // 3, # Heuristic if not provided
+            'orbit_path': api_traj.get('orbit_path', []),
+            'orbit': orbit,
+            'mission': mission_name,
+            'pad': pad,
+            'landing_type': next_launch.get('landing_type'),
+            'landing_location': next_launch.get('landing_location')
+        }
+    # --------------------------------------------------
 
     # Launch site coordinates
     launch_sites = {
@@ -3255,8 +3280,10 @@ def setup_dashboard_environment():
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --enable-webgl --disable-web-security"
 
-    os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
-    os.environ["QSG_RHI_BACKEND"] = "gl"
+    if platform.system() != 'Darwin':
+        os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+        os.environ["QSG_RHI_BACKEND"] = "gl"
+    
     os.environ.setdefault("QSG_RENDER_LOOP", "threaded")
 
     # High DPI Scaling support
@@ -3271,7 +3298,7 @@ def setup_dashboard_environment():
     # 5. Config file matching large display -> 2.0
     # 6. Default fallback for Linux -> 2.0
     
-    if platform.system() == 'Windows':
+    if platform.system() in ('Windows', 'Darwin'):
         default_scale = "1.0"
     elif os.environ.get("DASHBOARD_WIDTH") == "1480":
         default_scale = "1.0"
