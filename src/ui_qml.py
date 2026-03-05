@@ -477,8 +477,8 @@ Window {
                 enabled: !backgroundWindy.isDragging
                 NumberAnimation { 
                     id: widthAnimation
-                    duration: 300 
-                    easing.type: Easing.OutQuart 
+                    duration: 350 
+                    easing.type: Easing.OutCubic
                 } 
             }
 
@@ -513,6 +513,7 @@ Window {
                                     anchors.fill: parent
                                     layer.enabled: backgroundWindy.isDragging || (typeof widthAnimation !== 'undefined' && widthAnimation.running)
                                     layer.smooth: true
+                                    layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     enabled: !backgroundWindy.isLocked
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                     url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
@@ -786,6 +787,7 @@ Window {
                                     zoomFactor: 1.0
                                     layer.enabled: true
                                     layer.smooth: true
+                                    layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     settings.javascriptCanAccessClipboard: false
                                     settings.allowWindowActivationFromJavaScript: false
                                     onContextMenuRequested: function(request) { request.accepted = true }
@@ -1531,14 +1533,14 @@ Window {
                 property real videoExpansionFactor: 0.0
                 readonly property real progress: Math.max(0, Math.min(1, (width - currentMinWidth) / Math.max(1, currentMaxWidth - currentMinWidth)))
 
-                Behavior on width { 
-                    enabled: !videoCard.isDragging
-                    NumberAnimation { 
-                        id: videoWidthAnimation
-                        duration: 300 
-                        easing.type: Easing.OutQuart 
-                    } 
-                }
+            Behavior on width { 
+                enabled: !videoCard.isDragging
+                NumberAnimation { 
+                    id: videoWidthAnimation
+                    duration: 350 
+                    easing.type: Easing.OutCubic
+                } 
+            }
 
                 Item {
                     anchors.fill: parent
@@ -1570,6 +1572,9 @@ Window {
                             id: youtubeView
                             profile: youtubeProfile
                             anchors.fill: parent
+                            layer.enabled: videoCard.isDragging || (typeof videoWidthAnimation !== 'undefined' && videoWidthAnimation.running)
+                            layer.smooth: true
+                            layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                             
                             // MouseArea for expansion gesture
                             MouseArea {
@@ -1617,9 +1622,6 @@ Window {
                                 }
                             }
 
-                            // Performance: Enable layer during animations to keep it smooth
-                            layer.enabled: videoCard.isDragging || videoWidthAnimation.running
-                            layer.smooth: true
                             backgroundColor: "black"
                             onBackgroundColorChanged: {
                                 if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)

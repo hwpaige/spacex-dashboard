@@ -118,7 +118,7 @@
         let touchMode = 'none';
         // Track last deltas to decide whether to start momentum on release
         let lastDeltaX = 0, lastDeltaY = 0;
-        let lastMoveTimeMs = 0;
+        let lastMoveTimeMs = Date.now();
         // Drag deadzone and pinch tracking
         const DRAG_DEADZONE_PX = 8;           // ignore tiny movements
         const RECENT_MS_THRESHOLD = 110;      // last movement must be recent
@@ -553,28 +553,35 @@
                 // Pointer event fallbacks (Linux/Qt WebEngine often routes touch via pointer events)
                 // We only count non-mouse pointers here to avoid double-handling regular mouse drags.
                 // Moving these into init ensures renderer.domElement is available safely.
-                renderer.domElement.addEventListener('pointerdown', (e) => {
+                const onPointerDown = (e) => {
                     if (e && e.pointerType && e.pointerType !== 'mouse') {
                         activePointers++;
                         userInteracting = true;
+                        // Log pointer type for debugging
+                        try { console.log('[globe] pointerdown:', e.pointerType, 'activePointers:', activePointers); } catch(ex) {}
                     }
-                });
-                document.addEventListener('pointerup', (e) => {
+                };
+                const onPointerUp = (e) => {
                     if (e && e.pointerType && e.pointerType !== 'mouse') {
                         activePointers = Math.max(0, activePointers - 1);
                         if (activePointers === 0 && !isMouseDown) {
                             userInteracting = false;
                         }
+                        try { console.log('[globe] pointerup:', e.pointerType, 'activePointers:', activePointers); } catch(ex) {}
                     }
-                });
-                document.addEventListener('pointercancel', (e) => {
+                };
+                const onPointerCancel = (e) => {
                     if (e && e.pointerType && e.pointerType !== 'mouse') {
                         activePointers = Math.max(0, activePointers - 1);
                         if (activePointers === 0 && !isMouseDown) {
                             userInteracting = false;
                         }
+                        try { console.log('[globe] pointercancel:', e.pointerType, 'activePointers:', activePointers); } catch(ex) {}
                     }
-                });
+                };
+                renderer.domElement.addEventListener('pointerdown', onPointerDown);
+                document.addEventListener('pointerup', onPointerUp);
+                document.addEventListener('pointercancel', onPointerCancel);
 
                 // Disable in-page context menu (right-click/long-press)
                 try { document.addEventListener('contextmenu', function (e) { e.preventDefault(); }, { passive: false }); } catch (_e) { }
@@ -1322,10 +1329,18 @@
         // Inactivity fallback: if marked interacting but no activity and no pointers, clear it
         setInterval(function () {
             try {
-                if (!window.globeAutospinGuard) return;
                 const now = Date.now();
-                if (userInteracting && activePointers === 0 && (now - lastMoveTimeMs) > 1500) {
+                // Increased robustness: if userInteracting is true but no move for 3s and no pointers, reset.
+                // This handles cases where mouseup/touchend might have been missed entirely by the browser.
+                if (userInteracting && activePointers === 0 && (now - lastMoveTimeMs) > 3000) {
                     console.log('[globe] clearing stale interaction due to inactivity');
+                    window.clearInteraction();
+                }
+                
+                // If isMouseDown is true but no move for 10s, it's likely stuck.
+                if (isMouseDown && (now - lastMoveTimeMs) > 10000) {
+                    console.log('[globe] clearing stuck mousedown state');
+                    isMouseDown = false;
                     window.clearInteraction();
                 }
             } catch (e) { }
@@ -1351,10 +1366,10 @@
             setInterval(function () {
                 if (typeof document === 'undefined') return;
                 if (document.visibilityState !== 'visible') return;
-                if (window.globeAutospinGuard === false) return;
                 const now = performance.now();
                 if (now - __lastRenderTs > STALL_MS) {
-                    try { console.log('[globe] watchdog: render stalled, attempting resume'); } catch (e) { }
+                    try { console.log('[globe] watchdog: render stalled, attempting resume and reset'); } catch (e) { }
+                    window.clearInteraction(); // Reset everything if stalled
                     window.resumeSpin();
                 }
             }, CHECK_MS);
