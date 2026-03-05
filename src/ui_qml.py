@@ -2226,6 +2226,11 @@ Window {
 
                     Popup {
                         id: weatherTray
+                        x: 0
+                        width: parent.width
+                        height: 0
+                        y: parent.height - height
+                        visible: height > 0
                         closePolicy: Popup.CloseOnPressOutside
                         onClosed: height = 0
                         padding: 0
@@ -2321,6 +2326,7 @@ Window {
                                             if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
                                                 weatherTray.height = 0
                                             } else {
+                                                weatherTray.open()
                                                 weatherTray.height = weatherTray.expandedHeight
                                             }
                                         }
@@ -2531,7 +2537,10 @@ Window {
 
                         onPressed: {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
-                            if (weatherTray.height === 0) weatherTray.height = 1
+                            if (weatherTray.height === 0) {
+                                weatherTray.open()
+                                weatherTray.height = 1
+                            }
                             startHeight = weatherTray.height
                             weatherTray.isDragging = true
                             moved = false
@@ -2577,6 +2586,7 @@ Window {
                                 if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
                                     weatherTray.height = 0
                                 } else {
+                                    weatherTray.open()
                                     weatherTray.height = weatherTray.expandedHeight
                                 }
                             }
@@ -2718,6 +2728,7 @@ Window {
                                 if (narrativeTray.height > narrativeTray.expandedHeight * 0.5) {
                                     narrativeTray.height = 0
                                 } else {
+                                    narrativeTray.open()
                                     narrativeTray.height = narrativeTray.expandedHeight
                                 }
                             }
@@ -2797,6 +2808,10 @@ Window {
                                     
                                     onPressed: {
                                         startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        if (narrativeTray.height === 0) {
+                                            narrativeTray.open()
+                                            narrativeTray.height = 1
+                                        }
                                         startHeight = narrativeTray.height
                                         narrativeTray.isDragging = true
                                         moved = false
