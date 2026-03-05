@@ -437,7 +437,9 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
-        anchors.rightMargin: (1.0 - backgroundWindy.progress) > 0 ? (1.0 - backgroundWindy.progress) * 12 : 0
+        anchors.rightMargin: (root.height > root.width) ? 0 : ((1.0 - backgroundWindy.progress) > 0 ? (1.0 - backgroundWindy.progress) * 12 : 0)
+        // Fixed bottom inset for vertical mode after calibration (12px)
+        anchors.bottomMargin: (root.height > root.width) ? ((1.0 - backgroundWindy.progress) > 0 ? (1.0 - backgroundWindy.progress) * 12 : 0) : 0
         
         /* Binding {
             target: backgroundWindy
@@ -451,44 +453,62 @@ Window {
             id: backgroundWindy
             anchors.left: parent.left
             anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            anchors.bottom: (root.height > root.width) ? undefined : parent.bottom
             // width property below handles sizing; anchors.right is bound to videoCard.left when applicable
-            anchors.right: (typeof videoCard !== 'undefined' && videoCard !== null) ? videoCard.left : parent.right
-            // Use anchors.rightMargin to handle the safeArea logic directly on the background
-            anchors.rightMargin: (1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0
+            anchors.right: (root.height > root.width) ? parent.right : ((typeof videoCard !== 'undefined' && videoCard !== null) ? videoCard.left : parent.right)
+            // Use anchors.rightMargin/bottomMargin to handle the safeArea logic directly on the background
+            anchors.rightMargin: (root.height > root.width) ? 0 : ((1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0)
+            anchors.bottomMargin: (root.height > root.width) ? ((1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0) : 0
             
             property bool isDragging: false
-            property real manualWidth: minWidth
+            property real manualWidth: minSize
             property real expansionFactor: 0.0
             property bool isLocked: true
 
             readonly property bool isHighRes: backend && backend.isHighResolution
 
-            // Width is 1/4 of total safeArea width + expansion based on drag
-            // When anchors.right is bound to videoCard.left, we don't need explicit width
-            // but we must ensure it doesn't conflict. 
-            // If anchors.right is set, width is ignored in favor of anchors.
-            width: isDragging ? manualWidth : (minWidth + expansionFactor * (root.width - minWidth))
+            // Dimension logic: handles both horizontal (width) and vertical (height) expansion
+            width: (root.height > root.width) ? parent.width : (isDragging ? manualWidth : (minSize + expansionFactor * (root.width - minSize)))
+            height: (root.height > root.width) ? (isDragging ? manualWidth : (minSize + expansionFactor * (root.height - minSize))) : parent.height
             z: 0 // Behind centralContent
             visible: !!(!backend || !backend.isLoading)
             clip: true
 
-            readonly property real minWidth: (root.width / 4) + (isHighRes ? 120 : 250)
-            readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, root.width - minWidth)))
+            readonly property real minSize: (root.height > root.width) ? ((root.height / 4) + (isHighRes ? 120 : 250)) : ((root.width / 4) + (isHighRes ? 120 : 250))
+            
+            // Reset expansion on orientation change
+            property bool isVerticalOrientation: root.height > root.width
+            onIsVerticalOrientationChanged: {
+                expansionFactor = 0.0
+                isLocked = true
+            }
+
+            readonly property real progress: (root.height > root.width) 
+                                            ? Math.max(0, Math.min(1, (height - minSize) / Math.max(1, root.height - minSize)))
+                                            : Math.max(0, Math.min(1, (width - minSize) / Math.max(1, root.width - minSize)))
             onWidthChanged: {
-                if (isDragging || (widthAnimation && widthAnimation.running)) {
-                    // Force re-evaluation of dependent properties if needed, 
-                    // though QML should do this automatically.
+                if (!isDragging && widthAnimation && widthAnimation.running) {
+                    // Force re-evaluation of dependent properties if needed
                 }
             }
 
             Behavior on width {
                 id: widthBehavior
-                enabled: !backgroundWindy.isDragging
+                enabled: !backgroundWindy.isDragging && (root.height <= root.width)
                 NumberAnimation { 
                     id: widthAnimation
                     duration: 400
-                    easing.type: Easing.OutCubic // Smoother opening, maintains nice deceleration
+                    easing.type: Easing.OutCubic 
+                } 
+            }
+            
+            Behavior on height {
+                id: heightBehavior
+                enabled: !backgroundWindy.isDragging && (root.height > root.width)
+                NumberAnimation { 
+                    id: heightAnimation
+                    duration: 400
+                    easing.type: Easing.OutCubic 
                 } 
             }
 
@@ -525,11 +545,11 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running)
+                                    layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running)
                                     layer.smooth: true
                                     // layer.renderTarget removed due to compatibility issues with older Qt versions
                                     // layer.renderTarget: Item.FramebufferObject
-                                    layer.textureSize: (backgroundWindy.isDragging || (widthAnimation && widthAnimation.running))
+                                    layer.textureSize: (backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running))
                                                         ? Qt.size(weatherSwipe.maxTextureWidth, weatherSwipe.maxTextureHeight) 
                                                         : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     enabled: !backgroundWindy.isLocked
@@ -561,16 +581,18 @@ Window {
                 }
             }
 
-            // Right-side fade effect
+            // Right/Bottom side fade effect
             Rectangle {
-                anchors.top: parent.top
+                anchors.top: (root.height > root.width) ? undefined : parent.top
                 anchors.bottom: parent.bottom
                 anchors.right: parent.right
-                width: 250 
+                anchors.left: (root.height > root.width) ? parent.left : undefined
+                width: (root.height > root.width) ? undefined : 250 
+                height: (root.height > root.width) ? 250 : undefined
                 opacity: 1.0 - backgroundWindy.progress
                 visible: opacity > 0
                 gradient: Gradient {
-                    orientation: Gradient.Horizontal
+                    orientation: (root.height > root.width) ? Gradient.Vertical : Gradient.Horizontal
                     GradientStop { position: 0.0; color: "transparent" }
                     GradientStop { position: 1.0; color: root.color }
                 }
@@ -588,18 +610,22 @@ Window {
             spacing: 5
             visible: !!(!backend || !backend.isLoading)
 
-            RowLayout {
+            GridLayout {
                 id: mainRowLayout
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                spacing: 5
+                columnSpacing: 5
+                rowSpacing: 5
+                columns: root.height > root.width ? 1 : 4
+                rows: root.height > root.width ? 4 : 1
 
             // Column 1: Radar (Transparent Spacer with UI Overlay)
             Rectangle {
                 id: radarColumn
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: 1.0
+                Layout.preferredWidth: root.height > root.width ? -1 : 1.0
+                Layout.preferredHeight: root.height > root.width ? 1.0 : -1
                 color: "transparent"
                 radius: 0
                 clip: false
@@ -614,21 +640,22 @@ Window {
                         z: 5 // Below buttons but above the spacer
                         enabled: backgroundWindy.isLocked
                         
-                        property real startX: 0
-                        property real initialWidth: 0
+                        property real startPos: 0
+                        property real initialSize: 0
                         
                         onPressed: (mouse) => {
-                            startX = mapToItem(safeArea, mouse.x, mouse.y).x
-                            initialWidth = backgroundWindy.width
-                            backgroundWindy.manualWidth = initialWidth
+                            var currentPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                            startPos = currentPos
+                            initialSize = (root.height > root.width) ? backgroundWindy.height : backgroundWindy.width
+                            backgroundWindy.manualWidth = initialSize
                             backgroundWindy.isDragging = true
                         }
                         
                         onPositionChanged: (mouse) => {
                             if (backgroundWindy.isDragging) {
-                                var currentX = mapToItem(safeArea, mouse.x, mouse.y).x
-                                var deltaX = currentX - startX
-                                backgroundWindy.manualWidth = Math.max(backgroundWindy.minWidth, Math.min(root.width, initialWidth + deltaX))
+                                var currentPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                                var delta = currentPos - startPos
+                                backgroundWindy.manualWidth = Math.max(backgroundWindy.minSize, Math.min((root.height > root.width ? root.height : root.width), initialSize + delta))
                             }
                         }
                         
@@ -764,7 +791,8 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (1.0 - backgroundWindy.progress)
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (root.height > root.width ? -1 : (1.0 - backgroundWindy.progress))
+                Layout.preferredHeight: plotCard.isHighResolution ? 0 : (root.height > root.width ? 1.0 : -1)
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
@@ -850,7 +878,8 @@ Window {
                 id: launchCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: (1.0 - backgroundWindy.progress)
+                Layout.preferredWidth: root.height > root.width ? -1 : (1.0 - backgroundWindy.progress)
+                Layout.preferredHeight: root.height > root.width ? 1.0 : -1
                 // When in high-resolution mode, the globe is shown at the top, so we make the background 
                 // transparent to allow the globe to sit directly on the app background/Windy view.
                 color: (isHighResolution) ? "transparent" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
@@ -1536,13 +1565,16 @@ Window {
                 // Original width logic: 25% of screen when not expanded, 50% when expanded.
                 // We use fixed width for dragging, but it must account for Windy expansion.
                 readonly property real baseWidth: root.width / 4
-                readonly property real currentMinWidth: baseWidth * (1.0 - backgroundWindy.progress)
-                readonly property real currentMaxWidth: Math.min(490, (root.width / 2) * (1.0 - backgroundWindy.progress))
+                readonly property real baseHeight: root.height / 4
+                readonly property real currentMinWidth: root.height > root.width ? baseHeight * (1.0 - backgroundWindy.progress) : baseWidth * (1.0 - backgroundWindy.progress)
+                readonly property real currentMaxWidth: root.height > root.width ? Math.min(490, (root.height / 2) * (1.0 - backgroundWindy.progress)) : Math.min(490, (root.width / 2) * (1.0 - backgroundWindy.progress))
 
-                width: videoCard.isDragging ? videoCard.manualWidth : (currentMinWidth + videoCard.videoExpansionFactor * (currentMaxWidth - currentMinWidth))
-                Layout.fillWidth: false
-                Layout.fillHeight: true
-                Layout.preferredWidth: width
+                width: (root.height > root.width) ? parent.width : (videoCard.isDragging ? videoCard.manualWidth : (currentMinWidth + videoCard.videoExpansionFactor * (currentMaxWidth - currentMinWidth)))
+                height: (root.height > root.width) ? (videoCard.isDragging ? videoCard.manualWidth : (currentMinWidth + videoCard.videoExpansionFactor * (currentMaxWidth - currentMinWidth))) : parent.height
+                Layout.fillWidth: root.height > root.width
+                Layout.fillHeight: root.height <= root.width
+                Layout.preferredWidth: (root.height > root.width) ? -1 : width
+                Layout.preferredHeight: (root.height > root.width) ? 1.0 : -1
                 color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
                 radius: 8
                 clip: true
@@ -1552,6 +1584,13 @@ Window {
                 property bool isDragging: false
                 property real manualWidth: currentMinWidth
                 property real videoExpansionFactor: 0.0
+
+                // Reset expansion on orientation change
+                property bool isVerticalOrientation: root.height > root.width
+                onIsVerticalOrientationChanged: {
+                    videoExpansionFactor = 0.0
+                }
+
                 readonly property real progress: Math.max(0, Math.min(1, (width - currentMinWidth) / Math.max(1, currentMaxWidth - currentMinWidth)))
 
             Behavior on width { 
@@ -1602,27 +1641,29 @@ Window {
                             
                             // MouseArea for expansion gesture
                             MouseArea {
-                                anchors.left: parent.left
+                                anchors.left: (root.height > root.width) ? parent.left : parent.left
+                                anchors.right: (root.height > root.width) ? parent.right : undefined
                                 anchors.top: parent.top
-                                anchors.bottom: parent.bottom
-                                width: 40
+                                anchors.bottom: (root.height > root.width) ? undefined : parent.bottom
+                                width: (root.height > root.width) ? undefined : 40
+                                height: (root.height > root.width) ? 40 : undefined
                                 z: 10
                                 
-                                property real startX: 0
-                                property real initialWidth: 0
+                                property real startPos: 0
+                                property real initialSize: 0
                                 
                                 onPressed: (mouse) => {
-                                    startX = mapToItem(safeArea, mouse.x, mouse.y).x
-                                    initialWidth = videoCard.width
-                                    videoCard.manualWidth = initialWidth
+                                    startPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                                    initialSize = (root.height > root.width) ? videoCard.height : videoCard.width
+                                    videoCard.manualWidth = initialSize
                                     videoCard.isDragging = true
                                 }
                                 
                                 onPositionChanged: (mouse) => {
                                     if (videoCard.isDragging) {
-                                        var currentX = mapToItem(safeArea, mouse.x, mouse.y).x
-                                        var deltaX = startX - currentX // Dragging left increases width
-                                        videoCard.manualWidth = Math.max(videoCard.currentMinWidth, Math.min(videoCard.currentMaxWidth, initialWidth + deltaX))
+                                        var currentPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                                        var delta = (root.height > root.width) ? (currentPos - startPos) : (startPos - currentPos) 
+                                        videoCard.manualWidth = Math.max(videoCard.currentMinWidth, Math.min(videoCard.currentMaxWidth, initialSize + delta))
                                     }
                                 }
                                 
@@ -1928,7 +1969,7 @@ Window {
             }
         }
 
-        // Bottom bar - FIXED VERSION
+            // Bottom bar - FIXED VERSION
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: 30
