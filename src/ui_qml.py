@@ -1033,11 +1033,12 @@ Window {
                                         
                                         // Prefer X video URL if available for SpaceX launches, fallback to converted YouTube URL
                                         var xUrl = model.xVideoUrl || "";
+                                        var convertedXUrl = backend.getConvertedVideoUrl(xUrl);
                                         var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
                                         
                                         if (xUrl !== "") {
-                                            console.log("Launch selected: Using X.com stream:", xUrl)
-                                            root.currentVideoUrl = xUrl
+                                            console.log("Launch selected: Using X.com stream:", convertedXUrl)
+                                            root.currentVideoUrl = convertedXUrl
                                         } else if (convertedUrl !== "") {
                                             console.log("Launch selected: Using YouTube embed:", convertedUrl)
                                             root.currentVideoUrl = convertedUrl;
@@ -1743,7 +1744,9 @@ Window {
                                     
                                     // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
                                     // We only apply this to X.com (Twitter) streams as requested.
-                                    var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || loadRequest.url.toString().indexOf("twitter.com") !== -1;
+                                    var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 
+                                              loadRequest.url.toString().indexOf("twitter.com") !== -1 ||
+                                              loadRequest.url.toString().indexOf("platform.twitter.com") !== -1;
                                     if (root.autoFullScreen && isX) {
                                         // X.com needs a bit of time to initialize its player, so we retry a few times.
                                         youtubeView.runJavaScript("(function(){" +

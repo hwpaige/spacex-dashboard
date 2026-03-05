@@ -1833,7 +1833,8 @@ class Backend(QObject):
 
     @pyqtProperty(str, notify=liveLaunchUrlChanged)
     def liveLaunchUrl(self):
-        return self._live_launch_url
+        """Return the converted X/Twitter livestream URL for the current launch."""
+        return self.getConvertedVideoUrl(self._live_launch_url)
 
     def _get_launch_trends_data(self):
         """Helper to get launch trends data with internal caching to avoid redundant calls."""
@@ -2085,9 +2086,11 @@ class Backend(QObject):
 
     @pyqtSlot(str, result=str)
     def getConvertedVideoUrl(self, video_url):
-        """Helper to convert raw YouTube URLs to embed format without updating state."""
+        """Helper to convert raw YouTube/X URLs to embed format without updating state."""
         if not video_url or not video_url.strip():
             return ""
+        
+        # YouTube conversion
         if 'youtube.com/watch?v=' in video_url:
             video_id = video_url.split('v=')[1].split('&')[0]
             return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
@@ -2097,6 +2100,14 @@ class Backend(QObject):
         if 'youtu.be/' in video_url:
             video_id = video_url.split('youtu.be/')[1].split('?')[0]
             return f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+            
+        # X (Twitter) conversion
+        if 'x.com/' in video_url or 'twitter.com/' in video_url:
+            # Handle standard tweet URLs: https://x.com/user/status/12345
+            if '/status/' in video_url:
+                tweet_id = video_url.split('/status/')[1].split('?')[0].split('/')[0]
+                return f"https://platform.twitter.com/embed/Tweet.html?id={tweet_id}&theme=dark"
+                
         return video_url
 
     @pyqtSlot(str)
@@ -2105,17 +2116,8 @@ class Backend(QObject):
         try:
             # Always update the video URL, even if empty (to clear the view)
             if video_url and video_url.strip():
-                # Convert YouTube watch URLs to embed URLs
-                if 'youtube.com/watch?v=' in video_url:
-                    video_id = video_url.split('v=')[1].split('&')[0]
-                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
-                elif 'youtube.com/live/' in video_url:
-                    video_id = video_url.split('youtube.com/live/')[1].split('?')[0]
-                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
-                elif 'youtu.be/' in video_url:
-                    video_id = video_url.split('youtu.be/')[1].split('?')[0]
-                    video_url = f"https://www.youtube.com/embed/{video_id}?rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
-                
+                # Convert to embed format
+                video_url = self.getConvertedVideoUrl(video_url)
                 logger.info(f"Loading video: {video_url}")
             else:
                 logger.info("Clearing video view (no video for this launch)")
