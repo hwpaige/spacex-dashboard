@@ -2331,20 +2331,30 @@ def group_event_data(data, mode, event_type, timezone_obj):
         processed_launches = []
         
         for l in launches:
-            launch = parse_launch_data(l)
-            net = launch.get('net', '') or launch.get('date_start', '')
-            dt = _get_parsed_dt(net)
+            # Optimization: If it's already a dict from parse_launch_data (e.g. from cache), 
+            # don't re-parse it. Check for a known key like 'mission'.
+            if isinstance(l, dict) and 'mission' in l:
+                launch = l
+            else:
+                launch = parse_launch_data(l)
+            
+            # Use cached _parsed_dt if available to avoid redundant parsing
+            dt = launch.get('_parsed_dt')
+            if not dt:
+                net = launch.get('net', '') or launch.get('date_start', '')
+                dt = _get_parsed_dt(net)
+                launch['_parsed_dt'] = dt
+            
             if dt:
                 try:
-                    # Cache the local time string
-                    launch['_parsed_dt'] = dt
-                    launch['localTime'] = dt.astimezone(timezone_obj).strftime('%Y-%m-%d %H:%M:%S')
+                    # Cache the local time string if not present or if timezone changed
+                    if 'localTime' not in launch or launch.get('_tz_name') != str(timezone_obj):
+                        launch['localTime'] = dt.astimezone(timezone_obj).strftime('%Y-%m-%d %H:%M:%S')
+                        launch['_tz_name'] = str(timezone_obj)
                 except Exception:
                     launch['localTime'] = 'TBD'
-                    launch['_parsed_dt'] = None
             else:
                 launch['localTime'] = 'TBD'
-                launch['_parsed_dt'] = None
             processed_launches.append(launch)
         
         if event_type == 'upcoming':

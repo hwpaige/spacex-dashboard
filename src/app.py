@@ -8,7 +8,9 @@ import sys
 import os
 import json
 from PyQt6.QtWidgets import QApplication, QStyleFactory
-from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, QRectF, QPoint, QDir, QThread
+from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, 
+    QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, 
+    QRectF, QPoint, QDir, QThread)
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor, QFont, QLinearGradient
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
@@ -1835,6 +1837,10 @@ class Backend(QObject):
 
     def _get_launch_trends_data(self):
         """Helper to get launch trends data with internal caching to avoid redundant calls."""
+        # Fast path: return memoized data if available
+        if getattr(self, '_memoized_trends', None) is not None:
+            return self._memoized_trends
+
         current_year = datetime.now(pytz.UTC).year
         current_month = datetime.now(pytz.UTC).month
         
@@ -1850,7 +1856,8 @@ class Backend(QObject):
         
         if (self._launch_trends_cache.get('key') == cache_key and 
             self._launch_trends_cache.get('data_sig') == data_sig):
-            return self._launch_trends_cache['data']
+            self._memoized_trends = self._launch_trends_cache['data']
+            return self._memoized_trends
             
         # If not ready, return cached or empty and trigger background compute
         if not getattr(self, '_precomputing_trends', False):
@@ -1890,6 +1897,8 @@ class Backend(QObject):
                 'data_sig': data_sig,
                 'data': data
             }
+            # Invalidate memoized trends
+            self._memoized_trends = None
             
             # Persist to disk
             try:
@@ -2359,70 +2368,73 @@ class Backend(QObject):
         """Apply cached (runtime or git-seeded) data immediately and exit splash.
         This is signal-based and avoids any time-based waits."""
         profiler.mark("Backend: _seed_bootstrap Start")
-        try:
-            self.setLoadingStatus("Loading cached SpaceX data…")
-            
-            # Optimization: Use already loaded data if available, avoid redundant I/O
-            if not self._launch_data.get('previous') and not self._launch_data.get('upcoming'):
-                profiler.mark("Backend: _seed_bootstrap Loading Cache")
-                # Load launches from runtime cache, falling back to seed
-                prev_cache = load_launch_cache('previous')
-                up_cache = load_launch_cache('upcoming')
-                self._launch_data = {
-                    'previous': (prev_cache.get('data') if prev_cache else []) or [],
-                    'upcoming': (up_cache.get('data') if up_cache else []) or []
-                }
-            
-            self._update_live_launch_url()
-            
-            # Seed the calendar cache if it's still None after __init__
-            reloaded = 'prev_cache' in locals() or 'up_cache' in locals()
-            if reloaded:
-                self._clear_launch_caches()
-            
-            if (reloaded or getattr(self, '_launches_by_date_cache', None) is None) and self._launch_data:
-                # Trigger background recompute to avoid UI blocking
-                threading.Thread(target=self._precompute_calendar_mapping, daemon=True).start()
-                logger.info("Backend: Triggered background calendar cache seeding during bootstrap")
-                
-            # Update EventModel immediately
-            profiler.mark("Backend: _seed_bootstrap Updating EventModel")
-            self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
-            self._event_model.update_data()
-
-            profiler.mark("Backend: _seed_bootstrap Emitting Signals Start")
+        
+        def _bootstrap_worker():
             try:
-                profiler.mark("Backend: _seed_bootstrap emitting launchCacheReady")
-                self.launchCacheReady.emit()
-            except Exception:
-                pass
-            
-            profiler.mark("Backend: _seed_bootstrap emitting launchesChanged Start")
-            self.launchesChanged.emit()
-            profiler.mark("Backend: _seed_bootstrap emitting launchesChanged End")
-            
-            profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged Start")
-            self._emit_tray_visibility_changed()
-            profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged End")
-            
-            profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged Start")
-            self.eventModelChanged.emit()
-            profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged End")
-            
-            profiler.mark("Backend: _seed_bootstrap Emitting Signals End")
-            # Update trajectory now that we have at least cached data
-            self._emit_update_globe_trajectory_debounced()
-            self._schedule_trajectory_recompute()
-            
-            # NOTE: Do NOT exit splash here. Wait for network or timeout.
-            # self.setLoadingStatus("Application loaded…")
-            # self._isLoading = False
-            # self.loadingFinished.emit()
-            logger.info("BOOT: Seed/runtime cache applied; waiting for network or timeout to dismiss splash")
-            profiler.mark("Backend: _seed_bootstrap End")
-        except Exception as e:
-            logger.error(f"Seed bootstrap failed: {e}")
-            profiler.mark("Backend: _seed_bootstrap Error")
+                # Optimization: Use already loaded data if available, avoid redundant I/O
+                if not self._launch_data.get('previous') and not self._launch_data.get('upcoming'):
+                    profiler.mark("Backend: _seed_bootstrap Loading Cache")
+                    # Load launches from runtime cache, falling back to seed
+                    prev_cache = load_launch_cache('previous')
+                    up_cache = load_launch_cache('upcoming')
+                    self._launch_data = {
+                        'previous': (prev_cache.get('data') if prev_cache else []) or [],
+                        'upcoming': (up_cache.get('data') if up_cache else []) or []
+                    }
+                
+                self._update_live_launch_url()
+                
+                # Seed the calendar cache if it's still None after __init__
+                reloaded = 'prev_cache' in locals() or 'up_cache' in locals()
+                if reloaded:
+                    self._clear_launch_caches()
+                
+                if (reloaded or getattr(self, '_launches_by_date_cache', None) is None) and self._launch_data:
+                    # Pre-compute calendar mapping synchronously in this worker thread
+                    self._precompute_calendar_mapping()
+                    logger.info("Backend: Seeded calendar cache during bootstrap worker")
+                
+                def _apply_ui():
+                    # Update EventModel immediately
+                    profiler.mark("Backend: _seed_bootstrap Updating EventModel")
+                    self._event_model._data = self._launch_data if self._mode == 'spacex' else self._f1_data.get('schedule', [])
+                    self._event_model.update_data()
+
+                    profiler.mark("Backend: _seed_bootstrap Emitting Signals Start")
+                    try:
+                        profiler.mark("Backend: _seed_bootstrap emitting launchCacheReady")
+                        self.launchCacheReady.emit()
+                    except Exception:
+                        pass
+                    
+                    profiler.mark("Backend: _seed_bootstrap emitting launchesChanged Start")
+                    self.launchesChanged.emit()
+                    profiler.mark("Backend: _seed_bootstrap emitting launchesChanged End")
+                    
+                    profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged Start")
+                    self._emit_tray_visibility_changed()
+                    profiler.mark("Backend: _seed_bootstrap emitting launchTrayVisibilityChanged End")
+                    
+                    profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged Start")
+                    self.eventModelChanged.emit()
+                    profiler.mark("Backend: _seed_bootstrap emitting eventModelChanged End")
+                    
+                    profiler.mark("Backend: _seed_bootstrap Emitting Signals End")
+                    # Update trajectory now that we have at least cached data
+                    self._emit_update_globe_trajectory_debounced()
+                    self._schedule_trajectory_recompute()
+                    
+                    logger.info("BOOT: Seed/runtime cache applied; waiting for network or timeout to dismiss splash")
+                    profiler.mark("Backend: _seed_bootstrap End")
+
+                QTimer.singleShot(0, _apply_ui)
+                
+            except Exception as e:
+                logger.error(f"Seed bootstrap worker failed: {e}")
+                profiler.mark("Backend: _seed_bootstrap Error")
+
+        self.setLoadingStatus("Loading cached SpaceX data…")
+        threading.Thread(target=_bootstrap_worker, daemon=True).start()
 
     def _start_data_loading_online(self):
         """Start DataLoader immediately (no guard timers), used when firstOnline fires."""
@@ -2562,6 +2574,7 @@ class Backend(QObject):
     def _clear_launch_caches(self):
         """Clear all internal caches derived from launch data"""
         self._launch_trends_cache.clear()
+        self._memoized_trends = None
         self._launches_by_date_cache = None
 
     def _precompute_calendar_mapping(self):

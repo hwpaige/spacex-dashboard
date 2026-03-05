@@ -190,8 +190,8 @@
                 // Allow us to prevent default touch gestures for custom pinch zoom
                 renderer.domElement.style.touchAction = 'none';
 
-                // Globe geometry
-                const geometry = new THREE.SphereGeometry(1, 64, 64);
+                // Globe geometry - reduced complexity from 64x64 for performance
+                const geometry = new THREE.SphereGeometry(1, 32, 32);
 
                 // Earth texture - try multiple paths
                 const textureLoader = new THREE.TextureLoader();
@@ -296,8 +296,9 @@
                                     const phiLength = (1 / tilesX) * Math.PI * 2;
                                     const thetaStart = (y / tilesY) * Math.PI;
                                     const thetaLength = (1 / tilesY) * Math.PI;
-
-                                    const tileGeom = new THREE.SphereGeometry(1, 64 / tilesX, 64 / tilesY, phiStart, phiLength, thetaStart, thetaLength);
+                                    
+                                    // Match sphere complexity
+                                    const tileGeom = new THREE.SphereGeometry(1, 32 / tilesX, 32 / tilesY, phiStart, phiLength, thetaStart, thetaLength);
                                     const tileMat = new THREE.MeshPhongMaterial({
                                         map: texture[y * tilesX + x],
                                         transparent: true,
