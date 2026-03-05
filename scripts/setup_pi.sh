@@ -1047,14 +1047,14 @@ EOF
         # Remove any existing Plymouth-related parameters and other potentially conflicting console settings
         # We want a clean slate for quiet splash boot to ensure only our desired console is used
         # Using a more robust sed pattern to avoid leading/double spaces
-        sed -i -E 's/\s*(quiet|splash|loglevel=[0-9]|vt\.global_cursor_default=[0-9]|plymouth\.ignore-serial-consoles|logo\.nologo|rd\.systemd\.show_status=[a-z]*|systemd\.show_status=[a-z]*|plymouth\.display-rotation=[0-9]|fbcon=rotate:[0-9])//g' "$CMDLINE_FILE"
+        sed -i -E 's/\s*(quiet|splash|loglevel=[0-9]|vt\.global_cursor_default=[0-9]|plymouth\.ignore-serial-consoles|logo\.nologo|rd\.systemd\.show_status=[a-z]*|systemd\.show_status=[a-z]*|plymouth\.display-rotation=[0-9]|fbcon=rotate:[0-9]|vt\.handoff=[0-9]|fsck\.mode=[a-z]*)//g' "$CMDLINE_FILE"
         sed -i -E 's/\s*(console=tty[0-9]|console=serial0,[0-9]*)//g' "$CMDLINE_FILE"
         # Clean up leading/trailing/double spaces
         sed -i 's/  */ /g; s/^ //; s/ $//' "$CMDLINE_FILE"
 
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
-            sed -i 's/$/ quiet splash loglevel=0 vt.global_cursor_default=0 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false systemd.show_status=false/' "$CMDLINE_FILE"
+            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 vt.handoff=7 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false systemd.show_status=false fsck.mode=skip/' "$CMDLINE_FILE"
         fi
 
         # Ensure console is moved to tty3 (avoid kernel logs on Plymouth tty)
@@ -1100,7 +1100,19 @@ ShowDelay=0
 DeviceTimeout=8
 EOF
 
+    # Regenerate initramfs to ensure Plymouth and quiet boot settings are baked in
+    if command -v update-initramfs >/dev/null 2>&1; then
+        log "Regenerating initramfs to apply Plymouth changes..."
+        update-initramfs -u
+    fi
+
     log "✓ Plymouth configured with theme: spacex"
+
+    # Further suppress console logging via sysctl
+    cat > /etc/sysctl.d/20-quiet-printk.conf << 'EOF'
+kernel.printk = 3 3 3 3
+EOF
+    sysctl -p /etc/sysctl.d/20-quiet-printk.conf 2>/dev/null || true
 
     # Make sure Plymouth units are enabled (usually pulled in by initramfs, but harmless to ensure)
     systemctl enable plymouth-start.service plymouth-quit.service plymouth-quit-wait.service 2>/dev/null || true

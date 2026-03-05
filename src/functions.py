@@ -3284,22 +3284,30 @@ def setup_dashboard_environment():
     os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
     os.environ["QT_USE_SRGB"] = "1"
     
+    # Enable HDR and wide color gamut support where available in Qt 6
+    # This helps bridge the gap with macOS's native color management
+    os.environ["QSG_RHI_HDR"] = "1"
+    
     # Improve rendering quality and color consistency
     if platform.system() == 'Windows':
         os.environ["QSG_RHI_BACKEND"] = "d3d11"
+        # On Windows, we can also try to enable 10-bit color if supported
+        os.environ["QSG_RHI_PREFER_10BIT"] = "1"
     elif platform.system() == 'Linux':
         os.environ["QSG_RHI_BACKEND"] = "gl"
     
     os.environ["QSG_RENDER_LOOP"] = "threaded"
     
-    # Force Chromium to use sRGB color profile for WebEngine content
+    # Force Chromium to use sRGB or P3 color profile for WebEngine content
     # Note: On macOS, we avoid some flags that cause stability issues
     if platform.system() != 'Darwin':
+        # Add flags to improve color depth and rendering quality in Chromium
+        vivid_flags = " --force-color-profile=srgb --enable-gpu-rasterization --ignore-gpu-blocklist --enable-hdr --force-raster-color-profile=srgb"
         if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
             if "--force-color-profile=srgb" not in os.environ["QTWEBENGINE_CHROMIUM_FLAGS"]:
-                os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " --force-color-profile=srgb --enable-gpu-rasterization --ignore-gpu-blocklist"
+                os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += vivid_flags
         else:
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-color-profile=srgb --enable-gpu-rasterization --ignore-gpu-blocklist"
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = vivid_flags.strip()
     else:
         # On macOS, let's at least ensure basic hardware acceleration is enabled
         if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
