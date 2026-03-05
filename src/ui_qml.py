@@ -437,14 +437,14 @@ Window {
         anchors.left: parent.left
         anchors.right: parent.right
         // Fixed right inset after calibration (original 6px cutoff + 6px safety = 12px)
-        anchors.rightMargin: (1.0 - backgroundWindy.progress) * 12
+        anchors.rightMargin: (1.0 - backgroundWindy.progress) > 0 ? (1.0 - backgroundWindy.progress) * 12 : 0
         
-        Binding {
+        /* Binding {
             target: backgroundWindy
             property: "anchors.right"
             value: videoCard.left
-            when: typeof videoCard !== 'undefined'
-        }
+            when: (typeof videoCard !== 'undefined' && videoCard !== null)
+        } */
 
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
@@ -453,6 +453,9 @@ Window {
             anchors.top: parent.top
             anchors.bottom: parent.bottom
             // width property below handles sizing; anchors.right is bound to videoCard.left when applicable
+            anchors.right: (typeof videoCard !== 'undefined' && videoCard !== null) ? videoCard.left : parent.right
+            // Use anchors.rightMargin to handle the safeArea logic directly on the background
+            anchors.rightMargin: (1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0
             
             property bool isDragging: false
             property real manualWidth: minWidth
@@ -472,14 +475,20 @@ Window {
 
             readonly property real minWidth: (root.width / 4) + (isHighRes ? 120 : 250)
             readonly property real progress: Math.max(0, Math.min(1, (width - minWidth) / Math.max(1, root.width - minWidth)))
+            onWidthChanged: {
+                if (isDragging || (widthAnimation && widthAnimation.running)) {
+                    // Force re-evaluation of dependent properties if needed, 
+                    // though QML should do this automatically.
+                }
+            }
 
-            Behavior on width { 
+            Behavior on width {
                 id: widthBehavior
                 enabled: !backgroundWindy.isDragging
                 NumberAnimation { 
                     id: widthAnimation
-                    duration: 350 
-                    easing.type: Easing.OutCubic
+                    duration: 400
+                    easing.type: Easing.OutCubic // Smoother opening, maintains nice deceleration
                 } 
             }
 
@@ -495,6 +504,10 @@ Window {
                 currentIndex: 1
                 property int loadedMask: (1 << 1)
                 onCurrentIndexChanged: loadedMask |= (1 << currentIndex)
+
+                // Cache some constants for the web views to avoid per-frame lookups
+                readonly property real maxTextureWidth: root.width
+                readonly property real maxTextureHeight: root.height
 
                 Repeater {
                     model: ["radar", "wind", "gust", "clouds", "temp", "pressure"]
@@ -512,9 +525,13 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    layer.enabled: backgroundWindy.isDragging || (typeof widthAnimation !== 'undefined' && widthAnimation.running)
+                                    layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running)
                                     layer.smooth: true
-                                    layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
+                                    // layer.renderTarget removed due to compatibility issues with older Qt versions
+                                    // layer.renderTarget: Item.FramebufferObject
+                                    layer.textureSize: (backgroundWindy.isDragging || (widthAnimation && widthAnimation.running))
+                                                        ? Qt.size(weatherSwipe.maxTextureWidth, weatherSwipe.maxTextureHeight) 
+                                                        : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     enabled: !backgroundWindy.isLocked
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
                                     url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
@@ -619,7 +636,7 @@ Window {
                             if (backgroundWindy.isDragging) {
                                 // Snap logic: if moved more than 15% (was 20%) from the starting state, snap to the other state.
                                 var p = backgroundWindy.progress
-                                var threshold = 0.15
+                                var threshold = 0.12 // Slightly more sensitive threshold
                                 if (backgroundWindy.expansionFactor === 0.0) {
                                     backgroundWindy.expansionFactor = (p > threshold) ? 1.0 : 0.0
                                 } else {
@@ -1541,7 +1558,7 @@ Window {
                 enabled: !videoCard.isDragging
                 NumberAnimation { 
                     id: videoWidthAnimation
-                    duration: 350 
+                    duration: 400 
                     easing.type: Easing.OutCubic
                 } 
             }
@@ -1576,9 +1593,12 @@ Window {
                             id: youtubeView
                             profile: youtubeProfile
                             anchors.fill: parent
-                            layer.enabled: videoCard.isDragging || (typeof videoWidthAnimation !== 'undefined' && videoWidthAnimation.running)
+                            layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
                             layer.smooth: true
-                            layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
+                            // layer.renderTarget: Item.FramebufferObject
+                            layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))
+                                                ? Qt.size(videoCard.currentMaxWidth > 0 ? videoCard.currentMaxWidth : root.width / 2, height > 0 ? height : root.height)
+                                                : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                             
                             // MouseArea for expansion gesture
                             MouseArea {
@@ -1609,7 +1629,7 @@ Window {
                                 onReleased: (mouse) => {
                                     if (videoCard.isDragging) {
                                         var p = videoCard.progress
-                                        var threshold = 0.15
+                                        var threshold = 0.12
                                         if (videoCard.videoExpansionFactor === 0.0) {
                                             videoCard.videoExpansionFactor = (p > threshold) ? 1.0 : 0.0
                                         } else {
