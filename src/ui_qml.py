@@ -2336,9 +2336,9 @@ Window {
                                 id: weatherListView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.leftMargin: 10
-                                Layout.rightMargin: 10
-                                Layout.bottomMargin: 10
+                                Layout.leftMargin: 6
+                                Layout.rightMargin: 6
+                                Layout.bottomMargin: 6
                                 model: backend ? backend.weatherForecastModel : null
                                 clip: true
                                 interactive: true
@@ -2742,9 +2742,6 @@ Window {
                             Rectangle {
                                 id: trayBackground
                                 anchors.fill: parent
-                                anchors.leftMargin: -4
-                                anchors.rightMargin: -4
-                                anchors.bottomMargin: -4
                                 color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                                 radius: 14
                                 border.width: 1
@@ -2841,8 +2838,9 @@ Window {
                                 id: narrativeListView
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.margins: 0
-                                Layout.bottomMargin: 0 
+                                Layout.leftMargin: 6
+                                Layout.rightMargin: 6
+                                Layout.bottomMargin: 6
                                 Layout.topMargin: 0
                                 clip: true
                                 model: backend.launchDescriptions
@@ -2949,8 +2947,6 @@ Window {
                                             id: contentLayout
                                             anchors.fill: parent
                                             anchors.margins: 0
-                                            anchors.leftMargin: -4
-                                            anchors.rightMargin: 0
                                             spacing: 8
                                             
                                             ColumnLayout {
