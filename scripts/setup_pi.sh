@@ -962,8 +962,16 @@ logo.sprite = Sprite(logo.image);
 
 # Center the logo on screen
 # The logo is pre-rotated 90 deg CCW and scaled down in the setup script for reliability
-logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
-logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2;
+# Handle both native and rotated screen dimensions
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+logo_width = logo.image.GetWidth();
+logo_height = logo.image.GetHeight();
+
+logo.x = screen_width / 2 - logo_width / 2;
+logo.y = screen_height / 2 - logo_height / 2;
+
 logo.sprite.SetX(logo.x);
 logo.sprite.SetY(logo.y);
 
@@ -1054,7 +1062,7 @@ EOF
 
         # Add Plymouth parameters
         if ! grep -q "splash" "$CMDLINE_FILE"; then
-            sed -i 's/$/ quiet splash loglevel=3 vt.global_cursor_default=0 vt.handoff=7 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false systemd.show_status=false fsck.mode=skip/' "$CMDLINE_FILE"
+            sed -i 's/$/ quiet splash loglevel=0 vt.global_cursor_default=0 vt.handoff=7 plymouth.ignore-serial-consoles logo.nologo rd.systemd.show_status=false systemd.show_status=false fsck.mode=skip/' "$CMDLINE_FILE"
         fi
 
         # Ensure console is moved to tty3 (avoid kernel logs on Plymouth tty)

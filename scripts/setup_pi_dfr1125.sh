@@ -968,8 +968,16 @@ logo.sprite = Sprite(logo.image);
 
 # Center the logo on screen
 # The logo is scaled in the setup script for reliability
-logo.x = Window.GetWidth() / 2 - logo.image.GetWidth() / 2;
-logo.y = Window.GetHeight() / 2 - logo.image.GetHeight() / 2;
+# Handle both native and rotated screen dimensions
+screen_width = Window.GetWidth();
+screen_height = Window.GetHeight();
+
+logo_width = logo.image.GetWidth();
+logo_height = logo.image.GetHeight();
+
+logo.x = screen_width / 2 - logo_width / 2;
+logo.y = screen_height / 2 - logo_height / 2;
+
 logo.sprite.SetX(logo.x);
 logo.sprite.SetY(logo.y);
 
