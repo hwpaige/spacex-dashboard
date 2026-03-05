@@ -449,8 +449,10 @@ Window {
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
             id: backgroundWindy
-            Layout.fillHeight: true
-            // width property below handles sizing; anchors.left and others are removed as it's in a RowLayout
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            // width property below handles sizing; anchors.right is bound to videoCard.left when applicable
             
             property bool isDragging: false
             property real manualWidth: minWidth

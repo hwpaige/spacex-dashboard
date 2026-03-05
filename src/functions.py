@@ -3293,11 +3293,20 @@ def setup_dashboard_environment():
     os.environ["QSG_RENDER_LOOP"] = "threaded"
     
     # Force Chromium to use sRGB color profile for WebEngine content
+    # Note: On macOS, we avoid some flags that cause stability issues
     if platform.system() != 'Darwin':
         if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " --force-color-profile=srgb"
+            if "--force-color-profile=srgb" not in os.environ["QTWEBENGINE_CHROMIUM_FLAGS"]:
+                os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " --force-color-profile=srgb --enable-gpu-rasterization --ignore-gpu-blocklist"
         else:
-            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-color-profile=srgb"
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-color-profile=srgb --enable-gpu-rasterization --ignore-gpu-blocklist"
+    else:
+        # On macOS, let's at least ensure basic hardware acceleration is enabled
+        if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
+            if "--enable-gpu" not in os.environ["QTWEBENGINE_CHROMIUM_FLAGS"]:
+                os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " --enable-gpu --enable-webgl"
+        else:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --enable-webgl"
     
     if platform.system() != 'Darwin':
         os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
