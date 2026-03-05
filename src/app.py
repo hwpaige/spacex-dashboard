@@ -1076,7 +1076,7 @@ class Backend(QObject):
         """Periodic update check in background"""
         self.checkForUpdatesNow()
 
-    @pyqtProperty(int)
+    @pyqtProperty(int, notify=modeChanged)
     def httpPort(self):
         return funcs.HTTP_SERVER_PORT
 

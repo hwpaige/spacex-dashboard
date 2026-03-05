@@ -449,9 +449,8 @@ Window {
         // Expanded Windy/Radar Background (Tesla Style)
         Item {
             id: backgroundWindy
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
+            Layout.fillHeight: true
+            // width property below handles sizing; anchors.left and others are removed as it's in a RowLayout
             
             property bool isDragging: false
             property real manualWidth: minWidth
@@ -860,7 +859,8 @@ Window {
 
                     // View 0: Existing List View
                         ListView {
-                            anchors.fill: parent
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
                             model: backend.eventModel
                             clip: true
                             spacing: 5
@@ -1010,7 +1010,8 @@ Window {
 
                         // View 1: Swipeable Calendar View (Loaded Lazily)
                         Loader {
-                            anchors.fill: parent
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
                             active: launchCard.launchViewMode === "calendar" || launchCard.calendarLoaded
                             onActiveChanged: if (active) launchCard.calendarLoaded = true
                             asynchronous: false // Synchronous to ensure properties like currentIndex are applied before render
@@ -1404,7 +1405,8 @@ Window {
                         
                         // View 2: Launch Trends Chart (Moved from Plot Card)
                         Item {
-                            anchors.fill: parent
+                            Layout.fillWidth: true
+                            Layout.fillHeight: true
                             
                             ChartItem {
                                 anchors.fill: parent
@@ -2202,15 +2204,8 @@ Window {
 
                     Popup {
                         id: weatherTray
-                        x: 0
-                        width: 300
-                        height: 0
-                        // Sit at the bottom and grow UP
-                        y: parent.height - height
-                        modal: false
-                        focus: false
-                        visible: height > 0
-                        closePolicy: Popup.NoAutoClose
+                        closePolicy: Popup.CloseOnPressOutside
+                        onClosed: height = 0
                         padding: 0
                         
                         property real expandedHeight: 220
@@ -2718,7 +2713,8 @@ Window {
                         modal: false
                         focus: false
                         visible: height > 0
-                        closePolicy: Popup.NoAutoClose
+                        closePolicy: Popup.CloseOnPressOutside
+                        onClosed: height = 0
 
                         padding: 0
                         leftPadding: 0
@@ -3252,6 +3248,9 @@ Window {
                             width: 620
                             height: 280
                             padding: 0
+                            modal: true
+                            focus: true
+                            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
                             background: Rectangle {
                                 color: (backend && backend.theme === "dark") ? "#111111" : "#f5f5f5"
                                 radius: 20
@@ -3661,7 +3660,8 @@ Window {
                             modal: false
                             focus: false
                             visible: height > 0
-                            closePolicy: Popup.NoAutoClose
+                            closePolicy: Popup.CloseOnPressOutside
+                            onClosed: height = 0
                             padding: 0
                             
                             property real expandedHeight: 160
@@ -4039,7 +4039,8 @@ Window {
                         modal: false
                         focus: false
                         visible: height > 0
-                        closePolicy: Popup.NoAutoClose
+                        closePolicy: Popup.CloseOnPressOutside
+                        onClosed: height = 0
                         padding: 0
                         
                         property real expandedHeight: 180

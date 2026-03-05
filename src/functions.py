@@ -3280,11 +3280,27 @@ def setup_dashboard_environment():
     else:
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--enable-gpu --enable-webgl --disable-web-security"
 
-    if platform.system() != 'Darwin':
-        os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
+    # Enable sRGB for more vivid and accurate colors across all platforms
+    os.environ["QT_ENABLE_HIGHDPI_SCALING"] = "1"
+    os.environ["QT_USE_SRGB"] = "1"
+    
+    # Improve rendering quality and color consistency
+    if platform.system() == 'Windows':
+        os.environ["QSG_RHI_BACKEND"] = "d3d11"
+    elif platform.system() == 'Linux':
         os.environ["QSG_RHI_BACKEND"] = "gl"
     
-    os.environ.setdefault("QSG_RENDER_LOOP", "threaded")
+    os.environ["QSG_RENDER_LOOP"] = "threaded"
+    
+    # Force Chromium to use sRGB color profile for WebEngine content
+    if platform.system() != 'Darwin':
+        if "QTWEBENGINE_CHROMIUM_FLAGS" in os.environ:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " --force-color-profile=srgb"
+        else:
+            os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = "--force-color-profile=srgb"
+    
+    if platform.system() != 'Darwin':
+        os.environ["QTWEBENGINE_DISABLE_SANDBOX"] = "1"
 
     # High DPI Scaling support
     # Detect physical resolution from config file if environment variables are missing
