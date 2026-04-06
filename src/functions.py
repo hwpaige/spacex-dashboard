@@ -1883,7 +1883,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         logger.info(f"Using API-provided trajectory data for {mission_name}")
         # Build response compatible with dashboard expectations
         # Note: the API provides {lat, lon, r} points, which the dashboard uses
-        return {
+        result = {
             'launch_site': {
                 'lat': api_traj['trajectory'][0]['lat'] if api_traj.get('trajectory') else 28.6,
                 'lon': api_traj['trajectory'][0]['lon'] if api_traj.get('trajectory') else -80.6,
@@ -1899,6 +1899,8 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'landing_type': next_launch.get('landing_type'),
             'landing_location': next_launch.get('landing_location')
         }
+        logger.info(f"API Trajectory points: {len(result['trajectory'])}")
+        return result
     # --------------------------------------------------
 
     # Launch site coordinates

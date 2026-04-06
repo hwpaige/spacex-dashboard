@@ -753,20 +753,21 @@
         }
 
         let lastTrajectoryUpdateTs = 0;
-        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 1000;
+        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 200; // Reduced from 1000 to allow smoother transition and ensure we don't miss updates from Python (500ms)
 
         function updateTrajectory(trajectoryData) {
             const now = performance.now();
             if (now - lastTrajectoryUpdateTs < MIN_TRAJECTORY_UPDATE_INTERVAL_MS) {
-                console.log("[globe] updateTrajectory rate limited");
+                console.log("[globe] updateTrajectory rate limited (" + (now - lastTrajectoryUpdateTs).toFixed(0) + "ms since last)");
+                return;
+            }
+
+            if (!renderer || !scene || !camera || !globe) {
+                console.warn("updateTrajectory called before webgl components were ready. Retrying in 1s...");
+                setTimeout(() => updateTrajectory(trajectoryData), 1000);
                 return;
             }
             lastTrajectoryUpdateTs = now;
-
-            if (!renderer || !scene || !camera) {
-                console.warn("updateTrajectory called before webgl components were ready");
-                return;
-            }
             // Remove existing trajectory group (which contains core and glow lines)
             if (trajectoryGroup) {
                 if (globe) globe.remove(trajectoryGroup);

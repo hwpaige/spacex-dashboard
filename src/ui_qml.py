@@ -390,6 +390,45 @@ Window {
     // Alignment guide rectangle removed
     // Cache expensive / repeated lookups
     
+    function updateGlobeTrajectoryData() {
+        // Update trajectory when data loads. 
+        // Using get_launch_trajectory_json to ensure clean data transfer.
+        if (!backend) return;
+        console.log("QML: updateGlobeTrajectoryData triggered. Backend loading: " + (backend ? backend.isLoading : "null"));
+        var trajectoryJson = backend.get_launch_trajectory_json();
+        if (trajectoryJson && trajectoryJson !== "") {
+            console.log("QML: Trajectory data retrieved successfully (" + trajectoryJson.length + " chars)");
+            
+            // Target both potential globe locations (Primary and High-Res/Vertical)
+            var targets = [];
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView) targets.push(plotGlobeView);
+            
+            var success = false;
+            targets.forEach(function(target) {
+                if (target.runJavaScript) {
+                    console.log("QML: Injecting trajectory into " + target.id);
+                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); }");
+                    success = true;
+                }
+            });
+            
+            if (!success) {
+                console.log("QML: No valid globe target found for trajectory update. Retrying in 2s...");
+                trajectoryRetryTimer.start();
+            }
+        } else {
+            console.log("QML: No trajectory data available yet from backend");
+            // If it's empty, maybe it's still computing. The next signal will catch it.
+        }
+    }
+
+    Timer {
+        id: trajectoryRetryTimer
+        interval: 2000
+        repeat: false
+        onTriggered: root.updateGlobeTrajectoryData()
+    }
+    
     Connections {
         target: backend
         function onWeatherChanged() {
@@ -415,20 +454,7 @@ Window {
             // }
         }
         function onUpdateGlobeTrajectory() {
-            // Update trajectory when data loads. 
-            // Using get_launch_trajectory_json to ensure clean data transfer.
-            console.log("QML: onUpdateGlobeTrajectory triggered");
-            var trajectoryJson = backend.get_launch_trajectory_json();
-            if (trajectoryJson && trajectoryJson !== "") {
-                console.log("QML: Sending trajectory data to plotGlobeView");
-                if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
-                    plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); }");
-                } else {
-                    console.log("QML: plotGlobeView not available for trajectory update");
-                }
-            } else {
-                console.log("QML: No trajectory data available yet");
-            }
+            root.updateGlobeTrajectoryData()
         }
     }
 
@@ -802,7 +828,7 @@ Window {
                 radius: 8
                 clip: false
                 opacity: (1.0 - backgroundWindy.progress)
-                visible: opacity > 0 && !plotCard.isHighResolution
+                visible: opacity > 0
                 property bool isHighResolution: backend && backend.isHighResolution
 
                 ColumnLayout {

@@ -2083,9 +2083,13 @@ class Backend(QObject):
         if data:
             try:
                 import json
-                return json.dumps(data)
+                json_str = json.dumps(data)
+                logger.info(f"Backend: Serialized trajectory for {data.get('mission')} ({len(data.get('trajectory', []))} points)")
+                return json_str
             except Exception as e:
                 logger.error(f"Error serializing trajectory: {e}")
+        else:
+            logger.info("Backend: get_launch_trajectory returned None/empty")
         return ""
 
     @pyqtSlot(str, str, str, str, result=bool)
@@ -2523,6 +2527,8 @@ class Backend(QObject):
             # (trajectory data is already in-memory or in cache)
             logger.info("Backend: Emitting updateGlobeTrajectory signal")
             self.updateGlobeTrajectory.emit()
+            # Safety emit for any other potential globe listeners
+            self.launchCacheReady.emit() 
         except Exception as e:
             logger.error(f"Error emitting globe signal: {e}")
 
