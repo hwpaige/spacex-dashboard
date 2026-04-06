@@ -104,6 +104,8 @@ from functions import (
     filter_and_sort_wifi_networks,
     get_nmcli_profiles,
     fetch_weather_for_all_locations,
+    enrich_narratives,
+    parse_narratives,
     perform_full_dashboard_data_load,
     setup_dashboard_environment,
     setup_dashboard_logging,
@@ -534,7 +536,24 @@ class Backend(QObject):
         profiler.mark("Backend: get_closest_x_video_url Start")
         self._live_launch_url = get_closest_x_video_url(self._launch_data)
         profiler.mark("Backend: get_closest_x_video_url End")
+        # Load narratives from cache or fallback to legacy, and enrich with cached launch data
+        # This ensures "pills" (status tags) are visible early if launch cache is available
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
+        try:
+            profiler.mark("Backend: Loading Narratives Cache Start")
+            narr_cache = load_cache_from_file(RUNTIME_CACHE_FILE_NARRATIVES)
+            if narr_cache and 'data' in narr_cache:
+                initial_narratives = narr_cache['data']
+                logger.info("Backend: Loaded cached narratives from disk")
+            else:
+                initial_narratives = parse_narratives(LAUNCH_DESCRIPTIONS)
+            
+            # Enrich with whatever launch data we loaded from cache earlier
+            self._launch_descriptions = enrich_narratives(initial_narratives, self._launch_data)
+            profiler.mark("Backend: Loading Narratives Cache End")
+        except Exception as e:
+            logger.debug(f"Failed to load initial narratives cache: {e}")
+
         self._weather_data = {}
         try:
             profiler.mark("Backend: Loading Weather Cache Start")
@@ -873,28 +892,47 @@ class Backend(QObject):
 
     @pyqtSlot(str, str)
     def add_remembered_network(self, ssid, password):
-        """Add a network to remembered list and persist to file"""
-        ts = time.time()
-        self._remembered_networks = sync_remembered_networks(self._remembered_networks, ssid, ts, password)
-        save_remembered_networks(self._remembered_networks)
-        self.rememberedNetworksChanged.emit()
+        """Add a network to remembered list and persist to file (Async)"""
+        def _worker():
+            try:
+                ts = time.time()
+                current_rem = list(self._remembered_networks or [])
+                new_rem = sync_remembered_networks(current_rem, ssid, ts, password)
+                save_remembered_networks(new_rem)
+                
+                def _done():
+                    self._remembered_networks = new_rem
+                    self.rememberedNetworksChanged.emit()
+                QTimer.singleShot(0, _done)
+            except Exception as e:
+                logger.error(f"Error adding remembered network in background: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     @pyqtSlot(str)
     def remove_remembered_network(self, ssid):
-        """Remove a network from remembered networks"""
-        self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
-        save_remembered_networks(self._remembered_networks)
-        
-        # On Linux, also attempt to remove the NetworkManager connection profile
-        if platform.system() == 'Linux':
-            logger.info(f"Removing NetworkManager profile for forgotten network: {ssid}")
+        """Remove a network from remembered networks (Async)"""
+        def _worker():
             try:
-                # We do this in a background thread to avoid any potential UI delay
-                threading.Thread(target=lambda: remove_nm_connection(ssid), daemon=True).start()
-            except Exception as e:
-                logger.debug(f"Failed to start NM profile removal thread: {e}")
+                # 1. Update list and save to disk
+                new_rem = [n for n in self._remembered_networks if n['ssid'] != ssid]
+                save_remembered_networks(new_rem)
                 
-        self.rememberedNetworksChanged.emit()
+                # 2. On Linux, also attempt to remove the NetworkManager connection profile
+                if platform.system() == 'Linux':
+                    try:
+                        remove_nm_connection(ssid)
+                    except Exception as e:
+                        logger.debug(f"Failed to remove NM profile: {e}")
+
+                def _done():
+                    self._remembered_networks = new_rem
+                    self.rememberedNetworksChanged.emit()
+                QTimer.singleShot(0, _done)
+            except Exception as e:
+                logger.error(f"Error removing remembered network in background: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def reload_web_content(self):
         """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
@@ -913,15 +951,22 @@ class Backend(QObject):
             logger.error(f"Error signaling web content reload: {e}")
 
     def save_last_connected_network(self, ssid):
-        """Save the last connected network to file"""
-        try:
-            ts = save_last_connected_network(ssid)
-            # Update internal list and sort
-            self._remembered_networks = sync_remembered_networks(self._remembered_networks, ssid, ts)
-            save_remembered_networks(self._remembered_networks)
-            self.rememberedNetworksChanged.emit()
-        except Exception as e:
-            logger.error(f"Error saving last connected network: {e}")
+        """Save the last connected network to file (Async)"""
+        def _worker():
+            try:
+                ts = save_last_connected_network(ssid)
+                current_rem = list(self._remembered_networks or [])
+                new_rem = sync_remembered_networks(current_rem, ssid, ts)
+                save_remembered_networks(new_rem)
+                
+                def _done():
+                    self._remembered_networks = new_rem
+                    self.rememberedNetworksChanged.emit()
+                QTimer.singleShot(0, _done)
+            except Exception as e:
+                logger.error(f"Error saving last connected network in background: {e}")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     def _try_nmcli_connection(self, ssid, password, wifi_device):
         """Try to connect using nmcli as fallback"""
@@ -1149,7 +1194,8 @@ class Backend(QObject):
     def theme(self, value):
         if self._theme != value:
             self._theme = value
-            save_theme_settings(value)
+            # File I/O in background
+            threading.Thread(target=lambda: save_theme_settings(value), daemon=True).start()
             self.themeChanged.emit()
 
     @pyqtProperty(str, notify=targetBranchChanged)
@@ -1160,7 +1206,8 @@ class Backend(QObject):
     def targetBranch(self, value):
         if self._target_branch != value:
             self._target_branch = value
-            save_branch_setting(value)
+            # File I/O in background
+            threading.Thread(target=lambda: save_branch_setting(value), daemon=True).start()
             self.targetBranchChanged.emit()
             
             # Reset update status and latest info when branch changes to ensure 
@@ -2017,79 +2064,62 @@ class Backend(QObject):
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
-        """Get trajectory data for the next upcoming launch or currently selected launch"""
+        """Get trajectory data for the next upcoming launch or currently selected launch (Async)"""
         # If we have a specific trajectory loaded, return that
         if hasattr(self, '_current_trajectory') and self._current_trajectory:
             logger.info("get_launch_trajectory: Returning current selected launch trajectory")
             return self._current_trajectory
         
-        # Otherwise, get the default next launch trajectory
-        upcoming = self.get_upcoming_launches()
-        previous = self._launch_data.get('previous', [])
-        
-        # Set selected launch to the next upcoming launch if available
-        if upcoming and len(upcoming) > 0:
-            next_launch = upcoming[0]
-            mission = next_launch.get('mission', '')
-            if mission and self._selected_launch_mission != mission:
-                self._selected_launch_mission = mission
-                self.selectedLaunchChanged.emit()
-                logger.info(f"get_launch_trajectory: Set selected launch to next upcoming: {mission}")
-        
-        # Use the centralized trajectory calculator in functions.py
-        # Pass the full launch objects to preserve trajectory_data from API
-        upcoming_full = self._launch_data.get('upcoming', [])
-        result = get_launch_trajectory_data(upcoming_full, previous)
-        if result and 'booster_trajectory' in result:
-            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points and {len(result['booster_trajectory'])} booster points")
-        elif result:
-            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points (no booster)")
-        else:
-            logger.info("get_launch_trajectory: Returning None")
-        return result
+        # Otherwise, return None and trigger a background calculation
+        # The UI will be notified via updateGlobeTrajectory signal once ready
+        logger.info("get_launch_trajectory: No trajectory cached, triggering background computation")
+        self._compute_trajectory_async()
+        return None
 
     @pyqtSlot(str, str, str, str, result=bool)
     def loadLaunchTrajectory(self, mission, pad, orbit, landing_type):
-        """Load trajectory data for a specific launch"""
+        """Load trajectory data for a specific launch in a background thread"""
         try:
-            logger.info(f"Loading trajectory for launch: {mission} from {pad}")
+            logger.info(f"Loading trajectory for launch: {mission} in background")
             
             # Set the selected launch for visual indication
             if self._selected_launch_mission != mission:
                 self._selected_launch_mission = mission
                 self.selectedLaunchChanged.emit()
             
-            # Find the actual launch object in our data to get trajectory_data
-            all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
-            launch_obj = next((l for l in all_launches if l.get('mission') == mission), None)
-            
-            if launch_obj:
-                # Use the full launch object which contains trajectory_data from API
-                result = get_launch_trajectory_data(launch_obj)
-            else:
-                # Fallback to creating a minimal object if not found
-                launch_data = {
-                    'mission': mission,
-                    'pad': pad,
-                    'orbit': orbit,
-                    'landing_type': landing_type
-                }
-                result = get_launch_trajectory_data(launch_data)
-            
-            if result:
-                # Store the trajectory data for the globe
-                self._current_trajectory = result
-                logger.info(f"Trajectory loaded for {mission}: {len(result.get('trajectory', []))} points")
-                
-                # Emit signal to update globe
-                self.updateGlobeTrajectory.emit()
-                return True
-            else:
-                logger.warning(f"Failed to generate trajectory for {mission}")
-                return False
+            def _worker():
+                try:
+                    # Find the actual launch object in our data to get trajectory_data
+                    all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
+                    launch_obj = next((l for l in all_launches if l.get('mission') == mission), None)
+                    
+                    if launch_obj:
+                        result = get_launch_trajectory_data(launch_obj)
+                    else:
+                        launch_data = {
+                            'mission': mission,
+                            'pad': pad,
+                            'orbit': orbit,
+                            'landing_type': landing_type
+                        }
+                        result = get_launch_trajectory_data(launch_data)
+                    
+                    if result:
+                        def _done():
+                            self._current_trajectory = result
+                            logger.info(f"Trajectory loaded for {mission}: {len(result.get('trajectory', []))} points")
+                            self.updateGlobeTrajectory.emit()
+                        QTimer.singleShot(0, _done)
+                    else:
+                        logger.warning(f"Failed to generate trajectory for {mission}")
+                except Exception as e:
+                    logger.error(f"Error computing specific trajectory: {e}")
+
+            threading.Thread(target=_worker, daemon=True).start()
+            return True # Started in background
                 
         except Exception as e:
-            logger.error(f"Error loading trajectory for {mission}: {e}")
+            logger.error(f"Error starting trajectory load for {mission}: {e}")
             return False
 
     @pyqtSlot(str, result=str)
