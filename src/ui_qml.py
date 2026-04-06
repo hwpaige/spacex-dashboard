@@ -109,7 +109,7 @@ Window {
     property url currentVideoUrl: backend ? backend.videoUrl : ""
 
     // UI Ready tracking
-    property int _pendingCriticalLoads: (backend && backend.isHighResolution) ? 2 : 1
+    property int _pendingCriticalLoads: 1
     function _onCriticalComponentLoaded() {
         _pendingCriticalLoads--;
         console.log("Critical UI component loaded. Pending: " + _pendingCriticalLoads);
@@ -821,8 +821,8 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (root.height > root.width ? -1 : (1.0 - backgroundWindy.progress))
-                Layout.preferredHeight: plotCard.isHighResolution ? 0 : (root.height > root.width ? 1.0 : -1)
+                Layout.preferredWidth: (root.height > root.width ? -1 : (1.0 - backgroundWindy.progress))
+                Layout.preferredHeight: (root.height > root.width ? 1.0 : -1)
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
