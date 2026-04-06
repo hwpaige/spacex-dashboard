@@ -922,9 +922,9 @@ EOF
 configure_plymouth() {
     log "Configuring Plymouth boot splash screen..."
 
-    # Install Plymouth if not already installed
-    if ! command -v plymouth &> /dev/null; then
-        apt-get install -y plymouth plymouth-themes
+    # Install Plymouth and ImageMagick if not already installed
+    if ! command -v plymouth &> /dev/null || ! command -v convert &> /dev/null; then
+        apt-get install -y plymouth plymouth-themes imagemagick
     fi
 
     # Create custom SpaceX Plymouth theme
@@ -1007,28 +1007,14 @@ EOF
     fi
 
     # Rebuild initramfs with Plymouth embedded
-    if ! update-initramfs -u; then
-        log "WARNING: Initramfs rebuild failed"
-    else
-        log "✓ Initramfs rebuilt successfully with Plymouth support"
-    fi
+    # We do this later in the function after all configs are done to avoid redundant runs
 
     # Copy initramfs to Raspberry Pi firmware directory (ensure it matches config.txt name)
     # The generic name 'initrd.img' is expected by our config.txt configuration
+    # Note: On Ubuntu, flash-kernel usually handles this, but we'll ensure it's there
     local target_initrd="/boot/firmware/initrd.img"
-    if [ -f /boot/initrd.img ]; then
-        cp /boot/initrd.img "$target_initrd"
-        log "✓ Initramfs copied to $target_initrd"
-    else
-        # Fallback: copy the newest versioned raspi initrd
-        local newest_initrd=$(ls -t /boot/initrd.img-*-raspi 2>/dev/null | head -n 1)
-        if [ -n "$newest_initrd" ]; then
-            cp "$newest_initrd" "$target_initrd"
-            log "✓ Newest initramfs ($newest_initrd) copied to $target_initrd"
-        else
-            log "WARNING: No initramfs images found in /boot/ to copy to $target_initrd"
-        fi
-    fi
+    
+    # We will trigger flash-kernel or update-initramfs at the end of this function
 
     # Ensure firmware loads initramfs at boot (required for Plymouth to appear early)
     local cfg="/boot/firmware/config.txt"
@@ -1045,13 +1031,16 @@ EOF
     fi
 
     # Configure kernel command line for Plymouth
-    # Ubuntu 25.10+ and some recent versions use os_prefix=current/ in config.txt
-    # which means the actual cmdline.txt is in /boot/firmware/current/
+    # Ubuntu 25.10+ uses a new A/B boot layout with assets in /boot/firmware/current/
     local fw_dir="/boot/firmware"
-    if grep -q "^os_prefix=" "$fw_dir/config.txt" 2>/dev/null; then
-        local prefix=$(grep "^os_prefix=" "$fw_dir/config.txt" | cut -d= -f2)
-        if [ -d "$fw_dir/$prefix" ]; then
-            fw_dir="$fw_dir/$prefix"
+    if [ -d "$fw_dir/current" ]; then
+        log "Ubuntu 25.10+ A/B boot layout detected: using $fw_dir/current/ as cmdline.txt base"
+        fw_dir="$fw_dir/current"
+    elif grep -q "^os_prefix=" "/boot/firmware/config.txt" 2>/dev/null; then
+        local prefix=$(grep "^os_prefix=" "/boot/firmware/config.txt" | cut -d= -f2)
+        if [ -d "/boot/firmware/$prefix" ]; then
+            fw_dir="/boot/firmware/$prefix"
+            log "Custom os_prefix detected: using $fw_dir as cmdline.txt base"
         fi
     fi
 
@@ -1113,6 +1102,19 @@ Theme=spacex
 ShowDelay=0
 DeviceTimeout=8
 EOF
+
+    # Regenerate initramfs to ensure Plymouth and quiet boot settings are baked in
+    if command -v flash-kernel >/dev/null 2>&1; then
+        log "Regenerating initramfs and updating boot firmware via flash-kernel..."
+        flash-kernel $(uname -r)
+    elif command -v update-initramfs >/dev/null 2>&1; then
+        log "Regenerating initramfs to apply Plymouth changes..."
+        update-initramfs -u
+        # Manual copy as fallback if flash-kernel is not used
+        if [ -f /boot/initrd.img ]; then
+            cp /boot/initrd.img /boot/firmware/initrd.img
+        fi
+    fi
 
     log "✓ Plymouth configured with theme: spacex"
 
@@ -1677,9 +1679,6 @@ EOF
     # Start LightDM immediately to test autologin
     log "Starting LightDM to test autologin configuration..."
     systemctl start lightdm || log "WARNING: LightDM failed to start (this may be normal if X is already running)"
-    
-    # Remove old getty override if it exists
-    rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
 }
 
 optimize_performance() {

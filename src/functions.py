@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import logging.handlers
 import math
 import platform
 IS_WINDOWS = platform.system() == 'Windows'
@@ -3396,7 +3397,14 @@ def setup_dashboard_logging(module_file):
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler(log_file, mode='w', encoding='utf-8'),
+                logging.handlers.TimedRotatingFileHandler(
+                    log_file,
+                    when='W0',  # Rotate every Monday at midnight
+                    interval=1,
+                    backupCount=0,  # No backup files kept, effectively resetting weekly
+                    encoding='utf-8',
+                    delay=False
+                ),
                 logging.StreamHandler(sys.stdout)
             ],
             force=True

@@ -556,6 +556,8 @@
                 // Moving these into init ensures renderer.domElement is available safely.
                 const onPointerDown = (e) => {
                     if (e && e.pointerType && e.pointerType !== 'mouse') {
+                        // Reset if it gets too high, indicating something is wrong
+                        if (activePointers > 10) activePointers = 0;
                         activePointers++;
                         userInteracting = true;
                         // Log pointer type for debugging
@@ -679,73 +681,88 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            const now = performance.now();
-            const absoluteTime = (now - __startTime) / 1000.0;
+            try {
+                const now = performance.now();
+                const absoluteTime = (now - __startTime) / 1000.0;
 
-            // Optimization: Skip all processing if system is paused and no interaction is happening
-            if (systemPaused && !userInteracting && !isInMomentum) {
-                // Still update time for clouds so they don't jump when resuming, 
-                // but we aren't rendering anyway so it's just a variable update.
-                return;
-            }
+                // Optimization: Skip all processing if system is paused and no interaction is happening
+                if (systemPaused && !userInteracting && !isInMomentum) {
+                    // Still update time for clouds so they don't jump when resuming, 
+                    // but we aren't rendering anyway so it's just a variable update.
+                    return;
+                }
 
-            if (globe) {
-                if (isInMomentum) {
-                    // Apply momentum directly in the same frame of reference it was recorded
-                    // (we bake orientation into momentum at capture time to avoid post-release flips)
-                    globe.rotation.y += momentumX;
-                    if (!window.__userRotOffset) window.__userRotOffset = 0;
-                    window.__userRotOffset += momentumX;
-                    
-                    globe.rotation.x += momentumY;
-                    clampRotationX();
+                if (globe) {
+                    if (isInMomentum) {
+                        // Apply momentum directly in the same frame of reference it was recorded
+                        // (we bake orientation into momentum at capture time to avoid post-release flips)
+                        globe.rotation.y += momentumX;
+                        if (!window.__userRotOffset) window.__userRotOffset = 0;
+                        window.__userRotOffset += momentumX;
+                        
+                        globe.rotation.x += momentumY;
+                        clampRotationX();
 
-                    // Decay momentum
-                    // Slightly stronger damping to reduce perceived recoil
-                    momentumX *= 0.93; // Friction/damping
-                    momentumY *= 0.93;
+                        // Decay momentum
+                        // Slightly stronger damping to reduce perceived recoil
+                        momentumX *= 0.93; // Friction/damping
+                        momentumY *= 0.93;
 
-                    // Check if momentum is low enough to return to auto-rotation
-                    if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
-                        isInMomentum = false;
-                        momentumX = 0;
-                        momentumY = 0;
+                        // Check if momentum is low enough to return to auto-rotation
+                        if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
+                            isInMomentum = false;
+                            momentumX = 0;
+                            momentumY = 0;
+                        }
+                    } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
+                        // Normal auto-rotation (decoupled from OrbitControls)
+                        const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
+                        // Use a separate base for auto-rotation to allow interaction to "offset" it
+                        if (!window.__autoRotBase) window.__autoRotBase = 0;
+                        window.__autoRotBase += baseSpeed * 0.01;
+                        globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
                     }
-                } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
-                    // Normal auto-rotation (decoupled from OrbitControls)
-                    const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
-                    // Use a separate base for auto-rotation to allow interaction to "offset" it
-                    if (!window.__autoRotBase) window.__autoRotBase = 0;
-                    window.__autoRotBase += baseSpeed * 0.01;
-                    globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
                 }
-            }
 
-            // Rotate clouds slower than the globe
-            const clouds = scene.getObjectByName('clouds');
-            if (clouds) {
-                // Cloud rotation can stay relative or use absolute time for perfect consistency
-                clouds.rotation.y = absoluteTime * 0.05; 
-                if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
-                    clouds.material.uniforms.time.value = absoluteTime;
+                // Rotate clouds slower than the globe
+                const clouds = scene.getObjectByName('clouds');
+                if (clouds) {
+                    // Cloud rotation can stay relative or use absolute time for perfect consistency
+                    clouds.rotation.y = absoluteTime * 0.05; 
+                    if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
+                        clouds.material.uniforms.time.value = absoluteTime;
+                    }
                 }
-            }
 
-            if (renderer && scene && camera) {
-                renderer.render(scene, camera);
-            }
+                if (renderer && scene && camera) {
+                    renderer.render(scene, camera);
+                }
 
-            // Track last render timestamp for watchdog
-            __lastRenderTs = now;
-            
-            // Periodically log animation status (every 5 seconds)
-            if (now - __lastResumeLogTs > 5000) {
-                console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
-                __lastResumeLogTs = now;
+                // Track last render timestamp for watchdog
+                __lastRenderTs = now;
+                
+                // Periodically log animation status (every 5 seconds)
+                if (now - __lastResumeLogTs > 5000) {
+                    console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
+                    __lastResumeLogTs = now;
+                }
+            } catch (error) {
+                console.error("[globe] Error in animate loop:", error);
+                // The loop continues due to requestAnimationFrame being called at the top.
             }
         }
 
+        let lastTrajectoryUpdateTs = 0;
+        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 1000;
+
         function updateTrajectory(trajectoryData) {
+            const now = performance.now();
+            if (now - lastTrajectoryUpdateTs < MIN_TRAJECTORY_UPDATE_INTERVAL_MS) {
+                console.log("[globe] updateTrajectory rate limited");
+                return;
+            }
+            lastTrajectoryUpdateTs = now;
+
             if (!renderer || !scene || !camera) {
                 console.warn("updateTrajectory called before webgl components were ready");
                 return;
@@ -1333,9 +1350,11 @@
                 const now = Date.now();
                 // Increased robustness: if userInteracting is true but no move for 3s and no pointers, reset.
                 // This handles cases where mouseup/touchend might have been missed entirely by the browser.
-                if (userInteracting && activePointers === 0 && (now - lastMoveTimeMs) > 3000) {
-                    console.log('[globe] clearing stale interaction due to inactivity');
-                    window.clearInteraction();
+                if (userInteracting && (now - lastMoveTimeMs) > 3000) {
+                    if (activePointers === 0 || (now - lastMoveTimeMs) > 10000) {
+                        console.log('[globe] clearing stale interaction due to inactivity');
+                        window.clearInteraction();
+                    }
                 }
                 
                 // If isMouseDown is true but no move for 10s, it's likely stuck.
