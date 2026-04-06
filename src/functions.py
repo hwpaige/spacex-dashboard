@@ -3257,6 +3257,24 @@ def setup_dashboard_environment():
                     is_25_10_or_newer = True
             except ValueError:
                 pass
+        
+        # Also check for FORCE_GLOZONE environment variable for troubleshooting
+        force_glozone = os.environ.get("FORCE_GLOZONE", "0") == "1"
+        
+        # Check for QT_VERSION to detect Qt 6.9+ which also triggers this
+        qt_version_str = os.environ.get("QT_VERSION_STR", "")
+        is_qt_69_plus = False
+        if qt_version_str:
+            try:
+                # Expecting format like '6.9.1'
+                parts = qt_version_str.split('.')
+                if len(parts) >= 2:
+                    major = int(parts[0])
+                    minor = int(parts[1])
+                    if major > 6 or (major == 6 and minor >= 9):
+                        is_qt_69_plus = True
+            except (ValueError, IndexError):
+                pass
 
         flags = [
             "--enable-gpu", "--ignore-gpu-blocklist", "--enable-webgl",
@@ -3277,7 +3295,7 @@ def setup_dashboard_environment():
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         ]
 
-        if is_25_10_or_newer:
+        if is_25_10_or_newer or force_glozone or is_qt_69_plus:
             # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
             # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
             flags.extend([
@@ -3285,7 +3303,12 @@ def setup_dashboard_environment():
                 "--ozone-platform=x11",
                 "--use-gl=egl"
             ])
-            logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
+            if force_glozone:
+                logger.info("FORCE_GLOZONE detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
+            elif is_qt_69_plus:
+                logger.info(f"Qt {qt_version_str} detected. Applying GLOzone hardware acceleration fixes.")
+            else:
+                logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
 
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
     else:

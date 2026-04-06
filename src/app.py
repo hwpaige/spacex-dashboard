@@ -1,5 +1,13 @@
-import functions as funcs
 # Initialize environment variables before importing PyQt6 to ensure Qt picks them up
+# Since we need to check Qt version for some fixes, we'll try to get it before full initialization
+import os
+try:
+    from PyQt6.QtCore import QT_VERSION_STR
+    os.environ["QT_VERSION_STR"] = QT_VERSION_STR
+except ImportError:
+    pass
+
+import functions as funcs
 funcs.setup_dashboard_environment()
 
 import platform
