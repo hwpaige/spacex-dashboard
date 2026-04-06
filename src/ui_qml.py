@@ -1004,6 +1004,7 @@ Window {
                             }
 
                             Rectangle {
+                                id: statusPill
                                 width: statusText.implicitWidth + 16
                                 height: 18
                                 color: root.getStatusColor(model ? model.status : "")
@@ -1030,28 +1031,50 @@ Window {
                                     if (model && !model.isGroup) {
                                         // Load trajectory for this specific launch
                                         backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
-                                        
-                                        // Prefer X video URL if available for SpaceX launches, fallback to converted YouTube URL
+                                        console.log("Launch selected:", model.mission, "from", model.pad)
+                                    }
+                                }
+                                cursorShape: Qt.PointingHandCursor
+                            }
+
+                            Rectangle {
+                                id: watchButton
+                                width: watchText.implicitWidth + 16
+                                height: 18
+                                color: "#F44336" // Red
+                                radius: 10
+                                anchors.top: statusPill.bottom
+                                anchors.right: parent.right
+                                anchors.topMargin: 5
+                                anchors.rightMargin: 5
+                                visible: !!(model && !model.isGroup && (model.videoUrl || model.xVideoUrl))
+                                z: 10 // Ensure it's above the main MouseArea
+
+                                Text {
+                                    id: watchText
+                                    text: "Watch"
+                                    font.pixelSize: 12
+                                    font.bold: true
+                                    color: "white"
+                                    anchors.centerIn: parent
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    onClicked: {
                                         var xUrl = model.xVideoUrl || "";
                                         var convertedXUrl = backend.getConvertedVideoUrl(xUrl);
                                         var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
                                         
                                         if (xUrl !== "") {
-                                            console.log("Launch selected: Using X.com stream:", convertedXUrl)
+                                            console.log("Watch clicked: Using X.com stream:", convertedXUrl)
                                             root.currentVideoUrl = convertedXUrl
                                         } else if (convertedUrl !== "") {
-                                            console.log("Launch selected: Using YouTube embed:", convertedUrl)
+                                            console.log("Watch clicked: Using YouTube embed:", convertedUrl)
                                             root.currentVideoUrl = convertedUrl;
-                                        } else {
-                                            // Clear the video view if no video is available for this launch
-                                            console.log("Launch selected: No video available")
-                                            root.currentVideoUrl = "about:blank";
                                         }
-                                        
-                                        console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
                                     }
                                 }
-                                cursorShape: Qt.PointingHandCursor
                             }
 
                         }
@@ -1472,6 +1495,86 @@ Window {
                             }
                         }
                     } // End StackLayout
+
+                    // Chart View Controls (Type and Mode) - Only shown in chart mode
+                    Rectangle {
+                        id: chartControlsOverlay
+                        anchors.bottom: launchButtonsOverlay.top
+                        anchors.bottomMargin: 8
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: chartControlsRow.implicitWidth + 24
+                        height: 32
+                        color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
+                        radius: 16
+                        z: 11
+                        visible: !!backend && (launchCard.launchViewMode === "chart")
+                        opacity: (visible && backgroundWindy.progress === 0) ? 1.0 : 0
+                        Behavior on opacity { NumberAnimation { duration: 250 } }
+
+                        RowLayout {
+                            id: chartControlsRow
+                            anchors.centerIn: parent
+                            spacing: 12
+
+                            // Chart Type: Bar vs Line
+                            Row {
+                                spacing: 4
+                                Repeater {
+                                    model: [
+                                        { "val": "bar", "label": "BAR" },
+                                        { "val": "line", "label": "LINE" }
+                                    ]
+                                    Rectangle {
+                                        width: 50; height: 24; radius: 12
+                                        color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "#333" : "#ddd") : "transparent"
+                                        border.color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            font.pixelSize: 10; font.bold: true
+                                            color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "white" : "black") : "#888"
+                                        }
+                                        MouseArea { 
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: if(backend) backend.chartType = modelData.val 
+                                        }
+                                    }
+                                }
+                            }
+
+                            Rectangle { width: 1; height: 16; color: backend.theme === "dark" ? "#333" : "#ccc" }
+
+                            // View Mode: Actual vs Cumulative
+                            Row {
+                                spacing: 4
+                                Repeater {
+                                    model: [
+                                        { "val": "actual", "label": "ACT" },
+                                        { "val": "cumulative", "label": "CUM" }
+                                    ]
+                                    Rectangle {
+                                        width: 50; height: 24; radius: 12
+                                        color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "#333" : "#ddd") : "transparent"
+                                        border.color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
+                                        border.width: 1
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            font.pixelSize: 10; font.bold: true
+                                            color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "white" : "black") : "#888"
+                                        }
+                                        MouseArea { 
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: if(backend) backend.chartViewMode = modelData.val 
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
 
                     // Launch view buttons overlay (Windy style)
                     Rectangle {
