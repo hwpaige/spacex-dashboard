@@ -790,12 +790,12 @@
             }
 
             if (!trajectoryData || !trajectoryData.trajectory || trajectoryData.trajectory.length < 2) {
-                console.log("No valid trajectory data received:", trajectoryData);
+                console.log("[globe] No valid trajectory data received:", JSON.stringify(trajectoryData));
                 return;
             }
 
-            console.log("Updating globe trajectory for mission:", trajectoryData.mission);
-            console.log("Trajectory points:", trajectoryData.trajectory.length);
+            console.log("[globe] Updating globe trajectory for mission:", trajectoryData.mission);
+            console.log("[globe] Trajectory points:", trajectoryData.trajectory.length);
             console.log("Booster points:", trajectoryData.booster_trajectory ? trajectoryData.booster_trajectory.length : 0);
             console.log("Landing type:", trajectoryData.landing_type);
 

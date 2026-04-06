@@ -402,12 +402,16 @@ Window {
             // Target both potential globe locations (Primary and High-Res/Vertical)
             var targets = [];
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView) targets.push(plotGlobeView);
+            // Fallback: check if plotGlobeViewInner is available directly (it might be in some contexts)
+            if (typeof plotGlobeViewInner !== 'undefined' && plotGlobeViewInner) {
+                if (targets.indexOf(plotGlobeViewInner) === -1) targets.push(plotGlobeViewInner);
+            }
             
             var success = false;
             targets.forEach(function(target) {
-                if (target.runJavaScript) {
-                    console.log("QML: Injecting trajectory into " + target.id);
-                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); }");
+                if (target && typeof target.runJavaScript === 'function') {
+                    console.log("QML: Injecting trajectory into " + (target.id || "unnamed") + " (length: " + trajectoryJson.length + ")");
+                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called via ' + (window.location.href.split('/').pop())); updateTrajectory(" + trajectoryJson + "); }");
                     success = true;
                 }
             });

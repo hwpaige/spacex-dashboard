@@ -738,6 +738,7 @@ class Backend(QObject):
         except Exception:
             pass
         self._trajectory_compute_inflight = False
+        self._current_trajectory = None
         self._trajectory_emit_timer = QTimer(self)
         self._trajectory_emit_timer.setSingleShot(True)
         try:
@@ -2370,7 +2371,6 @@ class Backend(QObject):
 
         # Update trajectory now that data is loaded (debounced) and precompute in background
         profiler.mark("Backend: Scheduling trajectory recompute")
-        self._emit_update_globe_trajectory_debounced()
         self._schedule_trajectory_recompute()
         profiler.mark("Backend: on_data_loaded End")
         profiler.log_summary()
@@ -2590,6 +2590,7 @@ class Backend(QObject):
                     if result:
                         def _done_success():
                             self._current_trajectory = result
+                            logger.info(f"Trajectory computation successful: {len(result.get('trajectory', []))} points")
                             self._trajectory_compute_inflight = False
                             self._emit_update_globe_trajectory_debounced()
                         QTimer.singleShot(0, _done_success)
@@ -2601,6 +2602,7 @@ class Backend(QObject):
                 
                 # If we got here, we failed
                 def _done_fail():
+                    logger.warning("Trajectory computation failed or returned no data")
                     self._trajectory_compute_inflight = False
                 QTimer.singleShot(0, _done_fail)
             except Exception as e:
