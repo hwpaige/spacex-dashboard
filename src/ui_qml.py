@@ -415,15 +415,19 @@ Window {
             // }
         }
         function onUpdateGlobeTrajectory() {
-            // Update trajectory when data loads
-            var trajectoryData = backend.get_launch_trajectory();
-            if (trajectoryData) {
-                if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
-                    globeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
-                }
+            // Update trajectory when data loads. 
+            // Using get_launch_trajectory_json to ensure clean data transfer.
+            console.log("QML: onUpdateGlobeTrajectory triggered");
+            var trajectoryJson = backend.get_launch_trajectory_json();
+            if (trajectoryJson && trajectoryJson !== "") {
+                console.log("QML: Sending trajectory data to plotGlobeView");
                 if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
-                    plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                    plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); }");
+                } else {
+                    console.log("QML: plotGlobeView not available for trajectory update");
                 }
+            } else {
+                console.log("QML: No trajectory data available yet");
             }
         }
     }
@@ -844,9 +848,9 @@ Window {
                                                 plotGlobeView._loaded = true;
                                                 if (typeof root !== 'undefined') root._onCriticalComponentLoaded();
                                             }
-                                            var trajectoryData = backend ? backend.get_launch_trajectory() : null;
-                                            if (trajectoryData) {
-                                                plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                                            var trajectoryJson = backend ? backend.get_launch_trajectory_json() : "";
+                                            if (trajectoryJson && trajectoryJson !== "") {
+                                                plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + trajectoryJson + ");");
                                             }
                                             if (backend) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
@@ -946,7 +950,7 @@ Window {
                                 font.pixelSize: 14; font.bold: true; color: "#999999"; visible: !!(model && model.isGroup)
                             }
 
-                            Column {
+                            ColumnLayout {
                                 id: launchColumn
                                 anchors.top: parent.top; anchors.topMargin: 5
                                 anchors.left: parent.left; anchors.leftMargin: 10
@@ -954,9 +958,10 @@ Window {
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && typeof model === 'object')
 
-                                Column {
+                                ColumnLayout {
                                     spacing: 0
-                                    width: parent.width - 85
+                                    Layout.fillWidth: true
+                                    Layout.rightMargin: 115
                                     Text { 
                                         text: {
                                             var m = (model && model.mission) ? model.mission : "";
@@ -965,7 +970,7 @@ Window {
                                         }
                                         font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                         color: (backend && backend.theme === "dark") ? "white" : "black"
-                                        width: parent.width
+                                        Layout.fillWidth: true
                                         wrapMode: Text.Wrap
                                     }
                                     Text { 
@@ -977,23 +982,31 @@ Window {
                                         visible: text !== ""
                                         font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                         color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                        width: parent.width
+                                        Layout.fillWidth: true
                                         wrapMode: Text.Wrap
                                     }
                                 }
-                                Row { spacing: 5
+                                Row { 
+                                    spacing: 5
+                                    Layout.fillWidth: true
                                     Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { spacing: 5
+                                Row { 
+                                    spacing: 5
+                                    Layout.fillWidth: true
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { spacing: 5; visible: !!(model && model.landingType)
+                                Row { 
+                                    spacing: 5; visible: !!(model && model.landingType)
+                                    Layout.fillWidth: true
                                     Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { spacing: 5
+                                Row { 
+                                    spacing: 5
+                                    Layout.fillWidth: true
                                     Text { text: "\uf017"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { 
                                         text: ((model && model.localTime && backend) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
@@ -1283,14 +1296,13 @@ Window {
                                         interactive: true
                                         boundsBehavior: Flickable.StopAtBounds
                                         flickableDirection: Flickable.VerticalFlick
-                                        delegate: Column {
+                                        delegate: ColumnLayout {
                                             width: parent.width
                                             spacing: 1
-                                            padding: 2
                                             
-                                            Column {
+                                            ColumnLayout {
                                                 spacing: 0
-                                                width: parent.width
+                                                Layout.fillWidth: true
                                                 Text { 
                                                     text: {
                                                         var m = modelData.mission;
@@ -1299,7 +1311,7 @@ Window {
                                                     }
                                                     font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                                     color: backend.theme === "dark" ? "white" : "black"
-                                                    width: parent.width
+                                                    Layout.fillWidth: true
                                                     wrapMode: Text.Wrap
                                                 }
                                                 Text { 
@@ -1311,7 +1323,7 @@ Window {
                                                     visible: text !== ""
                                                     font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                                     color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                                    width: parent.width
+                                                    Layout.fillWidth: true
                                                     wrapMode: Text.Wrap
                                                 }
                                             }
@@ -3202,7 +3214,7 @@ Window {
                                                     font.pixelSize: 14
                                                     font.family: "D-DIN"
                                                     font.bold: true
-                                                    width: parent.width
+                                                    Layout.fillWidth: true
                                                     wrapMode: Text.Wrap
                                                 }
 

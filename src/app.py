@@ -2076,6 +2076,18 @@ class Backend(QObject):
         self._compute_trajectory_async()
         return None
 
+    @pyqtSlot(result=str)
+    def get_launch_trajectory_json(self):
+        """Safe wrapper to return trajectory data as a JSON string for JS consumption."""
+        data = self.get_launch_trajectory()
+        if data:
+            try:
+                import json
+                return json.dumps(data)
+            except Exception as e:
+                logger.error(f"Error serializing trajectory: {e}")
+        return ""
+
     @pyqtSlot(str, str, str, str, result=bool)
     def loadLaunchTrajectory(self, mission, pad, orbit, landing_type):
         """Load trajectory data for a specific launch in a background thread"""
@@ -2507,12 +2519,12 @@ class Backend(QObject):
     # --- Globe trajectory helpers (async precompute + debounced emits) ---
     def _emit_update_globe_signal(self):
         try:
-            # Don't touch the globe if we are in the middle of a connection attempt
-            if getattr(self, '_wifi_connecting', False):
-                return
+            # Removed wifi guard to ensure trajectory updates even if wifi is connecting
+            # (trajectory data is already in-memory or in cache)
+            logger.info("Backend: Emitting updateGlobeTrajectory signal")
             self.updateGlobeTrajectory.emit()
-        except Exception as _e:
-            logger.debug(f"Failed to emit updateGlobeTrajectory: {_e}")
+        except Exception as e:
+            logger.error(f"Error emitting globe signal: {e}")
 
     def _emit_update_globe_trajectory_debounced(self):
         try:
