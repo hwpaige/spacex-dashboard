@@ -518,7 +518,7 @@ Window {
                 visible: !!backend
                 orientation: Qt.Vertical
                 clip: false
-                layer.enabled: true
+                layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || weatherSwipe.moving
                 layer.smooth: true
                 interactive: !backgroundWindy.isLocked
                 currentIndex: 1
@@ -831,7 +831,7 @@ Window {
                                         if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                     }
                                     zoomFactor: 1.0
-                                    layer.enabled: true
+                                    layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || (backgroundWindy.progress > 0 && backgroundWindy.progress < 1)
                                     layer.smooth: true
                                     layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     settings.javascriptCanAccessClipboard: false
@@ -916,7 +916,7 @@ Window {
                             boundsBehavior: Flickable.StopAtBounds
                             flickableDirection: Flickable.VerticalFlick
                             cacheBuffer: 1500
-                            layer.enabled: true
+                            layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || (backgroundWindy.progress > 0 && backgroundWindy.progress < 1)
                             layer.smooth: true
                             layer.textureSize: Qt.size(width, height)
                             // Use a fixed height for delegates to help with performance

@@ -183,7 +183,7 @@
 
                 // Renderer
                 renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                renderer.setPixelRatio(window.devicePixelRatio); // Sharpness on high-DPI screens
+                renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio)); // Limit pixel ratio for performance on Pi
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setClearColor(0x000000, 0); // Transparent background
                 document.body.appendChild(renderer.domElement);
@@ -829,7 +829,7 @@
                 const curve = new THREE.CatmullRomCurve3(points);
                 const tubeRadius = 0.0035; // Sharp main line
                 const radialSegments = 8;
-                const tubularSegments = points.length * 6; // smoothness
+                const tubularSegments = Math.min(600, points.length * 3); // cap segments for performance
                 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
 
                 // Apply vertex colors for gradient (Cyan -> Orange)
@@ -1031,7 +1031,7 @@
                     orbitCurve.closed = false;
 
                     const orbitTubeRadius = 0.003;
-                    const orbitSegments = orbitPoints.length * 6;
+                    const orbitSegments = Math.min(600, orbitPoints.length * 3);
 
                     const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, false);
                     const orbitMat = new THREE.MeshBasicMaterial({
