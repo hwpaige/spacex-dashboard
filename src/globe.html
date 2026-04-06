@@ -752,21 +752,38 @@
             }
         }
 
-        let lastTrajectoryUpdateTs = 0;
-        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 200; // Reduced from 1000 to allow smoother transition and ensure we don't miss updates from Python (500ms)
+        // Trajectory data queuing for early calls (before THREE.js/globe is ready)
+        let __pendingTrajectoryData = null;
+        let __trajectoryRetryTimeout = null;
 
         function updateTrajectory(trajectoryData) {
             const now = performance.now();
-            if (now - lastTrajectoryUpdateTs < MIN_TRAJECTORY_UPDATE_INTERVAL_MS) {
-                console.log("[globe] updateTrajectory rate limited (" + (now - lastTrajectoryUpdateTs).toFixed(0) + "ms since last)");
-                return;
+            
+            // 1. If not ready, store data and schedule retry
+            if (!renderer || !scene || !camera || !globe) {
+                console.warn("[globe] updateTrajectory: webgl components not ready. Storing pending data.");
+                __pendingTrajectoryData = trajectoryData;
+                if (!__trajectoryRetryTimeout) {
+                    __trajectoryRetryTimeout = setTimeout(() => {
+                        __trajectoryRetryTimeout = null;
+                        if (__pendingTrajectoryData) updateTrajectory(__pendingTrajectoryData);
+                    }, 1000);
+                }
+                return true; // We accept the data, it's queued
+            }
+            
+            // 2. Clear pending state if we are now ready
+            __pendingTrajectoryData = null;
+            if (__trajectoryRetryTimeout) {
+                clearTimeout(__trajectoryRetryTimeout);
+                __trajectoryRetryTimeout = null;
             }
 
-            if (!renderer || !scene || !camera || !globe) {
-                console.warn("updateTrajectory called before webgl components were ready. Retrying in 1s...");
-                setTimeout(() => updateTrajectory(trajectoryData), 1000);
-                return;
+            if (now - lastTrajectoryUpdateTs < MIN_TRAJECTORY_UPDATE_INTERVAL_MS) {
+                console.log("[globe] updateTrajectory rate limited (" + (now - lastTrajectoryUpdateTs).toFixed(0) + "ms since last)");
+                return true;
             }
+
             lastTrajectoryUpdateTs = now;
             // Remove existing trajectory group (which contains core and glow lines)
             if (trajectoryGroup) {
@@ -791,7 +808,7 @@
 
             if (!trajectoryData || !trajectoryData.trajectory || trajectoryData.trajectory.length < 2) {
                 console.log("[globe] No valid trajectory data received:", JSON.stringify(trajectoryData));
-                return;
+                return true;
             }
 
             console.log("[globe] Updating globe trajectory for mission:", trajectoryData.mission);
@@ -1087,11 +1104,12 @@
                     console.log(`Auto-rotated to ${globe.rotation.y.toFixed(2)} rad for start lon ${startLon}`);
                 }
 
+                return true;
             } catch (error) {
                 console.error("Error in updateTrajectory:", error);
+                return false;
             }
         }
-        // Expose function to window as early as possible
         window.updateTrajectory = updateTrajectory;
 
         // Initialize and start animation, but ensure THREE is available first

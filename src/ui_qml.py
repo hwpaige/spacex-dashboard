@@ -430,7 +430,14 @@ Window {
             uniqueTargets.forEach(function(target) {
                 if (target && typeof target.runJavaScript === 'function') {
                     console.log("QML: Injecting trajectory into target (runJavaScript exists)");
-                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); } else { console.log('JS: updateTrajectory NOT DEFINED yet'); }");
+                    target.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
+                        if (result === true) {
+                            console.log("QML: Trajectory injection SUCCESS (JS function found and called)");
+                        } else {
+                            console.log("QML: Trajectory injection FAILED (JS function NOT DEFINED), retrying in 2s...");
+                            trajectoryRetryTimer.start();
+                        }
+                    });
                     success = true;
                 }
             });
@@ -898,7 +905,14 @@ Window {
                                             }
                                             var trajectoryJson = backend ? backend.get_launch_trajectory_json() : "";
                                             if (trajectoryJson && trajectoryJson !== "") {
-                                                plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + trajectoryJson + ");");
+                                                plotGlobeViewInner.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
+                                                    if (result !== true) {
+                                                        console.log("QML: onLoadingChanged: updateTrajectory JS function not found, starting retry timer...");
+                                                        if (typeof trajectoryRetryTimer !== 'undefined') trajectoryRetryTimer.start();
+                                                    } else {
+                                                        console.log("QML: onLoadingChanged: Trajectory successfully injected into globe");
+                                                    }
+                                                });
                                             }
                                             if (backend) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
