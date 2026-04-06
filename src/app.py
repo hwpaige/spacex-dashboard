@@ -16,9 +16,11 @@ import sys
 import os
 import json
 from PyQt6.QtWidgets import QApplication, QStyleFactory
-from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, 
+from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, QObject, 
     QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, 
     QRectF, QPoint, QDir, QThread)
+import PyQt6.QtCore
+pyqtProperty = PyQt6.QtCore.pyqtProperty
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor, QFont, QLinearGradient
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
@@ -2586,12 +2588,15 @@ class Backend(QObject):
 
                 if launch_obj:
                     # Actually compute/fetch the trajectory data
+                    logger.info(f"Target launch found for trajectory: {launch_obj.get('mission')}")
                     result = get_launch_trajectory_data(launch_obj)
                     if result:
                         def _done_success():
                             self._current_trajectory = result
-                            logger.info(f"Trajectory computation successful: {len(result.get('trajectory', []))} points")
+                            logger.info(f"Trajectory computation successful for {result.get('mission')}: {len(result.get('trajectory', []))} points")
                             self._trajectory_compute_inflight = False
+                            # Emit BOTH signals to ensure UI catches it
+                            self.updateGlobeTrajectory.emit()
                             self._emit_update_globe_trajectory_debounced()
                         QTimer.singleShot(0, _done_success)
                         return

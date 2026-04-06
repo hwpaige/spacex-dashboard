@@ -393,36 +393,54 @@ Window {
     function updateGlobeTrajectoryData() {
         // Update trajectory when data loads. 
         // Using get_launch_trajectory_json to ensure clean data transfer.
-        if (!backend) return;
-        console.log("QML: updateGlobeTrajectoryData triggered. Backend loading: " + (backend ? backend.isLoading : "null"));
+        if (!backend) {
+            console.log("QML: updateGlobeTrajectoryData failed - backend is null");
+            return;
+        }
+        console.log("QML: updateGlobeTrajectoryData triggered. Backend loading: " + backend.isLoading);
         var trajectoryJson = backend.get_launch_trajectory_json();
         if (trajectoryJson && trajectoryJson !== "") {
             console.log("QML: Trajectory data retrieved successfully (" + trajectoryJson.length + " chars)");
             
             // Target both potential globe locations (Primary and High-Res/Vertical)
             var targets = [];
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView) targets.push(plotGlobeView);
-            // Fallback: check if plotGlobeViewInner is available directly (it might be in some contexts)
+            
+            // Try to find plotGlobeView (the Item containing the Loader)
+            if (typeof plotGlobeView !== 'undefined' && plotGlobeView) {
+                console.log("QML: Found plotGlobeView");
+                targets.push(plotGlobeView);
+            }
+            
+            // Also try to find the inner WebEngineView directly just in case it's in scope
             if (typeof plotGlobeViewInner !== 'undefined' && plotGlobeViewInner) {
-                if (targets.indexOf(plotGlobeViewInner) === -1) targets.push(plotGlobeViewInner);
+                console.log("QML: Found plotGlobeViewInner directly");
+                targets.push(plotGlobeViewInner);
+            }
+
+            // If we have a loader, try to get its item
+            if (typeof plotGlobeLoader !== 'undefined' && plotGlobeLoader && plotGlobeLoader.item) {
+                console.log("QML: Found plotGlobeLoader.item");
+                targets.push(plotGlobeLoader.item);
             }
             
             var success = false;
-            targets.forEach(function(target) {
+            var uniqueTargets = [];
+            targets.forEach(function(t) { if (t && uniqueTargets.indexOf(t) === -1) uniqueTargets.push(t); });
+
+            uniqueTargets.forEach(function(target) {
                 if (target && typeof target.runJavaScript === 'function') {
-                    console.log("QML: Injecting trajectory into " + (target.id || "unnamed") + " (length: " + trajectoryJson.length + ")");
-                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called via ' + (window.location.href.split('/').pop())); updateTrajectory(" + trajectoryJson + "); }");
+                    console.log("QML: Injecting trajectory into target (runJavaScript exists)");
+                    target.runJavaScript("if(typeof updateTrajectory !== 'undefined') { console.log('JS: updateTrajectory called'); updateTrajectory(" + trajectoryJson + "); } else { console.log('JS: updateTrajectory NOT DEFINED yet'); }");
                     success = true;
                 }
             });
             
             if (!success) {
-                console.log("QML: No valid globe target found for trajectory update. Retrying in 2s...");
+                console.log("QML: No valid globe target with runJavaScript found. Targets found: " + uniqueTargets.length + ". Retrying in 2s...");
                 trajectoryRetryTimer.start();
             }
         } else {
-            console.log("QML: No trajectory data available yet from backend");
-            // If it's empty, maybe it's still computing. The next signal will catch it.
+            console.log("QML: No trajectory data available yet from backend (json was empty)");
         }
     }
 
