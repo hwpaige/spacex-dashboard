@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import json
 import logging
-import logging.handlers
 import math
 import platform
 IS_WINDOWS = platform.system() == 'Windows'
@@ -50,9 +49,6 @@ class BootProfiler:
         elapsed = time.time() - self.start_time
         thread_name = threading.current_thread().name
         self.events.append((event_name, elapsed, thread_name))
-        # Prevent memory leak by capping the number of stored events
-        if len(self.events) > 500:
-            self.events.pop(0)
         logger.info(f"PROFILER: [{thread_name}] {event_name} at {elapsed:.3f}s")
         
     def get_summary(self):
@@ -777,99 +773,99 @@ def fetch_launches():
         return {'previous': [], 'upcoming': []}
 
 
-def parse_narratives(raw_list):
-    """Parse list of strings into list of dicts {date, text}."""
-    parsed = []
-    for item in raw_list:
-        if isinstance(item, dict):
-            parsed.append(item)
-            continue
-        if not isinstance(item, str):
-            continue
-        
-        match = re.match(r'^(\d{1,2}/\d{1,2}\s+\d{4}):\s*(.*)', item)
-        if match:
-            parsed.append({'date': match.group(1), 'text': match.group(2), 'full': item})
-        else:
-            parsed.append({'date': '', 'text': item, 'full': item})
-    return parsed
-
-def enrich_narratives(narratives_list, launches):
-    if not launches:
-        return narratives_list
-    
-    # Combine upcoming and previous
-    all_launches = launches.get('upcoming', []) + launches.get('previous', [])
-    
-    for narr in narratives_list:
-        # Try to match narrative to a launch
-        # Narrative dates are usually M/D HHMM, e.g. "7/1 2104"
-        # Launch 'net' is "2024-07-01T21:04:00Z"
-        
-        narr_date_str = narr.get('date', '')
-        if not narr_date_str:
-            continue
-            
-        try:
-            # Narratives usually have M/D HHMM. Net has YYYY-MM-DDTHH:MM:SSZ
-            # We'll try to match by month, day, and hour/minute if possible.
-            # Example: "7/1 2104" -> month 7, day 1, hour 21, minute 04
-            parts = narr_date_str.split(' ')
-            md = parts[0].split('/')
-            month = int(md[0])
-            day = int(md[1])
-            
-            hour = -1
-            minute = -1
-            if len(parts) > 1 and len(parts[1]) == 4:
-                hour = int(parts[1][:2])
-                minute = int(parts[1][2:])
-            
-            best_match = None
-            for l in all_launches:
-                l_net = l.get('net')
-                if not l_net: continue
-                
-                l_dt = _get_parsed_dt(l_net)
-                if not l_dt: continue
-                
-                # Match month and day
-                if l_dt.month == month and l_dt.day == day:
-                    # If we have time, check it too (allowing small delta due to TBD changes)
-                    if hour != -1:
-                        if l_dt.hour == hour and abs(l_dt.minute - minute) <= 5:
-                            best_match = l
-                            break
-                    else:
-                        best_match = l
-                        # Don't break, keep looking for better time match if possible? 
-                        # Usually one launch per day per pad, but let's be safe.
-            
-            if best_match:
-                narr['status'] = best_match.get('status')
-                narr['landing_location'] = best_match.get('landing_location')
-                narr['landing_type'] = best_match.get('landing_type')
-                narr['orbit'] = best_match.get('orbit')
-                narr['rocket'] = best_match.get('rocket')
-                narr['pad'] = best_match.get('pad')
-                narr['mission'] = best_match.get('mission')
-                
-                # Add day of week (abbreviated, e.g. "Wed")
-                try:
-                    l_dt = _get_parsed_dt(best_match.get('net'))
-                    if l_dt:
-                        narr['day_of_week'] = l_dt.strftime('%a')
-                except Exception:
-                    pass
-        except Exception as e:
-            logger.debug(f"Failed to match narrative to launch: {e}")
-            
-    return narratives_list
-
 def fetch_narratives(launch_data=None):
     """Fetch witty launch narratives from the new API and optionally enrich with launch metadata."""
     profiler.mark("fetch_narratives Start")
     logger.info("Fetching narratives from new API")
+    
+    def parse_narratives(raw_list):
+        """Parse list of strings into list of dicts {date, text}."""
+        parsed = []
+        for item in raw_list:
+            if isinstance(item, dict):
+                parsed.append(item)
+                continue
+            if not isinstance(item, str):
+                continue
+            
+            match = re.match(r'^(\d{1,2}/\d{1,2}\s+\d{4}):\s*(.*)', item)
+            if match:
+                parsed.append({'date': match.group(1), 'text': match.group(2), 'full': item})
+            else:
+                parsed.append({'date': '', 'text': item, 'full': item})
+        return parsed
+
+    def enrich_narratives(narratives_list, launches):
+        if not launches:
+            return narratives_list
+        
+        # Combine upcoming and previous
+        all_launches = launches.get('upcoming', []) + launches.get('previous', [])
+        
+        for narr in narratives_list:
+            # Try to match narrative to a launch
+            # Narrative dates are usually M/D HHMM, e.g. "7/1 2104"
+            # Launch 'net' is "2024-07-01T21:04:00Z"
+            
+            narr_date_str = narr.get('date', '')
+            if not narr_date_str:
+                continue
+                
+            try:
+                # Narratives usually have M/D HHMM. Net has YYYY-MM-DDTHH:MM:SSZ
+                # We'll try to match by month, day, and hour/minute if possible.
+                # Example: "7/1 2104" -> month 7, day 1, hour 21, minute 04
+                parts = narr_date_str.split(' ')
+                md = parts[0].split('/')
+                month = int(md[0])
+                day = int(md[1])
+                
+                hour = -1
+                minute = -1
+                if len(parts) > 1 and len(parts[1]) == 4:
+                    hour = int(parts[1][:2])
+                    minute = int(parts[1][2:])
+                
+                best_match = None
+                for l in all_launches:
+                    l_net = l.get('net')
+                    if not l_net: continue
+                    
+                    l_dt = _get_parsed_dt(l_net)
+                    if not l_dt: continue
+                    
+                    # Match month and day
+                    if l_dt.month == month and l_dt.day == day:
+                        # If we have time, check it too (allowing small delta due to TBD changes)
+                        if hour != -1:
+                            if l_dt.hour == hour and abs(l_dt.minute - minute) <= 5:
+                                best_match = l
+                                break
+                        else:
+                            best_match = l
+                            # Don't break, keep looking for better time match if possible? 
+                            # Usually one launch per day per pad, but let's be safe.
+                
+                if best_match:
+                    narr['status'] = best_match.get('status')
+                    narr['landing_location'] = best_match.get('landing_location')
+                    narr['landing_type'] = best_match.get('landing_type')
+                    narr['orbit'] = best_match.get('orbit')
+                    narr['rocket'] = best_match.get('rocket')
+                    narr['pad'] = best_match.get('pad')
+                    narr['mission'] = best_match.get('mission')
+                    
+                    # Add day of week (abbreviated, e.g. "Wed")
+                    try:
+                        l_dt = _get_parsed_dt(best_match.get('net'))
+                        if l_dt:
+                            narr['day_of_week'] = l_dt.strftime('%a')
+                    except Exception:
+                        pass
+            except Exception as e:
+                logger.debug(f"Failed to match narrative to launch: {e}")
+                
+        return narratives_list
 
     # Try loading from cache first
     cache = None
@@ -977,7 +973,7 @@ def fetch_weather(lat, lon, location):
         res_json = response.json()
         
         # Post-process forecast data to include condition strings and day names
-        if 'forecast' in res_json and res_json['forecast'] and 'daily' in res_json['forecast']:
+        if 'forecast' in res_json and 'daily' in res_json['forecast']:
             daily = res_json['forecast']['daily']
             hourly = res_json['forecast'].get('hourly', {})
             forecast_list = []
@@ -1886,7 +1882,7 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
         logger.info(f"Using API-provided trajectory data for {mission_name}")
         # Build response compatible with dashboard expectations
         # Note: the API provides {lat, lon, r} points, which the dashboard uses
-        result = {
+        return {
             'launch_site': {
                 'lat': api_traj['trajectory'][0]['lat'] if api_traj.get('trajectory') else 28.6,
                 'lon': api_traj['trajectory'][0]['lon'] if api_traj.get('trajectory') else -80.6,
@@ -1902,8 +1898,6 @@ def get_launch_trajectory_data(upcoming_launches, previous_launches=None):
             'landing_type': next_launch.get('landing_type'),
             'landing_location': next_launch.get('landing_location')
         }
-        logger.info(f"API Trajectory points: {len(result['trajectory'])}")
-        return result
     # --------------------------------------------------
 
     # Launch site coordinates
@@ -3168,9 +3162,7 @@ def perform_full_dashboard_data_load(locations_config, status_callback=None, tz_
         profiler.mark("Narratives received")
         
         # Enrich narratives with launch data now that both are available
-        # Calling enrich_narratives directly is more efficient than fetch_narratives(launch_data)
-        # as it avoids re-reading the cache file.
-        narratives = enrich_narratives(narratives, launch_data)
+        narratives = fetch_narratives(launch_data)
 
     profiler.mark("perform_full_dashboard_data_load End")
     _emit("Synchronizing dashboard...")
@@ -3264,32 +3256,14 @@ def setup_dashboard_environment():
                     is_25_10_or_newer = True
             except ValueError:
                 pass
-        
-        # Also check for FORCE_GLOZONE environment variable for troubleshooting
-        force_glozone = os.environ.get("FORCE_GLOZONE", "0") == "1"
-        
-        # Check for QT_VERSION to detect Qt 6.9+ which also triggers this
-        qt_version_str = os.environ.get("QT_VERSION_STR", "")
-        is_qt_69_plus = False
-        if qt_version_str:
-            try:
-                # Expecting format like '6.9.1'
-                parts = qt_version_str.split('.')
-                if len(parts) >= 2:
-                    major = int(parts[0])
-                    minor = int(parts[1])
-                    if major > 6 or (major == 6 and minor >= 9):
-                        is_qt_69_plus = True
-            except (ValueError, IndexError):
-                pass
 
         flags = [
             "--enable-gpu", "--ignore-gpu-blocklist", "--enable-webgl",
-            "--disable-gpu-sandbox", "--no-sandbox", "--disable-software-rasterizer",
+            "--disable-gpu-sandbox", "--no-sandbox",
             "--disable-dev-shm-usage", "--enable-accelerated-video-decode",
             "--enable-gpu-memory-buffer-video-frames", "--enable-accelerated-2d-canvas",
             "--enable-gpu-rasterization", "--enable-zero-copy",
-            "--enable-native-gpu-memory-buffers", "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder",
+            "--enable-native-gpu-memory-buffers", "--enable-features=VaapiVideoDecoder",
             "--disable-web-security", "--allow-running-insecure-content",
             "--gpu-testing-vendor-id=0xFFFF", "--gpu-testing-device-id=0xFFFF",
             "--disable-gpu-driver-bug-workarounds",
@@ -3302,23 +3276,15 @@ def setup_dashboard_environment():
             "--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure"
         ]
 
-        if is_25_10_or_newer or force_glozone or is_qt_69_plus:
+        if is_25_10_or_newer:
             # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
             # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
-            # 360 video panning requires working WebGL/GPU path
             flags.extend([
                 "--ozone-platform-hint=x11",
                 "--ozone-platform=x11",
-                "--use-gl=egl",
-                "--enable-gpu-rasterization",
-                "--enable-oop-rasterization"
+                "--use-gl=egl"
             ])
-            if force_glozone:
-                logger.info("FORCE_GLOZONE detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
-            elif is_qt_69_plus:
-                logger.info(f"Qt {qt_version_str} detected. Applying GLOzone hardware acceleration fixes.")
-            else:
-                logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
+            logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
 
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
     else:
@@ -3373,7 +3339,7 @@ def setup_dashboard_environment():
     # 3. Windows -> 1.0
     # 4. DASHBOARD_WIDTH == 3840 (explicitly large display) -> 2.0
     # 5. Config file matching large display -> 2.0
-    # 6. Default fallback for Linux -> 1.0 (Assume Waveshare 11.9 unless large display detected)
+    # 6. Default fallback for Linux -> 2.0
     
     if platform.system() in ('Windows', 'Darwin'):
         default_scale = "1.0"
@@ -3390,24 +3356,18 @@ def setup_dashboard_environment():
     elif detected_w == 2560 or detected_h == 734:
         default_scale = "1.333"
     else:
-        # If we can't detect the display, default to 1.0 to avoid "half resolution"
-        # issues on the Waveshare 11.9inch, which is the standard build.
-        default_scale = "1.0"
+        default_scale = "2.0"
 
     dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_scale)
     
     # Set QT_SCALE_FACTOR to ensure consistent scaling across all displays
     os.environ["QT_SCALE_FACTOR"] = dashboard_scale
-    
-    logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, QT_SCALE_FACTOR={dashboard_scale} (Detected resolution: {detected_w}x{detected_h})")
 
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
-        # Removed MESA overrides to allow the Pi's driver to report native capabilities
-        # and prevent resolution/interaction issues.
-        # os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
-        # os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
+        os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
+        os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
         # Help eliminate screen tearing on Pi
         os.environ.setdefault("vblank_mode", "3")
         # Enable synchronization to VSync for the Qt Scene Graph
@@ -3436,14 +3396,7 @@ def setup_dashboard_logging(module_file):
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.handlers.TimedRotatingFileHandler(
-                    log_file,
-                    when='W0',  # Rotate every Monday at midnight
-                    interval=1,
-                    backupCount=0,  # No backup files kept, effectively resetting weekly
-                    encoding='utf-8',
-                    delay=False
-                ),
+                logging.FileHandler(log_file, mode='w', encoding='utf-8'),
                 logging.StreamHandler(sys.stdout)
             ],
             force=True
