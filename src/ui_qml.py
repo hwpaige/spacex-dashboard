@@ -395,7 +395,7 @@ Window {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
+                            onClicked: () => {
                                 if (backend && backend.cancelUpdate) {
                                     backend.cancelUpdate()
                                 }
@@ -773,7 +773,7 @@ Window {
                             }
                         }
                         
-                        onCanceled: {
+                        onCanceled: () => {
                             if (backgroundWindy.isDragging) {
                                 backgroundWindy.isDragging = false
                             }
@@ -2207,9 +2207,9 @@ Window {
                                     var ctx = getContext("2d");
                                     ctx.reset();
 
-                                    var centerX = weatherIndicatorGauge.width / 2;
-                                    var centerY = weatherIndicatorGauge.height / 2;
-                                    var radius = Math.min(weatherIndicatorGauge.width, weatherIndicatorGauge.height) / 2 - 1;
+                                    var centerX = weatherProgressRing.width / 2;
+                                    var centerY = weatherProgressRing.height / 2;
+                                    var radius = Math.min(weatherProgressRing.width, weatherProgressRing.height) / 2 - 1;
 
                                     // Draw background ring (optional, faint)
                                     ctx.beginPath();
@@ -2748,7 +2748,7 @@ Window {
                         property real startHeight: 0
                         property bool moved: false
 
-                        onPressed: {
+                        onPressed: (mouse) => {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                             if (weatherTray.height === 0) {
                                 weatherTray.open()
@@ -2759,7 +2759,7 @@ Window {
                             moved = false
                         }
 
-                        onPositionChanged: {
+                        onPositionChanged: (mouse) => {
                             if (weatherTray.isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -2770,7 +2770,7 @@ Window {
                             }
                         }
 
-                        onReleased: {
+                        onReleased: (mouse) => {
                             weatherTray.isDragging = false
                             if (moved) {
                                 var threshold = weatherTray.expandedHeight * 0.2
@@ -2793,7 +2793,7 @@ Window {
                             }
                         }
 
-                        onClicked: {
+                        onClicked: (mouse) => {
                             if (!moved) {
                                 // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                 if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
@@ -2883,7 +2883,7 @@ Window {
                         property bool isDragging: false
                         property bool moved: false
                         
-                        onPressed: {
+                        onPressed: (mouse) => {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                             // Ensure tray is ready
                             if (narrativeTray.height === 0) {
@@ -2894,7 +2894,7 @@ Window {
                             moved = false
                         }
                         
-                        onPositionChanged: {
+                        onPositionChanged: (mouse) => {
                             if (isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -2907,7 +2907,7 @@ Window {
                             }
                         }
                         
-                        onReleased: {
+                        onReleased: (mouse) => {
                             isDragging = false
                             if (moved) {
                                 // 20% threshold logic:
@@ -2935,7 +2935,7 @@ Window {
                             }
                         }
 
-                        onClicked: {
+                        onClicked: (mouse) => {
                             if (!moved) {
                                 // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                 if (narrativeTray.height > narrativeTray.expandedHeight * 0.5) {
@@ -3438,7 +3438,7 @@ Window {
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: {
+                        onClicked: (mouse) => {
                             console.log("Update clicked - showing update dialog")
                             if (backend) backend.show_update_dialog()
                         }
@@ -3486,7 +3486,7 @@ Window {
 
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: {
+                            onClicked: () => {
                                 displaySettingsPopup.open()
                             }
                         }
@@ -3868,7 +3868,7 @@ Window {
 
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: {
+                            onClicked: () => {
                                 console.log("WiFi clicked - opening popup")
                                 wifiPopup.open()
                                 console.log("WiFi popup opened, visible:", wifiPopup.visible)
@@ -4131,7 +4131,7 @@ Window {
                             property real startHeight: 0
                             property bool moved: false
                             
-                            onPressed: {
+                            onPressed: (mouse) => {
                                 startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 if (locationDrawer.height === 0) locationDrawer.height = 1
                                 startHeight = locationDrawer.height
@@ -4173,7 +4173,7 @@ Window {
                                 }
                             }
                             
-                            onClicked: {
+                            onClicked: () => {
                                 if (!moved) {
                                     // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                     if (locationDrawer.height > locationDrawer.expandedHeight * 0.5) {
@@ -4491,7 +4491,7 @@ Window {
                         property real startHeight: 0
                         property bool moved: false
                         
-                        onPressed: {
+                        onPressed: (mouse) => {
                             if (countdownTray.height === 0) countdownTray.height = 1
                             startHeight = countdownTray.height
                             countdownTray.isDragging = true
@@ -4499,7 +4499,7 @@ Window {
                             moved = false
                         }
                         
-                        onPositionChanged: {
+                        onPositionChanged: (mouse) => {
                             if (countdownTray.isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -4510,7 +4510,7 @@ Window {
                             }
                         }
                         
-                        onReleased: {
+                        onReleased: (mouse) => {
                             countdownTray.isDragging = false
                             if (moved) {
                                 var threshold = countdownTray.expandedHeight * 0.2
@@ -4521,7 +4521,7 @@ Window {
                                 }
                             }
                         }
-                        onClicked: {
+                        onClicked: (mouse) => {
                             if (!moved) {
                                 if (countdownTray.height > 0) countdownTray.height = 0
                                 else countdownTray.height = countdownTray.expandedHeight
@@ -4610,7 +4610,7 @@ Window {
                             visible: !!(backend && backend.wifiConnected)
                             Layout.preferredWidth: 60
                             Layout.preferredHeight: 20
-                            onClicked: {
+                            onClicked: () => {
                                 backend.disconnectWifi()
                                 wifiPopup.close()
                             }
@@ -4863,7 +4863,7 @@ Window {
                         text: "👁"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
-                        onClicked: {
+                        onClicked: (mouse) => {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
                             passwordField.focus = true
                         }
@@ -4890,7 +4890,7 @@ Window {
                         text: "Cancel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        onClicked: {
+                        onClicked: (mouse) => {
                             passwordField.text = ""
                             passwordDialog.close()
                         }
@@ -4913,7 +4913,7 @@ Window {
                         text: "Connect"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        onClicked: {
+                        onClicked: (mouse) => {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
                         }
@@ -5047,7 +5047,7 @@ Window {
                         enabled: !virtualKeyboard.numberMode
                         // Avoid stealing focus from the password field
                         focusPolicy: Qt.NoFocus
-                        onClicked: {
+                        onClicked: (mouse) => {
                             virtualKeyboard.shiftPressed = !virtualKeyboard.shiftPressed
                         }
 
@@ -5127,7 +5127,7 @@ Window {
                         Layout.preferredHeight: 30
                         // Avoid stealing focus from the password field
                         focusPolicy: Qt.NoFocus
-                        onClicked: {
+                        onClicked: (mouse) => {
                             virtualKeyboard.numberMode = !virtualKeyboard.numberMode
                             virtualKeyboard.shiftPressed = false  // Reset shift when switching modes
                         }
@@ -5499,7 +5499,7 @@ Window {
                             var latest = backend.latestVersionInfo.hash
                             return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
                         }
-                        onClicked: {
+                        onClicked: (mouse) => {
                             backend.runUpdateScript()
                             updatePopup.close()
                         }
@@ -5565,7 +5565,7 @@ Window {
                         text: "Restart"
                         Layout.preferredWidth: 85
                         Layout.preferredHeight: 28
-                        onClicked: {
+                        onClicked: (mouse) => {
                             console.log("Restart clicked")
                             if (backend) backend.reboot_device()
                         }
