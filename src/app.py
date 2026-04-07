@@ -910,6 +910,11 @@ class Backend(QObject):
         logger.info(f"Initial location: {self._location}")
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
+        
+        # Thread tracking variables for periodic updaters
+        self._weather_updater_thread = None
+        self._launch_updater_thread = None
+        self._next_launch_updater_thread = None
 
     @pyqtSlot(str, str)
     def add_remembered_network(self, ssid, password):
@@ -2246,8 +2251,13 @@ class Backend(QObject):
     @pyqtSlot()
     def update_weather(self):
         """Update weather data in a separate thread to avoid blocking UI"""
-        if hasattr(self, '_weather_updater_thread') and self._weather_updater_thread.isRunning():
-            return  # Skip if already updating
+        # Check if thread exists and is still valid (not deleted)
+        try:
+            if self._weather_updater_thread is not None and self._weather_updater_thread.isRunning():
+                return  # Skip if already updating
+        except RuntimeError:
+            # Underlying C++ object has been deleted, clear reference
+            self._weather_updater_thread = None
 
         self._weather_updater = WeatherUpdater(self._location)
         self._weather_updater_thread = QThread()
@@ -2256,13 +2266,19 @@ class Backend(QObject):
         self._weather_updater.finished.connect(self._weather_updater_thread.quit)
         self._weather_updater.finished.connect(self._weather_updater.deleteLater)
         self._weather_updater_thread.finished.connect(self._weather_updater_thread.deleteLater)
+        self._weather_updater_thread.finished.connect(lambda: setattr(self, '_weather_updater_thread', None))
         self._weather_updater_thread.started.connect(self._weather_updater.run)
         self._weather_updater_thread.start()
 
     def update_launches_periodic(self):
         """Update launch data in a separate thread to avoid blocking UI"""
-        if hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning():
-            return  # Skip if already updating
+        # Check if thread exists and is still valid (not deleted)
+        try:
+            if self._launch_updater_thread is not None and self._launch_updater_thread.isRunning():
+                return  # Skip if already updating
+        except RuntimeError:
+            # Underlying C++ object has been deleted, clear reference
+            self._launch_updater_thread = None
 
         self._launch_updater = LaunchUpdater(self._tz)
         self._launch_updater_thread = QThread()
@@ -2271,6 +2287,7 @@ class Backend(QObject):
         self._launch_updater.finished.connect(self._launch_updater_thread.quit)
         self._launch_updater.finished.connect(self._launch_updater.deleteLater)
         self._launch_updater_thread.finished.connect(self._launch_updater_thread.deleteLater)
+        self._launch_updater_thread.finished.connect(lambda: setattr(self, '_launch_updater_thread', None))
         self._launch_updater_thread.started.connect(self._launch_updater.run)
         self._launch_updater_thread.start()
 
@@ -2281,9 +2298,19 @@ class Backend(QObject):
             return
 
         # Skip if either updater is already running to avoid overlaps
-        if (hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning()) or \
-           (hasattr(self, '_next_launch_updater_thread') and self._next_launch_updater_thread.isRunning()):
-            return
+        try:
+            if (self._launch_updater_thread is not None and self._launch_updater_thread.isRunning()) or \
+               (self._next_launch_updater_thread is not None and self._next_launch_updater_thread.isRunning()):
+                return
+        except RuntimeError:
+            # Handle potential deleted threads by resetting references where applicable
+            # (The logic below will recreate them as needed)
+            if hasattr(self, '_launch_updater_thread'):
+                try: self._launch_updater_thread.isRunning()
+                except RuntimeError: self._launch_updater_thread = None
+            if hasattr(self, '_next_launch_updater_thread'):
+                try: self._next_launch_updater_thread.isRunning()
+                except RuntimeError: self._next_launch_updater_thread = None
 
         next_launch = self.get_next_launch()
         if not next_launch or not next_launch.get('id'):
@@ -2297,6 +2324,7 @@ class Backend(QObject):
         self._next_launch_updater.finished.connect(self._next_launch_updater_thread.quit)
         self._next_launch_updater.finished.connect(self._next_launch_updater.deleteLater)
         self._next_launch_updater_thread.finished.connect(self._next_launch_updater_thread.deleteLater)
+        self._next_launch_updater_thread.finished.connect(lambda: setattr(self, '_next_launch_updater_thread', None))
         self._next_launch_updater_thread.started.connect(self._next_launch_updater.run)
         
         self._next_launch_updater_thread.start()
