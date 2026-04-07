@@ -81,11 +81,7 @@ The project includes setup scripts for different display configurations on Raspb
       sudo bash scripts/setup_pi_dfr1125.sh
       ```
 
-    The setup scripts handle system dependencies, display timings, Kiosk mode configuration, and boot splash screen setup.
-
-## Performance & Testing
-
-For details on how to monitor performance on the Raspberry Pi and how to run the included unit tests, see [TESTING_AND_PERFORMANCE.md](TESTING_AND_PERFORMANCE.md).
+The setup scripts handle system dependencies, display timings, Kiosk mode configuration, and boot splash screen setup.
 
 ## Weather and Forecast Data
 
