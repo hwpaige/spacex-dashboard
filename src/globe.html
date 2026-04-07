@@ -98,6 +98,8 @@
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let cloudUniforms, cloudMaterial, loadCloudTextureFunc;
+        let cloudsObject = null;          // cached reference – avoids O(n) scene.getObjectByName every frame
+        let cloudsRotY = 0.0;             // accumulated cloud rotation (incremental, avoids wrap-jump)
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
@@ -199,11 +201,25 @@
                 }, false);
                 renderer.domElement.addEventListener('webglcontextrestored', function () {
                     console.log('[globe] WebGL context restored – resuming render');
-                    // Mark all materials as needing an upload on the next render pass
-                    if (cloudMaterial) cloudMaterial.needsUpdate = true;
-                    if (globe) {
-                        globe.traverse(function (child) {
-                            if (child.material) child.material.needsUpdate = true;
+                    // Mark every material, texture uniform, and the cloud material as needing
+                    // GPU re-upload on the next render pass.
+                    if (scene) {
+                        scene.traverse(function (child) {
+                            if (!child.material) return;
+                            const mats = Array.isArray(child.material) ? child.material : [child.material];
+                            mats.forEach(function (m) {
+                                m.needsUpdate = true;
+                                // Re-upload any texture maps bound to the material
+                                ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'emissiveMap', 'alphaMap', 'envMap'].forEach(function (key) {
+                                    if (m[key]) m[key].needsUpdate = true;
+                                });
+                                // Re-upload shader uniforms that hold textures
+                                if (m.uniforms) {
+                                    Object.values(m.uniforms).forEach(function (u) {
+                                        if (u && u.value && u.value.isTexture) u.value.needsUpdate = true;
+                                    });
+                                }
+                            });
                         });
                     }
                 }, false);
@@ -425,8 +441,8 @@
                                     float detail = fbm(vUv * 25.0 - time * 0.05) * 0.25;
                                     texColor.a *= (1.0 + detail);
                                     
-                                    float n3 = noise(vUv * 6.0 - time * 0.05);
-                                    texColor2 = texture2D(cloudTexture, vUv + vec2(n3 * 0.015, 0.0));
+                                    float n3b = noise(vUv * 6.0 - time * 0.05);
+                                    texColor2 = texture2D(cloudTexture, vUv + vec2(n3b * 0.015, 0.0));
                                 } else {
                             // High-detail procedural fallback using fBm
                                     // Layer 1: Large slow structures (low freq, high amp)
@@ -491,6 +507,7 @@
                         const clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
                         clouds.name = 'clouds';
                         globe.add(clouds);
+                        cloudsObject = clouds;  // cache so animate() avoids O(n) scene traversal
                         
                         // Debug log for cloud creation
                         console.log("Cloud layer created and added to globe");
@@ -693,11 +710,23 @@
         let __lastRenderTs = performance.now();
         let __lastResumeLogTs = 0;
         let __startTime = performance.now();
+        let __animateCalls = 0;    // call counter used by watchdog to detect a stopped RAF loop
+        let __animateStarted = false; // set true on first animate() call; guards premature watchdog restart
+        let __lastAnimateTs = performance.now(); // timestamp of the previous animate() call for delta-time
 
         function animate() {
             requestAnimationFrame(animate);
+            __animateCalls++;
+            __animateStarted = true;
 
             const now = performance.now();
+            // Delta time since the last animate() call, capped to 100 ms to avoid large jumps
+            // after a long pause (e.g. view hidden then shown again, or system suspended).
+            // 100 ms is the maximum believable inter-frame gap for a 10 fps lower-bound;
+            // anything larger means the page was suspended rather than running slowly.
+            const deltaMs = Math.min(now - __lastAnimateTs, 100);
+            __lastAnimateTs = now;
+
             // Wrap elapsed time to prevent GLSL float precision loss on long-running deployments.
             // At ~3 days uptime the per-frame delta becomes smaller than a 32-bit float's
             // epsilon at that magnitude, causing the cloud shader to appear frozen.
@@ -707,8 +736,6 @@
 
             // Optimization: Skip all processing if system is paused and no interaction is happening
             if (systemPaused && !userInteracting && !isInMomentum) {
-                // Still update time for clouds so they don't jump when resuming, 
-                // but we aren't rendering anyway so it's just a variable update.
                 return;
             }
 
@@ -744,22 +771,27 @@
                 }
             }
 
-            // Rotate clouds slower than the globe
-            const clouds = scene.getObjectByName('clouds');
-            if (clouds) {
-                // Cloud rotation can stay relative or use absolute time for perfect consistency
-                clouds.rotation.y = absoluteTime * 0.05; 
-                if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
-                    clouds.material.uniforms.time.value = absoluteTime;
+            // Rotate clouds using incremental delta-time so the rotation never jumps when
+            // absoluteTime wraps at the 3600-second boundary.
+            if (cloudsObject) {
+                // deltaMs is already capped to 100 ms above, so no secondary cap needed here.
+                const dtSec = deltaMs / 1000.0;
+                cloudsRotY += dtSec * 0.05;
+                cloudsObject.rotation.y = cloudsRotY;
+                if (cloudsObject.material && cloudsObject.material.uniforms && cloudsObject.material.uniforms.time) {
+                    cloudsObject.material.uniforms.time.value = absoluteTime;
                 }
             }
 
             if (renderer && scene && camera) {
-                renderer.render(scene, camera);
+                try {
+                    renderer.render(scene, camera);
+                    // Only mark a successful render so the watchdog can detect silent failures
+                    __lastRenderTs = now;
+                } catch (renderErr) {
+                    console.warn('[globe] renderer.render() threw:', renderErr);
+                }
             }
-
-            // Track last render timestamp for watchdog
-            __lastRenderTs = now;
             
             // Periodically log animation status (every 5 seconds)
             if (now - __lastResumeLogTs > 5000) {
@@ -1383,19 +1415,42 @@
             }
         });
 
-        // Self-healing watchdog: if frames stop for >3s while visible, resume
+        // Self-healing watchdog: if frames stop for >3s while visible, resume.
+        // Uses two complementary signals:
+        //   1. __lastRenderTs   – stops updating when systemPaused causes an early return
+        //                         OR when renderer.render() throws
+        //   2. __animateCalls   – stops incrementing only when the RAF loop itself has
+        //                         stopped (e.g. Qt WebEngine throttled the view)
+        // Both paths call clearInteraction()+resumeSpin() to reset state, and if the RAF
+        // loop appears to have stopped entirely, a fresh requestAnimationFrame is issued.
         (function () {
             const CHECK_MS = 1000;
             const STALL_MS = 3000;
+            let __watchdogLastAnimateCalls = __animateCalls;
             setInterval(function () {
                 if (typeof document === 'undefined') return;
-                if (document.visibilityState !== 'visible') return;
                 const now = performance.now();
-                if (now - __lastRenderTs > STALL_MS) {
-                    try { console.log('[globe] watchdog: render stalled, attempting resume and reset'); } catch (e) { }
-                    window.clearInteraction(); // Reset everything if stalled
+                const visible = document.visibilityState === 'visible';
+
+                // --- Signal 1: render timestamp stall (works while RAF is running) ---
+                if (visible && now - __lastRenderTs > STALL_MS) {
+                    try { console.log('[globe] watchdog: render timestamp stalled, attempting resume'); } catch (e) { }
+                    window.clearInteraction();
                     window.resumeSpin();
                 }
+
+                // --- Signal 2: RAF call counter stall (detects a stopped RAF loop) ---
+                const currentCalls = __animateCalls;
+                if (visible && __animateStarted && currentCalls === __watchdogLastAnimateCalls) {
+                    // animate() hasn't been called since the last watchdog tick — RAF has stopped.
+                    try { console.log('[globe] watchdog: RAF loop appears stopped, restarting animate'); } catch (e) { }
+                    window.clearInteraction();
+                    window.resumeSpin();
+                    // Restart the loop. requestAnimationFrame schedules exactly one extra call;
+                    // that call will self-reschedule normally via the first line of animate().
+                    requestAnimationFrame(animate);
+                }
+                __watchdogLastAnimateCalls = currentCalls;
             }, CHECK_MS);
         })();
 
