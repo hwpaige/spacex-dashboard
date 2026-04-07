@@ -18,7 +18,7 @@ import json
 from PyQt6.QtWidgets import QApplication, QStyleFactory
 from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, QObject, 
     QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, 
-    QRectF, QPoint, QDir, QThread)
+    QRectF, QPoint, QDir, QThread, QtMsgType)
 import PyQt6.QtCore
 pyqtProperty = PyQt6.QtCore.pyqtProperty
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor, QFont, QLinearGradient
@@ -163,7 +163,21 @@ logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DA
 
 def _qt_message_handler(mode, context, message):
     msg = format_qt_message(mode, context, message)
-    if msg: logger.error(msg)
+    if not msg:
+        return
+        
+    if mode == QtMsgType.QtDebugMsg:
+        logger.debug(msg)
+    elif mode == QtMsgType.QtInfoMsg:
+        logger.info(msg)
+    elif mode == QtMsgType.QtWarningMsg:
+        logger.warning(msg)
+    elif mode == QtMsgType.QtCriticalMsg:
+        logger.error(msg)
+    elif mode == QtMsgType.QtFatalMsg:
+        logger.critical(msg)
+    else:
+        logger.error(msg)
 
 # Install the handler only once
 try:

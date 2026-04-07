@@ -1400,6 +1400,7 @@ Window {
                                     }
                                     
                                     ListView {
+                                        id: calendarPopupListView
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
                                         clip: true
@@ -1408,7 +1409,7 @@ Window {
                                         boundsBehavior: Flickable.StopAtBounds
                                         flickableDirection: Flickable.VerticalFlick
                                         delegate: ColumnLayout {
-                                            width: parent.width
+                                            width: calendarPopupListView.width
                                             spacing: 1
                                             
                                             ColumnLayout {
@@ -1452,7 +1453,7 @@ Window {
                                                 }
                                                 Text { text: modelData.status; font.bold: true; font.pixelSize: 12; color: root.getStatusColor(modelData.status) }
                                             }
-                                            Rectangle { width: parent.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
+                                            Rectangle { width: calendarPopupListView.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
                                         }
                                     }
                                     
@@ -2206,9 +2207,9 @@ Window {
                                     var ctx = getContext("2d");
                                     ctx.reset();
 
-                                    var centerX = width / 2;
-                                    var centerY = height / 2;
-                                    var radius = Math.min(width, height) / 2 - 1;
+                                    var centerX = weatherIndicatorGauge.width / 2;
+                                    var centerY = weatherIndicatorGauge.height / 2;
+                                    var radius = Math.min(weatherIndicatorGauge.width, weatherIndicatorGauge.height) / 2 - 1;
 
                                     // Draw background ring (optional, faint)
                                     ctx.beginPath();
@@ -2439,7 +2440,7 @@ Window {
                     Popup {
                         id: weatherTray
                         x: 0
-                        width: parent.width
+                        width: parent ? parent.width : 200
                         height: 0
                         y: parent.height - height
                         visible: height > 0
@@ -2620,7 +2621,7 @@ Window {
                                     }
                                 }
                                 delegate: Item {
-                                    width: parent.width
+                                    width: weatherListView.width
                                     height: 30
                                     RowLayout {
                                         anchors.fill: parent
@@ -4537,8 +4538,8 @@ Window {
             id: wifiPopup
             width: 450
             height: 240
-            x: (parent.width - width) / 2
-            y: (parent.height - height) / 2
+            x: (root.width - width) / 2
+            y: (root.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -4558,7 +4559,7 @@ Window {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    radius: parent.radius
+                    radius: parent ? parent.radius : 0
                     border.color: Qt.rgba(0, 0, 0, 0.1)
                     border.width: 1
                 }
@@ -4804,8 +4805,8 @@ Window {
             id: passwordDialog
             width: 320
             height: 120
-            x: (parent.width - width) / 2
-            y: (parent.height - height - 200) / 2  // Leave room for keyboard
+            x: (root.width - width) / 2
+            y: (root.height - height - 200) / 2  // Leave room for keyboard
             modal: true
             focus: true
             // Keep the password dialog open while interacting with the custom on-screen keyboard
@@ -5196,8 +5197,8 @@ Window {
             id: updatePopup
             width: 450
             height: 220
-            x: (parent.width - width) / 2
-            y: (parent.height - height) / 2
+            x: (root.width - width) / 2
+            y: (root.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -5212,7 +5213,7 @@ Window {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    radius: parent.radius
+                    radius: parent ? parent.radius : 0
                     border.color: Qt.rgba(0, 0, 0, 0.1)
                     border.width: 1
                 }
@@ -5538,22 +5539,22 @@ Window {
                     spacing: 12
 
                     Button {
-                        text: backend.updateChecking ? "Checking..." : "Check Now"
+                        text: (backend && backend.updateChecking) ? "Checking..." : "Check Now"
                         Layout.preferredWidth: 80
                         Layout.preferredHeight: 28
-                        enabled: !backend.updateChecking
-                        onClicked: backend.checkForUpdatesNow()
+                        enabled: backend ? !backend.updateChecking : false
+                        onClicked: if (backend) backend.checkForUpdatesNow()
 
                         background: Rectangle {
-                            color: backend.updateChecking ?
-                                (backend.theme === "dark" ? "#666" : "#ccc") :
-                                (backend.theme === "dark" ? "#303030" : "#e0e0e0")
+                            color: (backend && backend.updateChecking) ?
+                                ((backend && backend.theme === "dark") ? "#666" : "#ccc") :
+                                ((backend && backend.theme === "dark") ? "#303030" : "#e0e0e0")
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -5566,11 +5567,11 @@ Window {
                         Layout.preferredHeight: 28
                         onClicked: {
                             console.log("Restart clicked")
-                            backend.reboot_device()
+                            if (backend) backend.reboot_device()
                         }
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
+                            color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
@@ -5603,13 +5604,13 @@ Window {
                         onClicked: updatePopup.close()
 
                         background: Rectangle {
-                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
+                            color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: backend.theme === "dark" ? "white" : "black"
+                            color: (backend && backend.theme === "dark") ? "white" : "black"
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -5631,8 +5632,8 @@ Window {
             id: debugDialog
             width: 450
             height: 250
-            x: (parent.width - width) / 2
-            y: (parent.height - height) / 2
+            x: (root.width - width) / 2
+            y: (root.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -5663,7 +5664,7 @@ Window {
 
                     TextArea {
                         id: debugText
-                        text: backend.getWifiInterfaceInfo()
+                        text: backend ? backend.getWifiInterfaceInfo() : ""
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         background: Rectangle {
@@ -5682,7 +5683,7 @@ Window {
                     text: "Refresh"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 24
-                    onClicked: debugText.text = backend.getWifiInterfaceInfo()
+                    onClicked: if (backend) debugText.text = backend.getWifiInterfaceInfo()
 
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#303030" : "#d0d0d0"
