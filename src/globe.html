@@ -190,6 +190,24 @@
                 // Allow us to prevent default touch gestures for custom pinch zoom
                 renderer.domElement.style.touchAction = 'none';
 
+                // Handle WebGL context loss/restore (can occur under GPU memory pressure on Pi).
+                // Without these handlers the canvas goes blank and the RAF loop keeps running
+                // but nothing is rendered – appearing as a complete freeze.
+                renderer.domElement.addEventListener('webglcontextlost', function (event) {
+                    event.preventDefault(); // Required to allow context restore
+                    console.warn('[globe] WebGL context lost – rendering paused');
+                }, false);
+                renderer.domElement.addEventListener('webglcontextrestored', function () {
+                    console.log('[globe] WebGL context restored – resuming render');
+                    // Mark all materials as needing an upload on the next render pass
+                    if (cloudMaterial) cloudMaterial.needsUpdate = true;
+                    if (globe) {
+                        globe.traverse(function (child) {
+                            if (child.material) child.material.needsUpdate = true;
+                        });
+                    }
+                }, false);
+
                 // Globe geometry - reduced complexity from 64x64 for performance
                 const geometry = new THREE.SphereGeometry(1, 32, 32);
 
@@ -680,7 +698,12 @@
             requestAnimationFrame(animate);
 
             const now = performance.now();
-            const absoluteTime = (now - __startTime) / 1000.0;
+            // Wrap elapsed time to prevent GLSL float precision loss on long-running deployments.
+            // At ~3 days uptime the per-frame delta becomes smaller than a 32-bit float's
+            // epsilon at that magnitude, causing the cloud shader to appear frozen.
+            // Wrapping at 3600 s keeps the value well within representable float range.
+            const TIME_WRAP = 3600.0;
+            const absoluteTime = ((now - __startTime) / 1000.0) % TIME_WRAP;
 
             // Optimization: Skip all processing if system is paused and no interaction is happening
             if (systemPaused && !userInteracting && !isInMomentum) {
@@ -768,6 +791,7 @@
                 scene.remove(launchMarker);
                 launchMarker.geometry.dispose();
                 launchMarker.material.dispose();
+                launchMarker = null;
                 console.log("Removed existing launch marker");
             }
 
@@ -843,7 +867,9 @@
                 // 2. Glow effect (slightly larger tube, lower opacity, additive)
                 const glowRadius = tubeRadius * 1.8;
                 const glowGeometry = new THREE.TubeGeometry(curve, tubularSegments, glowRadius, radialSegments, false);
-                glowGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray, 3)); // reuse colors
+                // Use a copy of colorArray so each geometry owns its own buffer and
+                // disposing one does not corrupt the other.
+                glowGeometry.setAttribute('color', new THREE.BufferAttribute(colorArray.slice(), 3));
                 const glowMaterial = new THREE.MeshBasicMaterial({
                     vertexColors: true,
                     transparent: true,
@@ -1001,9 +1027,6 @@
                         const y = radius * Math.cos(phi);
                         orbitPoints.push(new THREE.Vector3(x, y, z));
                     });
-                    // Use LineSegments for dashed effect
-                    const orbitGeometry = new THREE.BufferGeometry().setFromPoints(orbitPoints);
-
                     // Create a group for the orbit to include a glow effect
                     const orbitGroup = new THREE.Group();
 
