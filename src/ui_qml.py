@@ -1851,6 +1851,7 @@ Window {
                                 id: youtubeView
                                 profile: youtubeProfile
                                 anchors.fill: parent
+                                focus: true
                                 layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
                                 layer.smooth: true
                                 layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))

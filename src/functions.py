@@ -3282,11 +3282,11 @@ def setup_dashboard_environment():
 
         flags = [
             "--enable-gpu", "--ignore-gpu-blocklist", "--enable-webgl",
-            "--disable-gpu-sandbox", "--no-sandbox",
+            "--disable-gpu-sandbox", "--no-sandbox", "--disable-software-rasterizer",
             "--disable-dev-shm-usage", "--enable-accelerated-video-decode",
             "--enable-gpu-memory-buffer-video-frames", "--enable-accelerated-2d-canvas",
             "--enable-gpu-rasterization", "--enable-zero-copy",
-            "--enable-native-gpu-memory-buffers", "--enable-features=VaapiVideoDecoder",
+            "--enable-native-gpu-memory-buffers", "--enable-features=VaapiVideoDecoder,VaapiVideoEncoder",
             "--disable-web-security", "--allow-running-insecure-content",
             "--gpu-testing-vendor-id=0xFFFF", "--gpu-testing-device-id=0xFFFF",
             "--disable-gpu-driver-bug-workarounds",
@@ -3302,10 +3302,13 @@ def setup_dashboard_environment():
         if is_25_10_or_newer or force_glozone or is_qt_69_plus:
             # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
             # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
+            # 360 video panning requires working WebGL/GPU path
             flags.extend([
                 "--ozone-platform-hint=x11",
                 "--ozone-platform=x11",
-                "--use-gl=egl"
+                "--use-gl=egl",
+                "--enable-gpu-rasterization",
+                "--enable-oop-rasterization"
             ])
             if force_glozone:
                 logger.info("FORCE_GLOZONE detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
