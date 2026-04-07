@@ -8,11 +8,12 @@
         body, html {
             margin: 0;
             padding: 0;
+            width: 100%;
             height: 100%;
             overflow: hidden;
             background-color: transparent;
         }
-        iframe {
+        #player {
             width: 100%;
             height: 100%;
             border: none;
@@ -20,6 +21,52 @@
     </style>
 </head>
 <body>
-    <iframe width="560" height="315" src="https://www.youtube.com/embed/videoseries?list=PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY&autoplay=1&mute=1&loop=1&controls=0&rel=0&enablejsapi=1" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+    <div id="player"></div>
+    <!--
+        Use the YouTube IFrame Player API to manage looping via onStateChange
+        instead of the loop=1 URL parameter.  The loop=1 param causes YouTube
+        to spin up a brand-new player instance on every cycle without tearing
+        down the previous one, which leads to unbounded memory/CPU growth.
+        Handling ENDED in JavaScript restarts the same single player instance.
+    -->
+    <script>
+        var tag = document.createElement('script');
+        tag.src = 'https://www.youtube.com/iframe_api';
+        var firstScriptTag = document.getElementsByTagName('script')[0];
+        firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+
+        var player;
+        function onYouTubeIframeAPIReady() {
+            player = new YT.Player('player', {
+                width: '100%',
+                height: '100%',
+                playerVars: {
+                    listType: 'playlist',
+                    list: 'PLBQ5P5txVQr9_jeZLGa0n5EIYvsOJFAnY',
+                    autoplay: 1,
+                    mute: 1,
+                    controls: 0,
+                    rel: 0,
+                    playsinline: 1,
+                    modestbranding: 1,
+                    fs: 0
+                },
+                events: {
+                    onReady: function(event) {
+                        event.target.playVideo();
+                    },
+                    onStateChange: function(event) {
+                        // When the playlist ends, seek back to the first video
+                        // and play again — all within the same player instance.
+                        // This avoids the memory leak that arises when YouTube's
+                        // native looping creates a new <iframe> on every cycle.
+                        if (event.data === YT.PlayerState.ENDED) {
+                            player.playVideoAt(0);
+                        }
+                    }
+                }
+            });
+        }
+    </script>
 </body>
 </html>
