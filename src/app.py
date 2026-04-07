@@ -3741,11 +3741,16 @@ if __name__ == '__main__':
     # We already called setup_dashboard_environment() at the top of the file.
     
     # QApplication setup
-    # Optimize Qt WebEngine for Raspberry Pi performance
+    # Optimize Qt WebEngine for Raspberry Pi performance.
+    # '--disable-background-timer-throttling' prevents the background tab timer
+    # from being slowed down, which helps with animations and polling loops.
+    # '--memory-pressure-off' is intentionally NOT set: allowing Chromium to
+    # respond to OS-level memory pressure signals lets it proactively trim its
+    # media buffers when RAM is running low, which is critical on constrained
+    # hardware (e.g. Raspberry Pi) where a single high-resolution video can
+    # pre-buffer hundreds of megabytes and exhaust available RAM.
     if '--disable-background-timer-throttling' not in sys.argv:
         sys.argv.append('--disable-background-timer-throttling')
-    if '--memory-pressure-off' not in sys.argv:
-        sys.argv.append('--memory-pressure-off')
         
     profiler.mark("QApplication setup")
     app = QApplication(sys.argv)
