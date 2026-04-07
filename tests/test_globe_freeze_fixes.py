@@ -1,0 +1,263 @@
+"""Tests that validate the globe-freezing regression fixes in src/globe.html.
+
+Each test is focused on one specific root-cause fix so failures are easy to
+diagnose.  The tests parse the HTML/GLSL as text rather than executing it so
+they run without a browser or GPU.
+"""
+
+import re
+from pathlib import Path
+
+GLOBE_HTML_PATH = Path(__file__).parent.parent / 'src' / 'globe.html'
+
+
+def _read_globe():
+    return GLOBE_HTML_PATH.read_text(encoding='utf-8')
+
+
+def _extract_function_body(html: str, function_name: str) -> str:
+    """Return the complete source text of the named JS function (including braces).
+
+    Uses brace-depth tracking so it works regardless of how long the body is.
+    Returns an empty string if the function is not found.
+    """
+    start = html.find(f'function {function_name}()')
+    if start == -1:
+        return ''
+    depth = 0
+    end = start
+    entered = False
+    for i, ch in enumerate(html[start:], start=start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = i
+                break
+    return html[start:end + 1]
+
+
+def _extract_iife_after(html: str, marker: str, max_chars: int = 5000) -> str:
+    """Return the text of the first IIFE ((function(){ ... })()) after *marker*.
+
+    Uses brace-depth tracking up to *max_chars* characters after the marker.
+    """
+    pos = html.find(marker)
+    if pos == -1:
+        return ''
+    section = html[pos:pos + max_chars]
+    # Find the opening paren of the IIFE
+    iife_start = section.find('(function ()')
+    if iife_start == -1:
+        iife_start = section.find('(function()')
+    if iife_start == -1:
+        return section  # fallback: return the raw section
+    depth = 0
+    entered = False
+    end = iife_start
+    for i, ch in enumerate(section[iife_start:], start=iife_start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = i
+                break
+    return section[iife_start:end + 1]
+
+
+# ---------------------------------------------------------------------------
+# Fix 1 – GLSL variable `n3` must not be re-declared in an inner scope
+# ---------------------------------------------------------------------------
+
+def test_glsl_no_n3_redeclaration():
+    """The cloud fragment shader must not redeclare 'float n3' inside the
+    hasTexture branch.  A duplicate declaration in an inner scope is illegal
+    in GLSL ES 1.00 (WebGL 1) and causes shader compile failure on strict
+    drivers (e.g. Raspberry Pi / VideoCore) making clouds appear frozen.
+    """
+    html = _read_globe()
+    # Extract the fragment shader source from between the back-tick literals.
+    frag_match = re.search(
+        r'const cloudFragmentShader\s*=\s*`(.*?)`\s*;',
+        html,
+        re.DOTALL,
+    )
+    assert frag_match, "cloudFragmentShader template literal not found"
+    shader = frag_match.group(1)
+
+    declarations = re.findall(r'\bfloat\s+n3\b', shader)
+    assert len(declarations) <= 1, (
+        f"'float n3' declared {len(declarations)} times in cloudFragmentShader. "
+        "A redeclaration inside an inner scope is illegal in GLSL ES 1.00 and "
+        "causes shader compile failure on strict GLES drivers (Pi VideoCore). "
+        "Rename the inner variable (e.g. n3b) to fix this."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 2 – clouds object must be cached, not traversed every frame
+# ---------------------------------------------------------------------------
+
+def test_clouds_object_cached():
+    """The clouds mesh should be cached in a module-level variable (cloudsObject)
+    and used in animate() rather than calling scene.getObjectByName() on every
+    frame.  The O(n) scene traversal on every frame is a needless CPU cost on Pi
+    and grows as trajectory objects are added to the scene.
+    """
+    html = _read_globe()
+    assert 'cloudsObject' in html, (
+        "'cloudsObject' variable not found in globe.html. "
+        "The clouds mesh should be cached at creation time to avoid repeated "
+        "O(n) scene.getObjectByName() calls in the animation loop."
+    )
+
+
+def test_get_object_by_name_not_in_animate():
+    """scene.getObjectByName('clouds') must not appear inside the animate()
+    function body.  The animate loop runs at 30–60 fps; calling getObjectByName
+    there performs a full scene-tree traversal on every frame.
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+    assert "getObjectByName" not in animate_body, (
+        "scene.getObjectByName() call found inside animate(). "
+        "Cache the clouds mesh at init time and use the cached reference instead."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 3 – cloud rotation must use incremental delta-time, not absolute time
+# ---------------------------------------------------------------------------
+
+def test_cloud_rotation_uses_delta_not_absolute():
+    """Cloud rotation must be driven by a cumulative delta-time accumulator
+    (cloudsRotY) rather than 'absoluteTime * <constant>'.
+
+    Using absolute time means clouds.rotation.y is SET to a new absolute value
+    every frame.  When absoluteTime wraps at 3600 s the cloud layer snaps to
+    a completely different position in a single frame – visually indistinguishable
+    from a freeze and then a jarring jump.
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+
+    # The old absolute-time pattern must be gone
+    old_pattern = re.search(r'clouds\.rotation\.y\s*=\s*absoluteTime', animate_body)
+    assert old_pattern is None, (
+        "clouds.rotation.y is still assigned using absoluteTime inside animate(). "
+        "Use an incremental cloudsRotY accumulator (cloudsRotY += dtSec * speed) "
+        "to prevent the cloud layer from jumping when absoluteTime wraps."
+    )
+
+    # The new accumulator must be present
+    assert 'cloudsRotY' in html, (
+        "'cloudsRotY' accumulator not found in globe.html. "
+        "Cloud rotation must accumulate delta increments to stay smooth across wraps."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 4 – watchdog must detect a stopped RAF loop and restart it
+# ---------------------------------------------------------------------------
+
+def test_watchdog_has_call_counter():
+    """The self-healing watchdog must track the animate() call counter
+    (__animateCalls) to detect when the RAF loop itself has stopped, not just
+    when rendering has stalled.  Without this, a Qt WebEngine view becoming
+    non-visible (which pauses RAF) can freeze the globe permanently.
+    """
+    html = _read_globe()
+    assert '__animateCalls' in html, (
+        "'__animateCalls' not found.  The watchdog needs a call counter to detect "
+        "when the RAF loop has stopped, not just when rendering has stalled."
+    )
+    assert '__animateStarted' in html, (
+        "'__animateStarted' guard not found.  Without it the watchdog would try to "
+        "restart animate() before THREE.js has finished initialising."
+    )
+
+
+def test_watchdog_restarts_raf():
+    """The watchdog must call requestAnimationFrame(animate) when the RAF loop
+    appears to have stopped (call counter unchanged for one watchdog tick).
+    Previously it only called resumeSpin() which only resets JS flags but does
+    not restart a stopped RAF loop.
+    """
+    html = _read_globe()
+    watchdog_body = _extract_iife_after(html, 'Self-healing watchdog')
+    assert watchdog_body, "'Self-healing watchdog' IIFE not found"
+    assert 'requestAnimationFrame(animate)' in watchdog_body, (
+        "The self-healing watchdog does not call requestAnimationFrame(animate) to "
+        "restart a stopped RAF loop.  resumeSpin() alone only resets JS state flags "
+        "and cannot restart a loop that Qt WebEngine has throttled or paused."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 5 – __lastRenderTs updated only inside successful render block
+# ---------------------------------------------------------------------------
+
+def test_last_render_ts_inside_render_block():
+    """__lastRenderTs must only be updated when renderer.render() actually
+    succeeds (inside the try block), not unconditionally after the render
+    conditional.  Moving it outside means the watchdog cannot detect scenarios
+    where the renderer exists but produces no output (e.g. after WebGL context
+    loss where Three.js render() is a silent no-op).
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+
+    render_pos = animate_body.find('renderer.render(scene, camera)')
+    ts_pos = animate_body.find('__lastRenderTs = now')
+    assert render_pos != -1, "renderer.render() not found inside animate()"
+    assert ts_pos != -1, "__lastRenderTs = now not found inside animate()"
+    assert ts_pos > render_pos, (
+        "__lastRenderTs = now appears BEFORE renderer.render() in animate(). "
+        "It must only be set after a successful render so the watchdog can detect "
+        "frames where the renderer fails silently."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 6 – WebGL context restore marks texture uniforms for re-upload
+# ---------------------------------------------------------------------------
+
+def test_context_restored_marks_texture_uniforms():
+    """The webglcontextrestored handler must mark texture uniforms needsUpdate
+    so that GPU-side textures (including the cloud shader sampler) are fully
+    re-uploaded after a context restore.  Without this, clouds stay blank or
+    render black after a GPU memory pressure event on Pi.
+    """
+    html = _read_globe()
+    restored_start = html.find("webglcontextrestored")
+    assert restored_start != -1, "webglcontextrestored handler not found"
+    # Extract the full handler body using brace-depth tracking
+    depth = 0
+    entered = False
+    end = restored_start
+    for i, ch in enumerate(html[restored_start:], start=restored_start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = i
+                break
+    restored_body = html[restored_start:end + 1]
+    assert 'isTexture' in restored_body or 'needsUpdate' in restored_body, (
+        "The webglcontextrestored handler does not appear to mark textures for "
+        "re-upload.  After a WebGL context restore all GPU textures are lost and "
+        "must be re-uploaded via texture.needsUpdate = true."
+    )
+    assert 'uniforms' in restored_body, (
+        "The webglcontextrestored handler does not iterate over shader uniforms. "
+        "Texture uniforms (e.g. cloudTexture) must also be marked needsUpdate."
+    )
