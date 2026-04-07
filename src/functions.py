@@ -3370,7 +3370,7 @@ def setup_dashboard_environment():
     # 3. Windows -> 1.0
     # 4. DASHBOARD_WIDTH == 3840 (explicitly large display) -> 2.0
     # 5. Config file matching large display -> 2.0
-    # 6. Default fallback for Linux -> 2.0
+    # 6. Default fallback for Linux -> 1.0 (Assume Waveshare 11.9 unless large display detected)
     
     if platform.system() in ('Windows', 'Darwin'):
         default_scale = "1.0"
@@ -3387,18 +3387,24 @@ def setup_dashboard_environment():
     elif detected_w == 2560 or detected_h == 734:
         default_scale = "1.333"
     else:
-        default_scale = "2.0"
+        # If we can't detect the display, default to 1.0 to avoid "half resolution"
+        # issues on the Waveshare 11.9inch, which is the standard build.
+        default_scale = "1.0"
 
     dashboard_scale = os.environ.get("DASHBOARD_SCALE", default_scale)
     
     # Set QT_SCALE_FACTOR to ensure consistent scaling across all displays
     os.environ["QT_SCALE_FACTOR"] = dashboard_scale
+    
+    logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, QT_SCALE_FACTOR={dashboard_scale} (Detected resolution: {detected_w}x{detected_h})")
 
     if platform.system() == 'Linux':
         os.environ["QT_QPA_PLATFORM"] = "xcb"
         os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
-        os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
-        os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
+        # Removed MESA overrides to allow the Pi's driver to report native capabilities
+        # and prevent resolution/interaction issues.
+        # os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
+        # os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
         # Help eliminate screen tearing on Pi
         os.environ.setdefault("vblank_mode", "3")
         # Enable synchronization to VSync for the Qt Scene Graph

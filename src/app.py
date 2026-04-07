@@ -660,7 +660,7 @@ class Backend(QObject):
                 self._width = int(self._width / scale)
                 self._height = int(self._height / scale)
             
-            logger.info(f"Backend: Initialized resolution: {self._width}x{self._height} (logical), scale: {scale}")
+            logger.info(f"Backend: Initialized resolution: {self._width}x{self._height} (logical), scale: {scale} (DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, detected_w={detected_w})")
         except (ValueError, TypeError):
             logger.warning(f"Backend: Invalid DASHBOARD_SCALE value: {scale_str}")
             scale = 1.0
