@@ -35,13 +35,6 @@
         var firstScriptTag = document.getElementsByTagName('script')[0];
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
-        // Cap playback to this quality level.  On memory-constrained hardware
-        // (e.g. Raspberry Pi) a single long, high-resolution video can pre-buffer
-        // hundreds of megabytes of compressed media data and exhaust available RAM.
-        // 'medium' (360p) is a reasonable cap that keeps the display presentable
-        // while keeping the buffer footprint small.
-        var QUALITY_CAP = 'medium';
-
         var player;
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
@@ -60,17 +53,9 @@
                 },
                 events: {
                     onReady: function(event) {
-                        // Apply quality cap before the first frame loads so the
-                        // player never buffers more data than necessary.
-                        event.target.setPlaybackQuality(QUALITY_CAP);
                         event.target.playVideo();
                     },
                     onStateChange: function(event) {
-                        // Re-apply the quality cap whenever a new video starts
-                        // playing (each playlist item gets its own buffer).
-                        if (event.data === YT.PlayerState.PLAYING) {
-                            player.setPlaybackQuality(QUALITY_CAP);
-                        }
                         // When the playlist ends, seek back to the first video
                         // and play again — all within the same player instance.
                         // This avoids the memory leak that arises when YouTube's
