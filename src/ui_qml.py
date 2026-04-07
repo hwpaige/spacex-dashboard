@@ -450,20 +450,27 @@ Window {
             uniqueTargets.forEach(function(target) {
                 if (target && typeof target.runJavaScript === 'function') {
                     console.log("QML: Injecting trajectory into target (runJavaScript exists)");
-                    target.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
+                    var callResult = target.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
                         if (result === true) {
                             console.log("QML: Trajectory injection SUCCESS (JS function found and called)");
+                            success = true;
                         } else {
                             console.log("QML: Trajectory injection FAILED (JS function NOT DEFINED), retrying in 2s...");
                             trajectoryRetryTimer.start();
                         }
                     });
-                    success = true;
+                
+                    // In QML, if we called our custom wrapper and it returned false, we know it failed immediately
+                    if (callResult === false) {
+                        console.log("QML: Target.runJavaScript returned false (loader item likely not ready)");
+                    } else {
+                        success = true; // At least one target accepted the call
+                    }
                 }
             });
-            
+        
             if (!success) {
-                console.log("QML: No valid globe target with runJavaScript found. Targets found: " + uniqueTargets.length + ". Retrying in 2s...");
+                console.log("QML: No valid globe target with runJavaScript found or all targets were unready. Targets found: " + uniqueTargets.length + ". Retrying in 2s...");
                 trajectoryRetryTimer.start();
             }
         } else {
@@ -907,8 +914,16 @@ Window {
                             id: plotGlobeView
                             anchors.fill: parent
                             property bool _loaded: false
-                            function runJavaScript(script) {
-                                if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
+                            function runJavaScript(script, callback) {
+                                if (plotGlobeLoader.item) {
+                                    if (callback !== undefined) {
+                                        plotGlobeLoader.item.runJavaScript(script, callback);
+                                    } else {
+                                        plotGlobeLoader.item.runJavaScript(script);
+                                    }
+                                    return true;
+                                }
+                                return false;
                             }
                             Loader {
                                 id: plotGlobeLoader

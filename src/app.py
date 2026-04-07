@@ -743,6 +743,7 @@ class Backend(QObject):
         except Exception:
             pass
         self._trajectory_compute_inflight = False
+        self._trajectory_needs_recompute = False
         self._current_trajectory = None
         self._trajectory_emit_timer = QTimer(self)
         self._trajectory_emit_timer.setSingleShot(True)
@@ -2238,6 +2239,9 @@ class Backend(QObject):
         self._weather_updater_thread = QThread()
         self._weather_updater.moveToThread(self._weather_updater_thread)
         self._weather_updater.finished.connect(self._on_weather_updated)
+        self._weather_updater.finished.connect(self._weather_updater_thread.quit)
+        self._weather_updater.finished.connect(self._weather_updater.deleteLater)
+        self._weather_updater_thread.finished.connect(self._weather_updater_thread.deleteLater)
         self._weather_updater_thread.started.connect(self._weather_updater.run)
         self._weather_updater_thread.start()
 
@@ -2250,6 +2254,9 @@ class Backend(QObject):
         self._launch_updater_thread = QThread()
         self._launch_updater.moveToThread(self._launch_updater_thread)
         self._launch_updater.finished.connect(self._on_launches_updated)
+        self._launch_updater.finished.connect(self._launch_updater_thread.quit)
+        self._launch_updater.finished.connect(self._launch_updater.deleteLater)
+        self._launch_updater_thread.finished.connect(self._launch_updater_thread.deleteLater)
         self._launch_updater_thread.started.connect(self._launch_updater.run)
         self._launch_updater_thread.start()
 
@@ -2273,12 +2280,10 @@ class Backend(QObject):
         self._next_launch_updater_thread = QThread()
         self._next_launch_updater.moveToThread(self._next_launch_updater_thread)
         self._next_launch_updater.finished.connect(self._on_next_launch_updated)
-        self._next_launch_updater_thread.started.connect(self._next_launch_updater.run)
-        
-        # Cleanup
         self._next_launch_updater.finished.connect(self._next_launch_updater_thread.quit)
-        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.deleteLater)
+        self._next_launch_updater.finished.connect(self._next_launch_updater.deleteLater)
         self._next_launch_updater_thread.finished.connect(self._next_launch_updater_thread.deleteLater)
+        self._next_launch_updater_thread.started.connect(self._next_launch_updater.run)
         
         self._next_launch_updater_thread.start()
 
@@ -2599,18 +2604,25 @@ class Backend(QObject):
 
     def _compute_trajectory_async(self):
         if getattr(self, '_trajectory_compute_inflight', False):
-            logger.debug("Trajectory compute already in flight; skipping")
+            # If already computing, mark that we need a follow-up recompute for the newest state.
+            # The recompute timer will handle triggering it eventually after the current worker finishes.
+            self._trajectory_needs_recompute = True
             return
+            
         self._trajectory_compute_inflight = True
+        self._trajectory_needs_recompute = False
 
         def _worker():
             try:
                 logger.info("Computing launch trajectory in background…")
+                # Snapshot the mission we are computing for
+                mission_to_compute = getattr(self, '_selected_launch_mission', None)
+                
                 # Find the target launch (selected or next upcoming)
                 launch_obj = None
-                if self._selected_launch_mission:
+                if mission_to_compute:
                     all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
-                    launch_obj = next((l for l in all_launches if l.get('mission') == self._selected_launch_mission), None)
+                    launch_obj = next((l for l in all_launches if l.get('mission') == mission_to_compute), None)
                 
                 if not launch_obj:
                     # Fallback to next upcoming launch
@@ -2625,6 +2637,9 @@ class Backend(QObject):
                             self._current_trajectory = result
                             logger.info(f"Trajectory computation successful for {result.get('mission')}: {len(result.get('trajectory', []))} points")
                             self._trajectory_compute_inflight = False
+                            # We don't call self._compute_trajectory_async() immediately here to avoid 
+                            # tight recursion loops. The next timer tick will start it if needs_recompute is set.
+                            
                             # Emit BOTH signals to ensure UI catches it
                             self.updateGlobeTrajectory.emit()
                             self._emit_update_globe_trajectory_debounced()
@@ -2639,11 +2654,13 @@ class Backend(QObject):
                 def _done_fail():
                     logger.warning("Trajectory computation failed or returned no data")
                     self._trajectory_compute_inflight = False
+                    # Let the timer handle the next retry, don't recurse immediately
                 QTimer.singleShot(0, _done_fail)
             except Exception as e:
                 logger.warning(f"Background trajectory compute failed: {e}")
                 self._trajectory_compute_inflight = False
-
+                # No recompute on exception to avoid infinite loops of failure
+        
         try:
             threading.Thread(target=_worker, daemon=True).start()
         except Exception as _e:
@@ -2739,10 +2756,6 @@ class Backend(QObject):
         # Update globe trajectory in case current/next launch changed (e.g., after Success)
         self._emit_update_globe_trajectory_debounced()
         self._schedule_trajectory_recompute()
-        # Clean up thread
-        if hasattr(self, '_launch_updater_thread'):
-            self._launch_updater_thread.quit()
-            self._launch_updater_thread.wait()
 
         # Auto-reconnect to last connected network if not currently connected
         self._auto_reconnect_to_last_network()
@@ -2812,10 +2825,6 @@ class Backend(QObject):
         self.weatherChanged.emit()
         self.weatherUpdated.emit()
         self.weatherForecastModelChanged.emit()
-        # Clean up thread
-        if hasattr(self, '_weather_updater_thread'):
-            self._weather_updater_thread.quit()
-            self._weather_updater_thread.wait()
 
     def _safety_reset_wifi_connecting(self, ssid=None):
         """Reset the connecting state if it's been stuck for too long"""

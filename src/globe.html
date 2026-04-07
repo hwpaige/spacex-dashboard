@@ -172,6 +172,10 @@
         let pinchStartDistance = null;
         let pinchStartZ = null;
 
+        // Performance & Rate Limiting
+        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 2000;
+        let lastTrajectoryUpdateTs = 0;
+
         function init() {
             try {
                 // Scene
@@ -1116,7 +1120,13 @@
         console.log("Starting initialization (waiting for THREE if offline)...");
         if (window.__ensureThreeAndBoot) {
             window.__ensureThreeAndBoot(function () {
-                try { init(); } catch (e) { console.error('Init failed, will retry shortly:', e); setTimeout(function () { window.__ensureThreeAndBoot(init); }, 4000); }
+                try {
+                    init();
+                    if (typeof __pendingTrajectoryData !== 'undefined' && __pendingTrajectoryData) {
+                        console.log("Processing pending trajectory data after initialization");
+                        updateTrajectory(__pendingTrajectoryData);
+                    }
+                } catch (e) { console.error('Init failed, will retry shortly:', e); setTimeout(function () { window.__ensureThreeAndBoot(init); }, 4000); }
             });
         } else {
             // Fallback: try to init directly
