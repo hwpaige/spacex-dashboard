@@ -633,6 +633,13 @@ Window {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
+                                    profile: WebEngineProfile {
+                                        id: windyProfile
+                                        // Use off-the-record to avoid disk I/O and reduce memory usage on Pi
+                                        offTheRecord: true
+                                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                                        httpAcceptLanguage: "en-US,en"
+                                    }
                                     layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running)
                                     layer.smooth: true
                                     // layer.renderTarget removed due to compatibility issues with older Qt versions
@@ -649,7 +656,7 @@ Window {
                                     settings.allowRunningInsecureContent: true
                                     settings.javascriptEnabled: true
                                     settings.localContentCanAccessRemoteUrls: true
-
+                                    settings.pluginsEnabled: false  // Not needed for Windy and saves RAM
                                     onLoadingChanged: function(loadRequest) {
                                         if (loadRequest.status === WebEngineView.LoadFailedStatus) {
                                             console.log("Radar WebEngineView (" + modelData + ") load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode, "URL:", loadRequest.url);
@@ -933,6 +940,13 @@ Window {
                                 sourceComponent: WebEngineView {
                                     id: plotGlobeViewInner
                                     anchors.fill: parent
+                                    profile: WebEngineProfile {
+                                        id: globeProfile
+                                        // Use off-the-record for the globe to save memory and avoid disk I/O
+                                        offTheRecord: true
+                                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                                        httpAcceptLanguage: "en-US,en"
+                                    }
                                     url: globeUrl
                                     backgroundColor: "transparent"
                                     onBackgroundColorChanged: {
@@ -944,6 +958,7 @@ Window {
                                     layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     settings.javascriptCanAccessClipboard: false
                                     settings.allowWindowActivationFromJavaScript: false
+                                    settings.pluginsEnabled: false  // Not needed for Globe and saves RAM
                                     onContextMenuRequested: function(request) { request.accepted = true }
 
                                     onLoadingChanged: function(loadRequest) {
@@ -978,6 +993,19 @@ Window {
                                         function onThemeChanged() {
                                             if (backend) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
+                                            }
+                                        }
+                                    }
+
+                                    // Pause globe animation when video is expanded to save CPU/GPU on Pi
+                                    Connections {
+                                        target: videoCard
+                                        function onVideoExpansionFactorChanged() {
+                                            if (videoCard.videoExpansionFactor > 0.5) {
+                                                plotGlobeViewInner.runJavaScript("(function(){try{if(window.pauseSpin)pauseSpin();}catch(e){}})();");
+                                            } else if (root.active) {
+                                                // Only resume if the app is still the active window
+                                                plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();");
                                             }
                                         }
                                     }
@@ -1835,13 +1863,10 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
-                        storageName: "youtube_profile"
+                        // Use off-the-record to avoid disk I/O bottlenecks and storage growth on the Pi
+                        offTheRecord: true
                         httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
-                        // Allow sending Referer headers for YouTube embeds
-                        // offTheRecord: false  // Removed to avoid warning, defaults to false anyway
-                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
-                        httpCacheType: WebEngineProfile.DiskHttpCache
                     }
 
                     // Rounded-corner container to ensure YouTube/map view corners are clipped
@@ -1891,7 +1916,7 @@ Window {
                                 settings.javascriptEnabled: true
                                 settings.localContentCanAccessRemoteUrls: true
                                 settings.playbackRequiresUserGesture: false  // Allow autoplay
-                                settings.pluginsEnabled: true
+                                settings.pluginsEnabled: false  // YouTube uses HTML5; plugins are not needed and use extra RAM
                                 settings.javascriptCanOpenWindows: false
                                 settings.javascriptCanAccessClipboard: false
                                 settings.allowWindowActivationFromJavaScript: true

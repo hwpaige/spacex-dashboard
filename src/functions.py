@@ -50,6 +50,9 @@ class BootProfiler:
         elapsed = time.time() - self.start_time
         thread_name = threading.current_thread().name
         self.events.append((event_name, elapsed, thread_name))
+        # Prevent memory leak by capping the number of stored events
+        if len(self.events) > 500:
+            self.events.pop(0)
         logger.info(f"PROFILER: [{thread_name}] {event_name} at {elapsed:.3f}s")
         
     def get_summary(self):
