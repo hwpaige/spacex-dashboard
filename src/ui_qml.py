@@ -107,6 +107,27 @@ Window {
     // Track the currently selected YouTube URL for the video card.
     // Initialized to the default playlist URL provided by the backend.
     property url currentVideoUrl: backend ? backend.videoUrl : ""
+    property url debouncedVideoUrl: currentVideoUrl
+    
+    Timer {
+        id: videoUrlDebouncer
+        interval: 1000
+        repeat: false
+        onTriggered: {
+            console.log("Debounced video URL updated to:", currentVideoUrl)
+            debouncedVideoUrl = currentVideoUrl
+        }
+    }
+    
+    onCurrentVideoUrlChanged: {
+        // If clearing or loading about:blank, do it immediately to free memory
+        if (currentVideoUrl.toString() === "" || currentVideoUrl.toString() === "about:blank") {
+            videoUrlDebouncer.stop()
+            debouncedVideoUrl = ""
+        } else {
+            videoUrlDebouncer.restart()
+        }
+    }
 
     // UI Ready tracking
     property int _pendingCriticalLoads: 1
@@ -150,18 +171,17 @@ Window {
         if (!webView || !webView.runJavaScript) return;
         if (typeof backend !== 'undefined' && backend && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
-        // Default to transparent if no custom color provided, allowing the QML background to show through the corners.
-        // If a specific color is needed (e.g. to hide artifacts), it can be passed in.
         var themeColor = customColor ? customColor : "transparent";
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
                  "var themeColor='" + themeColor + "';" +
-                 "var apply=function(){var h=document.documentElement, b=document.body;" +
-                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.clipPath='inset(0 round '+r+'px)'; h.style.backgroundColor=themeColor;}" +
-                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.clipPath='inset(0 round '+r+'px)'; b.style.backgroundColor=themeColor;}" +
+                 "var apply=function(){" +
+                 "  var h=document.documentElement, b=document.body;" +
+                 "  if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.clipPath='inset(0 round '+r+'px)'; h.style.backgroundColor=themeColor;}" +
+                 "  if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.clipPath='inset(0 round '+r+'px)'; b.style.backgroundColor=themeColor;}" +
                  "};" +
                  "apply();" +
-                 "var i=0; var timer=setInterval(function(){try{apply(); if(++i>10) clearInterval(timer);}catch(e){clearInterval(timer);}}, 500);" +
+                 "setTimeout(apply, 500); setTimeout(apply, 1000); setTimeout(apply, 2000);" +
                  "}catch(e){}})();";
         webView.runJavaScript(js);
     }
@@ -211,7 +231,7 @@ Window {
             // don't let background updates (like the placeholder) override it.
             var isManualLive = (backend.liveLaunchUrl !== "" && current === backend.liveLaunchUrl)
             // We check the URL directly for NSF as well
-            var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
+            var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1"
             var isManualNsf = (current === nsfUrl)
             
             if (isManualLive || isManualNsf) {
@@ -598,7 +618,7 @@ Window {
                             Loader {
                                 id: webViewLoader
                                 anchors.fill: parent
-                                active: (weatherSwipe.loadedMask & (1 << index))
+                                active: index === weatherSwipe.currentIndex || weatherSwipe.moving
                                 visible: index === weatherSwipe.currentIndex
                                 sourceComponent: WebEngineView {
                                     id: webView
@@ -1806,175 +1826,111 @@ Window {
 
                         // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                        WebEngineView {
-                            id: youtubeView
-                            profile: youtubeProfile
+                        Loader {
+                            id: youtubeLoader
                             anchors.fill: parent
-                            layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
-                            layer.smooth: true
-                            // layer.renderTarget: Item.FramebufferObject
-                            layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))
-                                                ? Qt.size(videoCard.currentMaxWidth > 0 ? videoCard.currentMaxWidth : root.width / 2, height > 0 ? height : root.height)
-                                                : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
+                            active: debouncedVideoUrl && debouncedVideoUrl.toString() !== "" && debouncedVideoUrl.toString() !== "about:blank"
+                            onActiveChanged: if (active) console.log("YouTube WebEngineView activated for:", debouncedVideoUrl)
                             
-                            // MouseArea for expansion gesture
-                            MouseArea {
-                                anchors.left: (root.height > root.width) ? parent.left : parent.left
-                                anchors.right: (root.height > root.width) ? parent.right : undefined
-                                anchors.top: parent.top
-                                anchors.bottom: (root.height > root.width) ? undefined : parent.bottom
-                                width: (root.height > root.width) ? undefined : 40
-                                height: (root.height > root.width) ? 40 : undefined
-                                z: 10
+                            sourceComponent: WebEngineView {
+                                id: youtubeView
+                                profile: youtubeProfile
+                                anchors.fill: parent
+                                layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
+                                layer.smooth: true
+                                layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))
+                                                    ? Qt.size(videoCard.currentMaxWidth > 0 ? videoCard.currentMaxWidth : root.width / 2, height > 0 ? height : root.height)
+                                                    : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                 
-                                property real startPos: 0
-                                property real initialSize: 0
-                                
-                                onPressed: (mouse) => {
-                                    startPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
-                                    initialSize = (root.height > root.width) ? videoCard.height : videoCard.width
-                                    videoCard.manualWidth = initialSize
-                                    videoCard.isDragging = true
-                                }
-                                
-                                onPositionChanged: (mouse) => {
-                                    if (videoCard.isDragging) {
-                                        var currentPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
-                                        var delta = (root.height > root.width) ? (currentPos - startPos) : (startPos - currentPos) 
-                                        videoCard.manualWidth = Math.max(videoCard.currentMinWidth, Math.min(videoCard.currentMaxWidth, initialSize + delta))
-                                    }
-                                }
-                                
-                                onReleased: (mouse) => {
-                                    if (videoCard.isDragging) {
-                                        var p = videoCard.progress
-                                        var threshold = 0.12
-                                        if (videoCard.videoExpansionFactor === 0.0) {
-                                            videoCard.videoExpansionFactor = (p > threshold) ? 1.0 : 0.0
-                                        } else {
-                                            videoCard.videoExpansionFactor = (p < (1.0 - threshold)) ? 0.0 : 1.0
-                                        }
-                                        videoCard.isDragging = false
-                                    }
-                                }
-                                
-                                onCanceled: {
-                                    if (videoCard.isDragging) {
-                                        videoCard.isDragging = false
-                                    }
-                                }
-                            }
-
-                            backgroundColor: "black"
-                            onBackgroundColorChanged: {
-                                if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
-                            }
-                            url: root.currentVideoUrl
-                            onUrlChanged: {
-                                if (url.toString() === "") {
-                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:black;'></body></html>")
-                                }
-                            }
-
-                            settings.webGLEnabled: true
-                            settings.accelerated2dCanvasEnabled: true
-                            settings.allowRunningInsecureContent: true
-                            settings.javascriptEnabled: true
-                            settings.localContentCanAccessRemoteUrls: true
-                            settings.playbackRequiresUserGesture: false  // Allow autoplay
-                            settings.pluginsEnabled: true
-                            settings.javascriptCanOpenWindows: false
-                            settings.javascriptCanAccessClipboard: false
-                            settings.allowWindowActivationFromJavaScript: true
-                            onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
-                            onLoadingChanged: function(loadRequest) {
-                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                    console.log("YouTube WebEngineView load failed:", loadRequest.errorString);
-                                    console.log("Error code:", loadRequest.errorCode);
-                                    console.log("Error domain:", loadRequest.errorDomain);
-                                    
-                                    // Handle specific error codes
-                                    if (loadRequest.errorCode === 153) {
-                                        console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
-                                        console.log("This is a new YouTube policy requiring API client identification");
-                                        console.log("Attempting to reload with proper headers...");
-                                        
-                                        // Auto-retry for Referer header errors
-                                        youtubeRetryTimer.restart();
-                                    } else if (loadRequest.errorCode === 2) {
-                                        console.log("ERR_FAILED - Network or server error. Check your internet connection.");
-                                    } else if (loadRequest.errorCode === 3) {
-                                        console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
-                                    } else if (loadRequest.errorCode === 6) {
-                                        console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
-                                    } else if (loadRequest.errorCode === -3) {
-                                        console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
-                                    } else {
-                                        console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
-                                    }
-                                    root.autoFullScreen = false;
-                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                    console.log("YouTube WebEngineView loaded successfully");
-                                    // Apply internal page rounding to ensure corners clip
-                                    // Use black background for video views to avoid white/gray corner artifacts
+                                backgroundColor: "black"
+                                onBackgroundColorChanged: {
                                     if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
-                                    
-                                    // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
-                                    // We only apply this to X.com (Twitter) streams as requested.
-                                    var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 
-                                              loadRequest.url.toString().indexOf("twitter.com") !== -1 ||
-                                              loadRequest.url.toString().indexOf("platform.twitter.com") !== -1;
-                                    if (root.autoFullScreen && isX) {
-                                        // X.com needs a bit of time to initialize its player, so we retry a few times.
-                                        youtubeView.runJavaScript("(function(){" +
-                                            "var attempts = 0;" +
-                                            "var tryFS = function() {" +
-                                            "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
-                                            "  if(el && el.requestFullscreen) {" +
-                                            "    el.requestFullscreen().catch(function(e){" +
-                                            "      if(++attempts < 10) setTimeout(tryFS, 1000);" +
-                                            "      else console.log('Auto-fullscreen failed:', e);" +
-                                            "    });" +
-                                            "  } else if (el && el.webkitRequestFullscreen) {" +
-                                            "    el.webkitRequestFullscreen();" +
-                                            "  } else if (++attempts < 10) {" +
-                                            "    setTimeout(tryFS, 1000);" +
-                                            "  }" +
-                                            "};" +
-                                            "tryFS();" +
-                                        "})()");
+                                }
+                                url: debouncedVideoUrl
+                                onUrlChanged: {
+                                    if (url.toString() === "") {
+                                        youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:black;'></body></html>")
                                     }
-                                    root.autoFullScreen = false;
-                                    
-                                    youtubeRetryTimer.stop(); // Stop any pending retries
                                 }
-                            }
 
-                            // Staggered global reload for YouTube view
-                            Connections {
-                                target: backend
-                                function onReloadWebContent() {
-                                    globalReloadTimer.start()
+                                settings.webGLEnabled: true
+                                settings.accelerated2dCanvasEnabled: true
+                                settings.allowRunningInsecureContent: true
+                                settings.javascriptEnabled: true
+                                settings.localContentCanAccessRemoteUrls: true
+                                settings.playbackRequiresUserGesture: false  // Allow autoplay
+                                settings.pluginsEnabled: true
+                                settings.javascriptCanOpenWindows: false
+                                settings.javascriptCanAccessClipboard: false
+                                settings.allowWindowActivationFromJavaScript: true
+                                onFullScreenRequested: function(request) { 
+                                    console.log("YouTube full screen requested. Accepting...");
+                                    request.accept(); 
+                                    if (root.visibility !== Window.FullScreen) root.visibility = Window.FullScreen;
                                 }
-                            }
-                            Timer {
-                                id: globalReloadTimer
-                                interval: 2500
-                                repeat: false
-                                onTriggered: {
-                                    youtubeView.reload()
-                                    console.log("YouTube/map view reloaded (staggered)")
+                                onLoadingChanged: function(loadRequest) {
+                                    if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                        console.log("YouTube WebEngineView load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode);
+                                        
+                                        if (loadRequest.errorCode === 153) {
+                                            console.log("ERR_MISSING_REFERER_HEADER - retrying in 3s...");
+                                            youtubeRetryTimer.restart();
+                                        }
+                                        root.autoFullScreen = false;
+                                    } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                        console.log("YouTube WebEngineView loaded successfully");
+                                        if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
+                                        
+                                        var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 
+                                                  loadRequest.url.toString().indexOf("twitter.com") !== -1 ||
+                                                  loadRequest.url.toString().indexOf("platform.twitter.com") !== -1;
+                                        if (root.autoFullScreen && isX) {
+                                            youtubeView.runJavaScript("(function(){" +
+                                                "var attempts = 0;" +
+                                                "var tryFS = function() {" +
+                                                "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                                "  if(el && el.requestFullscreen) {" +
+                                                "    el.requestFullscreen().catch(function(e){" +
+                                                "      if(++attempts < 10) setTimeout(tryFS, 1000);" +
+                                                "      else console.log('Auto-fullscreen failed:', e);" +
+                                                "    });" +
+                                                "  } else if (el && el.webkitRequestFullscreen) {" +
+                                                "    el.webkitRequestFullscreen();" +
+                                                "  } else if (++attempts < 10) {" +
+                                                "    setTimeout(tryFS, 1000);" +
+                                                "  }" +
+                                                "};" +
+                                                "tryFS();" +
+                                            "})()");
+                                        }
+                                        root.autoFullScreen = false;
+                                        youtubeRetryTimer.stop();
+                                    }
                                 }
-                            }
 
-                            // Auto-retry timer for content length mismatch
-                            Timer {
-                                id: youtubeRetryTimer
-                                interval: 3000 // 3 seconds
-                                repeat: false
-                                onTriggered: {
-                                    console.log("Attempting to reload YouTube video after error 153...");
-                                    youtubeView.reload();
+                                Connections {
+                                    target: backend
+                                    function onReloadWebContent() {
+                                        globalReloadTimer.start()
+                                    }
+                                }
+                                Timer {
+                                    id: globalReloadTimer
+                                    interval: 2500
+                                    repeat: false
+                                    onTriggered: {
+                                        youtubeView.reload()
+                                        console.log("YouTube view reloaded (staggered)")
+                                    }
+                                }
+                                Timer {
+                                    id: youtubeRetryTimer
+                                    interval: 3000
+                                    repeat: false
+                                    onTriggered: {
+                                        console.log("Retrying YouTube load after error...");
+                                        youtubeView.reload();
+                                    }
                                 }
                             }
                         }
@@ -2117,23 +2073,25 @@ Window {
                                                 root.currentVideoUrl = backend.liveLaunchUrl
                                                 if (isSame) {
                                                     // If already on the live URL, just trigger fullscreen again with a few retries
-                                                    youtubeView.runJavaScript("(function(){" +
-                                                        "var attempts = 0;" +
-                                                        "var tryFS = function() {" +
-                                                        "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
-                                                        "  if(el && el.requestFullscreen) {" +
-                                                        "    el.requestFullscreen().catch(function(e){" +
-                                                        "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
-                                                        "      else console.log('Manual auto-fullscreen failed:', e);" +
-                                                        "    });" +
-                                                        "  } else if (el && el.webkitRequestFullscreen) {" +
-                                                        "    el.webkitRequestFullscreen();" +
-                                                        "  } else if (++attempts < 5) {" +
-                                                        "    setTimeout(tryFS, 1000);" +
-                                                        "  }" +
-                                                        "};" +
-                                                        "tryFS();" +
-                                                    "})()");
+                                                    if (youtubeLoader.item) {
+                                                        youtubeLoader.item.runJavaScript("(function(){" +
+                                                            "var attempts = 0;" +
+                                                            "var tryFS = function() {" +
+                                                            "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                                            "  if(el && el.requestFullscreen) {" +
+                                                            "    el.requestFullscreen().catch(function(e){" +
+                                                            "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
+                                                            "      else console.log('Manual auto-fullscreen failed:', e);" +
+                                                            "    });" +
+                                                            "  } else if (el && el.webkitRequestFullscreen) {" +
+                                                            "    el.webkitRequestFullscreen();" +
+                                                            "  } else if (++attempts < 5) {" +
+                                                            "    setTimeout(tryFS, 1000);" +
+                                                            "  }" +
+                                                            "};" +
+                                                            "tryFS();" +
+                                                        "})()");
+                                                    }
                                                 } else {
                                                     root.autoFullScreen = true
                                                 }
