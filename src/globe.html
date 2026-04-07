@@ -172,10 +172,6 @@
         let pinchStartDistance = null;
         let pinchStartZ = null;
 
-        // Performance & Rate Limiting
-        const MIN_TRAJECTORY_UPDATE_INTERVAL_MS = 2000;
-        let lastTrajectoryUpdateTs = 0;
-
         function init() {
             try {
                 // Scene
@@ -187,7 +183,7 @@
 
                 // Renderer
                 renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-                renderer.setPixelRatio(Math.min(1.5, window.devicePixelRatio)); // Limit pixel ratio for performance on Pi
+                renderer.setPixelRatio(window.devicePixelRatio); // Sharpness on high-DPI screens
                 renderer.setSize(window.innerWidth, window.innerHeight);
                 renderer.setClearColor(0x000000, 0); // Transparent background
                 document.body.appendChild(renderer.domElement);
@@ -560,8 +556,6 @@
                 // Moving these into init ensures renderer.domElement is available safely.
                 const onPointerDown = (e) => {
                     if (e && e.pointerType && e.pointerType !== 'mouse') {
-                        // Reset if it gets too high, indicating something is wrong
-                        if (activePointers > 10) activePointers = 0;
                         activePointers++;
                         userInteracting = true;
                         // Log pointer type for debugging
@@ -685,110 +679,77 @@
         function animate() {
             requestAnimationFrame(animate);
 
-            try {
-                const now = performance.now();
-                const absoluteTime = (now - __startTime) / 1000.0;
+            const now = performance.now();
+            const absoluteTime = (now - __startTime) / 1000.0;
 
-                // Optimization: Skip all processing if system is paused and no interaction is happening
-                if (systemPaused && !userInteracting && !isInMomentum) {
-                    // Still update time for clouds so they don't jump when resuming, 
-                    // but we aren't rendering anyway so it's just a variable update.
-                    return;
-                }
+            // Optimization: Skip all processing if system is paused and no interaction is happening
+            if (systemPaused && !userInteracting && !isInMomentum) {
+                // Still update time for clouds so they don't jump when resuming, 
+                // but we aren't rendering anyway so it's just a variable update.
+                return;
+            }
 
-                if (globe) {
-                    if (isInMomentum) {
-                        // Apply momentum directly in the same frame of reference it was recorded
-                        // (we bake orientation into momentum at capture time to avoid post-release flips)
-                        globe.rotation.y += momentumX;
-                        if (!window.__userRotOffset) window.__userRotOffset = 0;
-                        window.__userRotOffset += momentumX;
-                        
-                        globe.rotation.x += momentumY;
-                        clampRotationX();
+            if (globe) {
+                if (isInMomentum) {
+                    // Apply momentum directly in the same frame of reference it was recorded
+                    // (we bake orientation into momentum at capture time to avoid post-release flips)
+                    globe.rotation.y += momentumX;
+                    if (!window.__userRotOffset) window.__userRotOffset = 0;
+                    window.__userRotOffset += momentumX;
+                    
+                    globe.rotation.x += momentumY;
+                    clampRotationX();
 
-                        // Decay momentum
-                        // Slightly stronger damping to reduce perceived recoil
-                        momentumX *= 0.93; // Friction/damping
-                        momentumY *= 0.93;
+                    // Decay momentum
+                    // Slightly stronger damping to reduce perceived recoil
+                    momentumX *= 0.93; // Friction/damping
+                    momentumY *= 0.93;
 
-                        // Check if momentum is low enough to return to auto-rotation
-                        if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
-                            isInMomentum = false;
-                            momentumX = 0;
-                            momentumY = 0;
-                        }
-                    } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
-                        // Normal auto-rotation (decoupled from OrbitControls)
-                        const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
-                        // Use a separate base for auto-rotation to allow interaction to "offset" it
-                        if (!window.__autoRotBase) window.__autoRotBase = 0;
-                        window.__autoRotBase += baseSpeed * 0.01;
-                        globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
+                    // Check if momentum is low enough to return to auto-rotation
+                    if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
+                        isInMomentum = false;
+                        momentumX = 0;
+                        momentumY = 0;
                     }
+                } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
+                    // Normal auto-rotation (decoupled from OrbitControls)
+                    const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
+                    // Use a separate base for auto-rotation to allow interaction to "offset" it
+                    if (!window.__autoRotBase) window.__autoRotBase = 0;
+                    window.__autoRotBase += baseSpeed * 0.01;
+                    globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
                 }
+            }
 
-                // Rotate clouds slower than the globe
-                const clouds = scene.getObjectByName('clouds');
-                if (clouds) {
-                    // Cloud rotation can stay relative or use absolute time for perfect consistency
-                    clouds.rotation.y = absoluteTime * 0.05; 
-                    if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
-                        clouds.material.uniforms.time.value = absoluteTime;
-                    }
+            // Rotate clouds slower than the globe
+            const clouds = scene.getObjectByName('clouds');
+            if (clouds) {
+                // Cloud rotation can stay relative or use absolute time for perfect consistency
+                clouds.rotation.y = absoluteTime * 0.05; 
+                if (clouds.material && clouds.material.uniforms && clouds.material.uniforms.time) {
+                    clouds.material.uniforms.time.value = absoluteTime;
                 }
+            }
 
-                if (renderer && scene && camera) {
-                    renderer.render(scene, camera);
-                }
+            if (renderer && scene && camera) {
+                renderer.render(scene, camera);
+            }
 
-                // Track last render timestamp for watchdog
-                __lastRenderTs = now;
-                
-                // Periodically log animation status (every 5 seconds)
-                if (now - __lastResumeLogTs > 5000) {
-                    console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
-                    __lastResumeLogTs = now;
-                }
-            } catch (error) {
-                console.error("[globe] Error in animate loop:", error);
-                // The loop continues due to requestAnimationFrame being called at the top.
+            // Track last render timestamp for watchdog
+            __lastRenderTs = now;
+            
+            // Periodically log animation status (every 5 seconds)
+            if (now - __lastResumeLogTs > 5000) {
+                console.log(`[globe] Animating: time=${absoluteTime.toFixed(2)}, systemPaused=${systemPaused}, userInteracting=${userInteracting}`);
+                __lastResumeLogTs = now;
             }
         }
 
-        // Trajectory data queuing for early calls (before THREE.js/globe is ready)
-        let __pendingTrajectoryData = null;
-        let __trajectoryRetryTimeout = null;
-
         function updateTrajectory(trajectoryData) {
-            const now = performance.now();
-            
-            // 1. If not ready, store data and schedule retry
-            if (!renderer || !scene || !camera || !globe) {
-                console.warn("[globe] updateTrajectory: webgl components not ready. Storing pending data.");
-                __pendingTrajectoryData = trajectoryData;
-                if (!__trajectoryRetryTimeout) {
-                    __trajectoryRetryTimeout = setTimeout(() => {
-                        __trajectoryRetryTimeout = null;
-                        if (__pendingTrajectoryData) updateTrajectory(__pendingTrajectoryData);
-                    }, 1000);
-                }
-                return true; // We accept the data, it's queued
+            if (!renderer || !scene || !camera) {
+                console.warn("updateTrajectory called before webgl components were ready");
+                return;
             }
-            
-            // 2. Clear pending state if we are now ready
-            __pendingTrajectoryData = null;
-            if (__trajectoryRetryTimeout) {
-                clearTimeout(__trajectoryRetryTimeout);
-                __trajectoryRetryTimeout = null;
-            }
-
-            if (now - lastTrajectoryUpdateTs < MIN_TRAJECTORY_UPDATE_INTERVAL_MS) {
-                console.log("[globe] updateTrajectory rate limited (" + (now - lastTrajectoryUpdateTs).toFixed(0) + "ms since last)");
-                return true;
-            }
-
-            lastTrajectoryUpdateTs = now;
             // Remove existing trajectory group (which contains core and glow lines)
             if (trajectoryGroup) {
                 if (globe) globe.remove(trajectoryGroup);
@@ -811,12 +772,12 @@
             }
 
             if (!trajectoryData || !trajectoryData.trajectory || trajectoryData.trajectory.length < 2) {
-                console.log("[globe] No valid trajectory data received:", JSON.stringify(trajectoryData));
-                return true;
+                console.log("No valid trajectory data received:", trajectoryData);
+                return;
             }
 
-            console.log("[globe] Updating globe trajectory for mission:", trajectoryData.mission);
-            console.log("[globe] Trajectory points:", trajectoryData.trajectory.length);
+            console.log("Updating globe trajectory for mission:", trajectoryData.mission);
+            console.log("Trajectory points:", trajectoryData.trajectory.length);
             console.log("Booster points:", trajectoryData.booster_trajectory ? trajectoryData.booster_trajectory.length : 0);
             console.log("Landing type:", trajectoryData.landing_type);
 
@@ -851,7 +812,7 @@
                 const curve = new THREE.CatmullRomCurve3(points);
                 const tubeRadius = 0.0035; // Sharp main line
                 const radialSegments = 8;
-                const tubularSegments = Math.min(600, points.length * 3); // cap segments for performance
+                const tubularSegments = points.length * 6; // smoothness
                 const tubeGeometry = new THREE.TubeGeometry(curve, tubularSegments, tubeRadius, radialSegments, false);
 
                 // Apply vertex colors for gradient (Cyan -> Orange)
@@ -1053,7 +1014,7 @@
                     orbitCurve.closed = false;
 
                     const orbitTubeRadius = 0.003;
-                    const orbitSegments = Math.min(600, orbitPoints.length * 3);
+                    const orbitSegments = orbitPoints.length * 6;
 
                     const orbitTubeGeo = new THREE.TubeGeometry(orbitCurve, orbitSegments, orbitTubeRadius, 8, false);
                     const orbitMat = new THREE.MeshBasicMaterial({
@@ -1108,25 +1069,18 @@
                     console.log(`Auto-rotated to ${globe.rotation.y.toFixed(2)} rad for start lon ${startLon}`);
                 }
 
-                return true;
             } catch (error) {
                 console.error("Error in updateTrajectory:", error);
-                return false;
             }
         }
+        // Expose function to window as early as possible
         window.updateTrajectory = updateTrajectory;
 
         // Initialize and start animation, but ensure THREE is available first
         console.log("Starting initialization (waiting for THREE if offline)...");
         if (window.__ensureThreeAndBoot) {
             window.__ensureThreeAndBoot(function () {
-                try {
-                    init();
-                    if (typeof __pendingTrajectoryData !== 'undefined' && __pendingTrajectoryData) {
-                        console.log("Processing pending trajectory data after initialization");
-                        updateTrajectory(__pendingTrajectoryData);
-                    }
-                } catch (e) { console.error('Init failed, will retry shortly:', e); setTimeout(function () { window.__ensureThreeAndBoot(init); }, 4000); }
+                try { init(); } catch (e) { console.error('Init failed, will retry shortly:', e); setTimeout(function () { window.__ensureThreeAndBoot(init); }, 4000); }
             });
         } else {
             // Fallback: try to init directly
@@ -1379,11 +1333,9 @@
                 const now = Date.now();
                 // Increased robustness: if userInteracting is true but no move for 3s and no pointers, reset.
                 // This handles cases where mouseup/touchend might have been missed entirely by the browser.
-                if (userInteracting && (now - lastMoveTimeMs) > 3000) {
-                    if (activePointers === 0 || (now - lastMoveTimeMs) > 10000) {
-                        console.log('[globe] clearing stale interaction due to inactivity');
-                        window.clearInteraction();
-                    }
+                if (userInteracting && activePointers === 0 && (now - lastMoveTimeMs) > 3000) {
+                    console.log('[globe] clearing stale interaction due to inactivity');
+                    window.clearInteraction();
                 }
                 
                 // If isMouseDown is true but no move for 10s, it's likely stuck.

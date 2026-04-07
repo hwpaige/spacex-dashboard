@@ -2,13 +2,13 @@
 # Hardened git-only updater (no ZIP fallback)
 # Writes progress to stdout (app redirects to /tmp/spacex-dashboard-update.log)
 
-echo "== BEGIN SYSTEM UPDATE (git-only) v2.4 =="
-echo "Step 1/5: Checking for running app instances..."
+echo "== BEGIN UPDATE (git-only) v2.3 =="
+echo "Checking for running app instances..."
 # Allow the GUI to remain open showing the in-app update overlay when requested.
 # The launcher (app.py) sets KEEP_APP_RUNNING=1 to keep the UI alive so users don't
 # see the greeter. If not set, fall back to the old behavior and stop the app.
 if [ "${KEEP_APP_RUNNING}" = "1" ]; then
-    echo "KEEP_APP_RUNNING=1 detected; keeping the UI alive to show progress."
+    echo "KEEP_APP_RUNNING=1 detected; not killing running app. Proceeding with update while UI shows progress."
 else
     if pgrep -f "python.*app.py" > /dev/null; then
         echo "Stopping running app instances..."
@@ -23,14 +23,14 @@ if ! git rev-parse --git-dir > /dev/null 2>&1; then
     exit 1
 fi
 
-echo "Step 2/5: Preparing repository for clean update..."
+echo "Preparing repository for clean update (dropping local changes)…"
 
 # Resolve the repository root and operate from there so running this script from scripts/ works
 REPO_DIR="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [ -z "$REPO_DIR" ] || [ ! -d "$REPO_DIR/.git" ]; then
   echo "Error: Failed to resolve repository root (.git not found)."; exit 1
 fi
-echo "Repository root: $REPO_DIR"
+echo "Repository root resolved to: $REPO_DIR"
 cd "$REPO_DIR" || { echo "Error: Unable to cd to $REPO_DIR"; exit 1; }
 
 # Determine the desktop/effective user (so git writes to .git as the right user)
@@ -88,9 +88,9 @@ update_via_git() {
   
   # Drop any local work so deployment is deterministic
   run_git reset --hard HEAD || true
-  run_git clean -f || true
+  run_git clean -fd || true
   
-  echo "Step 3/5: Fetching latest changes from repository..."
+  echo "Fetching latest changes from repository..."
   if ! run_git fetch origin 2>&1; then
     echo "git fetch failed."
     return 1
@@ -132,7 +132,7 @@ fi
 
 # Optional: Install any new Python dependencies if requirements.txt changed
 if git diff HEAD~1 --name-only | grep -q "^requirements.txt$"; then
-    echo "Step 4/5: requirements.txt changed. Installing dependencies..."
+    echo "requirements.txt changed. Installing dependencies in virtual environment..."
 
     # Resolve project directory for absolute paths
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -193,9 +193,9 @@ if [ -d "$PROJECT_DIR/cache" ]; then
 fi
 
 # Reapply display settings for Pi with Waveshare 11.9" display (320x1480 rotated to portrait)
-echo "Step 5/5: Checking for Raspberry Pi display configuration..."
+echo "Checking for Raspberry Pi display configuration..."
 if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree/model" 2>/dev/null; then
-    echo "Raspberry Pi detected. Reapplying display rotation..."
+    echo "Raspberry Pi detected. Reapplying display rotation for Waveshare 11.9\" (320x1480) display..."
     # Wait a moment for X session to be ready
     sleep 2
     # Detect correct HDMI output name (HDMI-A-1 on Pi 5 KMS, HDMI-1 on others)
@@ -216,7 +216,7 @@ if [ -f "/proc/device-tree/model" ] && grep -q "Raspberry Pi" "/proc/device-tree
             echo "Applying 'normal' rotation..."
             xrandr --output "$OUTPUT" --rotate normal 2>&1 | tee -a ~/xrandr_update.log || echo "Warning: xrandr rotation failed"
         fi
-        echo "Display settings applied. (If scaling is still incorrect, you may need to check scripts/setup_pi.sh)"
+        echo "Display settings applied. If the app still scales incorrectly, you may need to rerun the setup script manually."
     else
         echo "No connected HDMI display detected. Skipping display setup."
     fi

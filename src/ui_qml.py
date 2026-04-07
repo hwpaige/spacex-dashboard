@@ -107,30 +107,9 @@ Window {
     // Track the currently selected YouTube URL for the video card.
     // Initialized to the default playlist URL provided by the backend.
     property url currentVideoUrl: backend ? backend.videoUrl : ""
-    property url debouncedVideoUrl: currentVideoUrl
-    
-    Timer {
-        id: videoUrlDebouncer
-        interval: 1000
-        repeat: false
-        onTriggered: {
-            console.log("Debounced video URL updated to:", currentVideoUrl)
-            debouncedVideoUrl = currentVideoUrl
-        }
-    }
-    
-    onCurrentVideoUrlChanged: {
-        // If clearing or loading about:blank, do it immediately to free memory
-        if (currentVideoUrl.toString() === "" || currentVideoUrl.toString() === "about:blank") {
-            videoUrlDebouncer.stop()
-            debouncedVideoUrl = ""
-        } else {
-            videoUrlDebouncer.restart()
-        }
-    }
 
     // UI Ready tracking
-    property int _pendingCriticalLoads: 1
+    property int _pendingCriticalLoads: (backend && backend.isHighResolution) ? 2 : 1
     function _onCriticalComponentLoaded() {
         _pendingCriticalLoads--;
         console.log("Critical UI component loaded. Pending: " + _pendingCriticalLoads);
@@ -171,17 +150,18 @@ Window {
         if (!webView || !webView.runJavaScript) return;
         if (typeof backend !== 'undefined' && backend && backend.wifiConnecting) return; // Prevent JS during connection
         var r = Math.max(0, radiusPx|0);
+        // Default to transparent if no custom color provided, allowing the QML background to show through the corners.
+        // If a specific color is needed (e.g. to hide artifacts), it can be passed in.
         var themeColor = customColor ? customColor : "transparent";
         var js = "(function(){try{" +
                  "var r=" + r + ";" +
                  "var themeColor='" + themeColor + "';" +
-                 "var apply=function(){" +
-                 "  var h=document.documentElement, b=document.body;" +
-                 "  if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.clipPath='inset(0 round '+r+'px)'; h.style.backgroundColor=themeColor;}" +
-                 "  if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.clipPath='inset(0 round '+r+'px)'; b.style.backgroundColor=themeColor;}" +
+                 "var apply=function(){var h=document.documentElement, b=document.body;" +
+                 " if(h){h.style.borderRadius=r+'px'; h.style.overflow='hidden'; h.style.clipPath='inset(0 round '+r+'px)'; h.style.backgroundColor=themeColor;}" +
+                 " if(b){b.style.borderRadius=r+'px'; b.style.overflow='hidden'; b.style.clipPath='inset(0 round '+r+'px)'; b.style.backgroundColor=themeColor;}" +
                  "};" +
                  "apply();" +
-                 "setTimeout(apply, 500); setTimeout(apply, 1000); setTimeout(apply, 2000);" +
+                 "var i=0; var timer=setInterval(function(){try{apply(); if(++i>10) clearInterval(timer);}catch(e){clearInterval(timer);}}, 500);" +
                  "}catch(e){}})();";
         webView.runJavaScript(js);
     }
@@ -231,7 +211,7 @@ Window {
             // don't let background updates (like the placeholder) override it.
             var isManualLive = (backend.liveLaunchUrl !== "" && current === backend.liveLaunchUrl)
             // We check the URL directly for NSF as well
-            var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1"
+            var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
             var isManualNsf = (current === nsfUrl)
             
             if (isManualLive || isManualNsf) {
@@ -395,7 +375,7 @@ Window {
                         MouseArea {
                             anchors.fill: parent
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: () => {
+                            onClicked: {
                                 if (backend && backend.cancelUpdate) {
                                     backend.cancelUpdate()
                                 }
@@ -409,81 +389,6 @@ Window {
 
     // Alignment guide rectangle removed
     // Cache expensive / repeated lookups
-    
-    function updateGlobeTrajectoryData() {
-        // Update trajectory when data loads. 
-        // Using get_launch_trajectory_json to ensure clean data transfer.
-        if (!backend) {
-            console.log("QML: updateGlobeTrajectoryData failed - backend is null");
-            return;
-        }
-        console.log("QML: updateGlobeTrajectoryData triggered. Backend loading: " + backend.isLoading);
-        var trajectoryJson = backend.get_launch_trajectory_json();
-        if (trajectoryJson && trajectoryJson !== "") {
-            console.log("QML: Trajectory data retrieved successfully (" + trajectoryJson.length + " chars)");
-            
-            // Target both potential globe locations (Primary and High-Res/Vertical)
-            var targets = [];
-            
-            // Try to find plotGlobeView (the Item containing the Loader)
-            if (typeof plotGlobeView !== 'undefined' && plotGlobeView) {
-                console.log("QML: Found plotGlobeView");
-                targets.push(plotGlobeView);
-            }
-            
-            // Also try to find the inner WebEngineView directly just in case it's in scope
-            if (typeof plotGlobeViewInner !== 'undefined' && plotGlobeViewInner) {
-                console.log("QML: Found plotGlobeViewInner directly");
-                targets.push(plotGlobeViewInner);
-            }
-
-            // If we have a loader, try to get its item
-            if (typeof plotGlobeLoader !== 'undefined' && plotGlobeLoader && plotGlobeLoader.item) {
-                console.log("QML: Found plotGlobeLoader.item");
-                targets.push(plotGlobeLoader.item);
-            }
-            
-            var success = false;
-            var uniqueTargets = [];
-            targets.forEach(function(t) { if (t && uniqueTargets.indexOf(t) === -1) uniqueTargets.push(t); });
-
-            uniqueTargets.forEach(function(target) {
-                if (target && typeof target.runJavaScript === 'function') {
-                    console.log("QML: Injecting trajectory into target (runJavaScript exists)");
-                    var callResult = target.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
-                        if (result === true) {
-                            console.log("QML: Trajectory injection SUCCESS (JS function found and called)");
-                            success = true;
-                        } else {
-                            console.log("QML: Trajectory injection FAILED (JS function NOT DEFINED), retrying in 2s...");
-                            trajectoryRetryTimer.start();
-                        }
-                    });
-                
-                    // In QML, if we called our custom wrapper and it returned false, we know it failed immediately
-                    if (callResult === false) {
-                        console.log("QML: Target.runJavaScript returned false (loader item likely not ready)");
-                    } else {
-                        success = true; // At least one target accepted the call
-                    }
-                }
-            });
-        
-            if (!success) {
-                console.log("QML: No valid globe target with runJavaScript found or all targets were unready. Targets found: " + uniqueTargets.length + ". Retrying in 2s...");
-                trajectoryRetryTimer.start();
-            }
-        } else {
-            console.log("QML: No trajectory data available yet from backend (json was empty)");
-        }
-    }
-
-    Timer {
-        id: trajectoryRetryTimer
-        interval: 2000
-        repeat: false
-        onTriggered: root.updateGlobeTrajectoryData()
-    }
     
     Connections {
         target: backend
@@ -510,7 +415,16 @@ Window {
             // }
         }
         function onUpdateGlobeTrajectory() {
-            root.updateGlobeTrajectoryData()
+            // Update trajectory when data loads
+            var trajectoryData = backend.get_launch_trajectory();
+            if (trajectoryData) {
+                if (typeof globeView !== 'undefined' && globeView.runJavaScript) {
+                    globeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
+                if (typeof plotGlobeView !== 'undefined' && plotGlobeView && plotGlobeView.runJavaScript) {
+                    plotGlobeView.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
+                }
+            }
         }
     }
 
@@ -604,7 +518,7 @@ Window {
                 visible: !!backend
                 orientation: Qt.Vertical
                 clip: false
-                layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || weatherSwipe.moving
+                layer.enabled: true
                 layer.smooth: true
                 interactive: !backgroundWindy.isLocked
                 currentIndex: 1
@@ -625,21 +539,12 @@ Window {
                             Loader {
                                 id: webViewLoader
                                 anchors.fill: parent
-                                // Loosen active condition: if backend exists and has a base URL, allow it to load.
-                                // The url property itself will handle being empty if needed.
-                                active: (backend && backend.radarBaseUrl !== "") && (index === weatherSwipe.currentIndex || weatherSwipe.moving)
+                                active: (weatherSwipe.loadedMask & (1 << index))
                                 visible: index === weatherSwipe.currentIndex
                                 sourceComponent: WebEngineView {
                                     id: webView
                                     objectName: "webView"
                                     anchors.fill: parent
-                                    profile: WebEngineProfile {
-                                        id: windyProfile
-                                        // Use off-the-record to avoid disk I/O and reduce memory usage on Pi
-                                        offTheRecord: true
-                                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                                        httpAcceptLanguage: "en-US,en"
-                                    }
                                     layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running)
                                     layer.smooth: true
                                     // layer.renderTarget removed due to compatibility issues with older Qt versions
@@ -649,23 +554,12 @@ Window {
                                                         : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     enabled: !backgroundWindy.isLocked
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                    // Use a simpler URL construction and ensure it re-evaluates when backend properties change
-                                    url: (parent.visible && backend && backend.radarBaseUrl !== "") ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                    url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                     settings.webGLEnabled: true
                                     settings.accelerated2dCanvasEnabled: true
                                     settings.allowRunningInsecureContent: true
                                     settings.javascriptEnabled: true
                                     settings.localContentCanAccessRemoteUrls: true
-                                    settings.pluginsEnabled: false  // Not needed for Windy and saves RAM
-                                    onLoadingChanged: function(loadRequest) {
-                                        if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                            console.log("Radar WebEngineView (" + modelData + ") load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode, "URL:", loadRequest.url);
-                                        } else if (loadRequest.status === WebEngineView.LoadStartedStatus) {
-                                            console.log("Radar WebEngineView (" + modelData + ") loading started...");
-                                        } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                            console.log("Radar WebEngineView (" + modelData + ") loaded successfully");
-                                        }
-                                    }
 
                                     Connections {
                                         target: backend
@@ -780,7 +674,7 @@ Window {
                             }
                         }
                         
-                        onCanceled: () => {
+                        onCanceled: {
                             if (backgroundWindy.isDragging) {
                                 backgroundWindy.isDragging = false
                             }
@@ -897,14 +791,14 @@ Window {
                 id: plotCard
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                Layout.preferredWidth: (root.height > root.width ? -1 : (1.0 - backgroundWindy.progress))
-                Layout.preferredHeight: (root.height > root.width ? 1.0 : -1)
+                Layout.preferredWidth: plotCard.isHighResolution ? 0 : (root.height > root.width ? -1 : (1.0 - backgroundWindy.progress))
+                Layout.preferredHeight: plotCard.isHighResolution ? 0 : (root.height > root.width ? 1.0 : -1)
                 // When showing the globe inside this card, match the app background
                 color: "transparent"
                 radius: 8
                 clip: false
                 opacity: (1.0 - backgroundWindy.progress)
-                visible: opacity > 0
+                visible: opacity > 0 && !plotCard.isHighResolution
                 property bool isHighResolution: backend && backend.isHighResolution
 
                 ColumnLayout {
@@ -921,44 +815,27 @@ Window {
                             id: plotGlobeView
                             anchors.fill: parent
                             property bool _loaded: false
-                            function runJavaScript(script, callback) {
-                                if (plotGlobeLoader.item) {
-                                    if (callback !== undefined) {
-                                        plotGlobeLoader.item.runJavaScript(script, callback);
-                                    } else {
-                                        plotGlobeLoader.item.runJavaScript(script);
-                                    }
-                                    return true;
-                                }
-                                return false;
+                            function runJavaScript(script) {
+                                if (plotGlobeLoader.item) plotGlobeLoader.item.runJavaScript(script)
                             }
                             Loader {
                                 id: plotGlobeLoader
                                 anchors.fill: parent
-                                // Delay loading of the heavy Globe view until boot is finished to prioritize core UI responsiveness
-                                active: (backend && !backend.isBootMode) || plotGlobeView._loaded
+                                active: true || plotGlobeView._loaded
                                 sourceComponent: WebEngineView {
                                     id: plotGlobeViewInner
                                     anchors.fill: parent
-                                    profile: WebEngineProfile {
-                                        id: globeProfile
-                                        // Use off-the-record for the globe to save memory and avoid disk I/O
-                                        offTheRecord: true
-                                        httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-                                        httpAcceptLanguage: "en-US,en"
-                                    }
                                     url: globeUrl
                                     backgroundColor: "transparent"
                                     onBackgroundColorChanged: {
                                         if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                     }
                                     zoomFactor: 1.0
-                                    layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || (backgroundWindy.progress > 0 && backgroundWindy.progress < 1)
+                                    layer.enabled: true
                                     layer.smooth: true
                                     layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     settings.javascriptCanAccessClipboard: false
                                     settings.allowWindowActivationFromJavaScript: false
-                                    settings.pluginsEnabled: false  // Not needed for Globe and saves RAM
                                     onContextMenuRequested: function(request) { request.accepted = true }
 
                                     onLoadingChanged: function(loadRequest) {
@@ -967,16 +844,9 @@ Window {
                                                 plotGlobeView._loaded = true;
                                                 if (typeof root !== 'undefined') root._onCriticalComponentLoaded();
                                             }
-                                            var trajectoryJson = backend ? backend.get_launch_trajectory_json() : "";
-                                            if (trajectoryJson && trajectoryJson !== "") {
-                                                plotGlobeViewInner.runJavaScript("(function(){ if(typeof updateTrajectory !== 'undefined') { updateTrajectory(" + trajectoryJson + "); return true; } return false; })()", function(result) {
-                                                    if (result !== true) {
-                                                        console.log("QML: onLoadingChanged: updateTrajectory JS function not found, starting retry timer...");
-                                                        if (typeof trajectoryRetryTimer !== 'undefined') trajectoryRetryTimer.start();
-                                                    } else {
-                                                        console.log("QML: onLoadingChanged: Trajectory successfully injected into globe");
-                                                    }
-                                                });
+                                            var trajectoryData = backend ? backend.get_launch_trajectory() : null;
+                                            if (trajectoryData) {
+                                                plotGlobeViewInner.runJavaScript("if(typeof updateTrajectory !== 'undefined') updateTrajectory(" + JSON.stringify(trajectoryData) + ");");
                                             }
                                             if (backend) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
@@ -993,19 +863,6 @@ Window {
                                         function onThemeChanged() {
                                             if (backend) {
                                                 plotGlobeViewInner.runJavaScript("if(typeof setTheme !== 'undefined') setTheme('" + backend.theme + "');");
-                                            }
-                                        }
-                                    }
-
-                                    // Pause globe animation when video is expanded to save CPU/GPU on Pi
-                                    Connections {
-                                        target: videoCard
-                                        function onVideoExpansionFactorChanged() {
-                                            if (videoCard.videoExpansionFactor > 0.5) {
-                                                plotGlobeViewInner.runJavaScript("(function(){try{if(window.pauseSpin)pauseSpin();}catch(e){}})();");
-                                            } else if (root.active) {
-                                                // Only resume if the app is still the active window
-                                                plotGlobeViewInner.runJavaScript("(function(){try{if(window.resumeSpin)resumeSpin();}catch(e){}})();");
                                             }
                                         }
                                     }
@@ -1059,7 +916,7 @@ Window {
                             boundsBehavior: Flickable.StopAtBounds
                             flickableDirection: Flickable.VerticalFlick
                             cacheBuffer: 1500
-                            layer.enabled: backgroundWindy.isDragging || (widthAnimation && widthAnimation.running) || (heightAnimation && heightAnimation.running) || (backgroundWindy.progress > 0 && backgroundWindy.progress < 1)
+                            layer.enabled: true
                             layer.smooth: true
                             layer.textureSize: Qt.size(width, height)
                             // Use a fixed height for delegates to help with performance
@@ -1089,7 +946,7 @@ Window {
                                 font.pixelSize: 14; font.bold: true; color: "#999999"; visible: !!(model && model.isGroup)
                             }
 
-                            ColumnLayout {
+                            Column {
                                 id: launchColumn
                                 anchors.top: parent.top; anchors.topMargin: 5
                                 anchors.left: parent.left; anchors.leftMargin: 10
@@ -1097,10 +954,9 @@ Window {
                                 spacing: 5
                                 visible: !!(model && !model.isGroup && typeof model === 'object')
 
-                                ColumnLayout {
+                                Column {
                                     spacing: 0
-                                    Layout.fillWidth: true
-                                    Layout.rightMargin: 115
+                                    width: parent.width - 85
                                     Text { 
                                         text: {
                                             var m = (model && model.mission) ? model.mission : "";
@@ -1109,7 +965,7 @@ Window {
                                         }
                                         font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                         color: (backend && backend.theme === "dark") ? "white" : "black"
-                                        Layout.fillWidth: true
+                                        width: parent.width
                                         wrapMode: Text.Wrap
                                     }
                                     Text { 
@@ -1121,31 +977,23 @@ Window {
                                         visible: text !== ""
                                         font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                         color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                        Layout.fillWidth: true
+                                        width: parent.width
                                         wrapMode: Text.Wrap
                                     }
                                 }
-                                Row { 
-                                    spacing: 5
-                                    Layout.fillWidth: true
+                                Row { spacing: 5
                                     Text { text: "\uf0ac"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Orbit: " + ((model && model.orbit) ? model.orbit : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { 
-                                    spacing: 5
-                                    Layout.fillWidth: true
+                                Row { spacing: 5
                                     Text { text: "\uf3c5"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Pad: " + ((model && model.pad) ? model.pad : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { 
-                                    spacing: 5; visible: !!(model && model.landingType)
-                                    Layout.fillWidth: true
+                                Row { spacing: 5; visible: !!(model && model.landingType)
                                     Text { text: "\uf5af"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { text: "Landing: " + ((model && model.landingType) ? model.landingType : ""); font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; color: "#999999" }
                                 }
-                                Row { 
-                                    spacing: 5
-                                    Layout.fillWidth: true
+                                Row { spacing: 5
                                     Text { text: "\uf017"; font.family: "Font Awesome 5 Free"; font.pixelSize: 14; color: "#999999"; width: 20; horizontalAlignment: Text.AlignHCenter }
                                     Text { 
                                         text: ((model && model.localTime && backend) ? model.localTime + " " + backend.timezoneAbbrev : "TBD") + " / " + 
@@ -1156,7 +1004,6 @@ Window {
                             }
 
                             Rectangle {
-                                id: statusPill
                                 width: statusText.implicitWidth + 16
                                 height: 18
                                 color: root.getStatusColor(model ? model.status : "")
@@ -1183,50 +1030,28 @@ Window {
                                     if (model && !model.isGroup) {
                                         // Load trajectory for this specific launch
                                         backend.loadLaunchTrajectory(model.mission, model.pad, model.orbit, model.landingType || "")
-                                        console.log("Launch selected:", model.mission, "from", model.pad)
-                                    }
-                                }
-                                cursorShape: Qt.PointingHandCursor
-                            }
-
-                            Rectangle {
-                                id: watchButton
-                                width: watchText.implicitWidth + 16
-                                height: 18
-                                color: "#F44336" // Red
-                                radius: 10
-                                anchors.top: statusPill.bottom
-                                anchors.right: parent.right
-                                anchors.topMargin: 5
-                                anchors.rightMargin: 5
-                                visible: !!(model && !model.isGroup && (model.videoUrl || model.xVideoUrl))
-                                z: 10 // Ensure it's above the main MouseArea
-
-                                Text {
-                                    id: watchText
-                                    text: "Watch"
-                                    font.pixelSize: 12
-                                    font.bold: true
-                                    color: "white"
-                                    anchors.centerIn: parent
-                                }
-
-                                MouseArea {
-                                    anchors.fill: parent
-                                    onClicked: {
+                                        
+                                        // Prefer X video URL if available for SpaceX launches, fallback to converted YouTube URL
                                         var xUrl = model.xVideoUrl || "";
                                         var convertedXUrl = backend.getConvertedVideoUrl(xUrl);
                                         var convertedUrl = backend.getConvertedVideoUrl(model.videoUrl || "");
                                         
                                         if (xUrl !== "") {
-                                            console.log("Watch clicked: Using X.com stream:", convertedXUrl)
+                                            console.log("Launch selected: Using X.com stream:", convertedXUrl)
                                             root.currentVideoUrl = convertedXUrl
                                         } else if (convertedUrl !== "") {
-                                            console.log("Watch clicked: Using YouTube embed:", convertedUrl)
+                                            console.log("Launch selected: Using YouTube embed:", convertedUrl)
                                             root.currentVideoUrl = convertedUrl;
+                                        } else {
+                                            // Clear the video view if no video is available for this launch
+                                            console.log("Launch selected: No video available")
+                                            root.currentVideoUrl = "about:blank";
                                         }
+                                        
+                                        console.log("Launch selected:", model.mission, "from", model.pad, "video:", model.videoUrl || "none")
                                     }
                                 }
+                                cursorShape: Qt.PointingHandCursor
                             }
 
                         }
@@ -1428,7 +1253,6 @@ Window {
                                     }
                                     
                                     ListView {
-                                        id: calendarPopupListView
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
                                         clip: true
@@ -1436,13 +1260,14 @@ Window {
                                         interactive: true
                                         boundsBehavior: Flickable.StopAtBounds
                                         flickableDirection: Flickable.VerticalFlick
-                                        delegate: ColumnLayout {
-                                            width: calendarPopupListView.width
+                                        delegate: Column {
+                                            width: parent.width
                                             spacing: 1
+                                            padding: 2
                                             
-                                            ColumnLayout {
+                                            Column {
                                                 spacing: 0
-                                                Layout.fillWidth: true
+                                                width: parent.width
                                                 Text { 
                                                     text: {
                                                         var m = modelData.mission;
@@ -1451,7 +1276,7 @@ Window {
                                                     }
                                                     font.family: "D-DIN"; font.pixelSize: 14; font.bold: true; 
                                                     color: backend.theme === "dark" ? "white" : "black"
-                                                    Layout.fillWidth: true
+                                                    width: parent.width
                                                     wrapMode: Text.Wrap
                                                 }
                                                 Text { 
@@ -1463,7 +1288,7 @@ Window {
                                                     visible: text !== ""
                                                     font.family: "D-DIN"; font.pixelSize: 11; font.bold: false;
                                                     color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                                    Layout.fillWidth: true
+                                                    width: parent.width
                                                     wrapMode: Text.Wrap
                                                 }
                                             }
@@ -1481,7 +1306,7 @@ Window {
                                                 }
                                                 Text { text: modelData.status; font.bold: true; font.pixelSize: 12; color: root.getStatusColor(modelData.status) }
                                             }
-                                            Rectangle { width: calendarPopupListView.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
+                                            Rectangle { width: parent.width; height: 1; color: "#333333"; opacity: 0.2; visible: index < calendarViewItem.popupLaunches.length - 1 }
                                         }
                                     }
                                     
@@ -1648,86 +1473,6 @@ Window {
                         }
                     } // End StackLayout
 
-                    // Chart View Controls (Type and Mode) - Only shown in chart mode
-                    Rectangle {
-                        id: chartControlsOverlay
-                        anchors.bottom: launchButtonsOverlay.top
-                        anchors.bottomMargin: 8
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        width: chartControlsRow.implicitWidth + 24
-                        height: 32
-                        color: backend.theme === "dark" ? "#cc181818" : "#ccf5f5f5"
-                        radius: 16
-                        z: 11
-                        visible: !!backend && (launchCard.launchViewMode === "chart")
-                        opacity: (visible && backgroundWindy.progress === 0) ? 1.0 : 0
-                        Behavior on opacity { NumberAnimation { duration: 250 } }
-
-                        RowLayout {
-                            id: chartControlsRow
-                            anchors.centerIn: parent
-                            spacing: 12
-
-                            // Chart Type: Bar vs Line
-                            Row {
-                                spacing: 4
-                                Repeater {
-                                    model: [
-                                        { "val": "bar", "label": "BAR" },
-                                        { "val": "line", "label": "LINE" }
-                                    ]
-                                    Rectangle {
-                                        width: 50; height: 24; radius: 12
-                                        color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "#333" : "#ddd") : "transparent"
-                                        border.color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
-                                        border.width: 1
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: modelData.label
-                                            font.pixelSize: 10; font.bold: true
-                                            color: (backend && backend.chartType === modelData.val) ? (backend.theme === "dark" ? "white" : "black") : "#888"
-                                        }
-                                        MouseArea { 
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: if(backend) backend.chartType = modelData.val 
-                                        }
-                                    }
-                                }
-                            }
-
-                            Rectangle { width: 1; height: 16; color: backend.theme === "dark" ? "#333" : "#ccc" }
-
-                            // View Mode: Actual vs Cumulative
-                            Row {
-                                spacing: 4
-                                Repeater {
-                                    model: [
-                                        { "val": "actual", "label": "ACT" },
-                                        { "val": "cumulative", "label": "CUM" }
-                                    ]
-                                    Rectangle {
-                                        width: 50; height: 24; radius: 12
-                                        color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "#333" : "#ddd") : "transparent"
-                                        border.color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
-                                        border.width: 1
-                                        Text {
-                                            anchors.centerIn: parent
-                                            text: modelData.label
-                                            font.pixelSize: 10; font.bold: true
-                                            color: (backend && backend.chartViewMode === modelData.val) ? (backend.theme === "dark" ? "white" : "black") : "#888"
-                                        }
-                                        MouseArea { 
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: if(backend) backend.chartViewMode = modelData.val 
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     // Launch view buttons overlay (Windy style)
                     Rectangle {
                         id: launchButtonsOverlay
@@ -1863,10 +1608,13 @@ Window {
 
                     WebEngineProfile {
                         id: youtubeProfile
-                        // Use off-the-record to avoid disk I/O bottlenecks and storage growth on the Pi
-                        offTheRecord: true
+                        storageName: "youtube_profile"
                         httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
+                        // Allow sending Referer headers for YouTube embeds
+                        offTheRecord: false
+                        persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
+                        httpCacheType: WebEngineProfile.DiskHttpCache
                     }
 
                     // Rounded-corner container to ensure YouTube/map view corners are clipped
@@ -1881,115 +1629,175 @@ Window {
 
                         // Mask effect removed to avoid dependency on Qt5Compat.GraphicalEffects
 
-                        Loader {
-                            id: youtubeLoader
+                        WebEngineView {
+                            id: youtubeView
+                            profile: youtubeProfile
                             anchors.fill: parent
-                            // Loosen active condition to ensure it loads once we have a URL, even if it's about:blank initially
-                            active: debouncedVideoUrl.toString() !== ""
-                            onActiveChanged: if (active) console.log("YouTube WebEngineView activated for:", debouncedVideoUrl)
+                            layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
+                            layer.smooth: true
+                            // layer.renderTarget: Item.FramebufferObject
+                            layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))
+                                                ? Qt.size(videoCard.currentMaxWidth > 0 ? videoCard.currentMaxWidth : root.width / 2, height > 0 ? height : root.height)
+                                                : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                             
-                            sourceComponent: WebEngineView {
-                                id: youtubeView
-                                profile: youtubeProfile
-                                anchors.fill: parent
-                                focus: true
-                                layer.enabled: videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running)
-                                layer.smooth: true
-                                layer.textureSize: (videoCard.isDragging || (videoWidthAnimation && videoWidthAnimation.running))
-                                                    ? Qt.size(videoCard.currentMaxWidth > 0 ? videoCard.currentMaxWidth : root.width / 2, height > 0 ? height : root.height)
-                                                    : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
+                            // MouseArea for expansion gesture
+                            MouseArea {
+                                anchors.left: (root.height > root.width) ? parent.left : parent.left
+                                anchors.right: (root.height > root.width) ? parent.right : undefined
+                                anchors.top: parent.top
+                                anchors.bottom: (root.height > root.width) ? undefined : parent.bottom
+                                width: (root.height > root.width) ? undefined : 40
+                                height: (root.height > root.width) ? 40 : undefined
+                                z: 10
                                 
-                                backgroundColor: "black"
-                                onBackgroundColorChanged: {
+                                property real startPos: 0
+                                property real initialSize: 0
+                                
+                                onPressed: (mouse) => {
+                                    startPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                                    initialSize = (root.height > root.width) ? videoCard.height : videoCard.width
+                                    videoCard.manualWidth = initialSize
+                                    videoCard.isDragging = true
+                                }
+                                
+                                onPositionChanged: (mouse) => {
+                                    if (videoCard.isDragging) {
+                                        var currentPos = (root.height > root.width) ? mapToItem(safeArea, mouse.x, mouse.y).y : mapToItem(safeArea, mouse.x, mouse.y).x
+                                        var delta = (root.height > root.width) ? (currentPos - startPos) : (startPos - currentPos) 
+                                        videoCard.manualWidth = Math.max(videoCard.currentMinWidth, Math.min(videoCard.currentMaxWidth, initialSize + delta))
+                                    }
+                                }
+                                
+                                onReleased: (mouse) => {
+                                    if (videoCard.isDragging) {
+                                        var p = videoCard.progress
+                                        var threshold = 0.12
+                                        if (videoCard.videoExpansionFactor === 0.0) {
+                                            videoCard.videoExpansionFactor = (p > threshold) ? 1.0 : 0.0
+                                        } else {
+                                            videoCard.videoExpansionFactor = (p < (1.0 - threshold)) ? 0.0 : 1.0
+                                        }
+                                        videoCard.isDragging = false
+                                    }
+                                }
+                                
+                                onCanceled: {
+                                    if (videoCard.isDragging) {
+                                        videoCard.isDragging = false
+                                    }
+                                }
+                            }
+
+                            backgroundColor: "black"
+                            onBackgroundColorChanged: {
+                                if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
+                            }
+                            url: root.currentVideoUrl
+                            onUrlChanged: {
+                                if (url.toString() === "") {
+                                    youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:black;'></body></html>")
+                                }
+                            }
+
+                            settings.webGLEnabled: true
+                            settings.accelerated2dCanvasEnabled: true
+                            settings.allowRunningInsecureContent: true
+                            settings.javascriptEnabled: true
+                            settings.localContentCanAccessRemoteUrls: true
+                            settings.playbackRequiresUserGesture: false  // Allow autoplay
+                            settings.pluginsEnabled: true
+                            settings.javascriptCanOpenWindows: false
+                            settings.javascriptCanAccessClipboard: false
+                            settings.allowWindowActivationFromJavaScript: true
+                            onFullScreenRequested: function(request) { request.accept(); root.visibility = Window.FullScreen }
+                            onLoadingChanged: function(loadRequest) {
+                                if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                    console.log("YouTube WebEngineView load failed:", loadRequest.errorString);
+                                    console.log("Error code:", loadRequest.errorCode);
+                                    console.log("Error domain:", loadRequest.errorDomain);
+                                    
+                                    // Handle specific error codes
+                                    if (loadRequest.errorCode === 153) {
+                                        console.log("ERR_MISSING_REFERER_HEADER detected - YouTube requires proper Referer header for embeds");
+                                        console.log("This is a new YouTube policy requiring API client identification");
+                                        console.log("Attempting to reload with proper headers...");
+                                        
+                                        // Auto-retry for Referer header errors
+                                        youtubeRetryTimer.restart();
+                                    } else if (loadRequest.errorCode === 2) {
+                                        console.log("ERR_FAILED - Network or server error. Check your internet connection.");
+                                    } else if (loadRequest.errorCode === 3) {
+                                        console.log("ERR_ABORTED - Request was aborted. This may be due to page navigation.");
+                                    } else if (loadRequest.errorCode === 6) {
+                                        console.log("ERR_FILE_NOT_FOUND - Video not found. The YouTube video may have been removed.");
+                                    } else if (loadRequest.errorCode === -3) {
+                                        console.log("ERR_ABORTED_BY_USER - Loading was cancelled.");
+                                    } else {
+                                        console.log("Unknown error code:", loadRequest.errorCode, "- Check network connectivity and try the reload button.");
+                                    }
+                                    root.autoFullScreen = false;
+                                } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                    console.log("YouTube WebEngineView loaded successfully");
+                                    // Apply internal page rounding to ensure corners clip
+                                    // Use black background for video views to avoid white/gray corner artifacts
                                     if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
-                                }
-                                url: debouncedVideoUrl
-                                onUrlChanged: {
-                                    if (url.toString() === "") {
-                                        youtubeView.loadHtml("<html><body style='margin:0;padding:0;background:black;'></body></html>")
+                                    
+                                    // Automatically trigger fullscreen if requested by a UI action (like pressing the LIVE button)
+                                    // We only apply this to X.com (Twitter) streams as requested.
+                                    var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 
+                                              loadRequest.url.toString().indexOf("twitter.com") !== -1 ||
+                                              loadRequest.url.toString().indexOf("platform.twitter.com") !== -1;
+                                    if (root.autoFullScreen && isX) {
+                                        // X.com needs a bit of time to initialize its player, so we retry a few times.
+                                        youtubeView.runJavaScript("(function(){" +
+                                            "var attempts = 0;" +
+                                            "var tryFS = function() {" +
+                                            "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                            "  if(el && el.requestFullscreen) {" +
+                                            "    el.requestFullscreen().catch(function(e){" +
+                                            "      if(++attempts < 10) setTimeout(tryFS, 1000);" +
+                                            "      else console.log('Auto-fullscreen failed:', e);" +
+                                            "    });" +
+                                            "  } else if (el && el.webkitRequestFullscreen) {" +
+                                            "    el.webkitRequestFullscreen();" +
+                                            "  } else if (++attempts < 10) {" +
+                                            "    setTimeout(tryFS, 1000);" +
+                                            "  }" +
+                                            "};" +
+                                            "tryFS();" +
+                                        "})()");
                                     }
+                                    root.autoFullScreen = false;
+                                    
+                                    youtubeRetryTimer.stop(); // Stop any pending retries
                                 }
+                            }
 
-                                settings.webGLEnabled: true
-                                settings.accelerated2dCanvasEnabled: true
-                                settings.allowRunningInsecureContent: true
-                                settings.javascriptEnabled: true
-                                settings.localContentCanAccessRemoteUrls: true
-                                settings.playbackRequiresUserGesture: false  // Allow autoplay
-                                settings.pluginsEnabled: false  // YouTube uses HTML5; plugins are not needed and use extra RAM
-                                settings.javascriptCanOpenWindows: false
-                                settings.javascriptCanAccessClipboard: false
-                                settings.allowWindowActivationFromJavaScript: true
-                                onFullScreenRequested: function(request) { 
-                                    console.log("YouTube full screen requested. Accepting...");
-                                    request.accept(); 
-                                    if (root.visibility !== Window.FullScreen) root.visibility = Window.FullScreen;
+                            // Staggered global reload for YouTube view
+                            Connections {
+                                target: backend
+                                function onReloadWebContent() {
+                                    globalReloadTimer.start()
                                 }
-                                onLoadingChanged: function(loadRequest) {
-                                    if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                        console.log("YouTube WebEngineView load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode, "URL:", loadRequest.url);
-                                        
-                                        if (loadRequest.errorCode === 153) {
-                                            console.log("ERR_MISSING_REFERER_HEADER - retrying in 3s...");
-                                            youtubeRetryTimer.restart();
-                                        }
-                                        root.autoFullScreen = false;
-                                    } else if (loadRequest.status === WebEngineView.LoadStartedStatus) {
-                                        console.log("YouTube WebEngineView loading started for:", loadRequest.url);
-                                    } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        console.log("YouTube WebEngineView loaded successfully:", loadRequest.url);
-                                        if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
-                                        
-                                        var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 
-                                                  loadRequest.url.toString().indexOf("twitter.com") !== -1 ||
-                                                  loadRequest.url.toString().indexOf("platform.twitter.com") !== -1;
-                                        if (root.autoFullScreen && isX) {
-                                            youtubeView.runJavaScript("(function(){" +
-                                                "var attempts = 0;" +
-                                                "var tryFS = function() {" +
-                                                "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
-                                                "  if(el && el.requestFullscreen) {" +
-                                                "    el.requestFullscreen().catch(function(e){" +
-                                                "      if(++attempts < 10) setTimeout(tryFS, 1000);" +
-                                                "      else console.log('Auto-fullscreen failed:', e);" +
-                                                "    });" +
-                                                "  } else if (el && el.webkitRequestFullscreen) {" +
-                                                "    el.webkitRequestFullscreen();" +
-                                                "  } else if (++attempts < 10) {" +
-                                                "    setTimeout(tryFS, 1000);" +
-                                                "  }" +
-                                                "};" +
-                                                "tryFS();" +
-                                            "})()");
-                                        }
-                                        root.autoFullScreen = false;
-                                        youtubeRetryTimer.stop();
-                                    }
+                            }
+                            Timer {
+                                id: globalReloadTimer
+                                interval: 2500
+                                repeat: false
+                                onTriggered: {
+                                    youtubeView.reload()
+                                    console.log("YouTube/map view reloaded (staggered)")
                                 }
+                            }
 
-                                Connections {
-                                    target: backend
-                                    function onReloadWebContent() {
-                                        globalReloadTimer.start()
-                                    }
-                                }
-                                Timer {
-                                    id: globalReloadTimer
-                                    interval: 2500
-                                    repeat: false
-                                    onTriggered: {
-                                        youtubeView.reload()
-                                        console.log("YouTube view reloaded (staggered)")
-                                    }
-                                }
-                                Timer {
-                                    id: youtubeRetryTimer
-                                    interval: 3000
-                                    repeat: false
-                                    onTriggered: {
-                                        console.log("Retrying YouTube load after error...");
-                                        youtubeView.reload();
-                                    }
+                            // Auto-retry timer for content length mismatch
+                            Timer {
+                                id: youtubeRetryTimer
+                                interval: 3000 // 3 seconds
+                                repeat: false
+                                onTriggered: {
+                                    console.log("Attempting to reload YouTube video after error 153...");
+                                    youtubeView.reload();
                                 }
                             }
                         }
@@ -2132,25 +1940,23 @@ Window {
                                                 root.currentVideoUrl = backend.liveLaunchUrl
                                                 if (isSame) {
                                                     // If already on the live URL, just trigger fullscreen again with a few retries
-                                                    if (youtubeLoader.item) {
-                                                        youtubeLoader.item.runJavaScript("(function(){" +
-                                                            "var attempts = 0;" +
-                                                            "var tryFS = function() {" +
-                                                            "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
-                                                            "  if(el && el.requestFullscreen) {" +
-                                                            "    el.requestFullscreen().catch(function(e){" +
-                                                            "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
-                                                            "      else console.log('Manual auto-fullscreen failed:', e);" +
-                                                            "    });" +
-                                                            "  } else if (el && el.webkitRequestFullscreen) {" +
-                                                            "    el.webkitRequestFullscreen();" +
-                                                            "  } else if (++attempts < 5) {" +
-                                                            "    setTimeout(tryFS, 1000);" +
-                                                            "  }" +
-                                                            "};" +
-                                                            "tryFS();" +
-                                                        "})()");
-                                                    }
+                                                    youtubeView.runJavaScript("(function(){" +
+                                                        "var attempts = 0;" +
+                                                        "var tryFS = function() {" +
+                                                        "  var el = document.querySelector('video') || document.querySelector('iframe') || document.documentElement;" +
+                                                        "  if(el && el.requestFullscreen) {" +
+                                                        "    el.requestFullscreen().catch(function(e){" +
+                                                        "      if(++attempts < 5) setTimeout(tryFS, 1000);" +
+                                                        "      else console.log('Manual auto-fullscreen failed:', e);" +
+                                                        "    });" +
+                                                        "  } else if (el && el.webkitRequestFullscreen) {" +
+                                                        "    el.webkitRequestFullscreen();" +
+                                                        "  } else if (++attempts < 5) {" +
+                                                        "    setTimeout(tryFS, 1000);" +
+                                                        "  }" +
+                                                        "};" +
+                                                        "tryFS();" +
+                                                    "})()");
                                                 } else {
                                                     root.autoFullScreen = true
                                                 }
@@ -2232,9 +2038,9 @@ Window {
                                     var ctx = getContext("2d");
                                     ctx.reset();
 
-                                    var centerX = weatherProgressRing.width / 2;
-                                    var centerY = weatherProgressRing.height / 2;
-                                    var radius = Math.min(weatherProgressRing.width, weatherProgressRing.height) / 2 - 1;
+                                    var centerX = width / 2;
+                                    var centerY = height / 2;
+                                    var radius = Math.min(width, height) / 2 - 1;
 
                                     // Draw background ring (optional, faint)
                                     ctx.beginPath();
@@ -2465,7 +2271,7 @@ Window {
                     Popup {
                         id: weatherTray
                         x: 0
-                        width: parent ? parent.width : 200
+                        width: parent.width
                         height: 0
                         y: parent.height - height
                         visible: height > 0
@@ -2646,7 +2452,7 @@ Window {
                                     }
                                 }
                                 delegate: Item {
-                                    width: weatherListView.width
+                                    width: parent.width
                                     height: 30
                                     RowLayout {
                                         anchors.fill: parent
@@ -2773,7 +2579,7 @@ Window {
                         property real startHeight: 0
                         property bool moved: false
 
-                        onPressed: (mouse) => {
+                        onPressed: {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                             if (weatherTray.height === 0) {
                                 weatherTray.open()
@@ -2784,7 +2590,7 @@ Window {
                             moved = false
                         }
 
-                        onPositionChanged: (mouse) => {
+                        onPositionChanged: {
                             if (weatherTray.isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -2795,7 +2601,7 @@ Window {
                             }
                         }
 
-                        onReleased: (mouse) => {
+                        onReleased: {
                             weatherTray.isDragging = false
                             if (moved) {
                                 var threshold = weatherTray.expandedHeight * 0.2
@@ -2818,7 +2624,7 @@ Window {
                             }
                         }
 
-                        onClicked: (mouse) => {
+                        onClicked: {
                             if (!moved) {
                                 // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                 if (weatherTray.height > weatherTray.expandedHeight * 0.5) {
@@ -2908,7 +2714,7 @@ Window {
                         property bool isDragging: false
                         property bool moved: false
                         
-                        onPressed: (mouse) => {
+                        onPressed: {
                             startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                             // Ensure tray is ready
                             if (narrativeTray.height === 0) {
@@ -2919,7 +2725,7 @@ Window {
                             moved = false
                         }
                         
-                        onPositionChanged: (mouse) => {
+                        onPositionChanged: {
                             if (isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -2932,7 +2738,7 @@ Window {
                             }
                         }
                         
-                        onReleased: (mouse) => {
+                        onReleased: {
                             isDragging = false
                             if (moved) {
                                 // 20% threshold logic:
@@ -2960,7 +2766,7 @@ Window {
                             }
                         }
 
-                        onClicked: (mouse) => {
+                        onClicked: {
                             if (!moved) {
                                 // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                 if (narrativeTray.height > narrativeTray.expandedHeight * 0.5) {
@@ -3293,7 +3099,7 @@ Window {
                                                     font.pixelSize: 14
                                                     font.family: "D-DIN"
                                                     font.bold: true
-                                                    Layout.fillWidth: true
+                                                    width: parent.width
                                                     wrapMode: Text.Wrap
                                                 }
 
@@ -3463,7 +3269,7 @@ Window {
 
                     MouseArea {
                         anchors.fill: parent
-                        onClicked: (mouse) => {
+                        onClicked: {
                             console.log("Update clicked - showing update dialog")
                             if (backend) backend.show_update_dialog()
                         }
@@ -3511,7 +3317,7 @@ Window {
 
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: () => {
+                            onClicked: {
                                 displaySettingsPopup.open()
                             }
                         }
@@ -3893,7 +3699,7 @@ Window {
 
                         MouseArea {
                             anchors.fill: parent
-                            onClicked: () => {
+                            onClicked: {
                                 console.log("WiFi clicked - opening popup")
                                 wifiPopup.open()
                                 console.log("WiFi popup opened, visible:", wifiPopup.visible)
@@ -4156,7 +3962,7 @@ Window {
                             property real startHeight: 0
                             property bool moved: false
                             
-                            onPressed: (mouse) => {
+                            onPressed: {
                                 startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 if (locationDrawer.height === 0) locationDrawer.height = 1
                                 startHeight = locationDrawer.height
@@ -4198,7 +4004,7 @@ Window {
                                 }
                             }
                             
-                            onClicked: () => {
+                            onClicked: {
                                 if (!moved) {
                                     // Toggle logic: if mostly closed, open it; if mostly open, close it.
                                     if (locationDrawer.height > locationDrawer.expandedHeight * 0.5) {
@@ -4516,7 +4322,7 @@ Window {
                         property real startHeight: 0
                         property bool moved: false
                         
-                        onPressed: (mouse) => {
+                        onPressed: {
                             if (countdownTray.height === 0) countdownTray.height = 1
                             startHeight = countdownTray.height
                             countdownTray.isDragging = true
@@ -4524,7 +4330,7 @@ Window {
                             moved = false
                         }
                         
-                        onPositionChanged: (mouse) => {
+                        onPositionChanged: {
                             if (countdownTray.isDragging && pressed) {
                                 var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
                                 var deltaY = currentGlobalPos.y - startGlobalPos.y
@@ -4535,7 +4341,7 @@ Window {
                             }
                         }
                         
-                        onReleased: (mouse) => {
+                        onReleased: {
                             countdownTray.isDragging = false
                             if (moved) {
                                 var threshold = countdownTray.expandedHeight * 0.2
@@ -4546,7 +4352,7 @@ Window {
                                 }
                             }
                         }
-                        onClicked: (mouse) => {
+                        onClicked: {
                             if (!moved) {
                                 if (countdownTray.height > 0) countdownTray.height = 0
                                 else countdownTray.height = countdownTray.expandedHeight
@@ -4563,8 +4369,8 @@ Window {
             id: wifiPopup
             width: 450
             height: 240
-            x: (root.width - width) / 2
-            y: (root.height - height) / 2
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -4584,7 +4390,7 @@ Window {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    radius: parent ? parent.radius : 0
+                    radius: parent.radius
                     border.color: Qt.rgba(0, 0, 0, 0.1)
                     border.width: 1
                 }
@@ -4635,7 +4441,7 @@ Window {
                             visible: !!(backend && backend.wifiConnected)
                             Layout.preferredWidth: 60
                             Layout.preferredHeight: 20
-                            onClicked: () => {
+                            onClicked: {
                                 backend.disconnectWifi()
                                 wifiPopup.close()
                             }
@@ -4830,8 +4636,8 @@ Window {
             id: passwordDialog
             width: 320
             height: 120
-            x: (root.width - width) / 2
-            y: (root.height - height - 200) / 2  // Leave room for keyboard
+            x: (parent.width - width) / 2
+            y: (parent.height - height - 200) / 2  // Leave room for keyboard
             modal: true
             focus: true
             // Keep the password dialog open while interacting with the custom on-screen keyboard
@@ -4888,7 +4694,7 @@ Window {
                         text: "👁"
                         Layout.preferredWidth: 30
                         Layout.preferredHeight: 28
-                        onClicked: (mouse) => {
+                        onClicked: {
                             passwordField.echoMode = passwordField.echoMode === TextField.Password ? TextField.Normal : TextField.Password
                             passwordField.focus = true
                         }
@@ -4915,7 +4721,7 @@ Window {
                         text: "Cancel"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        onClicked: (mouse) => {
+                        onClicked: {
                             passwordField.text = ""
                             passwordDialog.close()
                         }
@@ -4938,7 +4744,7 @@ Window {
                         text: "Connect"
                         Layout.fillWidth: true
                         Layout.preferredHeight: 24
-                        onClicked: (mouse) => {
+                        onClicked: {
                             backend.connectToWifi(wifiPopup.selectedNetwork, passwordField.text)
                             passwordDialog.close()
                         }
@@ -5072,7 +4878,7 @@ Window {
                         enabled: !virtualKeyboard.numberMode
                         // Avoid stealing focus from the password field
                         focusPolicy: Qt.NoFocus
-                        onClicked: (mouse) => {
+                        onClicked: {
                             virtualKeyboard.shiftPressed = !virtualKeyboard.shiftPressed
                         }
 
@@ -5152,7 +4958,7 @@ Window {
                         Layout.preferredHeight: 30
                         // Avoid stealing focus from the password field
                         focusPolicy: Qt.NoFocus
-                        onClicked: (mouse) => {
+                        onClicked: {
                             virtualKeyboard.numberMode = !virtualKeyboard.numberMode
                             virtualKeyboard.shiftPressed = false  // Reset shift when switching modes
                         }
@@ -5222,8 +5028,8 @@ Window {
             id: updatePopup
             width: 450
             height: 220
-            x: (root.width - width) / 2
-            y: (root.height - height) / 2
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -5238,7 +5044,7 @@ Window {
                 Rectangle {
                     anchors.fill: parent
                     color: "transparent"
-                    radius: parent ? parent.radius : 0
+                    radius: parent.radius
                     border.color: Qt.rgba(0, 0, 0, 0.1)
                     border.width: 1
                 }
@@ -5524,7 +5330,7 @@ Window {
                             var latest = backend.latestVersionInfo.hash
                             return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
                         }
-                        onClicked: (mouse) => {
+                        onClicked: {
                             backend.runUpdateScript()
                             updatePopup.close()
                         }
@@ -5564,22 +5370,22 @@ Window {
                     spacing: 12
 
                     Button {
-                        text: (backend && backend.updateChecking) ? "Checking..." : "Check Now"
+                        text: backend.updateChecking ? "Checking..." : "Check Now"
                         Layout.preferredWidth: 80
                         Layout.preferredHeight: 28
-                        enabled: backend ? !backend.updateChecking : false
-                        onClicked: if (backend) backend.checkForUpdatesNow()
+                        enabled: !backend.updateChecking
+                        onClicked: backend.checkForUpdatesNow()
 
                         background: Rectangle {
-                            color: (backend && backend.updateChecking) ?
-                                ((backend && backend.theme === "dark") ? "#666" : "#ccc") :
-                                ((backend && backend.theme === "dark") ? "#303030" : "#e0e0e0")
+                            color: backend.updateChecking ?
+                                (backend.theme === "dark" ? "#666" : "#ccc") :
+                                (backend.theme === "dark" ? "#303030" : "#e0e0e0")
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                            color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -5590,13 +5396,13 @@ Window {
                         text: "Restart"
                         Layout.preferredWidth: 85
                         Layout.preferredHeight: 28
-                        onClicked: (mouse) => {
+                        onClicked: {
                             console.log("Restart clicked")
-                            if (backend) backend.reboot_device()
+                            backend.reboot_device()
                         }
 
                         background: Rectangle {
-                            color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
+                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
@@ -5629,13 +5435,13 @@ Window {
                         onClicked: updatePopup.close()
 
                         background: Rectangle {
-                            color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
+                            color: backend.theme === "dark" ? "#303030" : "#e0e0e0"
                             radius: 3
                         }
 
                         contentItem: Text {
                             text: parent.text
-                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                            color: backend.theme === "dark" ? "white" : "black"
                             font.pixelSize: 11
                             horizontalAlignment: Text.AlignHCenter
                             verticalAlignment: Text.AlignVCenter
@@ -5657,8 +5463,8 @@ Window {
             id: debugDialog
             width: 450
             height: 250
-            x: (root.width - width) / 2
-            y: (root.height - height) / 2
+            x: (parent.width - width) / 2
+            y: (parent.height - height) / 2
             modal: true
             focus: true
             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
@@ -5689,7 +5495,7 @@ Window {
 
                     TextArea {
                         id: debugText
-                        text: backend ? backend.getWifiInterfaceInfo() : ""
+                        text: backend.getWifiInterfaceInfo()
                         readOnly: true
                         wrapMode: TextArea.Wrap
                         background: Rectangle {
@@ -5708,7 +5514,7 @@ Window {
                     text: "Refresh"
                     Layout.fillWidth: true
                     Layout.preferredHeight: 24
-                    onClicked: if (backend) debugText.text = backend.getWifiInterfaceInfo()
+                    onClicked: debugText.text = backend.getWifiInterfaceInfo()
 
                     background: Rectangle {
                         color: backend.theme === "dark" ? "#303030" : "#d0d0d0"

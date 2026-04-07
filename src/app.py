@@ -1,13 +1,5 @@
-# Initialize environment variables before importing PyQt6 to ensure Qt picks them up
-# Since we need to check Qt version for some fixes, we'll try to get it before full initialization
-import os
-try:
-    from PyQt6.QtCore import QT_VERSION_STR
-    os.environ["QT_VERSION_STR"] = QT_VERSION_STR
-except ImportError:
-    pass
-
 import functions as funcs
+# Initialize environment variables before importing PyQt6 to ensure Qt picks them up
 funcs.setup_dashboard_environment()
 
 import platform
@@ -16,16 +8,13 @@ import sys
 import os
 import json
 from PyQt6.QtWidgets import QApplication, QStyleFactory
-from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, QObject, 
+from PyQt6.QtCore import (Qt, QTimer, QUrl, pyqtSignal, pyqtProperty, QObject, 
     QAbstractListModel, QModelIndex, QVariant, pyqtSlot, qInstallMessageHandler, 
-    QRectF, QPoint, QDir, QThread, QtMsgType)
-import PyQt6.QtCore
-pyqtProperty = PyQt6.QtCore.pyqtProperty
+    QRectF, QPoint, QDir, QThread)
 from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush, QColor, QFont, QLinearGradient
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
-from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -107,8 +96,6 @@ from functions import (
     filter_and_sort_wifi_networks,
     get_nmcli_profiles,
     fetch_weather_for_all_locations,
-    enrich_narratives,
-    parse_narratives,
     perform_full_dashboard_data_load,
     setup_dashboard_environment,
     setup_dashboard_logging,
@@ -163,21 +150,7 @@ logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DA
 
 def _qt_message_handler(mode, context, message):
     msg = format_qt_message(mode, context, message)
-    if not msg:
-        return
-        
-    if mode == QtMsgType.QtDebugMsg:
-        logger.debug(msg)
-    elif mode == QtMsgType.QtInfoMsg:
-        logger.info(msg)
-    elif mode == QtMsgType.QtWarningMsg:
-        logger.warning(msg)
-    elif mode == QtMsgType.QtCriticalMsg:
-        logger.error(msg)
-    elif mode == QtMsgType.QtFatalMsg:
-        logger.critical(msg)
-    else:
-        logger.error(msg)
+    if msg: logger.error(msg)
 
 # Install the handler only once
 try:
@@ -508,7 +481,6 @@ class Backend(QObject):
     touchCalibrationExistsChanged = pyqtSignal()
     calibrationStarted = pyqtSignal()
     calibrationFinished = pyqtSignal()
-    isBootModeChanged = pyqtSignal()
     uiReady = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
@@ -554,24 +526,7 @@ class Backend(QObject):
         profiler.mark("Backend: get_closest_x_video_url Start")
         self._live_launch_url = get_closest_x_video_url(self._launch_data)
         profiler.mark("Backend: get_closest_x_video_url End")
-        # Load narratives from cache or fallback to legacy, and enrich with cached launch data
-        # This ensures "pills" (status tags) are visible early if launch cache is available
         self._launch_descriptions = LAUNCH_DESCRIPTIONS
-        try:
-            profiler.mark("Backend: Loading Narratives Cache Start")
-            narr_cache = load_cache_from_file(RUNTIME_CACHE_FILE_NARRATIVES)
-            if narr_cache and 'data' in narr_cache:
-                initial_narratives = narr_cache['data']
-                logger.info("Backend: Loaded cached narratives from disk")
-            else:
-                initial_narratives = parse_narratives(LAUNCH_DESCRIPTIONS)
-            
-            # Enrich with whatever launch data we loaded from cache earlier
-            self._launch_descriptions = enrich_narratives(initial_narratives, self._launch_data)
-            profiler.mark("Backend: Loading Narratives Cache End")
-        except Exception as e:
-            logger.debug(f"Failed to load initial narratives cache: {e}")
-
         self._weather_data = {}
         try:
             profiler.mark("Backend: Loading Weather Cache Start")
@@ -592,7 +547,6 @@ class Backend(QObject):
             self._on_weather_updated(self._weather_data)
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
-        self._video_url = "" # Initialize empty; will be set once HTTP server is ready
         self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
         profiler.mark("Backend: Initializing EventModel Start")
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
@@ -674,7 +628,7 @@ class Backend(QObject):
                 self._width = int(self._width / scale)
                 self._height = int(self._height / scale)
             
-            logger.info(f"Backend: Initialized resolution: {self._width}x{self._height} (logical), scale: {scale} (DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, detected_w={detected_w})")
+            logger.info(f"Backend: Initialized resolution: {self._width}x{self._height} (logical), scale: {scale}")
         except (ValueError, TypeError):
             logger.warning(f"Backend: Invalid DASHBOARD_SCALE value: {scale_str}")
             scale = 1.0
@@ -757,8 +711,6 @@ class Backend(QObject):
         except Exception:
             pass
         self._trajectory_compute_inflight = False
-        self._trajectory_needs_recompute = False
-        self._current_trajectory = None
         self._trajectory_emit_timer = QTimer(self)
         self._trajectory_emit_timer.setSingleShot(True)
         try:
@@ -910,55 +862,31 @@ class Backend(QObject):
         logger.info(f"Initial location: {self._location}")
         logger.info(f"Initial time: {self.currentTime}")
         logger.info(f"Initial countdown: {self.countdown}")
-        
-        # Thread tracking variables for periodic updaters
-        self._weather_updater_thread = None
-        self._launch_updater_thread = None
-        self._next_launch_updater_thread = None
 
     @pyqtSlot(str, str)
     def add_remembered_network(self, ssid, password):
-        """Add a network to remembered list and persist to file (Async)"""
-        def _worker():
-            try:
-                ts = time.time()
-                current_rem = list(self._remembered_networks or [])
-                new_rem = sync_remembered_networks(current_rem, ssid, ts, password)
-                save_remembered_networks(new_rem)
-                
-                def _done():
-                    self._remembered_networks = new_rem
-                    self.rememberedNetworksChanged.emit()
-                QTimer.singleShot(0, _done)
-            except Exception as e:
-                logger.error(f"Error adding remembered network in background: {e}")
-
-        threading.Thread(target=_worker, daemon=True).start()
+        """Add a network to remembered list and persist to file"""
+        ts = time.time()
+        self._remembered_networks = sync_remembered_networks(self._remembered_networks, ssid, ts, password)
+        save_remembered_networks(self._remembered_networks)
+        self.rememberedNetworksChanged.emit()
 
     @pyqtSlot(str)
     def remove_remembered_network(self, ssid):
-        """Remove a network from remembered networks (Async)"""
-        def _worker():
+        """Remove a network from remembered networks"""
+        self._remembered_networks = [n for n in self._remembered_networks if n['ssid'] != ssid]
+        save_remembered_networks(self._remembered_networks)
+        
+        # On Linux, also attempt to remove the NetworkManager connection profile
+        if platform.system() == 'Linux':
+            logger.info(f"Removing NetworkManager profile for forgotten network: {ssid}")
             try:
-                # 1. Update list and save to disk
-                new_rem = [n for n in self._remembered_networks if n['ssid'] != ssid]
-                save_remembered_networks(new_rem)
-                
-                # 2. On Linux, also attempt to remove the NetworkManager connection profile
-                if platform.system() == 'Linux':
-                    try:
-                        remove_nm_connection(ssid)
-                    except Exception as e:
-                        logger.debug(f"Failed to remove NM profile: {e}")
-
-                def _done():
-                    self._remembered_networks = new_rem
-                    self.rememberedNetworksChanged.emit()
-                QTimer.singleShot(0, _done)
+                # We do this in a background thread to avoid any potential UI delay
+                threading.Thread(target=lambda: remove_nm_connection(ssid), daemon=True).start()
             except Exception as e:
-                logger.error(f"Error removing remembered network in background: {e}")
-
-        threading.Thread(target=_worker, daemon=True).start()
+                logger.debug(f"Failed to start NM profile removal thread: {e}")
+                
+        self.rememberedNetworksChanged.emit()
 
     def reload_web_content(self):
         """Signal QML to reload all web-based content (globe, charts, etc.) when WiFi connects"""
@@ -977,22 +905,15 @@ class Backend(QObject):
             logger.error(f"Error signaling web content reload: {e}")
 
     def save_last_connected_network(self, ssid):
-        """Save the last connected network to file (Async)"""
-        def _worker():
-            try:
-                ts = save_last_connected_network(ssid)
-                current_rem = list(self._remembered_networks or [])
-                new_rem = sync_remembered_networks(current_rem, ssid, ts)
-                save_remembered_networks(new_rem)
-                
-                def _done():
-                    self._remembered_networks = new_rem
-                    self.rememberedNetworksChanged.emit()
-                QTimer.singleShot(0, _done)
-            except Exception as e:
-                logger.error(f"Error saving last connected network in background: {e}")
-
-        threading.Thread(target=_worker, daemon=True).start()
+        """Save the last connected network to file"""
+        try:
+            ts = save_last_connected_network(ssid)
+            # Update internal list and sort
+            self._remembered_networks = sync_remembered_networks(self._remembered_networks, ssid, ts)
+            save_remembered_networks(self._remembered_networks)
+            self.rememberedNetworksChanged.emit()
+        except Exception as e:
+            logger.error(f"Error saving last connected network: {e}")
 
     def _try_nmcli_connection(self, ssid, password, wifi_device):
         """Try to connect using nmcli as fallback"""
@@ -1078,35 +999,15 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader...")
                 self.loader = DataLoader(self._tz, self._location)
-                self.loader.statusUpdate.connect(self.setLoadingStatus)
-                self.loader.finished.connect(self.on_data_loaded)
-                
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
+                self.loader.finished.connect(self.on_data_loaded)
+                self.loader.statusUpdate.connect(self.setLoadingStatus)
                 self.thread.started.connect(self.loader.run)
                 logger.info("BOOT: Starting DataLoader thread...")
                 self.thread.start()
             else:
                 logger.info("BOOT: DataLoader already exists")
-
-            # Check for radar URLs in a thread to avoid blocking if it's slow
-            def _check_radar_url():
-                try:
-                    # Force a refresh of radar URL if it's empty
-                    if not self._radar_base_url:
-                        from src.functions import get_radar_locations # Assuming it exists or similar logic
-                        radar_locations = {
-                            'Starbase': 'https://embed.windy.com/embed2.html?lat=25.996&lon=-97.155&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1',
-                            'Cape Canaveral': 'https://embed.windy.com/embed2.html?lat=28.488&lon=-80.572&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1',
-                            'Vandenberg': 'https://embed.windy.com/embed2.html?lat=34.732&lon=-120.572&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1'
-                        }
-                        self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
-                        self.radarBaseUrlChanged.emit()
-                        logger.info(f"BOOT: Radar base URL set to {self._radar_base_url}")
-                except Exception as e:
-                    logger.error(f"Error initializing radar URL: {e}")
-            
-            threading.Thread(target=_check_radar_url, daemon=True).start()
 
             self._setup_timers()
             profiler.mark("Backend: _apply_initial_checks_results End")
@@ -1177,10 +1078,6 @@ class Backend(QObject):
         """Periodic update check in background"""
         self.checkForUpdatesNow()
 
-    @pyqtProperty(bool, notify=isBootModeChanged)
-    def isBootMode(self):
-        return self._boot_mode
-
     @pyqtProperty(int, notify=modeChanged)
     def httpPort(self):
         return funcs.HTTP_SERVER_PORT
@@ -1244,8 +1141,7 @@ class Backend(QObject):
     def theme(self, value):
         if self._theme != value:
             self._theme = value
-            # File I/O in background
-            threading.Thread(target=lambda: save_theme_settings(value), daemon=True).start()
+            save_theme_settings(value)
             self.themeChanged.emit()
 
     @pyqtProperty(str, notify=targetBranchChanged)
@@ -1256,8 +1152,7 @@ class Backend(QObject):
     def targetBranch(self, value):
         if self._target_branch != value:
             self._target_branch = value
-            # File I/O in background
-            threading.Thread(target=lambda: save_branch_setting(value), daemon=True).start()
+            save_branch_setting(value)
             self.targetBranchChanged.emit()
             
             # Reset update status and latest info when branch changes to ensure 
@@ -2114,78 +2009,79 @@ class Backend(QObject):
 
     @pyqtSlot(result=QVariant)
     def get_launch_trajectory(self):
-        """Get trajectory data for the next upcoming launch or currently selected launch (Async)"""
+        """Get trajectory data for the next upcoming launch or currently selected launch"""
         # If we have a specific trajectory loaded, return that
         if hasattr(self, '_current_trajectory') and self._current_trajectory:
             logger.info("get_launch_trajectory: Returning current selected launch trajectory")
             return self._current_trajectory
         
-        # Otherwise, return None and trigger a background calculation
-        # The UI will be notified via updateGlobeTrajectory signal once ready
-        logger.info("get_launch_trajectory: No trajectory cached, triggering background computation")
-        self._compute_trajectory_async()
-        return None
-
-    @pyqtSlot(result=str)
-    def get_launch_trajectory_json(self):
-        """Safe wrapper to return trajectory data as a JSON string for JS consumption."""
-        data = self.get_launch_trajectory()
-        if data:
-            try:
-                import json
-                json_str = json.dumps(data)
-                logger.info(f"Backend: Serialized trajectory for {data.get('mission')} ({len(data.get('trajectory', []))} points)")
-                return json_str
-            except Exception as e:
-                logger.error(f"Error serializing trajectory: {e}")
+        # Otherwise, get the default next launch trajectory
+        upcoming = self.get_upcoming_launches()
+        previous = self._launch_data.get('previous', [])
+        
+        # Set selected launch to the next upcoming launch if available
+        if upcoming and len(upcoming) > 0:
+            next_launch = upcoming[0]
+            mission = next_launch.get('mission', '')
+            if mission and self._selected_launch_mission != mission:
+                self._selected_launch_mission = mission
+                self.selectedLaunchChanged.emit()
+                logger.info(f"get_launch_trajectory: Set selected launch to next upcoming: {mission}")
+        
+        # Use the centralized trajectory calculator in functions.py
+        # Pass the full launch objects to preserve trajectory_data from API
+        upcoming_full = self._launch_data.get('upcoming', [])
+        result = get_launch_trajectory_data(upcoming_full, previous)
+        if result and 'booster_trajectory' in result:
+            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points and {len(result['booster_trajectory'])} booster points")
+        elif result:
+            logger.info(f"get_launch_trajectory: Returning {len(result['trajectory'])} main points (no booster)")
         else:
-            logger.info("Backend: get_launch_trajectory returned None/empty")
-        return ""
+            logger.info("get_launch_trajectory: Returning None")
+        return result
 
     @pyqtSlot(str, str, str, str, result=bool)
     def loadLaunchTrajectory(self, mission, pad, orbit, landing_type):
-        """Load trajectory data for a specific launch in a background thread"""
+        """Load trajectory data for a specific launch"""
         try:
-            logger.info(f"Loading trajectory for launch: {mission} in background")
+            logger.info(f"Loading trajectory for launch: {mission} from {pad}")
             
             # Set the selected launch for visual indication
             if self._selected_launch_mission != mission:
                 self._selected_launch_mission = mission
                 self.selectedLaunchChanged.emit()
             
-            def _worker():
-                try:
-                    # Find the actual launch object in our data to get trajectory_data
-                    all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
-                    launch_obj = next((l for l in all_launches if l.get('mission') == mission), None)
-                    
-                    if launch_obj:
-                        result = get_launch_trajectory_data(launch_obj)
-                    else:
-                        launch_data = {
-                            'mission': mission,
-                            'pad': pad,
-                            'orbit': orbit,
-                            'landing_type': landing_type
-                        }
-                        result = get_launch_trajectory_data(launch_data)
-                    
-                    if result:
-                        def _done():
-                            self._current_trajectory = result
-                            logger.info(f"Trajectory loaded for {mission}: {len(result.get('trajectory', []))} points")
-                            self.updateGlobeTrajectory.emit()
-                        QTimer.singleShot(0, _done)
-                    else:
-                        logger.warning(f"Failed to generate trajectory for {mission}")
-                except Exception as e:
-                    logger.error(f"Error computing specific trajectory: {e}")
-
-            threading.Thread(target=_worker, daemon=True).start()
-            return True # Started in background
+            # Find the actual launch object in our data to get trajectory_data
+            all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
+            launch_obj = next((l for l in all_launches if l.get('mission') == mission), None)
+            
+            if launch_obj:
+                # Use the full launch object which contains trajectory_data from API
+                result = get_launch_trajectory_data(launch_obj)
+            else:
+                # Fallback to creating a minimal object if not found
+                launch_data = {
+                    'mission': mission,
+                    'pad': pad,
+                    'orbit': orbit,
+                    'landing_type': landing_type
+                }
+                result = get_launch_trajectory_data(launch_data)
+            
+            if result:
+                # Store the trajectory data for the globe
+                self._current_trajectory = result
+                logger.info(f"Trajectory loaded for {mission}: {len(result.get('trajectory', []))} points")
+                
+                # Emit signal to update globe
+                self.updateGlobeTrajectory.emit()
+                return True
+            else:
+                logger.warning(f"Failed to generate trajectory for {mission}")
+                return False
                 
         except Exception as e:
-            logger.error(f"Error starting trajectory load for {mission}: {e}")
+            logger.error(f"Error loading trajectory for {mission}: {e}")
             return False
 
     @pyqtSlot(str, result=str)
@@ -2236,14 +2132,11 @@ class Backend(QObject):
 
     @pyqtSlot(bool)
     def setBootMode(self, val):
-        new_val = bool(val)
-        if self._boot_mode != new_val:
-            self._boot_mode = new_val
-            self.isBootModeChanged.emit()
-            if not self._boot_mode:
-                profiler.mark("Disabling Boot Mode")
-                logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
-                profiler.mark("Boot Mode Disabled (Charts Triggered)")
+        self._boot_mode = bool(val)
+        if not self._boot_mode:
+            profiler.mark("Disabling Boot Mode")
+            logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
+            profiler.mark("Boot Mode Disabled (Charts Triggered)")
 
     def initialize_weather(self):
         return initialize_all_weather(location_settings)
@@ -2251,43 +2144,25 @@ class Backend(QObject):
     @pyqtSlot()
     def update_weather(self):
         """Update weather data in a separate thread to avoid blocking UI"""
-        # Check if thread exists and is still valid (not deleted)
-        try:
-            if self._weather_updater_thread is not None and self._weather_updater_thread.isRunning():
-                return  # Skip if already updating
-        except RuntimeError:
-            # Underlying C++ object has been deleted, clear reference
-            self._weather_updater_thread = None
+        if hasattr(self, '_weather_updater_thread') and self._weather_updater_thread.isRunning():
+            return  # Skip if already updating
 
         self._weather_updater = WeatherUpdater(self._location)
         self._weather_updater_thread = QThread()
         self._weather_updater.moveToThread(self._weather_updater_thread)
         self._weather_updater.finished.connect(self._on_weather_updated)
-        self._weather_updater.finished.connect(self._weather_updater_thread.quit)
-        self._weather_updater.finished.connect(self._weather_updater.deleteLater)
-        self._weather_updater_thread.finished.connect(self._weather_updater_thread.deleteLater)
-        self._weather_updater_thread.finished.connect(lambda: setattr(self, '_weather_updater_thread', None))
         self._weather_updater_thread.started.connect(self._weather_updater.run)
         self._weather_updater_thread.start()
 
     def update_launches_periodic(self):
         """Update launch data in a separate thread to avoid blocking UI"""
-        # Check if thread exists and is still valid (not deleted)
-        try:
-            if self._launch_updater_thread is not None and self._launch_updater_thread.isRunning():
-                return  # Skip if already updating
-        except RuntimeError:
-            # Underlying C++ object has been deleted, clear reference
-            self._launch_updater_thread = None
+        if hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning():
+            return  # Skip if already updating
 
         self._launch_updater = LaunchUpdater(self._tz)
         self._launch_updater_thread = QThread()
         self._launch_updater.moveToThread(self._launch_updater_thread)
         self._launch_updater.finished.connect(self._on_launches_updated)
-        self._launch_updater.finished.connect(self._launch_updater_thread.quit)
-        self._launch_updater.finished.connect(self._launch_updater.deleteLater)
-        self._launch_updater_thread.finished.connect(self._launch_updater_thread.deleteLater)
-        self._launch_updater_thread.finished.connect(lambda: setattr(self, '_launch_updater_thread', None))
         self._launch_updater_thread.started.connect(self._launch_updater.run)
         self._launch_updater_thread.start()
 
@@ -2298,19 +2173,9 @@ class Backend(QObject):
             return
 
         # Skip if either updater is already running to avoid overlaps
-        try:
-            if (self._launch_updater_thread is not None and self._launch_updater_thread.isRunning()) or \
-               (self._next_launch_updater_thread is not None and self._next_launch_updater_thread.isRunning()):
-                return
-        except RuntimeError:
-            # Handle potential deleted threads by resetting references where applicable
-            # (The logic below will recreate them as needed)
-            if hasattr(self, '_launch_updater_thread'):
-                try: self._launch_updater_thread.isRunning()
-                except RuntimeError: self._launch_updater_thread = None
-            if hasattr(self, '_next_launch_updater_thread'):
-                try: self._next_launch_updater_thread.isRunning()
-                except RuntimeError: self._next_launch_updater_thread = None
+        if (hasattr(self, '_launch_updater_thread') and self._launch_updater_thread.isRunning()) or \
+           (hasattr(self, '_next_launch_updater_thread') and self._next_launch_updater_thread.isRunning()):
+            return
 
         next_launch = self.get_next_launch()
         if not next_launch or not next_launch.get('id'):
@@ -2321,11 +2186,12 @@ class Backend(QObject):
         self._next_launch_updater_thread = QThread()
         self._next_launch_updater.moveToThread(self._next_launch_updater_thread)
         self._next_launch_updater.finished.connect(self._on_next_launch_updated)
-        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.quit)
-        self._next_launch_updater.finished.connect(self._next_launch_updater.deleteLater)
-        self._next_launch_updater_thread.finished.connect(self._next_launch_updater_thread.deleteLater)
-        self._next_launch_updater_thread.finished.connect(lambda: setattr(self, '_next_launch_updater_thread', None))
         self._next_launch_updater_thread.started.connect(self._next_launch_updater.run)
+        
+        # Cleanup
+        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.quit)
+        self._next_launch_updater.finished.connect(self._next_launch_updater_thread.deleteLater)
+        self._next_launch_updater_thread.finished.connect(self._next_launch_updater_thread.deleteLater)
         
         self._next_launch_updater_thread.start()
 
@@ -2450,6 +2316,7 @@ class Backend(QObject):
 
         # Update trajectory now that data is loaded (debounced) and precompute in background
         profiler.mark("Backend: Scheduling trajectory recompute")
+        self._emit_update_globe_trajectory_debounced()
         self._schedule_trajectory_recompute()
         profiler.mark("Backend: on_data_loaded End")
         profiler.log_summary()
@@ -2602,14 +2469,12 @@ class Backend(QObject):
     # --- Globe trajectory helpers (async precompute + debounced emits) ---
     def _emit_update_globe_signal(self):
         try:
-            # Removed wifi guard to ensure trajectory updates even if wifi is connecting
-            # (trajectory data is already in-memory or in cache)
-            logger.info("Backend: Emitting updateGlobeTrajectory signal")
+            # Don't touch the globe if we are in the middle of a connection attempt
+            if getattr(self, '_wifi_connecting', False):
+                return
             self.updateGlobeTrajectory.emit()
-            # Safety emit for any other potential globe listeners
-            self.launchCacheReady.emit() 
-        except Exception as e:
-            logger.error(f"Error emitting globe signal: {e}")
+        except Exception as _e:
+            logger.debug(f"Failed to emit updateGlobeTrajectory: {_e}")
 
     def _emit_update_globe_trajectory_debounced(self):
         try:
@@ -2646,68 +2511,31 @@ class Backend(QObject):
 
     def _compute_trajectory_async(self):
         if getattr(self, '_trajectory_compute_inflight', False):
-            # If already computing, mark that we need a follow-up recompute for the newest state.
-            # The recompute timer will handle triggering it eventually after the current worker finishes.
-            self._trajectory_needs_recompute = True
+            logger.debug("Trajectory compute already in flight; skipping")
             return
-            
         self._trajectory_compute_inflight = True
-        self._trajectory_needs_recompute = False
 
         def _worker():
             try:
                 logger.info("Computing launch trajectory in background…")
-                # Snapshot the mission we are computing for
-                mission_to_compute = getattr(self, '_selected_launch_mission', None)
-                
-                # Find the target launch (selected or next upcoming)
-                launch_obj = None
-                if mission_to_compute:
-                    all_launches = self._launch_data.get('upcoming', []) + self._launch_data.get('previous', [])
-                    launch_obj = next((l for l in all_launches if l.get('mission') == mission_to_compute), None)
-                
-                if not launch_obj:
-                    # Fallback to next upcoming launch
-                    launch_obj = get_next_launch_info(self._launch_data.get('upcoming', []), self._tz)
-
-                if launch_obj:
-                    # Actually compute/fetch the trajectory data
-                    logger.info(f"Target launch found for trajectory: {launch_obj.get('mission')}")
-                    result = get_launch_trajectory_data(launch_obj)
-                    if result:
-                        def _done_success():
-                            self._current_trajectory = result
-                            logger.info(f"Trajectory computation successful for {result.get('mission')}: {len(result.get('trajectory', []))} points")
-                            self._trajectory_compute_inflight = False
-                            # We don't call self._compute_trajectory_async() immediately here to avoid 
-                            # tight recursion loops. The next timer tick will start it if needs_recompute is set.
-                            
-                            # Emit BOTH signals to ensure UI catches it
-                            self.updateGlobeTrajectory.emit()
-                            self._emit_update_globe_trajectory_debounced()
-                        QTimer.singleShot(0, _done_success)
-                        return
-                    else:
-                        logger.warning("No trajectory data generated by helper")
-                else:
-                    logger.warning("No target launch found for trajectory computation")
-                
-                # If we got here, we failed
-                def _done_fail():
-                    logger.warning("Trajectory computation failed or returned no data")
-                    self._trajectory_compute_inflight = False
-                    # Let the timer handle the next retry, don't recurse immediately
-                QTimer.singleShot(0, _done_fail)
+                # This will also populate the on-disk trajectory cache if needed
+                _ = self.get_launch_trajectory()
             except Exception as e:
                 logger.warning(f"Background trajectory compute failed: {e}")
-                self._trajectory_compute_inflight = False
-                # No recompute on exception to avoid infinite loops of failure
-        
+            finally:
+                def _done():
+                    self._trajectory_compute_inflight = False
+                    self._emit_update_globe_trajectory_debounced()
+                try:
+                    QTimer.singleShot(0, _done)
+                except Exception:
+                    # As a fallback, emit directly (may still work on main thread)
+                    _done()
+
         try:
             threading.Thread(target=_worker, daemon=True).start()
         except Exception as _e:
             logger.debug(f"Failed to start trajectory worker thread: {_e}")
-            self._trajectory_compute_inflight = False
 
     def _load_cached_launch_data(self):
         """Load cached launch data for offline mode"""
@@ -2727,16 +2555,7 @@ class Backend(QObject):
 
     def _load_cached_weather_data(self):
         """Load cached/default weather data for offline mode"""
-        # Try to load from cache file first
-        try:
-            weather_cache = load_cache_from_file(CACHE_FILE_WEATHER)
-            if weather_cache and 'data' in weather_cache:
-                logger.info(f"Backend: Loaded cached weather for {len(weather_cache['data'])} locations for offline mode")
-                return weather_cache['data']
-        except Exception as e:
-            logger.warning(f"Backend: Failed to load weather cache for offline mode: {e}")
-
-        # Return default weather data for all locations as a fallback
+        # Return default weather data for all locations
         weather_data = {}
         for location in location_settings.keys():
             weather_data[location] = {
@@ -2747,8 +2566,12 @@ class Backend(QObject):
                 'wind_direction': 90,
                 'cloud_cover': 50
             }
-        logger.info("Backend: Using default weather data for offline mode (no cache available)")
+        logger.info("Backend: Using default weather data for offline mode")
         return weather_data
+
+        logger.info("Backend: Data loading complete, cleaning up thread")
+        self.thread.quit()
+        self.thread.wait()
 
     def _clear_launch_caches(self):
         """Clear all internal caches derived from launch data"""
@@ -2803,6 +2626,10 @@ class Backend(QObject):
         # Update globe trajectory in case current/next launch changed (e.g., after Success)
         self._emit_update_globe_trajectory_debounced()
         self._schedule_trajectory_recompute()
+        # Clean up thread
+        if hasattr(self, '_launch_updater_thread'):
+            self._launch_updater_thread.quit()
+            self._launch_updater_thread.wait()
 
         # Auto-reconnect to last connected network if not currently connected
         self._auto_reconnect_to_last_network()
@@ -2872,6 +2699,10 @@ class Backend(QObject):
         self.weatherChanged.emit()
         self.weatherUpdated.emit()
         self.weatherForecastModelChanged.emit()
+        # Clean up thread
+        if hasattr(self, '_weather_updater_thread'):
+            self._weather_updater_thread.quit()
+            self._weather_updater_thread.wait()
 
     def _safety_reset_wifi_connecting(self, ssid=None):
         """Reset the connecting state if it's been stuck for too long"""
@@ -3920,22 +3751,6 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("SpaceXDashboard")
     app.setOrganizationName("Harrison")
-    
-    # Configure default WebEngine profile to avoid "Storage name is empty" errors
-    # and ensure disk-based behavior for better performance (caching) on Raspberry Pi.
-    try:
-        default_profile = QWebEngineProfile.defaultProfile()
-        if not default_profile.storageName():
-            default_profile.setStorageName("SpaceXDashboard")
-        # Ensure it's not off-the-record so it actually uses the storage for cache/cookies
-        if default_profile.isOffTheRecord():
-            default_profile.setOffTheRecord(False)
-        # On Raspberry Pi, we might also want to set the cache type explicitly
-        default_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
-        default_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
-        logger.info(f"BOOT: Default WebEngine profile configured (storage: {default_profile.storageName()})")
-    except Exception as e:
-        logger.warning(f"BOOT: Failed to configure default WebEngine profile: {e}")
     
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
