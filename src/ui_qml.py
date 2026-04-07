@@ -618,7 +618,9 @@ Window {
                             Loader {
                                 id: webViewLoader
                                 anchors.fill: parent
-                                active: index === weatherSwipe.currentIndex || weatherSwipe.moving
+                                // Loosen active condition: if backend exists and has a base URL, allow it to load.
+                                // The url property itself will handle being empty if needed.
+                                active: (backend && backend.radarBaseUrl !== "") && (index === weatherSwipe.currentIndex || weatherSwipe.moving)
                                 visible: index === weatherSwipe.currentIndex
                                 sourceComponent: WebEngineView {
                                     id: webView
@@ -633,12 +635,23 @@ Window {
                                                         : Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     enabled: !backgroundWindy.isLocked
                                     backgroundColor: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
-                                    url: parent.visible && backend ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
+                                    // Use a simpler URL construction and ensure it re-evaluates when backend properties change
+                                    url: (parent.visible && backend && backend.radarBaseUrl !== "") ? backend.radarBaseUrl.replace("radar", modelData) + "&v=" + Date.now() : ""
                                     settings.webGLEnabled: true
                                     settings.accelerated2dCanvasEnabled: true
                                     settings.allowRunningInsecureContent: true
                                     settings.javascriptEnabled: true
                                     settings.localContentCanAccessRemoteUrls: true
+
+                                    onLoadingChanged: function(loadRequest) {
+                                        if (loadRequest.status === WebEngineView.LoadFailedStatus) {
+                                            console.log("Radar WebEngineView (" + modelData + ") load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode, "URL:", loadRequest.url);
+                                        } else if (loadRequest.status === WebEngineView.LoadStartedStatus) {
+                                            console.log("Radar WebEngineView (" + modelData + ") loading started...");
+                                        } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
+                                            console.log("Radar WebEngineView (" + modelData + ") loaded successfully");
+                                        }
+                                    }
 
                                     Connections {
                                         target: backend
@@ -900,7 +913,8 @@ Window {
                             Loader {
                                 id: plotGlobeLoader
                                 anchors.fill: parent
-                                active: true || plotGlobeView._loaded
+                                // Delay loading of the heavy Globe view until boot is finished to prioritize core UI responsiveness
+                                active: (backend && !backend.isBootMode) || plotGlobeView._loaded
                                 sourceComponent: WebEngineView {
                                     id: plotGlobeViewInner
                                     anchors.fill: parent
@@ -1809,7 +1823,7 @@ Window {
                         httpUserAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                         httpAcceptLanguage: "en-US,en"
                         // Allow sending Referer headers for YouTube embeds
-                        offTheRecord: false
+                        // offTheRecord: false  // Removed to avoid warning, defaults to false anyway
                         persistentCookiesPolicy: WebEngineProfile.AllowPersistentCookies
                         httpCacheType: WebEngineProfile.DiskHttpCache
                     }
@@ -1829,7 +1843,8 @@ Window {
                         Loader {
                             id: youtubeLoader
                             anchors.fill: parent
-                            active: debouncedVideoUrl && debouncedVideoUrl.toString() !== "" && debouncedVideoUrl.toString() !== "about:blank"
+                            // Loosen active condition to ensure it loads once we have a URL, even if it's about:blank initially
+                            active: debouncedVideoUrl.toString() !== ""
                             onActiveChanged: if (active) console.log("YouTube WebEngineView activated for:", debouncedVideoUrl)
                             
                             sourceComponent: WebEngineView {
@@ -1870,15 +1885,17 @@ Window {
                                 }
                                 onLoadingChanged: function(loadRequest) {
                                     if (loadRequest.status === WebEngineView.LoadFailedStatus) {
-                                        console.log("YouTube WebEngineView load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode);
+                                        console.log("YouTube WebEngineView load failed:", loadRequest.errorString, "Code:", loadRequest.errorCode, "URL:", loadRequest.url);
                                         
                                         if (loadRequest.errorCode === 153) {
                                             console.log("ERR_MISSING_REFERER_HEADER - retrying in 3s...");
                                             youtubeRetryTimer.restart();
                                         }
                                         root.autoFullScreen = false;
+                                    } else if (loadRequest.status === WebEngineView.LoadStartedStatus) {
+                                        console.log("YouTube WebEngineView loading started for:", loadRequest.url);
                                     } else if (loadRequest.status === WebEngineView.LoadSucceededStatus) {
-                                        console.log("YouTube WebEngineView loaded successfully");
+                                        console.log("YouTube WebEngineView loaded successfully:", loadRequest.url);
                                         if (typeof root !== 'undefined') root._injectRoundedCorners(youtubeView, 8)
                                         
                                         var isX = loadRequest.url.toString().indexOf("x.com") !== -1 || 

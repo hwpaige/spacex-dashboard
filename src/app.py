@@ -25,6 +25,7 @@ from PyQt6.QtGui import QFontDatabase, QCursor, QRegion, QPainter, QPen, QBrush,
 from PyQt6.QtQml import QQmlApplicationEngine, QQmlContext, qmlRegisterType
 from PyQt6.QtQuick import QQuickWindow, QSGRendererInterface, QQuickPaintedItem
 from PyQt6.QtWebEngineQuick import QtWebEngineQuick
+from PyQt6.QtWebEngineCore import QWebEngineProfile
 from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis
 from datetime import datetime, timedelta
 import logging
@@ -493,6 +494,7 @@ class Backend(QObject):
     touchCalibrationExistsChanged = pyqtSignal()
     calibrationStarted = pyqtSignal()
     calibrationFinished = pyqtSignal()
+    isBootModeChanged = pyqtSignal()
     uiReady = pyqtSignal()
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
@@ -576,6 +578,7 @@ class Backend(QObject):
             self._on_weather_updated(self._weather_data)
         # Initialize radar base URL
         self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+        self._video_url = "" # Initialize empty; will be set once HTTP server is ready
         self._f1_data = {'schedule': [], 'standings': [], 'drivers': [], 'constructors': []}
         profiler.mark("Backend: Initializing EventModel Start")
         self._event_model = EventModel(self._launch_data, self._mode, self._event_type, self._tz)
@@ -1055,15 +1058,35 @@ class Backend(QObject):
             if self.loader is None:
                 logger.info("BOOT: Creating new DataLoader...")
                 self.loader = DataLoader(self._tz, self._location)
+                self.loader.statusUpdate.connect(self.setLoadingStatus)
+                self.loader.finished.connect(self.on_data_loaded)
+                
                 self.thread = QThread()
                 self.loader.moveToThread(self.thread)
-                self.loader.finished.connect(self.on_data_loaded)
-                self.loader.statusUpdate.connect(self.setLoadingStatus)
                 self.thread.started.connect(self.loader.run)
                 logger.info("BOOT: Starting DataLoader thread...")
                 self.thread.start()
             else:
                 logger.info("BOOT: DataLoader already exists")
+
+            # Check for radar URLs in a thread to avoid blocking if it's slow
+            def _check_radar_url():
+                try:
+                    # Force a refresh of radar URL if it's empty
+                    if not self._radar_base_url:
+                        from src.functions import get_radar_locations # Assuming it exists or similar logic
+                        radar_locations = {
+                            'Starbase': 'https://embed.windy.com/embed2.html?lat=25.996&lon=-97.155&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1',
+                            'Cape Canaveral': 'https://embed.windy.com/embed2.html?lat=28.488&lon=-80.572&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1',
+                            'Vandenberg': 'https://embed.windy.com/embed2.html?lat=34.732&lon=-120.572&zoom=8&level=surface&overlay=radar&product=radar&menu=&message=&marker=&calendar=now&pressure=&type=map&location=coordinates&detail=&metricWind=default&metricTemp=default&radarRange=-1'
+                        }
+                        self._radar_base_url = radar_locations.get(self._location, radar_locations.get('Starbase', ''))
+                        self.radarBaseUrlChanged.emit()
+                        logger.info(f"BOOT: Radar base URL set to {self._radar_base_url}")
+                except Exception as e:
+                    logger.error(f"Error initializing radar URL: {e}")
+            
+            threading.Thread(target=_check_radar_url, daemon=True).start()
 
             self._setup_timers()
             profiler.mark("Backend: _apply_initial_checks_results End")
@@ -1133,6 +1156,10 @@ class Backend(QObject):
     def check_for_updates_periodic(self):
         """Periodic update check in background"""
         self.checkForUpdatesNow()
+
+    @pyqtProperty(bool, notify=isBootModeChanged)
+    def isBootMode(self):
+        return self._boot_mode
 
     @pyqtProperty(int, notify=modeChanged)
     def httpPort(self):
@@ -2189,11 +2216,14 @@ class Backend(QObject):
 
     @pyqtSlot(bool)
     def setBootMode(self, val):
-        self._boot_mode = bool(val)
-        if not self._boot_mode:
-            profiler.mark("Disabling Boot Mode")
-            logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
-            profiler.mark("Boot Mode Disabled (Charts Triggered)")
+        new_val = bool(val)
+        if self._boot_mode != new_val:
+            self._boot_mode = new_val
+            self.isBootModeChanged.emit()
+            if not self._boot_mode:
+                profiler.mark("Disabling Boot Mode")
+                logger.info("BOOT: Boot mode disabled, triggering chart re-evaluation")
+                profiler.mark("Boot Mode Disabled (Charts Triggered)")
 
     def initialize_weather(self):
         return initialize_all_weather(location_settings)
@@ -3834,6 +3864,22 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     app.setApplicationName("SpaceXDashboard")
     app.setOrganizationName("Harrison")
+    
+    # Configure default WebEngine profile to avoid "Storage name is empty" errors
+    # and ensure disk-based behavior for better performance (caching) on Raspberry Pi.
+    try:
+        default_profile = QWebEngineProfile.defaultProfile()
+        if not default_profile.storageName():
+            default_profile.setStorageName("SpaceXDashboard")
+        # Ensure it's not off-the-record so it actually uses the storage for cache/cookies
+        if default_profile.isOffTheRecord():
+            default_profile.setOffTheRecord(False)
+        # On Raspberry Pi, we might also want to set the cache type explicitly
+        default_profile.setHttpCacheType(QWebEngineProfile.HttpCacheType.DiskHttpCache)
+        default_profile.setPersistentCookiesPolicy(QWebEngineProfile.PersistentCookiesPolicy.AllowPersistentCookies)
+        logger.info(f"BOOT: Default WebEngine profile configured (storage: {default_profile.storageName()})")
+    except Exception as e:
+        logger.warning(f"BOOT: Failed to configure default WebEngine profile: {e}")
     
     if platform.system() != 'Windows':
         app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
