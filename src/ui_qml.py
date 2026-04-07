@@ -105,8 +105,8 @@ Window {
 
     property bool autoFullScreen: false
     // Track the currently selected YouTube URL for the video card.
-    // Initialized to the default playlist URL provided by the backend.
-    property url currentVideoUrl: backend ? backend.videoUrl : ""
+    // Initialized to the NSF Starbase Live stream by default.
+    property url currentVideoUrl: backend ? "http://localhost:" + backend.httpPort + "/youtube_embed_nsf.html" : ""
 
     // UI Ready tracking
     property int _pendingCriticalLoads: (backend && backend.isHighResolution) ? 2 : 1
@@ -210,9 +210,10 @@ Window {
             // If the user has manually selected NSF or the Live stream, 
             // don't let background updates (like the placeholder) override it.
             var isManualLive = (backend.liveLaunchUrl !== "" && current === backend.liveLaunchUrl)
-            // We check the URL directly for NSF as well
+            // We check the URL directly for NSF as well (both legacy direct URL and local wrapper page)
             var nsfUrl = "https://www.youtube.com/embed/live_stream?channel=UCSUu1lih2njqoJ1zKgZpX6A&rel=0&controls=1&autoplay=1&mute=1&enablejsapi=1"
-            var isManualNsf = (current === nsfUrl)
+            var nsfLocalUrl = "http://localhost:" + backend.httpPort + "/youtube_embed_nsf.html"
+            var isManualNsf = (current === nsfUrl || current === nsfLocalUrl)
             
             if (isManualLive || isManualNsf) {
                 // Only allow override if 'next' is a specific YouTube video (not the placeholder)
