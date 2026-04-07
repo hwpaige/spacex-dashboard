@@ -974,7 +974,7 @@ def fetch_weather(lat, lon, location):
         res_json = response.json()
         
         # Post-process forecast data to include condition strings and day names
-        if 'forecast' in res_json and 'daily' in res_json['forecast']:
+        if 'forecast' in res_json and res_json['forecast'] and 'daily' in res_json['forecast']:
             daily = res_json['forecast']['daily']
             hourly = res_json['forecast'].get('hourly', {})
             forecast_list = []

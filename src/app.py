@@ -2727,7 +2727,16 @@ class Backend(QObject):
 
     def _load_cached_weather_data(self):
         """Load cached/default weather data for offline mode"""
-        # Return default weather data for all locations
+        # Try to load from cache file first
+        try:
+            weather_cache = load_cache_from_file(CACHE_FILE_WEATHER)
+            if weather_cache and 'data' in weather_cache:
+                logger.info(f"Backend: Loaded cached weather for {len(weather_cache['data'])} locations for offline mode")
+                return weather_cache['data']
+        except Exception as e:
+            logger.warning(f"Backend: Failed to load weather cache for offline mode: {e}")
+
+        # Return default weather data for all locations as a fallback
         weather_data = {}
         for location in location_settings.keys():
             weather_data[location] = {
@@ -2738,12 +2747,8 @@ class Backend(QObject):
                 'wind_direction': 90,
                 'cloud_cover': 50
             }
-        logger.info("Backend: Using default weather data for offline mode")
+        logger.info("Backend: Using default weather data for offline mode (no cache available)")
         return weather_data
-
-        logger.info("Backend: Data loading complete, cleaning up thread")
-        self.thread.quit()
-        self.thread.wait()
 
     def _clear_launch_caches(self):
         """Clear all internal caches derived from launch data"""
