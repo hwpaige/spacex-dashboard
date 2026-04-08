@@ -107,6 +107,10 @@ Window {
     // Track the currently selected YouTube URL for the video card.
     // Initialized to the NSF Starbase Live stream by default.
     property url currentVideoUrl: backend ? "http://localhost:" + backend.httpPort + "/youtube_embed_nsf.html" : ""
+    // Stores the video URL that was active before an automatic switch to the live feed.
+    property url _preLiveVideoUrl: ""
+    // True when the live feed switch was triggered automatically (not by the user).
+    property bool _autoSwitchedToLive: false
 
     // UI Ready tracking
     property int _pendingCriticalLoads: (backend && backend.isHighResolution) ? 2 : 1
@@ -1925,6 +1929,29 @@ Window {
                                     border.color: selected ? "white" : (active ? "transparent" : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
                                     border.width: selected ? 2 : 1
                                     opacity: active ? 1.0 : 0.6
+
+                                    // Automatically switch to the live feed when the button becomes
+                                    // active, and restore the previous feed when the launch ends.
+                                    onActiveChanged: {
+                                        if (active) {
+                                            // Live button just became active — save the current feed
+                                            // and switch to the live stream automatically.
+                                            if (String(root.currentVideoUrl) !== String(backend.liveLaunchUrl)) {
+                                                root._preLiveVideoUrl = root.currentVideoUrl
+                                                root._autoSwitchedToLive = true
+                                                root.currentVideoUrl = backend.liveLaunchUrl
+                                                root.autoFullScreen = true
+                                            }
+                                        } else {
+                                            // Live button became inactive (launch over) — restore the
+                                            // feed that was showing before the automatic switch.
+                                            if (root._autoSwitchedToLive && root._preLiveVideoUrl.toString() !== "") {
+                                                root.currentVideoUrl = root._preLiveVideoUrl
+                                            }
+                                            root._preLiveVideoUrl = ""
+                                            root._autoSwitchedToLive = false
+                                        }
+                                    }
 
                                     Text {
                                         anchors.centerIn: parent
