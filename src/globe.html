@@ -1451,7 +1451,10 @@
                     // a temporarily-throttled-but-not-stopped RAF loop on Qt/Pi would accumulate
                     // duplicate animate() chains every time the watchdog fired, eventually
                     // overwhelming the CPU/GPU and causing the globe to disappear.
-                    if (__rafId !== null) { cancelAnimationFrame(__rafId); __rafId = null; }
+                    if (__rafId !== null) {
+                        cancelAnimationFrame(__rafId);
+                        __rafId = null;
+                    }
                     __rafId = requestAnimationFrame(animate);
                 }
                 __watchdogLastAnimateCalls = currentCalls;
