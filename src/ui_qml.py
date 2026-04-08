@@ -2689,12 +2689,17 @@ Window {
                             // Fade out as tray expands (starts fading when tray is 2x ticker height)
                             opacity: 1.0 - Math.min(1.0, narrativeTray.height / 56.0)
 
+                            onTextChanged: tickerScrollSequence.restart()
+
                             SequentialAnimation on x {
+                                id: tickerScrollSequence
                                 loops: Animation.Infinite
                                 NumberAnimation {
                                     from: tickerRect.width
                                     to: -tickerText.width + 400  // Pause with text still visible
-                                    duration: 1600000
+                                    // Duration scales with distance to keep scroll speed constant:
+                                    // 0.025 px/ms = 25 px/s, so duration = distance / 0.025 ms.
+                                    duration: Math.max(4000, (tickerRect.width + tickerText.width - 400) / 0.025)
                                 }
                                 PauseAnimation { duration: 4000 }  // 4 second pause
                                 PropertyAnimation {
