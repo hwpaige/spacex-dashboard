@@ -1815,7 +1815,12 @@ class Backend(QObject):
 
     @pyqtProperty(bool, notify=countdownChanged)
     def isNearLaunch(self):
-        """Return True if the next launch is within 10 minutes or currently ongoing (not finished)."""
+        """Return True if the next launch is within 10 minutes or currently ongoing (not finished).
+
+        Uses countdownChanged as notify signal because the countdown timer fires every second,
+        so any transition (e.g. crossing the 10-minute threshold) will be reflected within
+        one second without needing a dedicated signal.
+        """
         if self._mode != 'spacex':
             return False
         return is_launch_near(self.get_next_launch())

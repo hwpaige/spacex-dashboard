@@ -2655,7 +2655,12 @@ def is_launch_finished(status):
     return any(keyword in s for keyword in ['success', 'failure', 'successful', 'complete'])
 
 def is_launch_near(next_launch, window_seconds=600):
-    """Return True if the next launch is within window_seconds (default 10 min) or currently ongoing."""
+    """Return True if the next launch is within window_seconds (default 10 min) or currently ongoing.
+
+    A launch is considered 'ongoing' when its NET time has passed but its status has not yet
+    been marked as finished (success/failure/complete).  See is_launch_finished() for the
+    status keywords that indicate a launch is no longer active.
+    """
     if not next_launch:
         return False
     try:
