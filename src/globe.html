@@ -713,9 +713,10 @@
         let __animateCalls = 0;    // call counter used by watchdog to detect a stopped RAF loop
         let __animateStarted = false; // set true on first animate() call; guards premature watchdog restart
         let __lastAnimateTs = performance.now(); // timestamp of the previous animate() call for delta-time
+        let __rafId = null;           // handle returned by requestAnimationFrame; allows watchdog to cancel before restarting
 
         function animate() {
-            requestAnimationFrame(animate);
+            __rafId = requestAnimationFrame(animate);
             __animateCalls++;
             __animateStarted = true;
 
@@ -1446,9 +1447,12 @@
                     try { console.log('[globe] watchdog: RAF loop appears stopped, restarting animate'); } catch (e) { }
                     window.clearInteraction();
                     window.resumeSpin();
-                    // Restart the loop. requestAnimationFrame schedules exactly one extra call;
-                    // that call will self-reschedule normally via the first line of animate().
-                    requestAnimationFrame(animate);
+                    // Cancel any pending RAF callback before issuing a new one.  Without this,
+                    // a temporarily-throttled-but-not-stopped RAF loop on Qt/Pi would accumulate
+                    // duplicate animate() chains every time the watchdog fired, eventually
+                    // overwhelming the CPU/GPU and causing the globe to disappear.
+                    if (__rafId !== null) { cancelAnimationFrame(__rafId); __rafId = null; }
+                    __rafId = requestAnimationFrame(animate);
                 }
                 __watchdogLastAnimateCalls = currentCalls;
             }, CHECK_MS);

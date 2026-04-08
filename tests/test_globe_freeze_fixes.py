@@ -261,3 +261,52 @@ def test_context_restored_marks_texture_uniforms():
         "The webglcontextrestored handler does not iterate over shader uniforms. "
         "Texture uniforms (e.g. cloudTexture) must also be marked needsUpdate."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 7 – Watchdog must not accumulate duplicate RAF loops (globe disappearance)
+# ---------------------------------------------------------------------------
+
+def test_raf_handle_stored():
+    """animate() must store the return value of requestAnimationFrame so the
+    watchdog can cancel the pending callback before issuing a new one.
+
+    Without storing the handle, when the watchdog fires Signal 2 (stalled RAF
+    call counter) it issues an extra requestAnimationFrame(animate) even though
+    the original loop is just temporarily throttled.  When the throttle lifts,
+    both chains run in parallel, each scheduling another RAF, leading to
+    exponential loop accumulation.  On a Pi running overnight this grows until
+    the GPU/CPU is overwhelmed and the globe disappears entirely.
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+    assert '__rafId = requestAnimationFrame(animate)' in animate_body, (
+        "animate() does not store the RAF handle (__rafId = requestAnimationFrame(animate)). "
+        "The handle must be stored so the watchdog can cancel the pending callback "
+        "before restarting the loop, preventing duplicate RAF chain accumulation."
+    )
+
+
+def test_watchdog_cancels_raf_before_restart():
+    """The watchdog Signal 2 block must cancel any pending RAF callback via
+    cancelAnimationFrame(__rafId) before issuing a fresh requestAnimationFrame.
+
+    This prevents duplicate animate() chains from accumulating when Qt WebEngine
+    temporarily throttles RAF (without fully stopping it).  Each un-cancelled
+    restart creates a parallel loop, and after hours the exponential growth of
+    concurrent loops overwhelms the Pi and causes the globe to disappear.
+    """
+    html = _read_globe()
+    watchdog_body = _extract_iife_after(html, 'Self-healing watchdog')
+    assert watchdog_body, "'Self-healing watchdog' IIFE not found"
+    assert 'cancelAnimationFrame' in watchdog_body, (
+        "The watchdog does not call cancelAnimationFrame before restarting the RAF "
+        "loop.  Without cancelling the existing pending callback, every watchdog "
+        "trigger during a throttle period adds another parallel animate() chain."
+    )
+    assert '__rafId' in watchdog_body, (
+        "The watchdog does not reference __rafId.  It must cancel the current "
+        "pending RAF handle before issuing a new requestAnimationFrame(animate) "
+        "to guarantee exactly one animate() chain is ever active."
+    )
