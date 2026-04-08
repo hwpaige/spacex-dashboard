@@ -1916,14 +1916,15 @@ Window {
                                 // Live button for current launch livestream (X.com)
                                 Rectangle {
                                     id: liveBtn
-                                    property bool selected: (backend.liveLaunchUrl !== "" && String(root.currentVideoUrl) === backend.liveLaunchUrl)
+                                    property bool selected: (backend.isNearLaunch && backend.liveLaunchUrl !== "" && String(root.currentVideoUrl) === backend.liveLaunchUrl)
+                                    property bool active: backend.isNearLaunch && backend.liveLaunchUrl !== ""
                                     Layout.preferredWidth: 40
                                     Layout.preferredHeight: 28
                                     radius: 14
-                                    color: selected ? "#FF0000" : (backend.liveLaunchUrl !== "" ? "#CC0000" : (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
-                                    border.color: selected ? "white" : (backend.liveLaunchUrl !== "" ? "transparent" : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
+                                    color: selected ? "#FF0000" : (active ? "#CC0000" : (backend.theme === "dark" ? "#181818" : "#f0f0f0"))
+                                    border.color: selected ? "white" : (active ? "transparent" : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"))
                                     border.width: selected ? 2 : 1
-                                    opacity: backend.liveLaunchUrl !== "" ? 1.0 : 0.6
+                                    opacity: active ? 1.0 : 0.6
 
                                     Text {
                                         anchors.centerIn: parent
@@ -1934,9 +1935,9 @@ Window {
                                     }
                                     MouseArea { 
                                         anchors.fill: parent
-                                        cursorShape: backend.liveLaunchUrl !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                        cursorShape: liveBtn.active ? Qt.PointingHandCursor : Qt.ArrowCursor
                                         onClicked: {
-                                            if (backend.liveLaunchUrl !== "") {
+                                            if (liveBtn.active) {
                                                 var isSame = (String(root.currentVideoUrl) === String(backend.liveLaunchUrl));
                                                 root.currentVideoUrl = backend.liveLaunchUrl
                                                 if (isSame) {
@@ -1964,7 +1965,7 @@ Window {
                                             }
                                         }
                                     }
-                                    ToolTip { text: backend.liveLaunchUrl !== "" ? "Switch to current launch livestream (X.com)" : "No live stream available"; delay: 400 }
+                                    ToolTip { text: liveBtn.active ? "Switch to current launch livestream (X.com)" : "No live stream available"; delay: 400 }
                                 }
                             }
                         }
@@ -4099,14 +4100,14 @@ Window {
                     Layout.preferredHeight: 28
                     Layout.alignment: Qt.AlignVCenter
                     radius: 14
-                    color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
-                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                    color: backend.isNearLaunch ? "#CC0000" : (backend.theme === "dark" ? "#181818" : "#f0f0f0")
+                    border.color: backend.isNearLaunch ? "transparent" : (backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0")
                     border.width: 1
 
                     Text {
                         anchors.centerIn: parent
                         text: backend.countdown
-                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                        color: backend.isNearLaunch ? "white" : ((backend && backend.theme === "dark") ? "white" : "black")
                         font.pixelSize: 14
                         font.family: "D-DIN"
                         font.bold: true

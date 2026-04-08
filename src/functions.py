@@ -156,6 +156,7 @@ __all__ = [
     "get_rpi_config_resolution",
     "check_touch_calibration_exists",
     "remove_touch_calibration",
+    "is_launch_near",
 ]
 
 
@@ -2652,6 +2653,24 @@ def is_launch_finished(status):
         return False
     s = str(status).lower()
     return any(keyword in s for keyword in ['success', 'failure', 'successful', 'complete'])
+
+def is_launch_near(next_launch, window_seconds=600):
+    """Return True if the next launch is within window_seconds (default 10 min) or currently ongoing."""
+    if not next_launch:
+        return False
+    try:
+        lt_utc = _get_parsed_dt(next_launch.get('net'))
+        if not lt_utc:
+            return False
+        now_utc = datetime.now(pytz.UTC)
+        # Ongoing: past T0 but not finished
+        if lt_utc <= now_utc and not is_launch_finished(next_launch.get('status')):
+            return True
+        # Within the window before T0
+        delta = (lt_utc - now_utc).total_seconds()
+        return 0 <= delta <= window_seconds
+    except Exception:
+        return False
 
 def get_calendar_mapping(launch_data, tz_obj=None):
     """
