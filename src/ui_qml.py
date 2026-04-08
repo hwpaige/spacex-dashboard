@@ -961,7 +961,7 @@ Window {
 
                                 Column {
                                     spacing: 0
-                                    width: parent.width - 85
+                                    width: parent.width - statusPill.width - 5
                                     Text { 
                                         text: {
                                             var m = (model && model.mission) ? model.mission : "";
@@ -1009,6 +1009,7 @@ Window {
                             }
 
                             Rectangle {
+                                id: statusPill
                                 width: statusText.implicitWidth + 16
                                 height: 18
                                 color: root.getStatusColor(model ? model.status : "")
