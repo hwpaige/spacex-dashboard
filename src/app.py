@@ -116,7 +116,8 @@ from functions import (
     save_theme_settings,
     load_branch_setting,
     save_branch_setting,
-    get_rpi_config_resolution
+    get_rpi_config_resolution,
+    is_launch_near,
 )
 # DBus imports are now conditional and imported only on Linux
 # import dbus
@@ -1811,6 +1812,18 @@ class Backend(QObject):
             self.get_next_launch(),
             self._tz
         )
+
+    @pyqtProperty(bool, notify=countdownChanged)
+    def isNearLaunch(self):
+        """Return True if the next launch is within 10 minutes or currently ongoing (not finished).
+
+        Uses countdownChanged as notify signal because the countdown timer fires every second,
+        so any transition (e.g. crossing the 10-minute threshold) will be reflected within
+        one second without needing a dedicated signal.
+        """
+        if self._mode != 'spacex':
+            return False
+        return is_launch_near(self.get_next_launch())
 
     @pyqtProperty(QVariant, notify=launchesChanged)
     def allLaunchData(self):
