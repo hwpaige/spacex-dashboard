@@ -1950,6 +1950,7 @@ Window {
                                             }
                                             root._preLiveVideoUrl = ""
                                             root._autoSwitchedToLive = false
+                                            root.autoFullScreen = false
                                         }
                                     }
 
