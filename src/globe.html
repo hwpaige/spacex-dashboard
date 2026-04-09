@@ -787,8 +787,17 @@
             if (renderer && scene && camera) {
                 try {
                     renderer.render(scene, camera);
-                    // Only mark a successful render so the watchdog can detect silent failures
-                    __lastRenderTs = now;
+                    // Three.js r128 renderer.render() does NOT throw when the WebGL context
+                    // is lost – all GL calls silently become no-ops.  Checking isContextLost()
+                    // here ensures __lastRenderTs is only updated when the GPU actually drew
+                    // something.  Without this check, a lost context looks "healthy" to the
+                    // watchdog and neither Signal 1 nor Signal 2 fires, leaving the globe
+                    // frozen on a blank canvas indefinitely (the overnight-freeze root cause
+                    // on Raspberry Pi under sustained GPU memory pressure).
+                    const gl = renderer.getContext ? renderer.getContext() : null;
+                    if (gl && !gl.isContextLost()) {
+                        __lastRenderTs = now;
+                    }
                 } catch (renderErr) {
                     console.warn('[globe] renderer.render() threw:', renderErr);
                 }
@@ -1438,6 +1447,14 @@
                     try { console.log('[globe] watchdog: render timestamp stalled, attempting resume'); } catch (e) { }
                     window.clearInteraction();
                     window.resumeSpin();
+                    // If rendering has been stalled for >30 s despite repeated resume
+                    // attempts, the WebGL context is likely permanently lost (Raspberry Pi
+                    // under prolonged GPU memory pressure rarely auto-restores the context).
+                    // Reloading the page creates a fresh WebGL context and recovers the globe.
+                    if (now - __lastRenderTs > 30000) {
+                        try { console.warn('[globe] watchdog: render stalled >30 s, reloading to recover'); } catch (e) { }
+                        try { window.location.reload(); } catch (e) { }
+                    }
                 }
 
                 // --- Signal 2: RAF call counter stall (detects a stopped RAF loop) ---

@@ -310,3 +310,56 @@ def test_watchdog_cancels_raf_before_restart():
         "pending RAF handle before issuing a new requestAnimationFrame(animate) "
         "to guarantee exactly one animate() chain is ever active."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 8 – __lastRenderTs must not be updated when WebGL context is lost
+# ---------------------------------------------------------------------------
+
+def test_last_render_ts_guarded_by_context_lost():
+    """animate() must check gl.isContextLost() before updating __lastRenderTs.
+
+    Three.js r128 renderer.render() does NOT throw when the WebGL context is
+    lost – all GL calls silently become no-ops.  Without an explicit
+    isContextLost() check, __lastRenderTs is updated every frame even though
+    nothing is drawn, so the watchdog Signal 1 never fires and the globe stays
+    frozen on a blank canvas indefinitely (the overnight freeze root cause on
+    Raspberry Pi under sustained GPU memory pressure).
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+    assert 'isContextLost' in animate_body, (
+        "animate() does not call gl.isContextLost() before updating __lastRenderTs. "
+        "Three.js r128 renderer.render() is a silent no-op on a lost context (no "
+        "exception thrown), so without this guard the watchdog never detects the "
+        "blank-canvas freeze that occurs after WebGL context loss on Raspberry Pi."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 9 – Watchdog must reload the page after an extended render stall
+# ---------------------------------------------------------------------------
+
+def test_watchdog_reloads_after_extended_stall():
+    """The watchdog Signal 1 block must call window.location.reload() when the
+    render timestamp has been stalled for an extended period (>30 s).
+
+    resumeSpin() only resets JS-side flags and cannot recover from a permanently
+    lost WebGL context.  Calling it every second is harmless but does nothing to
+    restore rendering.  After 30 s without a successful render the only reliable
+    recovery is to reload the page, which creates a fresh WebGL context.
+    """
+    html = _read_globe()
+    watchdog_body = _extract_iife_after(html, 'Self-healing watchdog')
+    assert watchdog_body, "'Self-healing watchdog' IIFE not found"
+    assert 'location.reload' in watchdog_body, (
+        "The watchdog does not call window.location.reload() to recover from a "
+        "permanently lost WebGL context.  resumeSpin() alone cannot restore GPU "
+        "resources; after an extended stall a page reload is required."
+    )
+    assert '30000' in watchdog_body, (
+        "The watchdog reload threshold (30000 ms) is not present.  The reload must "
+        "be triggered only after an extended stall so that transient systemPaused "
+        "states (resolved in <5 s by Signal 1) do not cause unnecessary reloads."
+    )
