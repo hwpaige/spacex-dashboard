@@ -3291,7 +3291,7 @@ def setup_dashboard_environment():
             "--disable-web-security", "--allow-running-insecure-content",
             "--gpu-testing-vendor-id=0xFFFF", "--gpu-testing-device-id=0xFFFF",
             "--disable-gpu-driver-bug-workarounds",
-            "--memory-pressure-off", "--max_old_space_size=2048", "--memory-reducer",
+            "--max_old_space_size=2048", "--memory-reducer",
             "--gpu-memory-buffer-size-mb=512", "--max-tiles-for-interest-area=512",
             "--num-raster-threads=2", "--disable-background-timer-throttling",
             "--disable-renderer-backgrounding", "--disable-backgrounding-occluded-windows",
