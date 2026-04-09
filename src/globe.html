@@ -385,7 +385,7 @@
                             }
                         `;
                         const cloudFragmentShader = `
-                            precision mediump float;
+                            precision highp float;
                             uniform sampler2D cloudTexture;
                             uniform float time;
                             uniform bool hasTexture;
@@ -729,9 +729,13 @@
             __lastAnimateTs = now;
 
             // Wrap elapsed time to prevent GLSL float precision loss on long-running deployments.
-            // At ~3 days uptime the per-frame delta becomes smaller than a 32-bit float's
-            // epsilon at that magnitude, causing the cloud shader to appear frozen.
-            // Wrapping at 3600 s keeps the value well within representable float range.
+            // PRIMARY concern: on Raspberry Pi (VideoCore VI), mediump float = float16.  When
+            // absoluteTime exceeds ~1024 the per-frame delta (≈0.017 s at 60 fps) falls below
+            // the float16 ULP (~2 units at that magnitude), so the cloud shader's time uniform
+            // stops changing and cloud animation appears frozen.  The fragment shader now uses
+            // precision highp float (float32) which has adequate precision up to ~3 days.
+            // SECONDARY safeguard: even float32 loses per-frame precision at ~3 days uptime.
+            // Wrapping at 3600 s keeps the value well within representable float range for both.
             const TIME_WRAP = 3600.0;
             const absoluteTime = ((now - __startTime) / 1000.0) % TIME_WRAP;
 
@@ -1399,6 +1403,16 @@
                     console.log('[globe] clearing stuck mousedown state');
                     isMouseDown = false;
                     window.clearInteraction();
+                }
+
+                // If activePointers is stuck > 0 with no movement for 10s, a pointerup
+                // was missed (e.g. finger lifted outside the window on Qt/Pi).  The
+                // existing activePointers===0 guard never fires, leaving userInteracting
+                // permanently true and freezing auto-rotation.
+                if (activePointers > 0 && (now - lastMoveTimeMs) > 10000) {
+                    console.log('[globe] resetting stuck activePointers:', activePointers);
+                    window.clearInteraction();
+                    if (!userPaused) window.resumeSpin();
                 }
             } catch (e) { }
         }, 1000);

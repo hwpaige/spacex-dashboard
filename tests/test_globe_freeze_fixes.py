@@ -310,3 +310,84 @@ def test_watchdog_cancels_raf_before_restart():
         "pending RAF handle before issuing a new requestAnimationFrame(animate) "
         "to guarantee exactly one animate() chain is ever active."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 8 – Cloud fragment shader must use highp float to prevent cloud freeze
+# ---------------------------------------------------------------------------
+
+def test_cloud_fragment_shader_uses_highp():
+    """The cloud fragment shader must declare 'precision highp float' (not
+    mediump).
+
+    On Raspberry Pi (VideoCore VI / Mali-class GPUs) mediump float is
+    implemented as IEEE 754 half-precision (float16, 10-bit mantissa).  The
+    cloud shader uses a 'time' uniform that grows from 0 to 3600 each hour.
+    When absoluteTime exceeds ~1024, the per-frame delta (≈0.017 s at 60 fps)
+    is smaller than the float16 ULP at that magnitude (~2 units), so the
+    value the shader sees never changes and cloud animation appears completely
+    frozen.
+
+    Switching the fragment shader to 'precision highp float' (float32) keeps
+    the ULP far below the per-frame delta for the full [0, 3600] range.
+    """
+    html = _read_globe()
+    frag_match = re.search(
+        r'const cloudFragmentShader\s*=\s*`(.*?)`\s*;',
+        html,
+        re.DOTALL,
+    )
+    assert frag_match, "cloudFragmentShader template literal not found"
+    shader = frag_match.group(1)
+
+    assert 'precision highp float' in shader, (
+        "cloudFragmentShader uses 'precision mediump float' (or no precision "
+        "declaration).  On Raspberry Pi, mediump = float16.  When the 'time' "
+        "uniform exceeds ~1024 the per-frame delta falls below the float16 ULP "
+        "and cloud animation freezes permanently until the wrap resets to 0. "
+        "Change the fragment shader to 'precision highp float'."
+    )
+    assert 'precision mediump float' not in shader, (
+        "cloudFragmentShader still contains 'precision mediump float'.  Remove "
+        "or replace it with 'precision highp float' to prevent cloud animation "
+        "from freezing on Raspberry Pi after ~17 minutes of uptime per hour."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 9 – Inactivity fallback must also clear stuck activePointers > 0
+# ---------------------------------------------------------------------------
+
+def test_inactivity_fallback_handles_stuck_active_pointers():
+    """The inactivity setInterval must reset activePointers when it has been
+    stuck > 0 without any pointer movement for an extended period.
+
+    On Qt/Raspberry Pi a non-mouse pointerdown can fire without a matching
+    pointerup (e.g. the touch is released outside the Qt WebEngine window).
+    This leaves activePointers > 0 indefinitely.  The existing inactivity
+    guard checks 'activePointers === 0' as a precondition, so it never fires,
+    leaving userInteracting = true stuck.  With userInteracting stuck true
+    the auto-rotation branch is skipped every frame and the globe appears
+    frozen after overnight use.
+
+    The fix is to also reset activePointers (via clearInteraction) when it
+    has been > 0 with no movement for a long time (e.g. 10 seconds).
+    """
+    html = _read_globe()
+    # Find the inactivity setInterval block
+    inactivity_start = html.find('Inactivity fallback')
+    assert inactivity_start != -1, "'Inactivity fallback' comment not found"
+    # Grab a reasonable window after the comment (the setInterval body)
+    section = html[inactivity_start:inactivity_start + 2000]
+
+    assert 'activePointers > 0' in section, (
+        "The inactivity fallback setInterval does not check 'activePointers > 0'. "
+        "A missed pointerup on Qt/Pi leaves activePointers stuck at a positive "
+        "value, preventing clearInteraction() from being called and leaving "
+        "userInteracting = true permanently frozen."
+    )
+    # The section must also call clearInteraction() in that path
+    assert 'clearInteraction' in section, (
+        "The inactivity fallback does not call clearInteraction() to reset the "
+        "stuck activePointers state."
+    )
