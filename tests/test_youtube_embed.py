@@ -99,3 +99,55 @@ def test_quality_cap_present():
         "Define a QUALITY_CAP constant and pass it to setPlaybackQuality so "
         "the cap is easy to adjust without hunting for magic strings."
     )
+
+
+def test_on_error_handler_present():
+    """Ensure an onError handler is present to skip unavailable playlist items.
+
+    This is the root cause of the playlist stopping silently on Raspberry Pi:
+    the IFrame Player API fires onError when a video is deleted, made private,
+    or blocked from embedding, but PR #17's implementation had no onError
+    handler, so the first problematic video permanently halted the playlist.
+
+    The old loop=1 iframe approach silently skipped bad videos automatically
+    inside YouTube's native player.  The IFrame API requires an explicit
+    onError handler that calls player.nextVideo() to replicate that behaviour.
+
+    This issue is quality-independent — any video can become unavailable
+    regardless of resolution — which is why capping quality alone (PR #29
+    fix) does not fully address the problem.
+    """
+    html = _strip_html_comments(_read_embed_html())
+    assert 'onError' in html, (
+        "onError handler not found in youtube_embed.html. "
+        "Without onError, one deleted or embed-blocked video in the playlist "
+        "stops playback permanently. Add an onError handler that calls "
+        "player.nextVideo() to skip to the next item."
+    )
+    assert 'nextVideo' in html, (
+        "player.nextVideo() call not found in youtube_embed.html. "
+        "The onError handler must call player.nextVideo() so the playlist "
+        "advances past unavailable videos instead of stopping."
+    )
+
+
+def test_buffering_stall_watchdog_present():
+    """Ensure a BUFFERING-stall watchdog is present to skip stuck videos.
+
+    If a video starts buffering but never begins playing (e.g. a slow network
+    or a very large video on a Raspberry Pi with limited bandwidth), the
+    playlist would stall indefinitely without a timeout.  A setTimeout-based
+    watchdog that calls player.nextVideo() after a reasonable delay keeps the
+    playlist moving without requiring a quality cap.
+    """
+    html = _strip_html_comments(_read_embed_html())
+    assert 'BUFFERING' in html, (
+        "YT.PlayerState.BUFFERING check not found in youtube_embed.html. "
+        "Add a buffering-stall watchdog: on entering BUFFERING state, start "
+        "a setTimeout that calls player.nextVideo() if still buffering."
+    )
+    assert 'setTimeout' in html, (
+        "setTimeout not found in youtube_embed.html. "
+        "A setTimeout is required to implement the buffering-stall watchdog "
+        "that skips videos stuck loading for too long."
+    )
