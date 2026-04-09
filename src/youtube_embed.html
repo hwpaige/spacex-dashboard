@@ -42,6 +42,9 @@
         // while keeping the buffer footprint small.
         var QUALITY_CAP = 'medium';
 
+        // Watchdog timer reference for the buffering-stall recovery path.
+        var bufferingWatchdog = null;
+
         var player;
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
@@ -66,10 +69,27 @@
                         event.target.playVideo();
                     },
                     onStateChange: function(event) {
+                        // Clear any pending stall watchdog on every state change.
+                        if (bufferingWatchdog !== null) {
+                            clearTimeout(bufferingWatchdog);
+                            bufferingWatchdog = null;
+                        }
                         // Re-apply the quality cap whenever a new video starts
                         // playing (each playlist item gets its own buffer).
                         if (event.data === YT.PlayerState.PLAYING) {
                             player.setPlaybackQuality(QUALITY_CAP);
+                        }
+                        // If the player gets stuck in BUFFERING for more than
+                        // 30 seconds (e.g. a video is very slow to load on a
+                        // constrained network), skip to the next item so the
+                        // playlist keeps moving rather than stalling forever.
+                        if (event.data === YT.PlayerState.BUFFERING) {
+                            bufferingWatchdog = setTimeout(function() {
+                                bufferingWatchdog = null;
+                                if (player.getPlayerState() === YT.PlayerState.BUFFERING) {
+                                    player.nextVideo();
+                                }
+                            }, 30000);
                         }
                         // When the playlist ends, seek back to the first video
                         // and play again — all within the same player instance.
@@ -78,6 +98,18 @@
                         if (event.data === YT.PlayerState.ENDED) {
                             player.playVideoAt(0);
                         }
+                    },
+                    onError: function(event) {
+                        // Skip to the next playlist item whenever a video is
+                        // unavailable (deleted, made private, or blocked from
+                        // embedding).  This is the root cause of the playlist
+                        // stopping silently: the old iframe-with-loop approach
+                        // let YouTube's native player skip bad items
+                        // automatically, but the IFrame Player API requires an
+                        // explicit onError handler to do the same.  Without
+                        // this, one bad video in the playlist halts playback
+                        // permanently.
+                        player.nextVideo();
                     }
                 }
             });
