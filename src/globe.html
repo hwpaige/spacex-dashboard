@@ -197,6 +197,13 @@
                 // but nothing is rendered – appearing as a complete freeze.
                 renderer.domElement.addEventListener('webglcontextlost', function (event) {
                     event.preventDefault(); // Required to allow context restore
+                    // Force the watchdog's Signal 1 to fire on its very next tick.
+                    // Three.js r128 sets _isContextLost=true and silently returns from
+                    // renderer.render() without throwing, so the animate() render block
+                    // would otherwise still execute __lastRenderTs = now, preventing the
+                    // watchdog from ever detecting the freeze.  Setting __lastRenderTs = 0
+                    // here guarantees now - __lastRenderTs >> STALL_MS immediately.
+                    __lastRenderTs = 0;
                     console.warn('[globe] WebGL context lost – rendering paused');
                 }, false);
                 renderer.domElement.addEventListener('webglcontextrestored', function () {
@@ -791,8 +798,15 @@
             if (renderer && scene && camera) {
                 try {
                     renderer.render(scene, camera);
-                    // Only mark a successful render so the watchdog can detect silent failures
-                    __lastRenderTs = now;
+                    // Only mark a successful render so the watchdog can detect silent failures.
+                    // Three.js r128 silently returns from render() when the WebGL context is
+                    // lost (_isContextLost=true) — no exception is thrown, but no pixels are
+                    // drawn either.  Without the isContextLost() guard below, __lastRenderTs
+                    // would still be updated, hiding the freeze from the watchdog indefinitely.
+                    const _ctx = renderer.getContext();
+                    if (_ctx && !_ctx.isContextLost()) {
+                        __lastRenderTs = now;
+                    }
                 } catch (renderErr) {
                     console.warn('[globe] renderer.render() threw:', renderErr);
                 }
