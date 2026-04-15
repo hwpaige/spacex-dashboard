@@ -1461,7 +1461,8 @@
             __lastRenderTs = 0;
 
             const now = performance.now();
-            const likelyStalledRaf = __animateStarted && (now - __lastAnimateTs > 1500);
+            const STALLED_RAF_THRESHOLD_MS = 1500;
+            const likelyStalledRaf = __animateStarted && (now - __lastAnimateTs > STALLED_RAF_THRESHOLD_MS);
             if (__rafId === null || likelyStalledRaf) {
                 if (__rafId !== null) {
                     cancelAnimationFrame(__rafId);
