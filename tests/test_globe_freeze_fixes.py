@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 GLOBE_HTML_PATH = Path(__file__).parent.parent / 'src' / 'globe.html'
-FALLBACK_SNIPPET_LENGTH = 300  # short diagnostic slice when listener callback cannot be parsed
+FALLBACK_SNIPPET_CHARS = 300  # short diagnostic slice when listener callback cannot be parsed
 
 
 def _read_globe():
@@ -79,19 +79,19 @@ def _extract_window_event_listener_body(html: str, event_name: str, start_pos: i
 
     func_start = html.find('function', start)
     if func_start == -1:
-        return html[start:start + FALLBACK_SNIPPET_LENGTH]
+        return html[start:start + FALLBACK_SNIPPET_CHARS]
 
     depth = 0
     entered = False
     end = func_start
-    for i, ch in enumerate(html[func_start:], start=func_start):
+    for idx, ch in enumerate(html[func_start:], start=func_start):
         if ch == '{':
             depth += 1
             entered = True
         elif ch == '}':
             depth -= 1
             if entered and depth == 0:
-                end = i
+                end = idx
                 break
     return html[start:end + 1]
 
