@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 GLOBE_HTML_PATH = Path(__file__).parent.parent / 'src' / 'globe.html'
+FALLBACK_SNIPPET_LENGTH = 300  # short diagnostic slice when listener callback cannot be parsed
 
 
 def _read_globe():
@@ -78,7 +79,7 @@ def _extract_window_event_listener_body(html: str, event_name: str, start_pos: i
 
     func_start = html.find('function', start)
     if func_start == -1:
-        return html[start:start + 300]
+        return html[start:start + FALLBACK_SNIPPET_LENGTH]
 
     depth = 0
     entered = False
