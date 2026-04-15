@@ -477,3 +477,51 @@ def test_render_timestamp_guards_against_context_loss():
         "isContextLost() check must appear before __lastRenderTs = now in animate() "
         "so that __lastRenderTs is only updated when the context is not lost."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 12 – connectivity events must force render-loop recovery
+# ---------------------------------------------------------------------------
+
+def test_online_handler_forces_recovery_after_network_flap():
+    """The dedicated connectivity recovery section must use the online event to
+    clear stale interaction state, resume spin, invalidate render timestamp, and
+    restart RAF when needed.
+
+    This protects against long-run freezes where network reconnect coincides
+    with Qt WebEngine throttling/suspending the animation loop.
+    """
+    html = _read_globe()
+    marker = 'Connectivity recovery instrumentation'
+    start = html.find(marker)
+    assert start != -1, (
+        "Connectivity recovery instrumentation block not found in globe.html."
+    )
+    section = html[start:start + 2500]
+    assert "window.addEventListener('online'" in section, (
+        "No dedicated online handler found in the connectivity recovery block."
+    )
+    assert 'window.clearInteraction()' in section and 'window.resumeSpin()' in section, (
+        "Online handler must reset interaction state and resume spin after reconnect."
+    )
+    assert '__lastRenderTs = 0' in section, (
+        "Online handler must invalidate __lastRenderTs so watchdog Signal 1 can "
+        "fire immediately if rendering does not resume."
+    )
+    assert 'requestAnimationFrame(animate)' in section, (
+        "Online handler must explicitly re-kick RAF when the loop appears stalled."
+    )
+
+
+def test_offline_handler_invalidates_render_timestamp():
+    """The offline handler should proactively invalidate __lastRenderTs so a
+    reconnect-triggered stall is detected immediately by the watchdog.
+    """
+    html = _read_globe()
+    marker = "window.addEventListener('offline'"
+    start = html.find(marker)
+    assert start != -1, "offline handler not found"
+    section = html[start:start + 900]
+    assert '__lastRenderTs = 0' in section, (
+        "offline handler must set __lastRenderTs = 0 to keep watchdog recovery fast."
+    )

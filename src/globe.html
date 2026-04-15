@@ -1444,6 +1444,33 @@
             }
         });
 
+        // Connectivity recovery instrumentation:
+        // network flaps can coincide with Qt WebEngine throttling/suspending RAF.
+        // On reconnect, explicitly reset stale interaction/pause state and ensure RAF is alive.
+        window.addEventListener('offline', function () {
+            try { console.warn('[globe] offline event detected'); } catch (e) { }
+            // Invalidate render timestamp so the watchdog can self-heal immediately.
+            __lastRenderTs = 0;
+        });
+        window.addEventListener('online', function () {
+            try { console.log('[globe] online event detected; forcing render recovery'); } catch (e) { }
+            window.clearInteraction();
+            window.resumeSpin();
+            // Force watchdog Signal 1 to become true on the very next tick if rendering
+            // does not resume naturally after reconnect.
+            __lastRenderTs = 0;
+
+            const now = performance.now();
+            const likelyStalledRaf = __animateStarted && (now - __lastAnimateTs > 1500);
+            if (__rafId === null || likelyStalledRaf) {
+                if (__rafId !== null) {
+                    cancelAnimationFrame(__rafId);
+                    __rafId = null;
+                }
+                __rafId = requestAnimationFrame(animate);
+            }
+        });
+
         // Self-healing watchdog: if frames stop for >3s while visible, resume.
         // Uses two complementary signals:
         //   1. __lastRenderTs   – stops updating when systemPaused causes an early return
