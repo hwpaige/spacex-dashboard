@@ -1449,14 +1449,16 @@
         // network flaps can coincide with Qt WebEngine throttling/suspending RAF.
         // On reconnect, explicitly reset stale interaction/pause state and ensure RAF is alive.
         window.addEventListener('offline', function () {
-            // Logging is best-effort; some embedded WebEngine runtimes may not expose console APIs reliably.
-            try { console.warn('[globe] offline event detected'); } catch (e) { }
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn('[globe] offline event detected');
+            }
             // Invalidate render timestamp so the watchdog can self-heal immediately.
             __lastRenderTs = 0;
         });
         window.addEventListener('online', function () {
-            // Logging is best-effort; some embedded WebEngine runtimes may not expose console APIs reliably.
-            try { console.log('[globe] online event detected; forcing render recovery'); } catch (e) { }
+            if (typeof console !== 'undefined' && typeof console.log === 'function') {
+                console.log('[globe] online event detected; forcing render recovery');
+            }
             window.clearInteraction();
             window.resumeSpin();
             // Force watchdog Signal 1 to become true on the very next tick if rendering
