@@ -391,3 +391,89 @@ def test_inactivity_fallback_handles_stuck_active_pointers():
         "The inactivity fallback does not call clearInteraction() to reset the "
         "stuck activePointers state."
     )
+
+
+# ---------------------------------------------------------------------------
+# Fix 10 – webglcontextlost must invalidate __lastRenderTs immediately
+# ---------------------------------------------------------------------------
+
+def test_context_lost_handler_invalidates_render_timestamp():
+    """The webglcontextlost handler must reset __lastRenderTs to 0 so the
+    watchdog's Signal 1 fires on its very next tick after context loss.
+
+    Three.js r128 silently returns from renderer.render() when the context is
+    lost (_isContextLost = true) — no exception is raised, so the try/catch in
+    animate() does not help.  Without __lastRenderTs = 0, the watchdog only
+    discovers the stall after STALL_MS (3 s) from the *last successful render*
+    before the context was lost, which could be up to 3 seconds later, leaving
+    the globe frozen undetected.  Setting __lastRenderTs = 0 guarantees that
+    now - __lastRenderTs >> STALL_MS immediately, so clearInteraction() and
+    resumeSpin() are called on the very next watchdog tick.
+    """
+    html = _read_globe()
+    lost_start = html.find('webglcontextlost')
+    assert lost_start != -1, 'webglcontextlost handler not found'
+    # Extract the complete handler body via brace-depth tracking
+    depth = 0
+    entered = False
+    end = lost_start
+    for i, ch in enumerate(html[lost_start:], start=lost_start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = i
+                break
+    lost_body = html[lost_start:end + 1]
+    assert '__lastRenderTs' in lost_body, (
+        "The webglcontextlost handler does not reset __lastRenderTs. "
+        "Three.js r128 returns silently from render() on context loss so the "
+        "animate() render block still executes __lastRenderTs = now, hiding the "
+        "freeze from the watchdog.  Add '__lastRenderTs = 0;' in the handler to "
+        "force Signal 1 to fire immediately after context loss."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 11 – __lastRenderTs must be gated on isContextLost() in animate()
+# ---------------------------------------------------------------------------
+
+def test_render_timestamp_guards_against_context_loss():
+    """animate() must check renderer.getContext().isContextLost() and only
+    update __lastRenderTs when the context is healthy.
+
+    Three.js r128 sets an internal _isContextLost flag and returns early from
+    renderer.render() when the WebGL context is lost — without throwing.  If
+    __lastRenderTs is updated unconditionally after the (silent no-op) render,
+    the watchdog's Signal 1 (render-timestamp stall) never fires, leaving the
+    globe frozen indefinitely.  After the WebGL context is restored Three.js
+    resets _isContextLost = false and rendering resumes, but only if the
+    watchdog (or the webglcontextrestored handler) has had a chance to run.
+
+    The fix: wrap the __lastRenderTs update in
+        const _ctx = renderer.getContext();
+        if (_ctx && !_ctx.isContextLost()) { __lastRenderTs = now; }
+    so the watchdog correctly detects the stall during context loss.
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+
+    assert 'isContextLost()' in animate_body, (
+        "animate() does not call isContextLost(). "
+        "Three.js r128 silently no-ops renderer.render() on context loss.  "
+        "Without the isContextLost() guard the watchdog never detects the stall "
+        "and the globe stays frozen indefinitely after a GPU memory-pressure event."
+    )
+    # The isContextLost check must appear before __lastRenderTs = now
+    ctx_lost_pos = animate_body.find('isContextLost()')
+    ts_pos = animate_body.find('__lastRenderTs = now')
+    assert ctx_lost_pos != -1 and ts_pos != -1, (
+        "Either isContextLost() check or __lastRenderTs = now missing in animate()"
+    )
+    assert ctx_lost_pos < ts_pos, (
+        "isContextLost() check must appear before __lastRenderTs = now in animate() "
+        "so that __lastRenderTs is only updated when the context is not lost."
+    )
