@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 GLOBE_HTML_PATH = Path(__file__).parent.parent / 'src' / 'globe.html'
-FALLBACK_SNIPPET_CHARS = 300  # short diagnostic slice when listener callback cannot be parsed
+MAX_FALLBACK_SNIPPET_CHARS = 300  # short diagnostic slice when listener callback cannot be parsed
 
 
 def _read_globe():
@@ -73,13 +73,13 @@ def _extract_iife_after(html: str, marker: str, max_chars: int = 5000) -> str:
 def _extract_window_event_listener_body(html: str, event_name: str, start_pos: int = 0) -> str:
     """Return the full source of window.addEventListener('<event_name>', fn)."""
     marker = f"window.addEventListener('{event_name}'"
-    start = html.find(marker, max(0, start_pos))
+    start = html.find(marker, start_pos)
     if start == -1:
         return ''
 
     func_start = html.find('function', start)
     if func_start == -1:
-        return html[start:start + FALLBACK_SNIPPET_CHARS]
+        return html[start:start + MAX_FALLBACK_SNIPPET_CHARS]
 
     depth = 0
     entered = False
