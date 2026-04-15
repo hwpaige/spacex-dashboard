@@ -69,6 +69,32 @@ def _extract_iife_after(html: str, marker: str, max_chars: int = 5000) -> str:
     return section[iife_start:end + 1]
 
 
+def _extract_window_event_listener_body(html: str, event_name: str, start_pos: int = 0) -> str:
+    """Return the full source of window.addEventListener('<event_name>', fn)."""
+    marker = f"window.addEventListener('{event_name}'"
+    start = html.find(marker, max(0, start_pos))
+    if start == -1:
+        return ''
+
+    func_start = html.find('function', start)
+    if func_start == -1:
+        return html[start:start + 300]
+
+    depth = 0
+    entered = False
+    end = func_start
+    for i, ch in enumerate(html[func_start:], start=func_start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = i
+                break
+    return html[start:end + 1]
+
+
 # ---------------------------------------------------------------------------
 # Fix 1 – GLSL variable `n3` must not be re-declared in an inner scope
 # ---------------------------------------------------------------------------
@@ -492,15 +518,10 @@ def test_online_handler_forces_recovery_after_network_flap():
     with Qt WebEngine throttling/suspending the animation loop.
     """
     html = _read_globe()
-    marker = 'Connectivity recovery instrumentation'
-    start = html.find(marker)
-    assert start != -1, (
-        "Connectivity recovery instrumentation block not found in globe.html."
-    )
-    section = html[start:start + 2500]
-    assert "window.addEventListener('online'" in section, (
-        "No dedicated online handler found in the connectivity recovery block."
-    )
+    marker = html.find('Connectivity recovery instrumentation')
+    assert marker != -1, "Connectivity recovery instrumentation block not found in globe.html."
+    section = _extract_window_event_listener_body(html, 'online', marker)
+    assert section, "No dedicated online handler found in globe.html."
     assert 'window.clearInteraction()' in section and 'window.resumeSpin()' in section, (
         "Online handler must reset interaction state and resume spin after reconnect."
     )
@@ -518,10 +539,8 @@ def test_offline_handler_invalidates_render_timestamp():
     reconnect-triggered stall is detected immediately by the watchdog.
     """
     html = _read_globe()
-    marker = "window.addEventListener('offline'"
-    start = html.find(marker)
-    assert start != -1, "offline handler not found"
-    section = html[start:start + 900]
+    section = _extract_window_event_listener_body(html, 'offline')
+    assert section, "offline handler not found"
     assert '__lastRenderTs = 0' in section, (
         "offline handler must set __lastRenderTs = 0 to keep watchdog recovery fast."
     )

@@ -125,6 +125,7 @@
         const DRAG_DEADZONE_PX = 8;           // ignore tiny movements
         const RECENT_MS_THRESHOLD = 110;      // last movement must be recent
         const MIN_RELEASE_VELOCITY = 0.002;   // minimum velocity to start inertia
+        const STALLED_RAF_THRESHOLD_MS = 1500; // reconnect guard threshold for stalled RAF loop
         let cumulativeDragDistance = 0;       // reset per-drag
         let hadPinchSinceLastDrag = false;    // cancels inertia if pinch occurred
 
@@ -1461,7 +1462,6 @@
             __lastRenderTs = 0;
 
             const now = performance.now();
-            const STALLED_RAF_THRESHOLD_MS = 1500;
             const likelyStalledRaf = __animateStarted && (now - __lastAnimateTs > STALLED_RAF_THRESHOLD_MS);
             if (__rafId === null || likelyStalledRaf) {
                 if (__rafId !== null) {
