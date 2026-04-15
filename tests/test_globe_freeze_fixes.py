@@ -9,6 +9,7 @@ import re
 from pathlib import Path
 
 GLOBE_HTML_PATH = Path(__file__).parent.parent / 'src' / 'globe.html'
+MAX_EVENT_LISTENER_SNIPPET_LENGTH = 300  # short diagnostic slice when listener callback cannot be parsed
 
 
 def _read_globe():
@@ -67,6 +68,32 @@ def _extract_iife_after(html: str, marker: str, max_chars: int = 5000) -> str:
                 end = i
                 break
     return section[iife_start:end + 1]
+
+
+def _extract_window_event_listener_body(html: str, event_name: str, start_pos: int = 0) -> str:
+    """Return the full source of window.addEventListener('<event_name>', fn)."""
+    marker = f"window.addEventListener('{event_name}'"
+    start = html.find(marker, start_pos)
+    if start == -1:
+        return ''
+
+    func_start = html.find('function', start)
+    if func_start == -1:
+        return html[start:start + MAX_EVENT_LISTENER_SNIPPET_LENGTH]
+
+    depth = 0
+    entered = False
+    end = func_start
+    for idx, ch in enumerate(html[func_start:], start=func_start):
+        if ch == '{':
+            depth += 1
+            entered = True
+        elif ch == '}':
+            depth -= 1
+            if entered and depth == 0:
+                end = idx
+                break
+    return html[start:end + 1]
 
 
 # ---------------------------------------------------------------------------
@@ -476,4 +503,45 @@ def test_render_timestamp_guards_against_context_loss():
     assert ctx_lost_pos < ts_pos, (
         "isContextLost() check must appear before __lastRenderTs = now in animate() "
         "so that __lastRenderTs is only updated when the context is not lost."
+    )
+
+
+# ---------------------------------------------------------------------------
+# Fix 12 – connectivity events must force render-loop recovery
+# ---------------------------------------------------------------------------
+
+def test_online_handler_forces_recovery_after_network_flap():
+    """The dedicated connectivity recovery section must use the online event to
+    clear stale interaction state, resume spin, invalidate render timestamp, and
+    restart RAF when needed.
+
+    This protects against long-run freezes where network reconnect coincides
+    with Qt WebEngine throttling/suspending the animation loop.
+    """
+    html = _read_globe()
+    marker = html.find('Connectivity recovery instrumentation')
+    assert marker != -1, "Connectivity recovery instrumentation block not found in globe.html."
+    section = _extract_window_event_listener_body(html, 'online', marker)
+    assert section, "No dedicated online handler found in globe.html."
+    assert 'window.clearInteraction()' in section and 'window.resumeSpin()' in section, (
+        "Online handler must reset interaction state and resume spin after reconnect."
+    )
+    assert '__lastRenderTs = 0' in section, (
+        "Online handler must invalidate __lastRenderTs so watchdog Signal 1 can "
+        "fire immediately if rendering does not resume."
+    )
+    assert 'requestAnimationFrame(animate)' in section, (
+        "Online handler must explicitly re-kick RAF when the loop appears stalled."
+    )
+
+
+def test_offline_handler_invalidates_render_timestamp():
+    """The offline handler should proactively invalidate __lastRenderTs so a
+    reconnect-triggered stall is detected immediately by the watchdog.
+    """
+    html = _read_globe()
+    section = _extract_window_event_listener_body(html, 'offline')
+    assert section, "offline handler not found"
+    assert '__lastRenderTs = 0' in section, (
+        "offline handler must set __lastRenderTs = 0 to keep watchdog recovery fast."
     )

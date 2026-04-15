@@ -125,6 +125,7 @@
         const DRAG_DEADZONE_PX = 8;           // ignore tiny movements
         const RECENT_MS_THRESHOLD = 110;      // last movement must be recent
         const MIN_RELEASE_VELOCITY = 0.002;   // minimum velocity to start inertia
+        const STALLED_RAF_THRESHOLD_MS = 1500; // reconnect guard threshold for stalled RAF loop
         let cumulativeDragDistance = 0;       // reset per-drag
         let hadPinchSinceLastDrag = false;    // cancels inertia if pinch occurred
 
@@ -1441,6 +1442,37 @@
                         window.resumeSpin();
                     }
                 }, 250);
+            }
+        });
+
+        // Connectivity recovery instrumentation:
+        // network flaps can coincide with Qt WebEngine throttling/suspending RAF.
+        // On reconnect, explicitly reset stale interaction/pause state and ensure RAF is alive.
+        window.addEventListener('offline', function () {
+            if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+                console.warn('[globe] offline event detected');
+            }
+            // Invalidate render timestamp so the watchdog can self-heal immediately.
+            __lastRenderTs = 0;
+        });
+        window.addEventListener('online', function () {
+            if (typeof console !== 'undefined' && typeof console.log === 'function') {
+                console.log('[globe] online event detected; forcing render recovery');
+            }
+            window.clearInteraction();
+            window.resumeSpin();
+            // Force watchdog Signal 1 to become true on the very next tick if rendering
+            // does not resume naturally after reconnect.
+            __lastRenderTs = 0;
+
+            const now = performance.now();
+            const likelyStalledRaf = __animateStarted && (now - __lastAnimateTs > STALLED_RAF_THRESHOLD_MS);
+            if (__rafId === null || likelyStalledRaf) {
+                if (__rafId !== null) {
+                    cancelAnimationFrame(__rafId);
+                    __rafId = null;
+                }
+                __rafId = requestAnimationFrame(animate);
             }
         });
 
