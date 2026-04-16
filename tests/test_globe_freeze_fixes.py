@@ -545,3 +545,34 @@ def test_offline_handler_invalidates_render_timestamp():
     assert '__lastRenderTs = 0' in section, (
         "offline handler must set __lastRenderTs = 0 to keep watchdog recovery fast."
     )
+
+
+def test_play_pause_button_removed_from_globe():
+    """The optional play/pause rotation UI should be removed to reduce state
+    interactions that can interfere with freeze recovery.
+    """
+    html = _read_globe()
+    assert 'playPauseBtn' not in html, (
+        "playPauseBtn UI/button logic is still present in globe.html. "
+        "Remove the pause/play button path so watchdog and recovery logic are not "
+        "gated by a separate UI pause state."
+    )
+
+
+def test_animate_auto_spin_not_gated_by_user_pause_state():
+    """animate() auto-spin branch should not depend on a separate user pause flag.
+
+    Auto-spin recovery should only be blocked by active interaction or system-level
+    pause, which keeps watchdog + connectivity recovery behavior deterministic.
+    """
+    html = _read_globe()
+    animate_body = _extract_function_body(html, 'animate')
+    assert animate_body, "function animate() not found"
+    assert 'userPaused' not in animate_body, (
+        "animate() still references userPaused. Remove user pause gating so spin "
+        "recovery is controlled only by system pause and interaction state."
+    )
+    assert 'autoSpinEnabled && !systemPaused && !userInteracting' in animate_body, (
+        "animate() auto-spin branch should require autoSpinEnabled, !systemPaused, "
+        "and !userInteracting."
+    )

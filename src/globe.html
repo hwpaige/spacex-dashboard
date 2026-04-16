@@ -5,7 +5,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>3D Earth Globe</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
         body {
             margin: 0;
@@ -20,39 +19,6 @@
             display: block;
         }
 
-        #playPauseBtn {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            /* Move to bottom left */
-            background: transparent;
-            /* Graph button style: transparent */
-            color: rgba(255, 255, 255, 0.7);
-            /* Subtle white */
-            border: none;
-            /* No border */
-            padding: 8px;
-            font-size: 18px;
-            /* Slightly larger icon */
-            cursor: pointer;
-            transition: color 0.2s;
-            z-index: 1000;
-        }
-
-        #playPauseBtn:hover {
-            background: transparent;
-            color: white;
-            /* Bright white on hover */
-        }
-
-        /* Light Mode Styles */
-        body.light-mode #playPauseBtn {
-            color: rgba(0, 0, 0, 0.7);
-        }
-
-        body.light-mode #playPauseBtn:hover {
-            color: black;
-        }
     </style>
     <script>
         // Lightweight loader that ensures THREE is available even if we started offline.
@@ -94,7 +60,6 @@
 </head>
 
 <body>
-    <button id="playPauseBtn"><i class="fas fa-play"></i></button>
     <script>
         let scene, camera, renderer, globe, controls, trajectoryGroup, launchMarker;
         let cloudUniforms, cloudMaterial, loadCloudTextureFunc;
@@ -103,9 +68,7 @@
         let momentumX = 0, momentumY = 0;
         let isInMomentum = false;
         let lastTime = Date.now();
-        let isAutoRotatePaused = true; // Start paused
-        // Distinguish between user-initiated pause and system-initiated pause (e.g., during app/network events)
-        let userPaused = true; // Start paused
+        // Distinguish system-initiated pause (e.g., during app/network events)
         let systemPaused = false;
         let pendingSystemResume = false; // set when resume is requested during active interaction
         // Explicit auto spin enable independent of OrbitControls (more robust on Qt WebEngine)
@@ -774,7 +737,7 @@
                         momentumX = 0;
                         momentumY = 0;
                     }
-                } else if (autoSpinEnabled && !userPaused && !systemPaused && !userInteracting) {
+                } else if (autoSpinEnabled && !systemPaused && !userInteracting) {
                     // Normal auto-rotation (decoupled from OrbitControls)
                     const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
                     // Use a separate base for auto-rotation to allow interaction to "offset" it
@@ -1256,7 +1219,7 @@
             resetRecentMoves();
             // Mouse up ends direct interaction; momentum may continue but that's not a touch
             userInteracting = false;
-            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
+            if (pendingSystemResume) { systemPaused = false; pendingSystemResume = false; }
         });
 
         // Touch support for mobile
@@ -1339,13 +1302,13 @@
             if (e.touches && e.touches.length > 0) return;
             endTouchCommon();
             userInteracting = false;
-            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
+            if (pendingSystemResume) { systemPaused = false; pendingSystemResume = false; }
         });
 
         document.addEventListener('touchcancel', () => {
             endTouchCommon();
             userInteracting = false;
-            if (pendingSystemResume) { systemPaused = false; isAutoRotatePaused = (userPaused || systemPaused); pendingSystemResume = false; }
+            if (pendingSystemResume) { systemPaused = false; pendingSystemResume = false; }
         });
 
 
@@ -1365,7 +1328,6 @@
             systemPaused = false;
             autoSpinEnabled = true;
             if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
-            isAutoRotatePaused = (userPaused || systemPaused);
             try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch (e) { }
         };
         window.forceResumeSpin = function () {
@@ -1373,18 +1335,16 @@
             systemPaused = false;
             autoSpinEnabled = true;
             if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
-            isAutoRotatePaused = (userPaused || systemPaused);
             pendingSystemResume = false;
             try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch (e) { }
         };
         window.pauseSpin = function () {
             systemPaused = true;
-            isAutoRotatePaused = (userPaused || systemPaused);
             try { if (window.globeAutospinGuard) console.log('[globe] pauseSpin invoked'); } catch (e) { }
         };
-        window.startSpin = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.resumeAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
-        window.startAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; isAutoRotatePaused = (userPaused || systemPaused); };
+        window.startSpin = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
+        window.resumeAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
+        window.startAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
 
         // Handle window focus/visibility to avoid "stuck interaction" states and auto-resume when appropriate
         window.addEventListener('blur', function () {
@@ -1427,7 +1387,7 @@
                 if (activePointers > 0 && (now - lastMoveTimeMs) > 10000) {
                     console.log('[globe] resetting stuck activePointers:', activePointers);
                     window.clearInteraction();
-                    if (!userPaused) window.resumeSpin();
+                    window.resumeSpin();
                 }
             } catch (e) { }
         }, 1000);
@@ -1438,7 +1398,7 @@
             if (document.visibilityState === 'visible') {
                 // When page becomes visible, allow a small grace then resume if allowed
                 setTimeout(function () {
-                    if (!userPaused && window.globeAutospinGuard !== false) {
+                    if (window.globeAutospinGuard !== false) {
                         window.resumeSpin();
                     }
                 }, 250);
@@ -1520,28 +1480,6 @@
                 __watchdogLastAnimateCalls = currentCalls;
             }, CHECK_MS);
         })();
-
-        // Play/Pause button functionality
-        // Play/Pause button functionality
-        document.getElementById('playPauseBtn').addEventListener('click', () => {
-            userPaused = !userPaused;
-            isAutoRotatePaused = (userPaused || systemPaused);
-
-            // "Actually works": If paused, kill any active momentum immediately
-            if (userPaused) {
-                isInMomentum = false;
-                momentumX = 0;
-                momentumY = 0;
-            }
-
-            const button = document.getElementById('playPauseBtn');
-            const icon = button.querySelector('i');
-            if (isAutoRotatePaused) {
-                icon.className = 'fas fa-play';
-            } else {
-                icon.className = 'fas fa-pause';
-            }
-        });
 
         // Initial instrumentation
         try { console.log('[globe] script loaded; awaiting boot'); } catch (e) { }
