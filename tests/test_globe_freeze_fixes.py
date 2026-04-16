@@ -569,8 +569,8 @@ def test_animate_has_no_idle_auto_spin_branch():
     animate_body = _extract_function_body(html, 'animate')
     assert animate_body, "function animate() not found"
     assert 'userPaused' not in animate_body, (
-        "animate() still references userPaused. Remove user pause gating so spin "
-        "recovery is controlled only by system pause and interaction state."
+        "animate() still references userPaused. Remove user pause state from globe "
+        "animation now that idle auto-spin is not part of animate()."
     )
     assert 'autoSpinEnabled' not in animate_body, (
         "animate() still contains autoSpinEnabled-driven idle rotation. Remove "

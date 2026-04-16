@@ -729,7 +729,7 @@
                     momentumX *= 0.93; // Friction/damping
                     momentumY *= 0.93;
 
-                    // Stop momentum once the residual velocity is negligible
+                    // Clear momentum state once residual velocity is negligible
                     if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
                         isInMomentum = false;
                         momentumX = 0;
