@@ -1317,13 +1317,11 @@
         window.resumeSpin = function () {
             if (userInteracting) { pendingSystemResume = true; return; }
             systemPaused = false;
-            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch (e) { }
         };
         window.forceResumeSpin = function () {
             window.clearInteraction();
             systemPaused = false;
-            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             pendingSystemResume = false;
             try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch (e) { }
         };
