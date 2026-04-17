@@ -559,20 +559,20 @@ def test_play_pause_button_removed_from_globe():
     )
 
 
-def test_animate_auto_spin_not_gated_by_user_pause_state():
-    """animate() auto-spin branch should not depend on a separate user pause flag.
+def test_animate_has_no_idle_auto_spin_branch():
+    """animate() should not include an idle auto-spin path.
 
-    Auto-spin recovery should only be blocked by active interaction or system-level
-    pause, which keeps watchdog + connectivity recovery behavior deterministic.
+    Rotation should come only from active user drag/flick momentum and not from a
+    background auto-rotation branch.
     """
     html = _read_globe()
     animate_body = _extract_function_body(html, 'animate')
     assert animate_body, "function animate() not found"
     assert 'userPaused' not in animate_body, (
-        "animate() still references userPaused. Remove user pause gating so spin "
-        "recovery is controlled only by system pause and interaction state."
+        "animate() still references userPaused. Remove user pause state from globe "
+        "animation now that idle auto-spin is not part of animate()."
     )
-    assert 'autoSpinEnabled && !systemPaused && !userInteracting' in animate_body, (
-        "animate() auto-spin branch should require autoSpinEnabled, !systemPaused, "
-        "and !userInteracting."
+    assert 'autoSpinEnabled' not in animate_body, (
+        "animate() still contains autoSpinEnabled-driven idle rotation. Remove "
+        "automatic spin so rotation only occurs from user interaction/momentum."
     )

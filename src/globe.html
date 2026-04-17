@@ -71,8 +71,6 @@
         // Distinguish system-initiated pause (e.g., during app/network events)
         let systemPaused = false;
         let pendingSystemResume = false; // set when resume is requested during active interaction
-        // Explicit auto spin enable independent of OrbitControls (more robust on Qt WebEngine)
-        let autoSpinEnabled = true;
         // Track if the user is actively interacting (mouse down or any touch contact)
         // This is used to prevent auto-rotation from starting/resuming while touching.
         let userInteracting = false;
@@ -731,19 +729,12 @@
                     momentumX *= 0.93; // Friction/damping
                     momentumY *= 0.93;
 
-                    // Check if momentum is low enough to return to auto-rotation
+                    // Clear momentum state once residual velocity is negligible
                     if (Math.abs(momentumX) < 0.0001 && Math.abs(momentumY) < 0.0001) {
                         isInMomentum = false;
                         momentumX = 0;
                         momentumY = 0;
                     }
-                } else if (autoSpinEnabled && !systemPaused && !userInteracting) {
-                    // Normal auto-rotation (decoupled from OrbitControls)
-                    const baseSpeed = (controls && typeof controls.autoRotateSpeed === 'number') ? controls.autoRotateSpeed : 2.0;
-                    // Use a separate base for auto-rotation to allow interaction to "offset" it
-                    if (!window.__autoRotBase) window.__autoRotBase = 0;
-                    window.__autoRotBase += baseSpeed * 0.01;
-                    globe.rotation.y = window.__autoRotBase + (window.__userRotOffset || 0);
                 }
             }
 
@@ -1326,15 +1317,11 @@
         window.resumeSpin = function () {
             if (userInteracting) { pendingSystemResume = true; return; }
             systemPaused = false;
-            autoSpinEnabled = true;
-            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             try { if (window.globeAutospinGuard) console.log('[globe] resumeSpin invoked'); } catch (e) { }
         };
         window.forceResumeSpin = function () {
             window.clearInteraction();
             systemPaused = false;
-            autoSpinEnabled = true;
-            if (controls && typeof controls.autoRotate === 'boolean') controls.autoRotate = true;
             pendingSystemResume = false;
             try { if (window.globeAutospinGuard) console.log('[globe] forceResumeSpin invoked'); } catch (e) { }
         };
@@ -1342,9 +1329,9 @@
             systemPaused = true;
             try { if (window.globeAutospinGuard) console.log('[globe] pauseSpin invoked'); } catch (e) { }
         };
-        window.startSpin = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
-        window.resumeAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
-        window.startAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; autoSpinEnabled = true; };
+        window.startSpin = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; };
+        window.resumeAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; };
+        window.startAnimation = function () { if (userInteracting) { pendingSystemResume = true; return; } systemPaused = false; };
 
         // Handle window focus/visibility to avoid "stuck interaction" states and auto-resume when appropriate
         window.addEventListener('blur', function () {
@@ -1357,7 +1344,7 @@
                 if (window.globeAutospinGuard) {
                     window.clearInteraction();
                     // If we were pending a resume, complete it now
-                    if (pendingSystemResume) { pendingSystemResume = false; systemPaused = false; autoSpinEnabled = true; }
+                    if (pendingSystemResume) { pendingSystemResume = false; systemPaused = false; }
                 }
             }
         });
