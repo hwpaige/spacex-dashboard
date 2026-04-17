@@ -144,6 +144,19 @@ if hasattr(sys.stderr, 'reconfigure'):
 setup_dashboard_logging(__file__)
 logger = logging.getLogger(__name__)
 
+
+def read_int_env(name, default, minimum=0):
+    try:
+        return max(minimum, int(os.environ.get(name, str(default))))
+    except (ValueError, TypeError) as env_error:
+        logger.warning(f"Invalid integer value for {name}; using default {default}. Error: {env_error}")
+        return default
+
+
+def read_bool_env(name, default=True):
+    raw = os.environ.get(name, "1" if default else "0")
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
 logger.info(f"BOOT: Environment initialized. DASHBOARD_WIDTH={os.environ.get('DASHBOARD_WIDTH', 'Not Set')}, QT_SCALE_FACTOR={os.environ.get('QT_SCALE_FACTOR')}")
 
 # Qt message handler to surface QML / Qt internal messages (errors, warnings, info)
@@ -3726,14 +3739,9 @@ class ChartItem(QQuickPaintedItem):
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 if __name__ == '__main__':
-    def read_int_env(name, default, minimum=0):
-        try:
-            return max(minimum, int(os.environ.get(name, str(default))))
-        except Exception:
-            return default
-
-    auto_restart_enabled = os.environ.get("SPACEX_DASHBOARD_AUTORESTART", "1").strip().lower() not in ("0", "false", "no", "off")
+    auto_restart_enabled = read_bool_env("SPACEX_DASHBOARD_AUTORESTART", default=True)
     restart_delay_seconds = read_int_env("SPACEX_DASHBOARD_RESTART_DELAY_SECONDS", 4, minimum=1)
+    # 0 disables auto-restart attempts.
     max_restart_attempts = read_int_env("SPACEX_DASHBOARD_MAX_RESTARTS", 5, minimum=0)
     restart_reset_uptime_seconds = read_int_env("SPACEX_DASHBOARD_RESTART_RESET_UPTIME_SECONDS", 900, minimum=60)
     restart_count = read_int_env("SPACEX_DASHBOARD_RESTART_COUNT", 0, minimum=0)
@@ -3848,7 +3856,7 @@ if __name__ == '__main__':
         engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
         profiler.mark("Engine LoadData End")
         if not engine.rootObjects():
-            raise RuntimeError("QML root object creation failed. Check application logs for QML loading errors.")
+            raise RuntimeError("QML root object creation failed. Check console output and application logs for QML loading errors.")
         profiler.mark("App Startup Complete")
         backend.setBootMode(False)
         profiler.log_summary()
@@ -3857,14 +3865,14 @@ if __name__ == '__main__':
         logger.exception("Unhandled top-level application error")
         exit_code = 1
 
-    uptime_seconds = int(max(0, time.monotonic() - boot_started))
+    uptime_seconds = time.monotonic() - boot_started
     if uptime_seconds >= restart_reset_uptime_seconds:
         restart_count = 0
 
     should_restart = auto_restart_enabled and (restart_count < max_restart_attempts)
     if should_restart:
         logger.error(
-            f"Dashboard process exited (code={exit_code}, uptime={uptime_seconds}s). "
+            f"Dashboard process exited (code={exit_code}, uptime={uptime_seconds:.1f}s). "
             f"Attempting restart {restart_count + 1}/{max_restart_attempts} in {restart_delay_seconds}s."
         )
         time.sleep(restart_delay_seconds)
@@ -3872,8 +3880,8 @@ if __name__ == '__main__':
         next_env["SPACEX_DASHBOARD_RESTART_COUNT"] = str(restart_count + 1)
         try:
             os.execvpe(sys.executable, [sys.executable] + sys.argv, next_env)
-        except Exception as restart_error:
-            logger.exception(f"Auto-restart failed: {restart_error}")
+        except Exception:
+            logger.exception("Auto-restart failed")
     elif auto_restart_enabled and restart_count >= max_restart_attempts:
         logger.error(
             f"Dashboard process exited and restart limit reached "
