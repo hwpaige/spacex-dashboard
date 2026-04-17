@@ -3726,17 +3726,17 @@ class ChartItem(QQuickPaintedItem):
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 if __name__ == '__main__':
-    def _read_int_env(name, default, minimum=0):
+    def read_int_env(name, default, minimum=0):
         try:
             return max(minimum, int(os.environ.get(name, str(default))))
         except Exception:
             return default
 
     auto_restart_enabled = os.environ.get("SPACEX_DASHBOARD_AUTORESTART", "1").strip().lower() not in ("0", "false", "no", "off")
-    restart_delay_seconds = _read_int_env("SPACEX_DASHBOARD_RESTART_DELAY_SECONDS", 4, minimum=1)
-    max_restart_attempts = _read_int_env("SPACEX_DASHBOARD_MAX_RESTARTS", 5, minimum=0)
-    restart_reset_uptime_seconds = _read_int_env("SPACEX_DASHBOARD_RESTART_RESET_UPTIME_SECONDS", 900, minimum=60)
-    restart_count = _read_int_env("SPACEX_DASHBOARD_RESTART_COUNT", 0, minimum=0)
+    restart_delay_seconds = read_int_env("SPACEX_DASHBOARD_RESTART_DELAY_SECONDS", 4, minimum=1)
+    max_restart_attempts = read_int_env("SPACEX_DASHBOARD_MAX_RESTARTS", 5, minimum=0)
+    restart_reset_uptime_seconds = read_int_env("SPACEX_DASHBOARD_RESTART_RESET_UPTIME_SECONDS", 900, minimum=60)
+    restart_count = read_int_env("SPACEX_DASHBOARD_RESTART_COUNT", 0, minimum=0)
     boot_started = time.monotonic()
     exit_code = 1
 
@@ -3848,13 +3848,13 @@ if __name__ == '__main__':
         engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
         profiler.mark("Engine LoadData End")
         if not engine.rootObjects():
-            raise RuntimeError("QML root object creation failed (see earlier QML errors above).")
+            raise RuntimeError("QML root object creation failed. Check application logs for QML loading errors.")
         profiler.mark("App Startup Complete")
         backend.setBootMode(False)
         profiler.log_summary()
         exit_code = int(app.exec())
-    except Exception as e:
-        logger.exception(f"Unhandled top-level application error: {e}")
+    except Exception:
+        logger.exception("Unhandled top-level application error")
         exit_code = 1
 
     uptime_seconds = int(max(0, time.monotonic() - boot_started))
@@ -3870,7 +3870,10 @@ if __name__ == '__main__':
         time.sleep(restart_delay_seconds)
         next_env = os.environ.copy()
         next_env["SPACEX_DASHBOARD_RESTART_COUNT"] = str(restart_count + 1)
-        os.execvpe(sys.executable, [sys.executable] + sys.argv, next_env)
+        try:
+            os.execvpe(sys.executable, [sys.executable] + sys.argv, next_env)
+        except Exception as restart_error:
+            logger.exception(f"Auto-restart failed: {restart_error}")
     elif auto_restart_enabled and restart_count >= max_restart_attempts:
         logger.error(
             f"Dashboard process exited and restart limit reached "
