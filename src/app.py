@@ -3726,117 +3726,155 @@ class ChartItem(QQuickPaintedItem):
 qmlRegisterType(ChartItem, 'Charts', 1, 0, 'ChartItem')
 
 if __name__ == '__main__':
-    profiler.mark("Main Execution Started")
-    # Set console encoding to UTF-8 to handle Unicode characters properly
-    if hasattr(sys.stdout, 'reconfigure'):
-        sys.stdout.reconfigure(encoding='utf-8')
-    if hasattr(sys.stderr, 'reconfigure'):
-        sys.stderr.reconfigure(encoding='utf-8')
-    
-    logger.info("BOOT: Starting SpaceX Dashboard application...")
-    
-    # Start local HTTP server for serving HTML files
-    profiler.mark("Starting HTTP Server")
-    server_thread = threading.Thread(target=start_http_server, daemon=True)
-    server_thread.start()
-    
-    # Ensure Qt WebEngine QML types are initialized before loading QML
-    try:
-        profiler.mark("QtWebEngineQuick Initialize")
-        QtWebEngineQuick.initialize()
-    except Exception as e:
-        print(f"QtWebEngineQuick.initialize() notice: {e}")
+    def _read_int_env(name, default, minimum=0):
+        try:
+            return max(minimum, int(os.environ.get(name, str(default))))
+        except Exception:
+            return default
 
-    profiler.mark("QApplication Initialization")
-    # Support high DPI scaling by using environment variables if set
-    # These are typically set in setup_dashboard_environment() from functions.py
-    # or by the user via DASHBOARD_SCALE.
-    # We already called setup_dashboard_environment() at the top of the file.
-    
-    # QApplication setup
-    # Optimize Qt WebEngine for Raspberry Pi performance.
-    # '--disable-background-timer-throttling' prevents the background tab timer
-    # from being slowed down, which helps with animations and polling loops.
-    # '--memory-pressure-off' is intentionally NOT set: allowing Chromium to
-    # respond to OS-level memory pressure signals lets it proactively trim its
-    # media buffers when RAM is running low, which is critical on constrained
-    # hardware (e.g. Raspberry Pi) where a single high-resolution video can
-    # pre-buffer hundreds of megabytes and exhaust available RAM.
-    if '--disable-background-timer-throttling' not in sys.argv:
-        sys.argv.append('--disable-background-timer-throttling')
+    auto_restart_enabled = os.environ.get("SPACEX_DASHBOARD_AUTORESTART", "1").strip().lower() not in ("0", "false", "no", "off")
+    restart_delay_seconds = _read_int_env("SPACEX_DASHBOARD_RESTART_DELAY_SECONDS", 4, minimum=1)
+    max_restart_attempts = _read_int_env("SPACEX_DASHBOARD_MAX_RESTARTS", 5, minimum=0)
+    restart_reset_uptime_seconds = _read_int_env("SPACEX_DASHBOARD_RESTART_RESET_UPTIME_SECONDS", 900, minimum=60)
+    restart_count = _read_int_env("SPACEX_DASHBOARD_RESTART_COUNT", 0, minimum=0)
+    boot_started = time.monotonic()
+    exit_code = 1
+
+    try:
+        profiler.mark("Main Execution Started")
+        # Set console encoding to UTF-8 to handle Unicode characters properly
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8')
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8')
         
-    profiler.mark("QApplication setup")
-    app = QApplication(sys.argv)
-    app.setApplicationName("SpaceXDashboard")
-    app.setOrganizationName("Harrison")
-    
-    if platform.system() != 'Windows':
-        app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
+        logger.info("BOOT: Starting SpaceX Dashboard application...")
+        
+        # Start local HTTP server for serving HTML files
+        profiler.mark("Starting HTTP Server")
+        server_thread = threading.Thread(target=start_http_server, daemon=True)
+        server_thread.start()
+        
+        # Ensure Qt WebEngine QML types are initialized before loading QML
+        try:
+            profiler.mark("QtWebEngineQuick Initialize")
+            QtWebEngineQuick.initialize()
+        except Exception as e:
+            print(f"QtWebEngineQuick.initialize() notice: {e}")
 
-    # Load fonts
-    profiler.mark("Loading Fonts")
-    font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "D-DIN.ttf")
-    if os.path.exists(font_path):
-        QFontDatabase.addApplicationFont(font_path)
+        profiler.mark("QApplication Initialization")
+        # Support high DPI scaling by using environment variables if set
+        # These are typically set in setup_dashboard_environment() from functions.py
+        # or by the user via DASHBOARD_SCALE.
+        # We already called setup_dashboard_environment() at the top of the file.
+        
+        # QApplication setup
+        # Optimize Qt WebEngine for Raspberry Pi performance.
+        # '--disable-background-timer-throttling' prevents the background tab timer
+        # from being slowed down, which helps with animations and polling loops.
+        # '--memory-pressure-off' is intentionally NOT set: allowing Chromium to
+        # respond to OS-level memory pressure signals lets it proactively trim its
+        # media buffers when RAM is running low, which is critical on constrained
+        # hardware (e.g. Raspberry Pi) where a single high-resolution video can
+        # pre-buffer hundreds of megabytes and exhaust available RAM.
+        if '--disable-background-timer-throttling' not in sys.argv:
+            sys.argv.append('--disable-background-timer-throttling')
+            
+        profiler.mark("QApplication setup")
+        app = QApplication(sys.argv)
+        app.setApplicationName("SpaceXDashboard")
+        app.setOrganizationName("Harrison")
+        
+        if platform.system() != 'Windows':
+            app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
 
-    fa_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "Font Awesome 5 Free-Solid-900.otf")
-    if os.path.exists(fa_path):
-        QFontDatabase.addApplicationFont(fa_path)
+        # Load fonts
+        profiler.mark("Loading Fonts")
+        font_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "D-DIN.ttf")
+        if os.path.exists(font_path):
+            QFontDatabase.addApplicationFont(font_path)
 
-    # Create Backend immediately with default offline status to speed up UI presentation.
-    # Initial WiFi check will run asynchronously to avoid blocking the main thread.
-    profiler.mark("Creating Backend")
-    logger.info("BOOT: Creating Backend instance...")
-    backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
-    
-    # Notify that backend is ready but QML hasn't loaded yet
-    backend.setLoadingStatus("Connecting to network...")
-    
-    # Small delay to ensure "Connecting to network..." is actually seen
-    # as startDataLoader kicks off background checks immediately.
-    QTimer.singleShot(800, backend.startDataLoader)
-    
-    profiler.mark("Initializing QML Engine")
-    engine = QQmlApplicationEngine()
-    # Connect QML warnings signal (list of QQmlError objects)
-    def _log_qml_warnings(errors):
-        for e in errors:
-            msg = format_qt_message(None, None, e.toString())
-            if msg: logger.error(f"QML warning: {msg}")
-    try:
-        engine.warnings.connect(_log_qml_warnings)
-    except Exception as _e:
-        logger.warning(f"Could not connect engine warnings signal: {_e}")
-    profiler.mark("Setting Context Properties")
-    context = engine.rootContext()
-    context.setContextProperty("backend", backend)
-    context.setContextProperty("radarLocations", radar_locations)
-    context.setContextProperty("circuitCoords", circuit_coords)
-    context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
-    context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
+        fa_path = os.path.join(os.path.dirname(__file__), "..", "assets", "fonts", "Font Awesome 5 Free-Solid-900.otf")
+        if os.path.exists(fa_path):
+            QFontDatabase.addApplicationFont(fa_path)
 
-    profiler.mark("Preparing URLs")
-    globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
-    earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
-    youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
+        # Create Backend immediately with default offline status to speed up UI presentation.
+        # Initial WiFi check will run asynchronously to avoid blocking the main thread.
+        profiler.mark("Creating Backend")
+        logger.info("BOOT: Creating Backend instance...")
+        backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
+        
+        # Notify that backend is ready but QML hasn't loaded yet
+        backend.setLoadingStatus("Connecting to network...")
+        
+        # Small delay to ensure "Connecting to network..." is actually seen
+        # as startDataLoader kicks off background checks immediately.
+        QTimer.singleShot(800, backend.startDataLoader)
+        
+        profiler.mark("Initializing QML Engine")
+        engine = QQmlApplicationEngine()
+        # Connect QML warnings signal (list of QQmlError objects)
+        def _log_qml_warnings(errors):
+            for e in errors:
+                msg = format_qt_message(None, None, e.toString())
+                if msg: logger.error(f"QML warning: {msg}")
+        try:
+            engine.warnings.connect(_log_qml_warnings)
+        except Exception as _e:
+            logger.warning(f"Could not connect engine warnings signal: {_e}")
+        profiler.mark("Setting Context Properties")
+        context = engine.rootContext()
+        context.setContextProperty("backend", backend)
+        context.setContextProperty("radarLocations", radar_locations)
+        context.setContextProperty("circuitCoords", circuit_coords)
+        context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
+        context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
 
-    context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
+        profiler.mark("Preparing URLs")
+        globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
+        earth_texture_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'earth_texture.jpg')
+        youtube_html_path = os.path.join(os.path.dirname(__file__), 'youtube_embed.html')
 
-    from ui_qml import qml_code  # Load QML from external module
-    profiler.mark("Engine LoadData Start")
-    # Increase delay for QML loading status so it's not immediately overwritten 
-    # if DataLoader finished very quickly.
-    def _set_ui_loading():
-        backend.setLoadingStatus("Preparing UI components...")
-    QTimer.singleShot(1500, _set_ui_loading)
-    
-    engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
-    profiler.mark("Engine LoadData End")
-    if not engine.rootObjects():
-        logger.error("QML root object creation failed (see earlier QML errors above).")
-        print("QML load failed. Check console for Qt errors.")
-        sys.exit(-1)
-    profiler.mark("App Startup Complete")
-    backend.setBootMode(False)
-    profiler.log_summary()
-    sys.exit(app.exec())
+        context.setContextProperty("globeUrl", "file:///" + globe_file_path.replace('\\', '/'))
+
+        from ui_qml import qml_code  # Load QML from external module
+        profiler.mark("Engine LoadData Start")
+        # Increase delay for QML loading status so it's not immediately overwritten 
+        # if DataLoader finished very quickly.
+        def _set_ui_loading():
+            backend.setLoadingStatus("Preparing UI components...")
+        QTimer.singleShot(1500, _set_ui_loading)
+        
+        engine.loadData(qml_code.encode(), QUrl("inline.qml"))  # Provide a pseudo URL for better line numbers
+        profiler.mark("Engine LoadData End")
+        if not engine.rootObjects():
+            raise RuntimeError("QML root object creation failed (see earlier QML errors above).")
+        profiler.mark("App Startup Complete")
+        backend.setBootMode(False)
+        profiler.log_summary()
+        exit_code = int(app.exec())
+    except Exception as e:
+        logger.exception(f"Unhandled top-level application error: {e}")
+        exit_code = 1
+
+    uptime_seconds = int(max(0, time.monotonic() - boot_started))
+    if uptime_seconds >= restart_reset_uptime_seconds:
+        restart_count = 0
+
+    should_restart = auto_restart_enabled and (restart_count < max_restart_attempts)
+    if should_restart:
+        logger.error(
+            f"Dashboard process exited (code={exit_code}, uptime={uptime_seconds}s). "
+            f"Attempting restart {restart_count + 1}/{max_restart_attempts} in {restart_delay_seconds}s."
+        )
+        time.sleep(restart_delay_seconds)
+        next_env = os.environ.copy()
+        next_env["SPACEX_DASHBOARD_RESTART_COUNT"] = str(restart_count + 1)
+        os.execvpe(sys.executable, [sys.executable] + sys.argv, next_env)
+    elif auto_restart_enabled and restart_count >= max_restart_attempts:
+        logger.error(
+            f"Dashboard process exited and restart limit reached "
+            f"({restart_count}/{max_restart_attempts}); not auto-restarting."
+        )
+
+    sys.exit(exit_code)
