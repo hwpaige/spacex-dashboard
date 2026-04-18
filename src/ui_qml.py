@@ -2845,6 +2845,8 @@ Window {
                         property bool isDragging: false
                         property real minExpandedHeight: 160
                         property real bottomBarInset: bottomBar.height
+                        property real baseCornerRadius: 14
+                        property real fadeCurveExponent: 1.45
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
                         property int searchDebounceMs: 350
@@ -2899,7 +2901,7 @@ Window {
                             if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
 
-                        opacity: Math.pow(openProgress, 1.45)
+                        opacity: Math.pow(openProgress, fadeCurveExponent)
 
                         Behavior on height {
                             enabled: !spotifyFullScreenTray.isDragging && (spotifyResultsList ? !spotifyResultsList.dragging : true)
@@ -2907,7 +2909,7 @@ Window {
                         }
 
                         background: Rectangle {
-                            radius: 14 * (1.0 - spotifyFullScreenTray.openProgress)
+                            radius: spotifyFullScreenTray.baseCornerRadius * (1.0 - spotifyFullScreenTray.openProgress)
                             color: (backend && backend.theme === "dark") ? "#151515" : "#f5f5f5"
                             border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
                             border.width: 1
