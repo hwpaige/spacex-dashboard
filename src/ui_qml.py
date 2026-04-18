@@ -2830,10 +2830,10 @@ Window {
 
                     Popup {
                         id: spotifyFullScreenTray
-                        x: 8
+                        x: 8 - spotifyPill.mapToItem(root.contentItem, 0, 0).x
                         width: Math.max(300, root.width - 16)
                         height: 0
-                        y: (spotifyPill.mapToItem(root.contentItem, 0, 0).y + spotifyPill.height) - height
+                        y: parent.height - height
                         visible: height > 0
                         padding: 0
                         closePolicy: Popup.CloseOnPressOutside
@@ -2890,8 +2890,8 @@ Window {
                         
                         function openLoginFlow() {
                             if (!backend) return
-                            if (height === 0) open()
                             height = expandedHeight
+                            open()
                             activeTab = 0
                             if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
@@ -3346,48 +3346,6 @@ Window {
                                     spacing: 10
                                     visible: !spotifyFullScreenTray.spotifyAuthenticated
 
-                                    Text {
-                                        text: "Spotify Login"
-                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                        font.family: "D-DIN"
-                                        font.pixelSize: 18
-                                        font.bold: true
-                                    }
-                                    Text {
-                                        text: {
-                                            if (!backend || !backend.spotifyPlayer) return "Login to Spotify."
-                                            return backend.spotifyPlayer.status || "Login to Spotify."
-                                        }
-                                        color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
-                                        font.family: "D-DIN"
-                                        font.pixelSize: 12
-                                        wrapMode: Text.WordWrap
-                                        Layout.fillWidth: true
-                                    }
-
-                                    RowLayout {
-                                        spacing: 8
-                                        Button {
-                                            text: "Start Login"
-                                            onClicked: {
-                                                if (backend) backend.startSpotifyLogin()
-                                            }
-                                        }
-                                        Button {
-                                            text: "Hide"
-                                            visible: !(backend && backend.spotifyAuthInProgress)
-                                            onClicked: spotifyFullScreenTray.height = 0
-                                        }
-                                        Item { Layout.fillWidth: true }
-                                        Button {
-                                            text: "Cancel"
-                                            visible: backend && backend.spotifyAuthInProgress
-                                            onClicked: {
-                                                if (backend) backend.cancelSpotifyLogin()
-                                            }
-                                        }
-                                    }
-
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
@@ -3397,10 +3355,33 @@ Window {
                                         border.width: 1
                                         clip: true
 
-                                        WebEngineView {
+                                        ColumnLayout {
                                             anchors.fill: parent
-                                            url: backend ? backend.spotifyAuthUrl : ""
-                                            settings.playbackRequiresUserGesture: false
+                                            anchors.margins: 10
+                                            spacing: 8
+
+                                            Item { Layout.fillHeight: true }
+
+                                            Rectangle {
+                                                Layout.alignment: Qt.AlignHCenter
+                                                Layout.preferredWidth: Math.min(parent.width - 20, 280)
+                                                Layout.preferredHeight: Layout.preferredWidth
+                                                radius: 8
+                                                color: "white"
+                                                border.color: (backend && backend.theme === "dark") ? "#333333" : "#d0d0d0"
+                                                border.width: 1
+                                                clip: true
+
+                                                Image {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 8
+                                                    source: backend ? backend.spotifyAuthQrUrl : ""
+                                                    fillMode: Image.PreserveAspectFit
+                                                    asynchronous: true
+                                                }
+                                            }
+
+                                            Item { Layout.fillHeight: true }
                                         }
                                     }
                                 }

@@ -157,6 +157,7 @@ __all__ = [
     "load_theme_settings",
     "save_theme_settings",
     "get_rpi_config_resolution",
+    "is_raspberry_pi",
     "check_touch_calibration_exists",
     "remove_touch_calibration",
     "is_launch_near",
@@ -3301,6 +3302,20 @@ def get_rpi_config_resolution():
                 
     return None, None
 
+def is_raspberry_pi():
+    """Return True if running on a Raspberry Pi."""
+    try:
+        with open("/proc/device-tree/model", "r") as f:
+            return "raspberry pi" in f.read().lower()
+    except Exception:
+        pass
+    try:
+        with open("/proc/cpuinfo", "r") as f:
+            return "raspberry pi" in f.read().lower()
+    except Exception:
+        pass
+    return False
+
 def get_ubuntu_version():
     """Returns the Ubuntu version as a string (e.g. '25.04' or '25.10'), or None if not on Ubuntu."""
     if not os.path.exists('/etc/os-release'):
@@ -3362,14 +3377,11 @@ def setup_dashboard_environment():
         ]
 
         if is_25_10_or_newer:
-            # Fixes for GLOzone in Qt 6.9+ on Ubuntu 25.10
-            # Explicitly force X11 ozone platform and EGL to maintain hardware acceleration
-            flags.extend([
-                "--ozone-platform-hint=x11",
-                "--ozone-platform=x11",
-                "--use-gl=egl"
-            ])
-            logger.info(f"Ubuntu {ubuntu_version} detected. Applying GLOzone/Qt 6.9 hardware acceleration fixes.")
+            # Qt 6.9+ on Ubuntu 25.10: don't pass --ozone-platform; the QtWebEngine
+            # Chromium build bundled with PyQt6 does not accept it and will FATAL crash.
+            # Just force EGL for hardware acceleration.
+            flags.append("--use-gl=egl")
+            logger.info(f"Ubuntu {ubuntu_version} detected. Applying Qt 6.9 EGL fix (ozone-platform omitted).")
 
         os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = " ".join(flags)
     else:
@@ -3440,6 +3452,10 @@ def setup_dashboard_environment():
         default_scale = "1.333"
     elif detected_w == 2560 or detected_h == 734:
         default_scale = "1.333"
+    elif platform.system() == 'Linux' and not is_raspberry_pi() and not detected_w and not detected_h:
+        # Running on a regular Linux desktop (not a Pi kiosk) with no explicit display config.
+        # Use 1.0 scale so the window isn't blown up to fill the screen.
+        default_scale = "1.0"
     else:
         default_scale = "2.0"
 
@@ -3449,8 +3465,12 @@ def setup_dashboard_environment():
     os.environ["QT_SCALE_FACTOR"] = dashboard_scale
 
     if platform.system() == 'Linux':
-        os.environ["QT_QPA_PLATFORM"] = "xcb"
-        os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
+        session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        if session_type == "wayland":
+            os.environ.setdefault("QT_QPA_PLATFORM", "wayland")
+        else:
+            os.environ.setdefault("QT_QPA_PLATFORM", "xcb")
+            os.environ["QT_XCB_GL_INTEGRATION"] = "xcb_egl"
         os.environ.setdefault("MESA_GL_VERSION_OVERRIDE", "3.3")
         os.environ.setdefault("MESA_GLSL_VERSION_OVERRIDE", "330")
         # Help eliminate screen tearing on Pi

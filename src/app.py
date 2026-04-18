@@ -31,6 +31,7 @@ import subprocess
 import signal
 import calendar
 import threading
+import socket
 from functions import (
     # status helpers
     profiler,
@@ -135,6 +136,9 @@ SPOTIFY_OAUTH_SCOPES = [
 ]
 SPOTIFY_SEARCH_LIMIT = 8
 SPOTIFY_MIN_QUERY_LENGTH = 2
+SPOTIFY_RELAY_KEY_DEFAULT = "spxrelay_Tp4r8Qm2Vz6Ld1Jx9Nc7Hk5Bw3Ys0FaE"
+SPOTIFY_RELAY_MIN_POLL_INTERVAL_SECONDS = 1.05
+SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS = 2.0
 
 # DBus imports are now conditional and imported only on Linux
 # import dbus
@@ -575,17 +579,28 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load initial weather cache: {e}")
 
-        self._spotify_client_id = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
-        self._spotify_client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "").strip()
+        self._spotify_client_id = "237156c29da8493e88f4de326f4768f1"
+        self._spotify_client_secret = "ad8b68422b834a12944fa8d3d453bb44"
         self._spotify_access_token = ""
         self._spotify_refresh_token = ""
         self._spotify_token_expires_at = 0.0
         self._spotify_auth_state = ""
         self._spotify_code_verifier = ""
+        self._spotify_auth_redirect_uri = ""
         self._spotify_auth_url = ""
         self._spotify_auth_in_progress = False
+        self._spotify_auth_poll_inflight = False
+        self._spotify_relay_last_poll_at = 0.0
+        self._spotify_relay_backoff_until = 0.0
         self._spotify_pending_volume = None
         self._spotify_auth_cache_file = os.path.join(funcs.CACHE_DIR_F1, "spotify_auth.json")
+        self._spotify_auth_mode = (os.environ.get("SPOTIFY_AUTH_MODE") or "auto").strip().lower()
+        if self._spotify_auth_mode not in ("auto", "local", "relay"):
+            logger.warning(f"Invalid SPOTIFY_AUTH_MODE '{self._spotify_auth_mode}', falling back to auto.")
+            self._spotify_auth_mode = "auto"
+        self._spotify_relay_base_url = ((os.environ.get("SPOTIFY_RELAY_BASE_URL") or funcs.LAUNCH_API_BASE_URL or "").strip().rstrip("/"))
+        self._spotify_relay_key = (os.environ.get("SPOTIFY_RELAY_KEY") or SPOTIFY_RELAY_KEY_DEFAULT).strip()
+        self._spotify_device_id = self._build_spotify_device_id()
         self._spotify_player = {
             "configured": bool(self._spotify_client_id),
             "authenticated": False,
@@ -633,6 +648,9 @@ class Backend(QObject):
         elif is_large_display:
             # Matches DFR1125 4K Bar Display (14 inch 3840x1100)
             default_w, default_h, default_s = 3840, 1100, "2.0"
+        elif platform.system() == 'Linux' and not funcs.is_raspberry_pi() and not detected_w and not detected_h:
+            # Regular Linux desktop (dev machine) — use windowed small-display defaults
+            default_w, default_h, default_s = 1480, 320, "1.0"
         else:
             # Linux default fallback (usually large display for backward compatibility)
             default_w, default_h, default_s = 3840, 1100, "2.0"
@@ -1150,8 +1168,58 @@ class Backend(QObject):
         """Periodic update check in background"""
         self.checkForUpdatesNow()
 
+    def _spotify_use_relay_auth(self):
+        if self._spotify_auth_mode == "local":
+            return False
+        if self._spotify_auth_mode == "relay":
+            return True
+        return bool(self._spotify_relay_base_url and self._spotify_relay_key)
+
+    def _spotify_relay_callback_uri(self):
+        if not self._spotify_relay_base_url:
+            return ""
+        return f"{self._spotify_relay_base_url}/spotify/callback"
+
+    def _spotify_relay_poll_url(self):
+        if not self._spotify_relay_base_url:
+            return ""
+        return f"{self._spotify_relay_base_url}/spotify/oauth-result"
+
+    def _spotify_local_redirect_uri(self):
+        host = (os.environ.get("SPOTIFY_REDIRECT_HOST") or "auto").strip()
+        if host.lower() == "auto":
+            try:
+                # Resolve the primary LAN IP so QR login on a phone can reach this dashboard callback.
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                    sock.connect(("8.8.8.8", 80))
+                    resolved_host = sock.getsockname()[0]
+                    if resolved_host:
+                        host = resolved_host
+            except Exception:
+                host = "127.0.0.1"
+        return f"http://{host}:{funcs.HTTP_SERVER_PORT}/spotify/callback"
+
+    def _build_spotify_device_id(self):
+        explicit = (os.environ.get("SPOTIFY_DEVICE_ID") or "").strip()
+        if explicit:
+            return explicit
+        machine_id = ""
+        try:
+            machine_id_path = "/etc/machine-id"
+            if os.path.exists(machine_id_path):
+                with open(machine_id_path, "r", encoding="utf-8") as machine_file:
+                    machine_id = machine_file.read().strip()
+        except Exception:
+            machine_id = ""
+        seed = f"{socket.gethostname()}:{machine_id or os.name}"
+        return hashlib.sha256(seed.encode("utf-8")).hexdigest()[:24]
+
     def _spotify_redirect_uri(self):
-        return f"http://127.0.0.1:{funcs.HTTP_SERVER_PORT}/spotify/callback"
+        if self._spotify_use_relay_auth():
+            relay_uri = self._spotify_relay_callback_uri()
+            if relay_uri:
+                return relay_uri
+        return self._spotify_local_redirect_uri()
 
     def _spotify_update_state(self, **updates):
         changed = False
@@ -1335,6 +1403,20 @@ class Backend(QObject):
         if not self._spotify_client_id:
             self._spotify_update_state(configured=False, status="Set SPOTIFY_CLIENT_ID to enable Spotify login.")
             return
+        if self._spotify_use_relay_auth():
+            if not self._spotify_relay_base_url:
+                self._spotify_update_state(authenticated=False, status="Set SPOTIFY_RELAY_BASE_URL for Spotify relay login.")
+                return
+            if not self._spotify_relay_key:
+                self._spotify_update_state(authenticated=False, status="Set SPOTIFY_RELAY_KEY for Spotify relay login.")
+                return
+        redirect_uri = self._spotify_redirect_uri()
+        if not redirect_uri:
+            self._spotify_update_state(authenticated=False, status="Spotify redirect URI is not configured.")
+            return
+        if self._spotify_use_relay_auth() and not redirect_uri.lower().startswith("https://"):
+            self._spotify_update_state(authenticated=False, status="Spotify relay callback must use HTTPS.")
+            return
         # RFC 7636 requires 43-128 chars; 64 random bytes become ~86 chars after Base64URL (no padding).
         verifier = base64.urlsafe_b64encode(os.urandom(64)).decode("utf-8").rstrip("=")
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("utf-8")).digest()).decode("utf-8").rstrip("=")
@@ -1342,12 +1424,16 @@ class Backend(QObject):
         self._spotify_code_verifier = verifier
         self._spotify_auth_state = state
         self._spotify_auth_in_progress = True
+        self._spotify_auth_poll_inflight = False
+        self._spotify_relay_last_poll_at = 0.0
+        self._spotify_relay_backoff_until = 0.0
         self.spotifyAuthInProgressChanged.emit()
         funcs.reset_spotify_auth_result()
+        self._spotify_auth_redirect_uri = redirect_uri
         query = urllib.parse.urlencode({
             "response_type": "code",
             "client_id": self._spotify_client_id,
-            "redirect_uri": self._spotify_redirect_uri(),
+            "redirect_uri": self._spotify_auth_redirect_uri,
             "code_challenge_method": "S256",
             "code_challenge": challenge,
             "state": state,
@@ -1360,9 +1446,16 @@ class Backend(QObject):
     @pyqtSlot()
     def cancelSpotifyLogin(self):
         self._spotify_auth_in_progress = False
+        self._spotify_auth_poll_inflight = False
+        self._spotify_relay_last_poll_at = 0.0
+        self._spotify_relay_backoff_until = 0.0
+        self._spotify_auth_state = ""
+        self._spotify_code_verifier = ""
         self.spotifyAuthInProgressChanged.emit()
+        self._spotify_auth_redirect_uri = ""
         self._spotify_auth_url = ""
         self.spotifyAuthUrlChanged.emit()
+        funcs.reset_spotify_auth_result()
 
     @pyqtSlot()
     def logoutSpotify(self):
@@ -1378,14 +1471,97 @@ class Backend(QObject):
             status="Spotify disconnected.",
         )
 
+    def _poll_spotify_relay_auth_result(self):
+        poll_url = self._spotify_relay_poll_url()
+        if not poll_url or not self._spotify_auth_state or not self._spotify_relay_key:
+            return None
+        now = time.monotonic()
+        if now < self._spotify_relay_backoff_until:
+            return None
+        if (now - self._spotify_relay_last_poll_at) < SPOTIFY_RELAY_MIN_POLL_INTERVAL_SECONDS:
+            return None
+        self._spotify_relay_last_poll_at = now
+        headers = {
+            "X-Relay-Key": self._spotify_relay_key,
+            "X-Device-Id": self._spotify_device_id,
+        }
+        try:
+            response = requests.get(
+                poll_url,
+                params={"state": self._spotify_auth_state},
+                headers=headers,
+                timeout=5,
+            )
+        except Exception as e:
+            logger.debug(f"Spotify relay poll request failed: {e}")
+            self._spotify_relay_backoff_until = time.monotonic() + SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS
+            return None
+        if response.status_code == 200:
+            try:
+                payload = response.json() if response.content else {}
+            except ValueError as e:
+                logger.warning(f"Spotify relay poll returned invalid JSON: {e}")
+                return {"error": "relay_invalid_json"}
+            if payload.get("pending"):
+                return None
+            result_state = payload.get("state", "")
+            if result_state and result_state != self._spotify_auth_state:
+                return {"error": "state_mismatch"}
+            return payload
+        if response.status_code == 429:
+            self._spotify_relay_backoff_until = time.monotonic() + SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS
+            return None
+        if response.status_code in (202, 204, 404):
+            return None
+        if response.status_code in (400, 401, 403):
+            detail = f"relay_http_{response.status_code}"
+            try:
+                body = response.json() if response.content else {}
+                if isinstance(body, dict) and body.get("detail"):
+                    detail = str(body.get("detail"))
+            except Exception:
+                pass
+            if response.status_code in (401, 403) and not (os.environ.get("SPOTIFY_RELAY_KEY") or "").strip():
+                detail = f"{detail} (check API relay key)"
+            return {"error": detail}
+        logger.warning(f"Spotify relay poll failed with HTTP {response.status_code}")
+        return None
+
     def _poll_spotify_auth_callback(self):
-        if not self._spotify_auth_in_progress:
+        if not self._spotify_auth_in_progress or self._spotify_auth_poll_inflight:
             return
-        callback = funcs.consume_spotify_auth_result(expected_state=self._spotify_auth_state)
+        self._spotify_auth_poll_inflight = True
+        try:
+            if self._spotify_use_relay_auth():
+                callback = self._poll_spotify_relay_auth_result()
+            else:
+                callback = funcs.consume_spotify_auth_result(expected_state=self._spotify_auth_state)
+        finally:
+            self._spotify_auth_poll_inflight = False
         if not callback:
             return
+        # Keep QR auth flow active on relay poll/config errors so the code remains scannable.
+        # Only terminal Spotify OAuth outcomes should close the login flow.
+        if self._spotify_use_relay_auth() and callback.get("error") and not callback.get("code"):
+            relay_error = str(callback.get("error") or "")
+            non_terminal_prefixes = (
+                "relay_http_",
+                "unauthorized",
+                "https_required",
+                "rate_limited",
+                "invalid_or_missing_state",
+                "relay_invalid_json",
+            )
+            if relay_error.startswith(non_terminal_prefixes):
+                self._spotify_update_state(authenticated=False, status=f"Spotify relay waiting: {relay_error}")
+                return
+        redirect_uri = self._spotify_auth_redirect_uri or self._spotify_redirect_uri()
+        code_verifier = self._spotify_code_verifier
         self._spotify_auth_in_progress = False
         self.spotifyAuthInProgressChanged.emit()
+        self._spotify_auth_state = ""
+        self._spotify_code_verifier = ""
+        self._spotify_auth_redirect_uri = ""
         self._spotify_auth_url = ""
         self.spotifyAuthUrlChanged.emit()
         if callback.get("error"):
@@ -1395,12 +1571,15 @@ class Backend(QObject):
         if not code:
             self._spotify_update_state(authenticated=False, status="Spotify login cancelled.")
             return
+        if not redirect_uri or not code_verifier:
+            self._spotify_update_state(authenticated=False, status="Spotify login expired. Please try again.")
+            return
         try:
             response = self._spotify_token_request({
                 "grant_type": "authorization_code",
                 "code": code,
-                "redirect_uri": self._spotify_redirect_uri(),
-                "code_verifier": self._spotify_code_verifier,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
             })
             if response.status_code != 200:
                 self._spotify_update_state(authenticated=False, status=f"Spotify login failed (HTTP {response.status_code}).")
@@ -1555,6 +1734,17 @@ class Backend(QObject):
     @pyqtProperty(str, notify=spotifyAuthUrlChanged)
     def spotifyAuthUrl(self):
         return self._spotify_auth_url
+
+    @pyqtProperty(str, notify=spotifyAuthUrlChanged)
+    def spotifyAuthQrUrl(self):
+        if not self._spotify_auth_url:
+            return ""
+        encoded = urllib.parse.quote(self._spotify_auth_url, safe="")
+        return f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data={encoded}"
+
+    @pyqtProperty(str, notify=spotifyAuthUrlChanged)
+    def spotifyRedirectUri(self):
+        return self._spotify_auth_redirect_uri or self._spotify_redirect_uri()
 
     @pyqtProperty(bool, notify=spotifyAuthInProgressChanged)
     def spotifyAuthInProgress(self):
@@ -4265,8 +4455,8 @@ if __name__ == '__main__':
         app.setApplicationName("SpaceXDashboard")
         app.setOrganizationName("Harrison")
         
-        if platform.system() != 'Windows':
-            app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Blank cursor globally
+        if platform.system() not in ('Windows', 'Darwin') and funcs.is_raspberry_pi():
+            app.setOverrideCursor(QCursor(Qt.CursorShape.BlankCursor))  # Hide cursor on Pi kiosk
 
         # Load fonts
         profiler.mark("Loading Fonts")
