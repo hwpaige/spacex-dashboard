@@ -2846,12 +2846,13 @@ Window {
                         property real minExpandedHeight: 160
                         property real bottomBarInset: bottomBar.height
                         property real baseCornerRadius: 14
-                        // Empirically tuned: slightly >1 keeps early drag transparent, then catches up near full-open.
+                        // Empirically tuned: exponent 1.45 delays early fade-in, then ramps opacity near full-open.
                         property real fadeCurveExponent: 1.45
+                        property real maxHeightRatio: 1.0
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
                         property int searchDebounceMs: 350
-                        property real expandedHeight: Math.max(minExpandedHeight, root.height - bottomBarInset)
+                        property real expandedHeight: Math.max(minExpandedHeight, Math.min(root.height - bottomBarInset, root.height * maxHeightRatio))
                         property real openProgress: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
                         property var searchResults: []
                         property var libraryPlaylists: []
