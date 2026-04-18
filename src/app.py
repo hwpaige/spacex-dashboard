@@ -124,6 +124,18 @@ from functions import (
     get_rpi_config_resolution,
     is_launch_near,
 )
+
+SPOTIFY_OAUTH_SCOPES = [
+    "user-read-playback-state",
+    "user-modify-playback-state",
+    "user-read-currently-playing",
+    "user-library-read",
+    "playlist-read-private",
+    "user-read-private",
+]
+SPOTIFY_SEARCH_LIMIT = 8
+SPOTIFY_MIN_QUERY_LENGTH = 2
+
 # DBus imports are now conditional and imported only on Linux
 # import dbus
 # import dbus.mainloop.glib
@@ -1214,16 +1226,18 @@ class Backend(QObject):
             return True
         return self._refresh_spotify_access_token()
 
-    def _spotify_api_request(self, method, endpoint, params=None):
+    def _spotify_api_request(self, method, endpoint, params=None, json_data=None):
         if not self._ensure_spotify_access_token():
             return False, {}, 401
         headers = {"Authorization": f"Bearer {self._spotify_access_token}"}
+        if json_data is not None:
+            headers["Content-Type"] = "application/json"
         url = f"https://api.spotify.com/v1{endpoint}"
         try:
-            response = requests.request(method, url, headers=headers, params=params, timeout=8)
+            response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
             if response.status_code == 401 and self._refresh_spotify_access_token():
                 headers["Authorization"] = f"Bearer {self._spotify_access_token}"
-                response = requests.request(method, url, headers=headers, params=params, timeout=8)
+                response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
             if response.status_code == 204:
                 return True, {}, 204
             payload = response.json() if response.content else {}
@@ -1231,6 +1245,79 @@ class Backend(QObject):
         except Exception as e:
             logger.warning(f"Spotify API request failed ({endpoint}): {e}")
             return False, {}, 0
+
+    def _spotify_pick_image_url(self, images):
+        if not images:
+            return ""
+        try:
+            return images[-1].get("url", "") or images[0].get("url", "") or ""
+        except Exception:
+            return ""
+
+    def _spotify_join_artists(self, item):
+        return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
+
+    def _spotify_format_entity(self, item, entity_type):
+        item = item or {}
+        if entity_type == "track":
+            artists = self._spotify_join_artists(item)
+            album = item.get("album") or {}
+            subtitle = artists if artists else (album.get("name", "") or "")
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "track",
+                "title": item.get("name", "") or "Unknown Track",
+                "subtitle": subtitle,
+                "context": album.get("name", "") or "",
+                "image_url": self._spotify_pick_image_url(album.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "album":
+            artists = self._spotify_join_artists(item)
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "album",
+                "title": item.get("name", "") or "Unknown Album",
+                "subtitle": artists or "Album",
+                "context": "Album",
+                "image_url": self._spotify_pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "playlist":
+            owner = (item.get("owner") or {}).get("display_name", "") or ""
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "playlist",
+                "title": item.get("name", "") or "Unknown Playlist",
+                "subtitle": owner or "Playlist",
+                "context": "Playlist",
+                "image_url": self._spotify_pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "artist":
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "artist",
+                "title": item.get("name", "") or "Unknown Artist",
+                "subtitle": "Artist",
+                "context": "",
+                "image_url": self._spotify_pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        return {
+            "id": item.get("id", ""),
+            "uri": item.get("uri", ""),
+            "type": entity_type,
+            "title": item.get("name", "") or "Unknown",
+            "subtitle": "",
+            "context": "",
+            "image_url": "",
+            "play_uri": item.get("uri", ""),
+        }
 
     @pyqtSlot()
     def startSpotifyLogin(self):
@@ -1253,7 +1340,7 @@ class Backend(QObject):
             "code_challenge_method": "S256",
             "code_challenge": challenge,
             "state": state,
-            "scope": "user-read-playback-state user-modify-playback-state user-read-currently-playing",
+            "scope": " ".join(SPOTIFY_OAUTH_SCOPES),
         })
         self._spotify_auth_url = f"https://accounts.spotify.com/authorize?{query}"
         self.spotifyAuthUrlChanged.emit()
@@ -1340,7 +1427,7 @@ class Backend(QObject):
             self._spotify_update_state(authenticated=True, has_active_device=False, is_playing=False, status="No active Spotify device.")
             return
         item = payload.get("item") or {}
-        artists = ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
+        artists = self._spotify_join_artists(item)
         images = ((item.get("album") or {}).get("images") or [])
         # Spotify images are ordered largest->smallest; pick the last (smallest) for compact pill rendering.
         album_art = images[-1].get("url") if images else ""
@@ -1388,6 +1475,76 @@ class Backend(QObject):
         volume = int(self._spotify_pending_volume)
         self._spotify_pending_volume = None
         self._spotify_api_request("PUT", "/me/player/volume", params={"volume_percent": volume})
+
+    @pyqtSlot(str, result=QVariant)
+    def spotifySearch(self, query):
+        query = (query or "").strip()
+        if len(query) < SPOTIFY_MIN_QUERY_LENGTH:
+            return []
+        ok, payload, status_code = self._spotify_api_request(
+            "GET",
+            "/search",
+            params={
+                "q": query,
+                "type": "track,album,artist,playlist",
+                "limit": SPOTIFY_SEARCH_LIMIT,
+            },
+        )
+        if not ok:
+            if status_code in (401, 403):
+                self._spotify_update_state(authenticated=False, status="Spotify authorization required.")
+            return []
+        results = []
+        for track in (payload.get("tracks") or {}).get("items", []):
+            results.append(self._spotify_format_entity(track, "track"))
+        for album in (payload.get("albums") or {}).get("items", []):
+            results.append(self._spotify_format_entity(album, "album"))
+        for playlist in (payload.get("playlists") or {}).get("items", []):
+            results.append(self._spotify_format_entity(playlist, "playlist"))
+        for artist in (payload.get("artists") or {}).get("items", []):
+            results.append(self._spotify_format_entity(artist, "artist"))
+        return results
+
+    @pyqtSlot(result=QVariant)
+    def spotifyGetLibrary(self):
+        if not (self._spotify_access_token or self._spotify_refresh_token):
+            return {"playlists": [], "albums": [], "tracks": []}
+        library = {"playlists": [], "albums": [], "tracks": []}
+
+        ok, payload, _ = self._spotify_api_request("GET", "/me/playlists", params={"limit": 20})
+        if ok:
+            for playlist in payload.get("items", []):
+                library["playlists"].append(self._spotify_format_entity(playlist, "playlist"))
+
+        ok, payload, _ = self._spotify_api_request("GET", "/me/albums", params={"limit": 20})
+        if ok:
+            for item in payload.get("items", []):
+                library["albums"].append(self._spotify_format_entity(item.get("album") or {}, "album"))
+
+        ok, payload, _ = self._spotify_api_request("GET", "/me/tracks", params={"limit": 30})
+        if ok:
+            for item in payload.get("items", []):
+                library["tracks"].append(self._spotify_format_entity(item.get("track") or {}, "track"))
+
+        return library
+
+    @pyqtSlot(str)
+    def spotifyPlayTrackUri(self, uri):
+        uri = (uri or "").strip()
+        if not uri:
+            return
+        ok, _, _ = self._spotify_api_request("PUT", "/me/player/play", json_data={"uris": [uri]})
+        if ok:
+            QTimer.singleShot(300, self.update_spotify_player)
+
+    @pyqtSlot(str)
+    def spotifyPlayContextUri(self, uri):
+        uri = (uri or "").strip()
+        if not uri:
+            return
+        ok, _, _ = self._spotify_api_request("PUT", "/me/player/play", json_data={"context_uri": uri})
+        if ok:
+            QTimer.singleShot(300, self.update_spotify_player)
 
     @pyqtProperty(str, notify=spotifyAuthUrlChanged)
     def spotifyAuthUrl(self):

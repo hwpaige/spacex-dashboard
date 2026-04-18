@@ -2764,10 +2764,7 @@ Window {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    backend.startSpotifyLogin()
-                                    spotifyLoginPopup.open()
-                                }
+                                onClicked: spotifyFullScreenTray.openLoginFlow()
                             }
                         }
 
@@ -2820,73 +2817,641 @@ Window {
                                 onMoved: backend.setSpotifyVolume(Math.round(value))
                             }
                         }
+
+                        Text {
+                            text: "\uf062"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 10
+                            font.weight: Font.Black
+                            color: (backend && backend.theme === "dark") ? "#7adf9c" : "#168d41"
+                            Layout.alignment: Qt.AlignVCenter
+                        }
                     }
 
                     Popup {
-                        id: spotifyLoginPopup
-                        width: Math.min(root.width * 0.8, 760)
-                        height: Math.min(root.height * 0.9, 520)
-                        x: (root.width - width) / 2
-                        y: (root.height - height) / 2
-                        modal: true
-                        focus: true
-                        closePolicy: Popup.CloseOnEscape
-                        onClosed: {
-                            if (backend.spotifyAuthInProgress) backend.cancelSpotifyLogin()
+                        id: spotifyFullScreenTray
+                        x: 8
+                        width: Math.max(300, root.width - 16)
+                        height: 0
+                        y: (spotifyPill.mapToItem(root.contentItem, 0, 0).y + spotifyPill.height) - height
+                        visible: height > 0
+                        padding: 0
+                        closePolicy: Popup.CloseOnPressOutside
+                        onClosed: height = 0
+
+                        property bool isDragging: false
+                        property real minExpandedHeight: 160
+                        property real bottomBarInset: 40
+                        property real maxHeightRatio: 0.9
+                        property real closeThresholdRatio: 0.2
+                        property int minSearchChars: 2
+                        property int searchDebounceMs: 350
+                        property real expandedHeight: Math.max(minExpandedHeight, Math.min(root.height - bottomBarInset, root.height * maxHeightRatio))
+                        property var searchResults: []
+                        property var libraryPlaylists: []
+                        property var libraryAlbums: []
+                        property var libraryTracks: []
+                        property int activeTab: 0
+                        property bool spotifyAuthenticated: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
+
+                        function _playItem(item) {
+                            if (!backend || !item) return
+                            var itemUri = item.play_uri || item.uri || ""
+                            if (!itemUri) return
+                            if (item.type === "track") backend.spotifyPlayTrackUri(itemUri)
+                            else backend.spotifyPlayContextUri(itemUri)
+                        }
+
+                        function refreshLibrary() {
+                            if (!backend || !backend.spotifyPlayer || !backend.spotifyPlayer.authenticated) {
+                                libraryPlaylists = []
+                                libraryAlbums = []
+                                libraryTracks = []
+                                return
+                            }
+                            var data = backend.spotifyGetLibrary()
+                            libraryPlaylists = (data && data.playlists) ? data.playlists : []
+                            libraryAlbums = (data && data.albums) ? data.albums : []
+                            libraryTracks = (data && data.tracks) ? data.tracks : []
+                        }
+
+                        function refreshSearch() {
+                            if (!backend || !backend.spotifyPlayer || !backend.spotifyPlayer.authenticated) {
+                                searchResults = []
+                                return
+                            }
+                            var q = (spotifySearchField.text || "").trim()
+                            if (q.length < minSearchChars) {
+                                searchResults = []
+                                return
+                            }
+                            searchResults = backend.spotifySearch(q)
+                        }
+                        
+                        function openLoginFlow() {
+                            if (!backend) return
+                            if (height === 0) open()
+                            height = expandedHeight
+                            activeTab = 0
+                            if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
+                        }
+
+                        opacity: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
+
+                        Behavior on height {
+                            enabled: !spotifyFullScreenTray.isDragging && (spotifyResultsList ? !spotifyResultsList.dragging : true)
+                            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
                         }
 
                         background: Rectangle {
-                            radius: 10
-                            color: (backend && backend.theme === "dark") ? "#161616" : "#f4f4f4"
-                            border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
+                            radius: 14
+                            color: (backend && backend.theme === "dark") ? "#151515" : "#f5f5f5"
+                            border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
                             border.width: 1
                         }
 
                         ColumnLayout {
                             anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
+                            anchors.margins: 0
+                            spacing: 0
+
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                color: "transparent"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf077"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: 11
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+
+                                    property point startGlobalPos: Qt.point(0, 0)
+                                    property real startHeight: 0
+                                    property bool moved: false
+
+                                    onPressed: {
+                                        startGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        startHeight = spotifyFullScreenTray.height
+                                        spotifyFullScreenTray.isDragging = true
+                                        moved = false
+                                    }
+
+                                    onPositionChanged: {
+                                        if (!spotifyFullScreenTray.isDragging || !pressed) return
+                                        var currentGlobalPos = mapToGlobal(Qt.point(mouse.x, mouse.y))
+                                        var deltaY = currentGlobalPos.y - startGlobalPos.y
+                                        if (Math.abs(deltaY) > 5) moved = true
+                                        var newHeight = startHeight - deltaY
+                                        newHeight = Math.max(0, Math.min(spotifyFullScreenTray.expandedHeight, newHeight))
+                                        spotifyFullScreenTray.height = newHeight
+                                    }
+
+                                    onReleased: {
+                                        spotifyFullScreenTray.isDragging = false
+                                        if (!moved) {
+                                            spotifyFullScreenTray.height = 0
+                                            return
+                                        }
+                                        var threshold = spotifyFullScreenTray.expandedHeight * spotifyFullScreenTray.closeThresholdRatio
+                                        if (spotifyFullScreenTray.height < threshold) spotifyFullScreenTray.height = 0
+                                        else spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
+                                    }
+                                }
+                            }
 
                             RowLayout {
+                                visible: spotifyFullScreenTray.spotifyAuthenticated
                                 Layout.fillWidth: true
-                                Text {
-                                    text: "Spotify Login"
-                                    font.pixelSize: 15
-                                    font.family: "D-DIN"
-                                    font.bold: true
-                                    color: (backend && backend.theme === "dark") ? "white" : "black"
-                                    Layout.fillWidth: true
+                                Layout.leftMargin: 10
+                                Layout.rightMargin: 10
+                                Layout.bottomMargin: 6
+                                spacing: 6
+
+                                Repeater {
+                                    model: [
+                                        {"label": "Now Playing"},
+                                        {"label": "Search"},
+                                        {"label": "Library"}
+                                    ]
+                                    Rectangle {
+                                        Layout.preferredHeight: 26
+                                        Layout.preferredWidth: Math.max(84, tabLabel.implicitWidth + 20)
+                                        radius: 13
+                                        color: spotifyFullScreenTray.activeTab === index
+                                               ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dcdcdc")
+                                               : ((backend && backend.theme === "dark") ? "#1a1a1a" : "#ebebeb")
+                                        border.color: (backend && backend.theme === "dark") ? "#3a3a3a" : "#d2d2d2"
+                                        border.width: spotifyFullScreenTray.activeTab === index ? 2 : 1
+
+                                        Text {
+                                            id: tabLabel
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                            font.family: "D-DIN"
+                                            font.pixelSize: 11
+                                            font.bold: spotifyFullScreenTray.activeTab === index
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                spotifyFullScreenTray.activeTab = index
+                                                if (index === 1) spotifyFullScreenTray.refreshSearch()
+                                                if (index === 2) spotifyFullScreenTray.refreshLibrary()
+                                            }
+                                        }
+                                    }
                                 }
-                                Button {
-                                    text: "Close"
-                                    onClicked: spotifyLoginPopup.close()
+
+                                Item { Layout.fillWidth: true }
+
+                                Text {
+                                    text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.status || "") : ""
+                                    color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#555555"
+                                    font.family: "D-DIN"
+                                    font.pixelSize: 10
+                                    Layout.alignment: Qt.AlignVCenter
                                 }
                             }
 
                             Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                radius: 8
-                                color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
-                                border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
+                                Layout.leftMargin: 10
+                                Layout.rightMargin: 10
+                                Layout.bottomMargin: 10
+                                radius: 10
+                                color: (backend && backend.theme === "dark") ? "#101010" : "white"
+                                border.color: (backend && backend.theme === "dark") ? "#2c2c2c" : "#e2e2e2"
                                 border.width: 1
                                 clip: true
 
-                                WebEngineView {
+                                StackLayout {
                                     anchors.fill: parent
-                                    url: backend ? backend.spotifyAuthUrl : ""
-                                    settings.playbackRequiresUserGesture: false
+                                    anchors.margins: 10
+                                    visible: spotifyFullScreenTray.spotifyAuthenticated
+                                    currentIndex: spotifyFullScreenTray.activeTab
+
+                                    ColumnLayout {
+                                        spacing: 8
+
+                                        Text {
+                                            text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.track_name || "Nothing playing") : "Spotify"
+                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                            font.family: "D-DIN"
+                                            font.pixelSize: 18
+                                            font.bold: true
+                                            elide: Text.ElideRight
+                                            Layout.fillWidth: true
+                                        }
+                                        Text {
+                                            text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.artist_name || backend.spotifyPlayer.status || "") : ""
+                                            color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
+                                            font.family: "D-DIN"
+                                            font.pixelSize: 13
+                                            Layout.fillWidth: true
+                                        }
+
+                                        RowLayout {
+                                            spacing: 12
+                                            Layout.fillWidth: true
+
+                                            Rectangle {
+                                                Layout.preferredWidth: 130
+                                                Layout.preferredHeight: 130
+                                                radius: 8
+                                                color: (backend && backend.theme === "dark") ? "#202020" : "#efefef"
+                                                border.color: (backend && backend.theme === "dark") ? "#3a3a3a" : "#d0d0d0"
+                                                border.width: 1
+                                                clip: true
+                                                Image {
+                                                    anchors.fill: parent
+                                                    source: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.album_art_url || "") : ""
+                                                    fillMode: Image.PreserveAspectCrop
+                                                    asynchronous: true
+                                                }
+                                            }
+
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 8
+
+                                                RowLayout {
+                                                    spacing: 14
+                                                    Text {
+                                                        text: "\uf048"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 20
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyPreviousTrack() }
+                                                    }
+                                                    Text {
+                                                        text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.is_playing) ? "\uf04c" : "\uf04b"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 22
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyTogglePlayPause() }
+                                                    }
+                                                    Text {
+                                                        text: "\uf051"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 20
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyNextTrack() }
+                                                    }
+                                                }
+
+                                                Slider {
+                                                    Layout.fillWidth: true
+                                                    from: 0
+                                                    to: 100
+                                                    value: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.volume_percent || 50) : 50
+                                                    onMoved: backend.setSpotifyVolume(Math.round(value))
+                                                }
+                                            }
+                                        }
+                                        Item { Layout.fillHeight: true }
+                                    }
+
+                                    ColumnLayout {
+                                        spacing: 8
+
+                                        TextField {
+                                            id: spotifySearchField
+                                            Layout.fillWidth: true
+                                            placeholderText: "Search songs, albums, artists, playlists"
+                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                            placeholderTextColor: (backend && backend.theme === "dark") ? "#7c7c7c" : "#9a9a9a"
+                                            background: Rectangle {
+                                                radius: 8
+                                                color: (backend && backend.theme === "dark") ? "#1e1e1e" : "#f0f0f0"
+                                                border.color: (backend && backend.theme === "dark") ? "#333333" : "#d4d4d4"
+                                                border.width: 1
+                                            }
+                                            onTextChanged: spotifySearchDebounce.restart()
+                                        }
+
+                                        Timer {
+                                            id: spotifySearchDebounce
+                                            interval: spotifyFullScreenTray.searchDebounceMs
+                                            repeat: false
+                                            onTriggered: spotifyFullScreenTray.refreshSearch()
+                                        }
+
+                                        ListView {
+                                            id: spotifyResultsList
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            clip: true
+                                            spacing: 4
+                                            model: spotifyFullScreenTray.searchResults
+                                            delegate: Rectangle {
+                                                width: ListView.view.width
+                                                height: 48
+                                                radius: 8
+                                                color: (backend && backend.theme === "dark") ? "#1b1b1b" : "#f6f6f6"
+                                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
+                                                border.width: 1
+
+                                                RowLayout {
+                                                    anchors.fill: parent
+                                                    anchors.leftMargin: 8
+                                                    anchors.rightMargin: 8
+                                                    spacing: 8
+
+                                                    Rectangle {
+                                                        Layout.preferredWidth: 34
+                                                        Layout.preferredHeight: 34
+                                                        radius: 4
+                                                        color: (backend && backend.theme === "dark") ? "#252525" : "#e5e5e5"
+                                                        clip: true
+                                                        Image {
+                                                            anchors.fill: parent
+                                                            source: modelData.image_url || ""
+                                                            fillMode: Image.PreserveAspectCrop
+                                                            asynchronous: true
+                                                        }
+                                                    }
+
+                                                    ColumnLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 0
+                                                        Text {
+                                                            text: modelData.title || ""
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 12
+                                                            font.bold: true
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                        }
+                                                        Text {
+                                                            text: ((modelData.type || "").toUpperCase()) + " • " + (modelData.subtitle || "")
+                                                            color: (backend && backend.theme === "dark") ? "#b8b8b8" : "#666666"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 10
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                        }
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    cursorShape: Qt.PointingHandCursor
+                                                    onClicked: spotifyFullScreenTray._playItem(modelData)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    ColumnLayout {
+                                        spacing: 6
+
+                                        RowLayout {
+                                            Layout.fillWidth: true
+                                            spacing: 6
+                                            Rectangle {
+                                                Layout.preferredWidth: 85
+                                                Layout.preferredHeight: 24
+                                                radius: 12
+                                                color: spotifyLibraryTabs.currentIndex === 0
+                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
+                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
+                                                Text { anchors.centerIn: parent; text: "Playlists"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
+                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 0 }
+                                            }
+                                            Rectangle {
+                                                Layout.preferredWidth: 75
+                                                Layout.preferredHeight: 24
+                                                radius: 12
+                                                color: spotifyLibraryTabs.currentIndex === 1
+                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
+                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
+                                                Text { anchors.centerIn: parent; text: "Albums"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
+                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 1 }
+                                            }
+                                            Rectangle {
+                                                Layout.preferredWidth: 75
+                                                Layout.preferredHeight: 24
+                                                radius: 12
+                                                color: spotifyLibraryTabs.currentIndex === 2
+                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
+                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
+                                                Text { anchors.centerIn: parent; text: "Tracks"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
+                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 2 }
+                                            }
+                                            Item { Layout.fillWidth: true }
+                                            Button {
+                                                text: "Refresh"
+                                                onClicked: spotifyFullScreenTray.refreshLibrary()
+                                            }
+                                        }
+
+                                        StackLayout {
+                                            id: spotifyLibraryTabs
+                                            Layout.fillWidth: true
+                                            Layout.fillHeight: true
+                                            currentIndex: 0
+
+                                            ListView {
+                                                clip: true
+                                                spacing: 4
+                                                model: spotifyFullScreenTray.libraryPlaylists
+                                                delegate: spotifyLibraryDelegate
+                                            }
+
+                                            ListView {
+                                                clip: true
+                                                spacing: 4
+                                                model: spotifyFullScreenTray.libraryAlbums
+                                                delegate: spotifyLibraryDelegate
+                                            }
+
+                                            ListView {
+                                                clip: true
+                                                spacing: 4
+                                                model: spotifyFullScreenTray.libraryTracks
+                                                delegate: spotifyLibraryDelegate
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Component {
+                                    id: spotifyLibraryDelegate
+                                    Rectangle {
+                                        width: ListView.view.width
+                                        height: 46
+                                        radius: 8
+                                        color: (backend && backend.theme === "dark") ? "#1b1b1b" : "#f6f6f6"
+                                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
+                                        border.width: 1
+
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            anchors.leftMargin: 8
+                                            anchors.rightMargin: 8
+                                            spacing: 8
+                                            Rectangle {
+                                                Layout.preferredWidth: 30
+                                                Layout.preferredHeight: 30
+                                                radius: 4
+                                                color: (backend && backend.theme === "dark") ? "#252525" : "#e5e5e5"
+                                                clip: true
+                                                Image { anchors.fill: parent; source: modelData.image_url || ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
+                                            }
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+                                                Text {
+                                                    text: modelData.title || ""
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                    font.family: "D-DIN"
+                                                    font.pixelSize: 12
+                                                    font.bold: true
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                                Text {
+                                                    text: modelData.subtitle || ""
+                                                    color: (backend && backend.theme === "dark") ? "#b8b8b8" : "#666666"
+                                                    font.family: "D-DIN"
+                                                    font.pixelSize: 10
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+                                            }
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: spotifyFullScreenTray._playItem(modelData)
+                                        }
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 10
+                                    visible: !spotifyFullScreenTray.spotifyAuthenticated
+
+                                    Text {
+                                        text: "Spotify Login"
+                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                        font.family: "D-DIN"
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                    }
+                                    Text {
+                                        text: {
+                                            if (!backend || !backend.spotifyPlayer) return "Login to Spotify."
+                                            return backend.spotifyPlayer.status || "Login to Spotify."
+                                        }
+                                        color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
+                                        font.family: "D-DIN"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    RowLayout {
+                                        spacing: 8
+                                        Button {
+                                            text: "Start Login"
+                                            onClicked: {
+                                                if (backend) backend.startSpotifyLogin()
+                                            }
+                                        }
+                                        Button {
+                                            text: "Hide"
+                                            visible: !(backend && backend.spotifyAuthInProgress)
+                                            onClicked: spotifyFullScreenTray.height = 0
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Button {
+                                            text: "Cancel"
+                                            visible: backend && backend.spotifyAuthInProgress
+                                            onClicked: {
+                                                if (backend) backend.cancelSpotifyLogin()
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        radius: 8
+                                        color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
+                                        border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
+                                        border.width: 1
+                                        clip: true
+
+                                        WebEngineView {
+                                            anchors.fill: parent
+                                            url: backend ? backend.spotifyAuthUrl : ""
+                                            settings.playbackRequiresUserGesture: false
+                                        }
+                                    }
                                 }
                             }
                         }
 
-                        Connections {
-                            target: backend
-                            function onSpotifyAuthInProgressChanged() {
-                                if (!backend.spotifyAuthInProgress && spotifyLoginPopup.visible) {
-                                    spotifyLoginPopup.close()
-                                }
+                        onVisibleChanged: {
+                            if (visible) {
+                                if (activeTab === 2) refreshLibrary()
+                                if (activeTab === 1) refreshSearch()
                             }
+                        }
+                        onHeightChanged: {
+                            if (height === 0 && backend && backend.spotifyAuthInProgress) {
+                                backend.cancelSpotifyLogin()
+                            }
+                        }
+                    }
+
+                    DragHandler {
+                        id: spotifyPillDragHandler
+                        target: null
+                        xAxis.enabled: false
+
+                        property real dragStartY: 0
+                        property real startHeight: 0
+
+                        onActiveChanged: {
+                            if (active) {
+                                dragStartY = centroid.scenePosition.y
+                                if (spotifyFullScreenTray.height === 0) {
+                                    spotifyFullScreenTray.open()
+                                    spotifyFullScreenTray.height = 1
+                                }
+                                startHeight = spotifyFullScreenTray.height
+                                spotifyFullScreenTray.isDragging = true
+                            } else {
+                                if (!spotifyFullScreenTray.isDragging) return
+                                spotifyFullScreenTray.isDragging = false
+                                var threshold = spotifyFullScreenTray.expandedHeight * spotifyFullScreenTray.closeThresholdRatio
+                                if (spotifyFullScreenTray.height < threshold) spotifyFullScreenTray.height = 0
+                                else spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
+                            }
+                        }
+
+                        onCentroidChanged: {
+                            if (!active || !spotifyFullScreenTray.isDragging) return
+                            var delta = centroid.scenePosition.y - dragStartY
+                            var newHeight = startHeight - delta
+                            newHeight = Math.max(0, Math.min(spotifyFullScreenTray.expandedHeight, newHeight))
+                            spotifyFullScreenTray.height = newHeight
                         }
                     }
                 }
