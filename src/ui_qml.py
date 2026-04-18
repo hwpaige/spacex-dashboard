@@ -2911,7 +2911,13 @@ Window {
                         onClosed: height = 0
 
                         property bool isDragging: false
-                        property real expandedHeight: Math.max(160, Math.min(root.height - 40, root.height * 0.9))
+                        property real minExpandedHeight: 160
+                        property real bottomBarInset: 40
+                        property real maxHeightRatio: 0.9
+                        property real closeThresholdRatio: 0.2
+                        property int minSearchChars: 2
+                        property int searchDebounceMs: 350
+                        property real expandedHeight: Math.max(minExpandedHeight, Math.min(root.height - bottomBarInset, root.height * maxHeightRatio))
                         property var searchResults: []
                         property var libraryPlaylists: []
                         property var libraryAlbums: []
@@ -2945,7 +2951,7 @@ Window {
                                 return
                             }
                             var q = (spotifySearchField.text || "").trim()
-                            if (q.length < 2) {
+                            if (q.length < minSearchChars) {
                                 searchResults = []
                                 return
                             }
@@ -3014,7 +3020,7 @@ Window {
                                             spotifyFullScreenTray.height = 0
                                             return
                                         }
-                                        var threshold = spotifyFullScreenTray.expandedHeight * 0.2
+                                        var threshold = spotifyFullScreenTray.expandedHeight * spotifyFullScreenTray.closeThresholdRatio
                                         if (spotifyFullScreenTray.height < threshold) spotifyFullScreenTray.height = 0
                                         else spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
                                     }
@@ -3195,7 +3201,7 @@ Window {
 
                                         Timer {
                                             id: spotifySearchDebounce
-                                            interval: 350
+                                            interval: spotifyFullScreenTray.searchDebounceMs
                                             repeat: false
                                             onTriggered: spotifyFullScreenTray.refreshSearch()
                                         }
@@ -3424,7 +3430,7 @@ Window {
                             } else {
                                 if (!spotifyFullScreenTray.isDragging) return
                                 spotifyFullScreenTray.isDragging = false
-                                var threshold = spotifyFullScreenTray.expandedHeight * 0.2
+                                var threshold = spotifyFullScreenTray.expandedHeight * spotifyFullScreenTray.closeThresholdRatio
                                 if (spotifyFullScreenTray.height < threshold) spotifyFullScreenTray.height = 0
                                 else spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
                             }
