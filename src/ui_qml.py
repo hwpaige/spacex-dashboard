@@ -2713,7 +2713,7 @@ Window {
                                     text: "\uf1bc"
                                     font.family: "Font Awesome 5 Brands"
                                     font.pixelSize: 10
-                                    color: backend.theme === "dark" ? "#1DB954" : "#168d41"
+                                    color: (backend && backend.theme === "dark") ? "#1DB954" : "#168d41"
                                     visible: !(backend && backend.spotifyPlayer && backend.spotifyPlayer.album_art_url)
                                 }
                             }

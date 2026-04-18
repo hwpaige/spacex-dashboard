@@ -1,19 +1,24 @@
 import os
+import sys
 
-FUNCTIONS_PATH = os.path.join(os.path.dirname(__file__), "..", "src", "functions.py")
+SRC_DIR = os.path.join(os.path.dirname(__file__), "..", "src")
+if SRC_DIR not in sys.path:
+    sys.path.insert(0, SRC_DIR)
 
-
-def _read_functions():
-    with open(FUNCTIONS_PATH, "r", encoding="utf-8") as fh:
-        return fh.read()
-
-
-def test_spotify_callback_route_is_present():
-    content = _read_functions()
-    assert 'parsed.path == "/spotify/callback"' in content
-    assert "consume_spotify_auth_result" in content
+import functions as funcs
 
 
-def test_spotify_state_mismatch_guard_exists():
-    content = _read_functions()
-    assert "state_mismatch" in content
+def test_spotify_auth_result_round_trip():
+    funcs.reset_spotify_auth_result()
+    funcs._set_spotify_auth_result({"code": "abc", "state": "xyz", "error": ""})
+    payload = funcs.consume_spotify_auth_result(expected_state="xyz")
+    assert payload["code"] == "abc"
+    assert funcs.consume_spotify_auth_result() is None
+
+
+def test_spotify_state_mismatch_guard_blocks_payload():
+    funcs.reset_spotify_auth_result()
+    funcs._set_spotify_auth_result({"code": "abc", "state": "wrong", "error": ""})
+    payload = funcs.consume_spotify_auth_result(expected_state="expected")
+    assert payload["error"] == "state_mismatch"
+    assert funcs.consume_spotify_auth_result() is None

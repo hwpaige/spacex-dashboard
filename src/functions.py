@@ -1255,6 +1255,9 @@ def consume_spotify_auth_result(expected_state: str | None = None):
         payload = dict(SPOTIFY_AUTH_RESULT)
         SPOTIFY_AUTH_RESULT.clear()
     state = payload.get("state")
+    if expected_state and not state:
+        logger.warning("Discarded Spotify auth callback due to missing state")
+        return {"error": "state_mismatch"}
     if expected_state and state and state != expected_state:
         logger.warning("Discarded Spotify auth callback due to state mismatch")
         return {"error": "state_mismatch"}

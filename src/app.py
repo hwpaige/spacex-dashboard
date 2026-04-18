@@ -903,6 +903,7 @@ class Backend(QObject):
         try:
             QTimer.singleShot(800, _boot_initial_scan)
             QTimer.singleShot(1500, _boot_autoreconnect)
+            # Defer until next event-loop tick so QML bindings are connected before first emit.
             QTimer.singleShot(0, self.update_spotify_player)
         except Exception as _e:
             logger.debug(f"Failed to set boot-time auto-reconnect timer: {_e}")
@@ -1236,6 +1237,7 @@ class Backend(QObject):
         if not self._spotify_client_id:
             self._spotify_update_state(configured=False, status="Set SPOTIFY_CLIENT_ID to enable Spotify login.")
             return
+        # RFC 7636 requires 43-128 chars; 64 random bytes become ~86 chars after Base64URL (no padding).
         verifier = base64.urlsafe_b64encode(os.urandom(64)).decode("utf-8").rstrip("=")
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("utf-8")).digest()).decode("utf-8").rstrip("=")
         state = secrets.token_urlsafe(24)
@@ -1340,6 +1342,7 @@ class Backend(QObject):
         item = payload.get("item") or {}
         artists = ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
         images = ((item.get("album") or {}).get("images") or [])
+        # Spotify images are ordered largest->smallest; pick the last (smallest) for compact pill rendering.
         album_art = images[-1].get("url") if images else ""
         device = payload.get("device") or {}
         self._spotify_update_state(
