@@ -30,10 +30,29 @@ Troubleshooting tips:
   - `from PyQt6.QtWebEngineQuick import QtWebEngineQuick`
   - `from PyQt6.QtCharts import QChartView, QLineSeries, QDateTimeAxis, QValueAxis`
 
+## Spotify setup
+
+Spotify login requires environment variables and redirect URI registration in your Spotify app settings.
+
+Set these environment variables before launching the dashboard:
+
+- `SPOTIFY_CLIENT_ID` (required)
+- `SPOTIFY_CLIENT_SECRET` (optional; if set, token exchange/refresh will use it)
+
+The app listens for OAuth callbacks on local HTTP ports `8080` to `8084` (first available), so add these redirect URIs in the Spotify Developer Dashboard:
+
+- `http://127.0.0.1:8080/spotify/callback`
+- `http://127.0.0.1:8081/spotify/callback`
+- `http://127.0.0.1:8082/spotify/callback`
+- `http://127.0.0.1:8083/spotify/callback`
+- `http://127.0.0.1:8084/spotify/callback`
+
+Do not commit real credentials to git; keep them in local environment configuration only.
+
+
 
 
      
-
 
 
 

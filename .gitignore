@@ -24,6 +24,10 @@ __pycache__/
 venv/
 env/
 
+# Local environment files
+.env
+.env.*
+
 # IDE files
 .idea/
 .vscode/
