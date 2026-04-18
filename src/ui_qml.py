@@ -2846,6 +2846,7 @@ Window {
                         property real minExpandedHeight: 160
                         property real bottomBarInset: bottomBar.height
                         property real baseCornerRadius: 14
+                        // Slightly >1 keeps early drag more transparent, then catches up near fully open.
                         property real fadeCurveExponent: 1.45
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
@@ -2909,6 +2910,7 @@ Window {
                         }
 
                         background: Rectangle {
+                            // Corners square off as the tray approaches full-screen.
                             radius: spotifyFullScreenTray.baseCornerRadius * (1.0 - spotifyFullScreenTray.openProgress)
                             color: (backend && backend.theme === "dark") ? "#151515" : "#f5f5f5"
                             border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
