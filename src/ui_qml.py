@@ -2764,17 +2764,7 @@ Window {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (!backend) return
-                                    if (spotifyFullScreenTray.height === 0) {
-                                        spotifyFullScreenTray.open()
-                                        spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
-                                    } else {
-                                        spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
-                                    }
-                                    spotifyFullScreenTray.activeTab = 0
-                                    if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
-                                }
+                                onClicked: spotifyFullScreenTray.openLoginFlow()
                             }
                         }
 
@@ -2896,6 +2886,14 @@ Window {
                                 return
                             }
                             searchResults = backend.spotifySearch(q)
+                        }
+                        
+                        function openLoginFlow() {
+                            if (!backend) return
+                            if (height === 0) open()
+                            height = expandedHeight
+                            activeTab = 0
+                            if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
 
                         opacity: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
@@ -3356,7 +3354,10 @@ Window {
                                         font.bold: true
                                     }
                                     Text {
-                                        text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.status || "Login to Spotify.") : "Login to Spotify."
+                                        text: {
+                                            if (!backend || !backend.spotifyPlayer) return "Login to Spotify."
+                                            return backend.spotifyPlayer.status || "Login to Spotify."
+                                        }
                                         color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
                                         font.family: "D-DIN"
                                         font.pixelSize: 12
@@ -3367,13 +3368,14 @@ Window {
                                     RowLayout {
                                         spacing: 8
                                         Button {
-                                            text: backend && backend.spotifyAuthInProgress ? "Restart Login" : "Start Login"
+                                            text: "Start Login"
                                             onClicked: {
                                                 if (backend) backend.startSpotifyLogin()
                                             }
                                         }
                                         Button {
-                                            text: "Close"
+                                            text: "Hide"
+                                            visible: !(backend && backend.spotifyAuthInProgress)
                                             onClicked: spotifyFullScreenTray.height = 0
                                         }
                                         Item { Layout.fillWidth: true }
@@ -3412,7 +3414,7 @@ Window {
                             }
                         }
                         onHeightChanged: {
-                            if (height <= 0 && backend && backend.spotifyAuthInProgress) {
+                            if (height === 0 && backend && backend.spotifyAuthInProgress) {
                                 backend.cancelSpotifyLogin()
                             }
                         }
