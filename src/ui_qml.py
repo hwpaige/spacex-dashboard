@@ -2005,10 +2005,12 @@ Window {
 
             // Bottom bar - FIXED VERSION
         Rectangle {
+            id: bottomBar
             Layout.fillWidth: true
             Layout.preferredHeight: 30
             color: "transparent"
             visible: true
+            z: 3000
 
             RowLayout {
                 anchors.fill: parent
@@ -2830,10 +2832,11 @@ Window {
 
                     Popup {
                         id: spotifyFullScreenTray
-                        x: 8 - spotifyPill.mapToItem(root.contentItem, 0, 0).x
-                        width: Math.max(300, root.width - 16)
+                        parent: root.contentItem
+                        x: 0
+                        width: root.width
                         height: 0
-                        y: parent.height - height
+                        y: root.height - bottomBar.height - height
                         visible: height > 0
                         padding: 0
                         closePolicy: Popup.CloseOnPressOutside
@@ -2841,12 +2844,16 @@ Window {
 
                         property bool isDragging: false
                         property real minExpandedHeight: 160
-                        property real bottomBarInset: 40
-                        property real maxHeightRatio: 0.9
+                        property real bottomBarInset: bottomBar.height
+                        property real baseCornerRadius: 14
+                        // Empirically tuned: exponent 1.45 delays early fade-in, then ramps opacity near full-open.
+                        property real fadeCurveExponent: 1.45
+                        property real maxHeightRatio: 1.0
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
                         property int searchDebounceMs: 350
                         property real expandedHeight: Math.max(minExpandedHeight, Math.min(root.height - bottomBarInset, root.height * maxHeightRatio))
+                        property real openProgress: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
                         property var searchResults: []
                         property var libraryPlaylists: []
                         property var libraryAlbums: []
@@ -2896,7 +2903,7 @@ Window {
                             if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
 
-                        opacity: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
+                        opacity: Math.pow(openProgress, fadeCurveExponent)
 
                         Behavior on height {
                             enabled: !spotifyFullScreenTray.isDragging && (spotifyResultsList ? !spotifyResultsList.dragging : true)
@@ -2904,7 +2911,8 @@ Window {
                         }
 
                         background: Rectangle {
-                            radius: 14
+                            // Corners square off as the tray approaches full-screen.
+                            radius: spotifyFullScreenTray.baseCornerRadius * (1.0 - spotifyFullScreenTray.openProgress)
                             color: (backend && backend.theme === "dark") ? "#151515" : "#f5f5f5"
                             border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
                             border.width: 1
