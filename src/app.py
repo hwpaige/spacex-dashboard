@@ -576,6 +576,7 @@ class Backend(QObject):
             logger.debug(f"Failed to load initial weather cache: {e}")
 
         self._spotify_client_id = os.environ.get("SPOTIFY_CLIENT_ID", "").strip()
+        self._spotify_client_secret = os.environ.get("SPOTIFY_CLIENT_SECRET", "").strip()
         self._spotify_access_token = ""
         self._spotify_refresh_token = ""
         self._spotify_token_expires_at = 0.0
@@ -1192,19 +1193,29 @@ class Backend(QObject):
     def _spotify_token_is_valid(self, skew_seconds=30):
         return bool(self._spotify_access_token) and (time.time() + skew_seconds) < float(self._spotify_token_expires_at or 0)
 
+    def _spotify_token_request(self, payload):
+        data = dict(payload or {})
+        headers = {}
+        if self._spotify_client_secret:
+            raw = f"{self._spotify_client_id}:{self._spotify_client_secret}".encode("utf-8")
+            headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('utf-8')}"
+        else:
+            data["client_id"] = self._spotify_client_id
+        return requests.post(
+            "https://accounts.spotify.com/api/token",
+            data=data,
+            headers=headers if headers else None,
+            timeout=8,
+        )
+
     def _refresh_spotify_access_token(self):
         if not self._spotify_client_id or not self._spotify_refresh_token:
             return False
         try:
-            response = requests.post(
-                "https://accounts.spotify.com/api/token",
-                data={
-                    "grant_type": "refresh_token",
-                    "refresh_token": self._spotify_refresh_token,
-                    "client_id": self._spotify_client_id,
-                },
-                timeout=8,
-            )
+            response = self._spotify_token_request({
+                "grant_type": "refresh_token",
+                "refresh_token": self._spotify_refresh_token,
+            })
             if response.status_code != 200:
                 logger.warning(f"Spotify token refresh failed: HTTP {response.status_code}")
                 return False
@@ -1385,17 +1396,12 @@ class Backend(QObject):
             self._spotify_update_state(authenticated=False, status="Spotify login cancelled.")
             return
         try:
-            response = requests.post(
-                "https://accounts.spotify.com/api/token",
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": self._spotify_redirect_uri(),
-                    "client_id": self._spotify_client_id,
-                    "code_verifier": self._spotify_code_verifier,
-                },
-                timeout=8,
-            )
+            response = self._spotify_token_request({
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": self._spotify_redirect_uri(),
+                "code_verifier": self._spotify_code_verifier,
+            })
             if response.status_code != 200:
                 self._spotify_update_state(authenticated=False, status=f"Spotify login failed (HTTP {response.status_code}).")
                 return
