@@ -2846,7 +2846,7 @@ Window {
                         property real minExpandedHeight: 160
                         property real bottomBarInset: bottomBar.height
                         property real baseCornerRadius: 14
-                        // Slightly >1 keeps early drag more transparent, then catches up near fully open.
+                        // Empirically tuned: slightly >1 keeps early drag transparent, then catches up near full-open.
                         property real fadeCurveExponent: 1.45
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
