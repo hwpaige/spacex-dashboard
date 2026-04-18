@@ -19,6 +19,7 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
 
@@ -113,6 +114,8 @@ __all__ = [
     "load_last_connected_network",
     "save_last_connected_network",
     "start_http_server",
+    "reset_spotify_auth_result",
+    "consume_spotify_auth_result",
     "perform_wifi_scan",
     "manage_nm_autoconnect",
     "test_network_connectivity",
@@ -1224,6 +1227,38 @@ def save_last_connected_network(ssid):
 
 HTTP_SERVER_PORT = 8080
 HTTP_SERVER_READY = threading.Event()
+SPOTIFY_AUTH_RESULT = {}
+SPOTIFY_AUTH_LOCK = threading.Lock()
+
+
+def reset_spotify_auth_result():
+    """Clear any pending Spotify OAuth callback payload."""
+    with SPOTIFY_AUTH_LOCK:
+        SPOTIFY_AUTH_RESULT.clear()
+
+
+def _set_spotify_auth_result(result: dict):
+    """Store latest Spotify OAuth callback payload."""
+    with SPOTIFY_AUTH_LOCK:
+        SPOTIFY_AUTH_RESULT.clear()
+        SPOTIFY_AUTH_RESULT.update(result or {})
+
+
+def consume_spotify_auth_result(expected_state: str | None = None):
+    """Return and clear pending Spotify OAuth callback payload.
+
+    If expected_state is provided and does not match, the payload is discarded.
+    """
+    with SPOTIFY_AUTH_LOCK:
+        if not SPOTIFY_AUTH_RESULT:
+            return None
+        payload = dict(SPOTIFY_AUTH_RESULT)
+        SPOTIFY_AUTH_RESULT.clear()
+    state = payload.get("state")
+    if expected_state and state and state != expected_state:
+        logger.warning("Discarded Spotify auth callback due to state mismatch")
+        return {"error": "state_mismatch"}
+    return payload
 
 def start_http_server():
     """Start a simple HTTP server for the globe and other web content"""
@@ -1236,6 +1271,29 @@ def start_http_server():
             super().__init__(*args, directory=src_dir, **kwargs)
 
         def do_GET(self):
+            parsed = urllib.parse.urlparse(self.path)
+            if parsed.path == "/spotify/callback":
+                query = urllib.parse.parse_qs(parsed.query, keep_blank_values=True)
+                result = {
+                    "code": (query.get("code") or [""])[0],
+                    "state": (query.get("state") or [""])[0],
+                    "error": (query.get("error") or [""])[0],
+                }
+                _set_spotify_auth_result(result)
+                ok = bool(result.get("code")) and not result.get("error")
+                body = (
+                    "<html><head><meta charset='utf-8'><title>Spotify Login</title></head>"
+                    "<body style='font-family:Arial,sans-serif;background:#111;color:#eee;padding:24px;'>"
+                    + ("<h3>Spotify connected.</h3><p>You can close this window.</p>" if ok
+                       else "<h3>Spotify login failed.</h3><p>You can close this window and try again.</p>")
+                    + "</body></html>"
+                ).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
             # Handle favicon requests to avoid noisy 404s
             if self.path in ("/favicon.ico", "/_favicon.ico"):
                 try:
