@@ -2764,10 +2764,7 @@ Window {
                             MouseArea {
                                 anchors.fill: parent
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    backend.startSpotifyLogin()
-                                    spotifyLoginPopup.open()
-                                }
+                                onClicked: spotifyFullScreenTray.openLoginFlow()
                             }
                         }
 
@@ -2832,74 +2829,6 @@ Window {
                     }
 
                     Popup {
-                        id: spotifyLoginPopup
-                        width: Math.min(root.width * 0.8, 760)
-                        height: Math.min(root.height * 0.9, 520)
-                        x: (root.width - width) / 2
-                        y: (root.height - height) / 2
-                        modal: true
-                        focus: true
-                        closePolicy: Popup.CloseOnEscape
-                        onClosed: {
-                            if (backend.spotifyAuthInProgress) backend.cancelSpotifyLogin()
-                        }
-
-                        background: Rectangle {
-                            radius: 10
-                            color: (backend && backend.theme === "dark") ? "#161616" : "#f4f4f4"
-                            border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
-                            border.width: 1
-                        }
-
-                        ColumnLayout {
-                            anchors.fill: parent
-                            anchors.margins: 10
-                            spacing: 8
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                Text {
-                                    text: "Spotify Login"
-                                    font.pixelSize: 15
-                                    font.family: "D-DIN"
-                                    font.bold: true
-                                    color: (backend && backend.theme === "dark") ? "white" : "black"
-                                    Layout.fillWidth: true
-                                }
-                                Button {
-                                    text: "Close"
-                                    onClicked: spotifyLoginPopup.close()
-                                }
-                            }
-
-                            Rectangle {
-                                Layout.fillWidth: true
-                                Layout.fillHeight: true
-                                radius: 8
-                                color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
-                                border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
-                                border.width: 1
-                                clip: true
-
-                                WebEngineView {
-                                    anchors.fill: parent
-                                    url: backend ? backend.spotifyAuthUrl : ""
-                                    settings.playbackRequiresUserGesture: false
-                                }
-                            }
-                        }
-
-                        Connections {
-                            target: backend
-                            function onSpotifyAuthInProgressChanged() {
-                                if (!backend.spotifyAuthInProgress && spotifyLoginPopup.visible) {
-                                    spotifyLoginPopup.close()
-                                }
-                            }
-                        }
-                    }
-
-                    Popup {
                         id: spotifyFullScreenTray
                         x: 8
                         width: Math.max(300, root.width - 16)
@@ -2923,6 +2852,7 @@ Window {
                         property var libraryAlbums: []
                         property var libraryTracks: []
                         property int activeTab: 0
+                        property bool spotifyAuthenticated: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
 
                         function _playItem(item) {
                             if (!backend || !item) return
@@ -2956,6 +2886,14 @@ Window {
                                 return
                             }
                             searchResults = backend.spotifySearch(q)
+                        }
+                        
+                        function openLoginFlow() {
+                            if (!backend) return
+                            if (height === 0) open()
+                            height = expandedHeight
+                            activeTab = 0
+                            if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
 
                         opacity: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
@@ -3028,6 +2966,7 @@ Window {
                             }
 
                             RowLayout {
+                                visible: spotifyFullScreenTray.spotifyAuthenticated
                                 Layout.fillWidth: true
                                 Layout.leftMargin: 10
                                 Layout.rightMargin: 10
@@ -3098,6 +3037,7 @@ Window {
                                 StackLayout {
                                     anchors.fill: parent
                                     anchors.margins: 10
+                                    visible: spotifyFullScreenTray.spotifyAuthenticated
                                     currentIndex: spotifyFullScreenTray.activeTab
 
                                     ColumnLayout {
@@ -3399,6 +3339,71 @@ Window {
                                         }
                                     }
                                 }
+
+                                ColumnLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 12
+                                    spacing: 10
+                                    visible: !spotifyFullScreenTray.spotifyAuthenticated
+
+                                    Text {
+                                        text: "Spotify Login"
+                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                        font.family: "D-DIN"
+                                        font.pixelSize: 18
+                                        font.bold: true
+                                    }
+                                    Text {
+                                        text: {
+                                            if (!backend || !backend.spotifyPlayer) return "Login to Spotify."
+                                            return backend.spotifyPlayer.status || "Login to Spotify."
+                                        }
+                                        color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
+                                        font.family: "D-DIN"
+                                        font.pixelSize: 12
+                                        wrapMode: Text.WordWrap
+                                        Layout.fillWidth: true
+                                    }
+
+                                    RowLayout {
+                                        spacing: 8
+                                        Button {
+                                            text: "Start Login"
+                                            onClicked: {
+                                                if (backend) backend.startSpotifyLogin()
+                                            }
+                                        }
+                                        Button {
+                                            text: "Hide"
+                                            visible: !(backend && backend.spotifyAuthInProgress)
+                                            onClicked: spotifyFullScreenTray.height = 0
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                        Button {
+                                            text: "Cancel"
+                                            visible: backend && backend.spotifyAuthInProgress
+                                            onClicked: {
+                                                if (backend) backend.cancelSpotifyLogin()
+                                            }
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.fillHeight: true
+                                        radius: 8
+                                        color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
+                                        border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
+                                        border.width: 1
+                                        clip: true
+
+                                        WebEngineView {
+                                            anchors.fill: parent
+                                            url: backend ? backend.spotifyAuthUrl : ""
+                                            settings.playbackRequiresUserGesture: false
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -3406,6 +3411,11 @@ Window {
                             if (visible) {
                                 if (activeTab === 2) refreshLibrary()
                                 if (activeTab === 1) refreshSearch()
+                            }
+                        }
+                        onHeightChanged: {
+                            if (height === 0 && backend && backend.spotifyAuthInProgress) {
+                                backend.cancelSpotifyLogin()
                             }
                         }
                     }
