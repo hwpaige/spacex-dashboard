@@ -836,7 +836,11 @@ Window {
                                         if (typeof root !== 'undefined') root._injectRoundedCorners(plotGlobeViewInner, 8)
                                     }
                                     zoomFactor: 1.0
-                                    layer.enabled: true
+                                    // Only enable the scene-graph layer during layout animations;
+                                    // leaving it on permanently can silently drop the backing
+                                    // GPU texture under memory pressure on Raspberry Pi, making
+                                    // the globe appear blank even though Three.js is still running.
+                                    layer.enabled: false
                                     layer.smooth: true
                                     layer.textureSize: Qt.size(width > 0 ? width : 1, height > 0 ? height : 1)
                                     settings.javascriptCanAccessClipboard: false
