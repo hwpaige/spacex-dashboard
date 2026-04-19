@@ -287,6 +287,13 @@ Window {
             color: (backend && backend.theme === "dark") ? "#111111" : "#f8f8f8"
             opacity: 0.98
             z: 9999
+            property bool showTerminalOutput: false
+            onVisibleChanged: {
+                if (visible) {
+                    // Start each update session with details collapsed.
+                    showTerminalOutput = false
+                }
+            }
 
             // Block all mouse/keyboard input to underlying UI while updating
             MouseArea { anchors.fill: parent; hoverEnabled: true }
@@ -304,8 +311,31 @@ Window {
                     anchors.horizontalCenter: parent.horizontalCenter
                 }
 
+                Rectangle {
+                    width: parent.width
+                    height: 36
+                    radius: 8
+                    color: backend.theme === "dark" ? "#181818" : "#f0f0f0"
+                    border.color: backend.theme === "dark" ? "#2a2a2a" : "#e0e0e0"
+                    border.width: 1
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: updateOverlay.showTerminalOutput ? "Hide terminal output" : "Show terminal output"
+                        color: backend.theme === "dark" ? "#E0E0E0" : "#202020"
+                        font.pixelSize: 13
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: updateOverlay.showTerminalOutput = !updateOverlay.showTerminalOutput
+                    }
+                }
+
                 // Progress text area showing tail of updater log
                 Rectangle {
+                    visible: updateOverlay.showTerminalOutput
                     width: parent.width
                     height: 140
                     radius: 8
@@ -2686,11 +2716,14 @@ Window {
 
                 Rectangle {
                     id: spotifyPill
-                    Layout.preferredWidth: 340
-                    Layout.maximumWidth: 340
+                    property real minDynamicWidth: 260
+                    property real maxDynamicWidth: Math.max(minDynamicWidth, bottomBar.width - weatherPill.width - 24)
+                    Layout.preferredWidth: Math.max(minDynamicWidth, Math.min(maxDynamicWidth, spotifyPillRow.implicitWidth + 6))
+                    Layout.maximumWidth: maxDynamicWidth
                     height: 28
                     radius: 14
                     color: "transparent"
+                    clip: true
 
                     Rectangle {
                         anchors.fill: parent
@@ -2701,18 +2734,19 @@ Window {
                     }
 
                     RowLayout {
+                        id: spotifyPillRow
                         anchors.fill: parent
-                        anchors.leftMargin: 8
-                        anchors.rightMargin: 8
-                        spacing: 6
+                        anchors.leftMargin: 0
+                        anchors.rightMargin: 6
+                        spacing: 2
 
                         Item {
-                            Layout.preferredWidth: 20
-                            Layout.preferredHeight: 20
+                            Layout.preferredWidth: spotifyPill.height
+                            Layout.preferredHeight: spotifyPill.height
                             Layout.alignment: Qt.AlignVCenter
                             Rectangle {
                                 anchors.fill: parent
-                                radius: 3
+                                radius: 0
                                 color: "transparent"
                                 clip: true
                                 Image {
@@ -2737,10 +2771,16 @@ Window {
                         }
 
                         ColumnLayout {
-                            Layout.fillWidth: true
+                            Layout.fillWidth: false
+                            Layout.preferredWidth: Math.min(
+                                                    Math.max(80, spotifyPill.width - spotifyPill.height - (spotifyAuthControls.visible ? spotifyAuthControls.implicitWidth : (spotifyLoginButton.visible ? spotifyLoginButton.width : 0)) - 14),
+                                                    Math.max(spotifyTrackText.implicitWidth, spotifyArtistText.implicitWidth)
+                                                )
                             Layout.alignment: Qt.AlignVCenter
                             spacing: 0
                             Text {
+                                id: spotifyTrackText
+                                Layout.fillWidth: true
                                 text: {
                                     if (!backend || !backend.spotifyPlayer) return "Spotify"
                                     if (!backend.spotifyPlayer.configured) return "Set SPOTIFY_CLIENT_ID"
@@ -2755,6 +2795,8 @@ Window {
                                 maximumLineCount: 1
                             }
                             Text {
+                                id: spotifyArtistText
+                                Layout.fillWidth: true
                                 text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.artist_name || backend.spotifyPlayer.status || "") : ""
                                 color: (backend && backend.theme === "dark") ? "#bbbbbb" : "#666666"
                                 font.pixelSize: 9
@@ -2765,6 +2807,7 @@ Window {
                         }
 
                         Rectangle {
+                            id: spotifyLoginButton
                             visible: backend && backend.spotifyPlayer && backend.spotifyPlayer.configured && !backend.spotifyPlayer.authenticated
                             Layout.preferredWidth: 64
                             Layout.preferredHeight: 20
@@ -2786,37 +2829,61 @@ Window {
                         }
 
                         RowLayout {
+                            id: spotifyAuthControls
                             visible: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
-                            spacing: 3
+                            property int buttonSize: 18
+                            property int buttonIconSize: 12
+                            spacing: 5
                             Layout.alignment: Qt.AlignVCenter
 
-                            Text {
-                                text: "\uf048"
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 12
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf049"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: backend.spotifyPreviousTrack()
                                 }
                             }
-                            Text {
-                                text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.is_playing) ? "\uf04c" : "\uf04b"
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 12
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.is_playing) ? "\uf04c" : "\uf04b"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
                                     onClicked: backend.spotifyTogglePlayPause()
                                 }
                             }
-                            Text {
-                                text: "\uf051"
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 12
-                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf050"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
                                 MouseArea {
                                     anchors.fill: parent
                                     cursorShape: Qt.PointingHandCursor
@@ -2824,39 +2891,92 @@ Window {
                                 }
                             }
 
-                            Slider {
-                                id: spotifyVolumeSlider
-                                Layout.preferredWidth: 72
-                                Layout.preferredHeight: 18
-                                from: 0
-                                to: 100
-                                value: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.volume_percent || 50) : 50
-                                onMoved: backend.setSpotifyVolume(Math.round(value))
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf6a9"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (backend) backend.setSpotifyVolume(0)
+                                    }
+                                }
+                            }
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf027"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (backend && backend.spotifyPlayer) {
+                                            var currentVolume = Math.round(backend.spotifyPlayer.volume_percent || 0)
+                                            backend.setSpotifyVolume(Math.max(0, currentVolume - 10))
+                                        }
+                                    }
+                                }
+                            }
+                            Item {
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf028"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        if (backend && backend.spotifyPlayer) {
+                                            var currentVolume = Math.round(backend.spotifyPlayer.volume_percent || 0)
+                                            backend.setSpotifyVolume(Math.min(100, currentVolume + 10))
+                                        }
+                                    }
+                                }
+                            }
+                            Item {
+                                id: spotifyPillDeviceIcon
+                                Layout.preferredWidth: spotifyAuthControls.buttonSize
+                                Layout.preferredHeight: spotifyAuthControls.buttonSize
+                                Layout.alignment: Qt.AlignVCenter
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: "\uf26c"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: spotifyAuthControls.buttonIconSize
+                                    font.weight: Font.Black
+                                    color: (backend && backend.theme === "dark") ? "#9edfb6" : "#168d41"
+                                }
+                                TapHandler {
+                                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                                    onTapped: spotifyFullScreenTray.openDevicePicker(spotifyPillDeviceIcon, "pill")
+                                }
                             }
                         }
 
-                        Text {
-                            id: spotifyPillDeviceIcon
-                            visible: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
-                            text: "\uf108"
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 10
-                            color: (backend && backend.theme === "dark") ? "#9edfb6" : "#168d41"
-                            Layout.alignment: Qt.AlignVCenter
-                            TapHandler {
-                                gesturePolicy: TapHandler.ReleaseWithinBounds
-                                onTapped: spotifyFullScreenTray.openDevicePicker(spotifyPillDeviceIcon, "pill")
-                            }
-                        }
-
-                        Text {
-                            text: "\uf062"
-                            font.family: "Font Awesome 5 Free"
-                            font.pixelSize: 10
-                            font.weight: Font.Black
-                            color: (backend && backend.theme === "dark") ? "#7adf9c" : "#168d41"
-                            Layout.alignment: Qt.AlignVCenter
-                        }
                     }
 
                     Item {
