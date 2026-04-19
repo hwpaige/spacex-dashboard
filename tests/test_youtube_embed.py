@@ -74,3 +74,28 @@ def test_autoplay_and_mute_present():
     html = _read_embed_html()
     assert 'autoplay' in html, "autoplay must be present in youtube_embed.html"
     assert 'mute' in html, "mute must be present in youtube_embed.html"
+
+
+def test_quality_cap_present():
+    """Ensure a playback quality cap is applied via setPlaybackQuality.
+
+    On memory-constrained hardware (Raspberry Pi) a single long,
+    high-resolution video can pre-buffer hundreds of megabytes of compressed
+    media data and exhaust available RAM, causing the playlist to stall when
+    it reaches that video.  Capping quality to 'medium' (360p) keeps the
+    buffer footprint small enough to run continuously.
+
+    This cap was removed in PR #21 (commit 667d17b) which re-introduced the
+    performance regression.  This test guards against that regression.
+    """
+    html = _strip_html_comments(_read_embed_html())
+    assert 'setPlaybackQuality' in html, (
+        "setPlaybackQuality call not found in youtube_embed.html. "
+        "A quality cap must be applied via the IFrame Player API to prevent "
+        "high-resolution videos from exhausting RAM on Raspberry Pi."
+    )
+    assert 'QUALITY_CAP' in html, (
+        "QUALITY_CAP variable not found in youtube_embed.html. "
+        "Define a QUALITY_CAP constant and pass it to setPlaybackQuality so "
+        "the cap is easy to adjust without hunting for magic strings."
+    )
