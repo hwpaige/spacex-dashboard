@@ -487,7 +487,8 @@ Window {
             visible: !!(!backend || !backend.isLoading)
             clip: true
 
-            readonly property real minSize: (root.height > root.width) ? ((root.height / 4) + (isHighRes ? 120 : 250)) : ((root.width / 4) + (isHighRes ? 120 : 250))
+            // Slightly widen the default (collapsed) landscape weather panel.
+            readonly property real minSize: (root.height > root.width) ? ((root.height / 4) + (isHighRes ? 120 : 250)) : ((root.width / 4) + (isHighRes ? 245 : 375))
             
             // Reset expansion on orientation change
             property bool isVerticalOrientation: root.height > root.width
@@ -4732,13 +4733,12 @@ Window {
                             modal: true
                             focus: true
                             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                            readonly property color settingsTileColor: (backend && backend.theme === "dark") ? "#8c1a1a1a" : "#bfffffff"
-                            readonly property color settingsTileBorder: (backend && backend.theme === "dark") ? "#55ffffff" : "#33000000"
+                            readonly property color settingsTileColor: (backend && backend.theme === "dark") ? "#c0181818" : "#d9ebebeb"
+                            readonly property color settingsTileBorder: "transparent"
                             background: Rectangle {
                                 color: (backend && backend.theme === "dark") ? "#dd111111" : "#e8f5f5f5"
                                 radius: 20
-                                border.color: (backend && backend.theme === "dark") ? "#66ffffff" : "#33000000"
-                                border.width: 1
+                                border.width: 0
                                 layer.enabled: true
                             }
 
@@ -4776,8 +4776,8 @@ Window {
 
                                         Repeater {
                                             model: [
-                                                { label: "Visual", icon: "\uf53f", idx: 0 },
-                                                { label: "Updates", icon: "\uf062", idx: 1 }
+                                                { label: "Updates", icon: "\uf062", idx: 1 },
+                                                { label: "Appearance", icon: "\uf53f", idx: 0 }
                                             ]
 
                                             delegate: Rectangle {
@@ -4829,7 +4829,7 @@ Window {
                                         Layout.fillWidth: true
 
                                         Text {
-                                            text: settingsCategoryStack.currentIndex === 0 ? "Visual" : "Updates"
+                                            text: settingsCategoryStack.currentIndex === 0 ? "Appearance" : "Updates"
                                             color: (backend && backend.theme === "dark") ? "white" : "black"
                                             font.pixelSize: 22
                                             font.bold: true
@@ -5029,7 +5029,7 @@ Window {
 
                                                         Text {
                                                             text: (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
-                                                            font.pixelSize: 18
+                                                            font.pixelSize: 13
                                                             font.bold: true
                                                             color: (backend && backend.theme === "dark") ? "white" : "black"
                                                             elide: Text.ElideRight
@@ -5079,7 +5079,7 @@ Window {
 
                                                         Text {
                                                             text: (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
-                                                            font.pixelSize: 18
+                                                            font.pixelSize: 13
                                                             font.bold: true
                                                             color: (backend && backend.theme === "dark") ? "white" : "black"
                                                             elide: Text.ElideRight
@@ -5129,7 +5129,7 @@ Window {
 
                                                         Text {
                                                             text: backend.targetBranch === "master" ? "Stable" : "Beta"
-                                                            font.pixelSize: 18
+                                                            font.pixelSize: 13
                                                             font.bold: true
                                                             color: (backend && backend.theme === "dark") ? "white" : "black"
                                                         }
@@ -5251,7 +5251,7 @@ Window {
                                                     color: (backend && backend.updateAvailable)
                                                            ? ((backend && backend.theme === "dark") ? "#2f4f3a" : "#4CAF50")
                                                            : displaySettingsPopup.settingsTileColor
-                                                    border.color: (backend && backend.updateAvailable) ? "#4CAF50" : displaySettingsPopup.settingsTileBorder
+                                                    border.color: (backend && backend.updateAvailable) ? "#4CAF50" : "transparent"
                                                     border.width: 1
                                                     radius: 10
                                                     opacity: {
