@@ -35,6 +35,33 @@
         var firstScriptTag = document.getElementsByTagName('script')[0];
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
+        // Cap playback to this quality level.  On memory-constrained hardware
+        // (e.g. Raspberry Pi) a single long, high-resolution video can pre-buffer
+        // hundreds of megabytes of compressed media data and exhaust available RAM.
+        // 'medium' (360p) is a reasonable cap that keeps the display presentable
+        // while keeping the buffer footprint small.
+        var QUALITY_CAP = 'medium';
+
+        // Maximum continuous play time (minutes) for a single video before
+        // skipping to the next one.  Very long videos (multi-hour launch streams)
+        // cause the DASH SourceBuffer to grow unboundedly and eventually fill all
+        // available RAM.  Skipping after this threshold reclaims memory.
+        var MAX_PLAY_MINUTES = 90;
+
+        var bufferWatchdogTimer = null;
+        var playDurationTimer = null;
+
+        function clearWatchdogs() {
+            if (bufferWatchdogTimer !== null) {
+                clearTimeout(bufferWatchdogTimer);
+                bufferWatchdogTimer = null;
+            }
+            if (playDurationTimer !== null) {
+                clearTimeout(playDurationTimer);
+                playDurationTimer = null;
+            }
+        }
+
         var player;
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
@@ -53,9 +80,39 @@
                 },
                 events: {
                     onReady: function(event) {
+                        // Apply quality cap before the first frame loads so the
+                        // player never buffers more data than necessary.
+                        event.target.setPlaybackQuality(QUALITY_CAP);
                         event.target.playVideo();
                     },
                     onStateChange: function(event) {
+                        // Cancel any outstanding watchdog timers before deciding
+                        // what (if anything) to arm next.
+                        clearWatchdogs();
+
+                        if (event.data === YT.PlayerState.BUFFERING) {
+                            // If the player stays in BUFFERING for 30 s it is
+                            // most likely stalled (network hiccup, embed-blocked
+                            // video).  Skip to the next item rather than letting
+                            // the stall pin the CPU at 100%.
+                            bufferWatchdogTimer = setTimeout(function() {
+                                player.nextVideo();
+                            }, 30000);
+                        }
+
+                        if (event.data === YT.PlayerState.PLAYING) {
+                            // Re-apply the quality cap whenever a new video
+                            // starts playing (each playlist item gets its own
+                            // buffer allocation).
+                            player.setPlaybackQuality(QUALITY_CAP);
+
+                            // Skip excessively long videos before their buffer
+                            // has time to fill all available RAM.
+                            playDurationTimer = setTimeout(function() {
+                                player.nextVideo();
+                            }, MAX_PLAY_MINUTES * 60 * 1000);
+                        }
+
                         // When the playlist ends, seek back to the first video
                         // and play again — all within the same player instance.
                         // This avoids the memory leak that arises when YouTube's
@@ -63,6 +120,11 @@
                         if (event.data === YT.PlayerState.ENDED) {
                             player.playVideoAt(0);
                         }
+                    },
+                    onError: function(event) {
+                        // Skip deleted, private, or embed-blocked videos
+                        // instead of halting the playlist permanently.
+                        player.nextVideo();
                     }
                 }
             });
