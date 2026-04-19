@@ -2712,13 +2712,15 @@ Window {
                             Rectangle {
                                 anchors.fill: parent
                                 radius: 3
-                                color: (backend && backend.theme === "dark") ? "#222" : "#ddd"
-                                border.color: (backend && backend.theme === "dark") ? "#444" : "#bbb"
-                                border.width: 1
+                                color: "transparent"
                                 clip: true
                                 Image {
+                                    id: spotifyPillAlbumArt
                                     anchors.fill: parent
-                                    source: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.album_art_url || "") : ""
+                                    source: {
+                                        var liveArt = (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.album_art_url || "") : ""
+                                        return liveArt || spotifyFallbackArtUrl || ""
+                                    }
                                     fillMode: Image.PreserveAspectCrop
                                     asynchronous: true
                                 }
@@ -2728,7 +2730,7 @@ Window {
                                     font.family: "Font Awesome 5 Brands"
                                     font.pixelSize: 10
                                     color: (backend && backend.theme === "dark") ? "#1DB954" : "#168d41"
-                                    visible: !(backend && backend.spotifyPlayer && backend.spotifyPlayer.album_art_url)
+                                    visible: spotifyPillAlbumArt.status === Image.Error
                                 }
                             }
                         }
@@ -2878,15 +2880,9 @@ Window {
                         property int searchDebounceMs: 350
                         property real expandedHeight: root.height
                         property real openProgress: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
-                        property var searchResults: []
-                        property var libraryPlaylists: []
-                        property var libraryAlbums: []
-                        property var libraryTracks: []
-                        property var libraryPodcasts: []
                         property int activeTab: 0
                         property int libraryCategory: 0
                         property var librarySelectedItem: null
-                        property var libraryItemTracks: []
                         property bool spotifyAuthenticated: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
 
                         function _playItem(item) {
@@ -2898,18 +2894,8 @@ Window {
                         }
 
                         function refreshLibrary() {
-                            if (!backend || !backend.spotifyPlayer || !backend.spotifyPlayer.authenticated) {
-                                libraryPlaylists = []
-                                libraryAlbums = []
-                                libraryTracks = []
-                                libraryPodcasts = []
-                                return
-                            }
-                            var data = backend.spotifyGetLibrary()
-                            libraryPlaylists = (data && data.playlists) ? data.playlists : []
-                            libraryAlbums = (data && data.albums) ? data.albums : []
-                            libraryTracks = (data && data.tracks) ? data.tracks : []
-                            libraryPodcasts = (data && data.podcasts) ? data.podcasts : []
+                            if (!backend) return
+                            backend.spotifyGetLibrary()
                         }
 
                         function openLibraryItem(item) {
@@ -2917,29 +2903,22 @@ Window {
                             var t = item.type || ""
                             if (t === "album") {
                                 librarySelectedItem = item
-                                libraryItemTracks = backend.spotifyGetAlbumTracks(item.uri || "")
+                                if (backend) backend.spotifyGetAlbumTracks(item.uri || "")
                             } else if (t === "playlist") {
                                 librarySelectedItem = item
-                                libraryItemTracks = backend.spotifyGetPlaylistTracks(item.uri || "")
+                                if (backend) backend.spotifyGetPlaylistTracks(item.uri || "")
                             } else if (t === "podcast") {
                                 librarySelectedItem = item
-                                libraryItemTracks = backend.spotifyGetPodcastEpisodes(item.uri || "")
+                                if (backend) backend.spotifyGetPodcastEpisodes(item.uri || "")
                             } else {
                                 _playItem(item)
                             }
                         }
 
                         function refreshSearch() {
-                            if (!backend || !backend.spotifyPlayer || !backend.spotifyPlayer.authenticated) {
-                                searchResults = []
-                                return
-                            }
+                            if (!backend) return
                             var q = (spotifySearchField.text || "").trim()
-                            if (q.length < minSearchChars) {
-                                searchResults = []
-                                return
-                            }
-                            searchResults = backend.spotifySearch(q)
+                            backend.spotifySearch(q)
                         }
                         
                         function openLoginFlow() {
@@ -3061,12 +3040,17 @@ Window {
 
                                     Rectangle {
                                         anchors.fill: parent
-                                        color: (backend && backend.theme === "dark") ? "#0a0a0a" : "#e0e0e0"
+                                        color: "transparent"
                                     }
 
                                     Image {
                                         anchors.fill: parent
-                                        source: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.album_art_url_large || backend.spotifyPlayer.album_art_url || "") : ""
+                                        source: {
+                                            var liveArt = (backend && backend.spotifyPlayer)
+                                                ? (backend.spotifyPlayer.album_art_url_large || backend.spotifyPlayer.album_art_url || "")
+                                                : ""
+                                            return liveArt || spotifyFallbackArtUrl || ""
+                                        }
                                         fillMode: Image.PreserveAspectCrop
                                         asynchronous: true
                                     }
@@ -3659,7 +3643,7 @@ Window {
                                                             Layout.fillHeight: true
                                                             clip: true
                                                             spacing: 4
-                                                            model: spotifyFullScreenTray.searchResults
+                                                            model: backend ? backend.spotifySearchResults : []
                                                             delegate: Rectangle {
                                                                 width: ListView.view.width
                                                                 height: 48
@@ -3751,9 +3735,9 @@ Window {
                                                         property int cols: Math.max(2, Math.floor(width / 130))
                                                         cellWidth: Math.floor(width / cols)
                                                         cellHeight: cellWidth + 44
-                                                        model: spotifyFullScreenTray.libraryCategory === 0 ? spotifyFullScreenTray.libraryPlaylists
-                                                               : spotifyFullScreenTray.libraryCategory === 1 ? spotifyFullScreenTray.libraryAlbums
-                                                               : spotifyFullScreenTray.libraryPodcasts
+                                                        model: spotifyFullScreenTray.libraryCategory === 0 ? ((backend && backend.spotifyLibrary) ? (backend.spotifyLibrary.playlists || []) : [])
+                                                               : spotifyFullScreenTray.libraryCategory === 1 ? ((backend && backend.spotifyLibrary) ? (backend.spotifyLibrary.albums || []) : [])
+                                                               : ((backend && backend.spotifyLibrary) ? (backend.spotifyLibrary.podcasts || []) : [])
 
                                                         delegate: Item {
                                                             width: spotifyLibraryItemGrid.cellWidth
@@ -3896,7 +3880,7 @@ Window {
                                                         Layout.fillHeight: true
                                                         clip: true
                                                         spacing: 3
-                                                        model: spotifyFullScreenTray.libraryItemTracks
+                                                        model: backend ? backend.spotifyLibraryItemTracks : []
 
                                                         delegate: Rectangle {
                                                             width: ListView.view.width
@@ -4668,8 +4652,8 @@ Window {
 
                     Rectangle {
                     width: 28
-                    height: 32
-                    radius: 16
+                    height: 28
+                    radius: 14
                     color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                     border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                     border.width: 1
@@ -4714,8 +4698,8 @@ Window {
                     // Display Settings icon (formerly Brightness)
                     Rectangle {
                         width: 28
-                        height: 32
-                        radius: 16
+                        height: 28
+                        radius: 14
                         color: (backend && backend.theme === "dark") ? "#181818" : "#f0f0f0"
                         border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#e0e0e0"
                         border.width: 1
@@ -4748,12 +4732,12 @@ Window {
                             modal: true
                             focus: true
                             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
-                            readonly property color settingsTileColor: (backend && backend.theme === "dark") ? "#aa1a1a1a" : "#ccffffff"
-                            readonly property color settingsTileBorder: (backend && backend.theme === "dark") ? "#44ffffff" : "#33000000"
+                            readonly property color settingsTileColor: (backend && backend.theme === "dark") ? "#8c1a1a1a" : "#bfffffff"
+                            readonly property color settingsTileBorder: (backend && backend.theme === "dark") ? "#55ffffff" : "#33000000"
                             background: Rectangle {
-                                color: (backend && backend.theme === "dark") ? "#111111" : "#f5f5f5"
+                                color: (backend && backend.theme === "dark") ? "#dd111111" : "#e8f5f5f5"
                                 radius: 20
-                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#ddd"
+                                border.color: (backend && backend.theme === "dark") ? "#66ffffff" : "#33000000"
                                 border.width: 1
                                 layer.enabled: true
                             }
@@ -4765,7 +4749,7 @@ Window {
                                 Rectangle {
                                     Layout.fillHeight: true
                                     Layout.preferredWidth: 180
-                                    color: (backend && backend.theme === "dark") ? "#181818" : "#ebebeb"
+                                    color: (backend && backend.theme === "dark") ? "#c0181818" : "#d9ebebeb"
                                     radius: 20
 
                                     Rectangle {
@@ -4851,6 +4835,14 @@ Window {
                                             font.bold: true
                                         }
 
+                                        Text {
+                                            visible: settingsCategoryStack.currentIndex === 1
+                                            text: "• Last checked: " + (backend ? backend.lastUpdateCheckTime : "Never")
+                                            font.pixelSize: 10
+                                            color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
+                                            Layout.leftMargin: 8
+                                        }
+
                                         Item { Layout.fillWidth: true }
 
                                         Rectangle {
@@ -4898,64 +4890,92 @@ Window {
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 82
+                                                    Layout.preferredHeight: 112
                                                     color: displaySettingsPopup.settingsTileColor
                                                     border.color: displaySettingsPopup.settingsTileBorder
                                                     border.width: 1
                                                     radius: 10
 
-                                                    MouseArea {
+                                                    ColumnLayout {
                                                         anchors.fill: parent
-                                                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                                                        cursorShape: Qt.PointingHandCursor
-                                                    }
-
-                                                    RowLayout {
-                                                        anchors.fill: parent
-                                                        anchors.leftMargin: 12
-                                                        anchors.rightMargin: 12
+                                                        anchors.margins: 12
                                                         spacing: 10
 
-                                                        Text {
-                                                            text: "\uf06e"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 15
-                                                            color: "#FF9800"
-                                                            Layout.preferredWidth: 18
-                                                        }
-
-                                                        ColumnLayout {
+                                                        RowLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 1
+                                                            spacing: 10
 
                                                             Text {
-                                                                text: "Always Show Launch Banner"
-                                                                font.pixelSize: 12
-                                                                font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                text: "\uf06e"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 15
+                                                                color: "#FF9800"
+                                                                Layout.preferredWidth: 18
                                                             }
-                                                            Text {
-                                                                text: backend.launchTrayManualMode ? "Manual mode is ON" : "Manual mode is OFF"
-                                                                font.pixelSize: 10
-                                                                color: (backend && backend.theme === "dark") ? "#b3b3b3" : "#666"
+
+                                                            ColumnLayout {
+                                                                Layout.fillWidth: true
+                                                                spacing: 1
+
+                                                                Text {
+                                                                    text: "Launch Banner Visibility"
+                                                                    font.pixelSize: 12
+                                                                    font.bold: true
+                                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                }
+                                                                Text {
+                                                                    text: backend.launchTrayMode === "always" ? "Always visible" : (backend.launchTrayMode === "hidden" ? "Always hidden" : "Show only when relevant")
+                                                                    font.pixelSize: 10
+                                                                    color: (backend && backend.theme === "dark") ? "#b3b3b3" : "#666"
+                                                                }
                                                             }
                                                         }
 
                                                         Rectangle {
-                                                            width: 30
-                                                            height: 16
+                                                            Layout.fillWidth: true
+                                                            Layout.preferredHeight: 34
                                                             radius: 8
-                                                            color: backend.launchTrayManualMode ? "#4CAF50" : ((backend && backend.theme === "dark") ? "#3a3a3a" : "#c8c8c8")
-                                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                                            color: (backend && backend.theme === "dark") ? "#442d2d2d" : "#33bcbcbc"
+                                                            border.width: 1
+                                                            border.color: (backend && backend.theme === "dark") ? "#55ffffff" : "#33000000"
 
-                                                            Rectangle {
-                                                                width: 12
-                                                                height: 12
-                                                                radius: 6
-                                                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
-                                                                y: 2
-                                                                color: "white"
-                                                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                                            RowLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: 2
+                                                                spacing: 2
+
+                                                                Repeater {
+                                                                    model: [
+                                                                        { label: "Always", value: "always" },
+                                                                        { label: "Automatic", value: "automatic" },
+                                                                        { label: "Hidden", value: "hidden" }
+                                                                    ]
+
+                                                                    delegate: Rectangle {
+                                                                        Layout.fillWidth: true
+                                                                        Layout.fillHeight: true
+                                                                        radius: 6
+                                                                        color: (backend && backend.launchTrayMode === modelData.value)
+                                                                               ? ((backend && backend.theme === "dark") ? "#3e6ae1" : "#5f87f0")
+                                                                               : "transparent"
+
+                                                                        Text {
+                                                                            anchors.centerIn: parent
+                                                                            text: modelData.label
+                                                                            font.pixelSize: 10
+                                                                            font.bold: true
+                                                                            color: (backend && backend.launchTrayMode === modelData.value)
+                                                                                   ? "white"
+                                                                                   : ((backend && backend.theme === "dark") ? "#c7c7c7" : "#555")
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape: Qt.PointingHandCursor
+                                                                            onClicked: backend.setLaunchTrayMode(modelData.value)
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -4966,174 +4986,198 @@ Window {
                                         }
 
                                         ColumnLayout {
-                                            spacing: 8
-
-                                            RowLayout {
-                                                Layout.alignment: Qt.AlignLeft
-                                                spacing: 8
-
-                                                Text {
-                                                    text: (backend && backend.updateAvailable) ? "Update Available" : "Software Update"
-                                                    font.pixelSize: 16
-                                                    font.bold: true
-                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                }
-
-                                                Text {
-                                                    text: "• Last checked: " + (backend ? backend.lastUpdateCheckTime : "Never")
-                                                    font.pixelSize: 10
-                                                    color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
-                                                }
-                                            }
+                                            spacing: 10
 
                                             GridLayout {
-                                                columns: 2
+                                                columns: 3
                                                 Layout.fillWidth: true
-                                                columnSpacing: 8
-                                                rowSpacing: 6
+                                                columnSpacing: 10
+                                                rowSpacing: 10
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 52
+                                                    Layout.preferredHeight: 104
                                                     color: displaySettingsPopup.settingsTileColor
                                                     border.color: displaySettingsPopup.settingsTileBorder
                                                     border.width: 1
-                                                    radius: 6
+                                                    radius: 10
 
-                                                    RowLayout {
+                                                    ColumnLayout {
                                                         anchors.fill: parent
-                                                        anchors.margins: 6
-                                                        spacing: 6
+                                                        anchors.margins: 12
+                                                        spacing: 8
 
-                                                        Text {
-                                                            text: "\uf126"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 12
-                                                            color: "#2196F3"
-                                                            Layout.preferredWidth: 15
-                                                        }
-
-                                                        ColumnLayout {
+                                                        RowLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 0
+
                                                             Text {
-                                                                text: "Current"
+                                                                text: "\uf126"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                color: "#2196F3"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: "CURRENT"
                                                                 font.pixelSize: 9
                                                                 font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                                                color: (backend && backend.theme === "dark") ? "#8faad8" : "#5577aa"
                                                             }
-                                                            Text {
-                                                                text: (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
-                                                                font.pixelSize: 10
-                                                                font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                                elide: Text.ElideRight
-                                                                Layout.fillWidth: true
-                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
+                                                            font.pixelSize: 18
+                                                            font.bold: true
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                        }
+
+                                                        Text {
+                                                            text: "Installed build"
+                                                            font.pixelSize: 10
+                                                            color: (backend && backend.theme === "dark") ? "#a9a9a9" : "#666"
                                                         }
                                                     }
                                                 }
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 52
+                                                    Layout.preferredHeight: 104
                                                     color: displaySettingsPopup.settingsTileColor
                                                     border.color: displaySettingsPopup.settingsTileBorder
                                                     border.width: 1
-                                                    radius: 6
+                                                    radius: 10
 
-                                                    RowLayout {
+                                                    ColumnLayout {
                                                         anchors.fill: parent
-                                                        anchors.margins: 6
-                                                        spacing: 6
+                                                        anchors.margins: 12
+                                                        spacing: 8
 
-                                                        Text {
-                                                            text: "\uf062"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 12
-                                                            color: "#4CAF50"
-                                                            Layout.preferredWidth: 15
-                                                        }
-
-                                                        ColumnLayout {
+                                                        RowLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 0
+
                                                             Text {
-                                                                text: "Latest"
+                                                                text: "\uf062"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                color: "#4CAF50"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: "LATEST"
                                                                 font.pixelSize: 9
                                                                 font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                                                color: (backend && backend.theme === "dark") ? "#8fd3a2" : "#4f8e5d"
                                                             }
-                                                            Text {
-                                                                text: (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
-                                                                font.pixelSize: 10
-                                                                font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                                elide: Text.ElideRight
-                                                                Layout.fillWidth: true
-                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
+                                                            font.pixelSize: 18
+                                                            font.bold: true
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                        }
+
+                                                        Text {
+                                                            text: (backend && backend.updateAvailable) ? "Ready to install" : "No newer build detected"
+                                                            font.pixelSize: 10
+                                                            color: (backend && backend.updateAvailable) ? "#4CAF50" : ((backend && backend.theme === "dark") ? "#a9a9a9" : "#666")
                                                         }
                                                     }
                                                 }
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 52
+                                                    Layout.preferredHeight: 104
                                                     color: displaySettingsPopup.settingsTileColor
                                                     border.color: displaySettingsPopup.settingsTileBorder
                                                     border.width: 1
-                                                    radius: 6
+                                                    radius: 10
 
-                                                    MouseArea {
+                                                    ColumnLayout {
                                                         anchors.fill: parent
-                                                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                                                        cursorShape: Qt.PointingHandCursor
-                                                    }
+                                                        anchors.margins: 12
+                                                        spacing: 8
 
-                                                    RowLayout {
-                                                        anchors.fill: parent
-                                                        anchors.margins: 6
-                                                        spacing: 4
-
-                                                        Text {
-                                                            text: "\uf06e"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 11
-                                                            color: "#FF9800"
-                                                            Layout.preferredWidth: 14
-                                                        }
-
-                                                        ColumnLayout {
+                                                        RowLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 0
+
                                                             Text {
-                                                                text: "Banner"
+                                                                text: "\uf121"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                color: backend.targetBranch === "master" ? "#2196F3" : "#FF9800"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: "CHANNEL"
                                                                 font.pixelSize: 9
                                                                 font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                color: (backend && backend.theme === "dark") ? "#c1a07e" : "#8a6442"
                                                             }
-                                                            Text {
-                                                                text: "Always"
-                                                                font.pixelSize: 8
-                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
-                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: backend.targetBranch === "master" ? "Stable" : "Beta"
+                                                            font.pixelSize: 18
+                                                            font.bold: true
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
                                                         }
 
                                                         Rectangle {
-                                                            width: 26
-                                                            height: 14
+                                                            Layout.fillWidth: true
+                                                            Layout.preferredHeight: 30
                                                             radius: 7
-                                                            color: backend.launchTrayManualMode ? "#4CAF50" : ((backend && backend.theme === "dark") ? "#333" : "#ccc")
-                                                            Behavior on color { ColorAnimation { duration: 200 } }
+                                                            color: (backend && backend.theme === "dark") ? "#442d2d2d" : "#33bcbcbc"
+                                                            border.width: 1
+                                                            border.color: (backend && backend.theme === "dark") ? "#55ffffff" : "#33000000"
 
-                                                            Rectangle {
-                                                                width: 10
-                                                                height: 10
-                                                                radius: 5
-                                                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
-                                                                y: 2
-                                                                color: "white"
-                                                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                                            RowLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: 2
+                                                                spacing: 2
+
+                                                                Repeater {
+                                                                    model: [
+                                                                        { label: "Stable", value: "master" },
+                                                                        { label: "Beta", value: "beta" }
+                                                                    ]
+
+                                                                    delegate: Rectangle {
+                                                                        Layout.fillWidth: true
+                                                                        Layout.fillHeight: true
+                                                                        radius: 5
+                                                                        color: backend.targetBranch === modelData.value
+                                                                               ? (modelData.value === "master" ? "#2196F3" : "#FF9800")
+                                                                               : "transparent"
+
+                                                                        Text {
+                                                                            anchors.centerIn: parent
+                                                                            text: modelData.label
+                                                                            font.pixelSize: 10
+                                                                            font.bold: true
+                                                                            color: backend.targetBranch === modelData.value
+                                                                                   ? "white"
+                                                                                   : ((backend && backend.theme === "dark") ? "#c7c7c7" : "#555")
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape: Qt.PointingHandCursor
+                                                                            onClicked: backend.setTargetBranch(modelData.value)
+                                                                        }
+                                                                    }
+                                                                }
                                                             }
                                                         }
                                                     }
@@ -5141,160 +5185,208 @@ Window {
 
                                                 Rectangle {
                                                     Layout.fillWidth: true
-                                                    Layout.preferredHeight: 52
+                                                    Layout.preferredHeight: 108
                                                     color: displaySettingsPopup.settingsTileColor
                                                     border.color: displaySettingsPopup.settingsTileBorder
                                                     border.width: 1
-                                                    radius: 6
+                                                    radius: 10
+                                                    opacity: (backend && backend.updateChecking) ? 0.82 : 1.0
 
-                                                    RowLayout {
+                                                    ColumnLayout {
                                                         anchors.fill: parent
-                                                        anchors.margins: 6
-                                                        spacing: 4
+                                                        anchors.margins: 12
+                                                        spacing: 8
 
-                                                        Text {
-                                                            text: "\uf121"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 11
-                                                            color: backend.targetBranch === "master" ? "#2196F3" : "#FF9800"
-                                                            Layout.preferredWidth: 14
-                                                        }
-
-                                                        ColumnLayout {
+                                                        RowLayout {
                                                             Layout.fillWidth: true
-                                                            spacing: 1
+
                                                             Text {
-                                                                text: "Branch"
+                                                                text: "\uf021"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                font.weight: Font.Black
+                                                                color: "#3e6ae1"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: backend.updateChecking ? "BUSY" : "ACTION"
                                                                 font.pixelSize: 9
                                                                 font.bold: true
-                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                            }
-                                                            Row {
-                                                                spacing: 0
-                                                                Rectangle {
-                                                                    width: 45
-                                                                    height: 18
-                                                                    color: backend.targetBranch === "master" ? "#2196F3" : ((backend && backend.theme === "dark") ? "#303030" : "#d0d0d0")
-                                                                    radius: 4
-                                                                    Text {
-                                                                        anchors.centerIn: parent
-                                                                        text: "Stable"
-                                                                        color: backend.targetBranch === "master" ? "white" : ((backend && backend.theme === "dark") ? "#aaa" : "#555")
-                                                                        font.pixelSize: 9
-                                                                        font.bold: backend.targetBranch === "master"
-                                                                    }
-                                                                    MouseArea {
-                                                                        anchors.fill: parent
-                                                                        onClicked: backend.setTargetBranch("master")
-                                                                    }
-                                                                }
-                                                                Rectangle {
-                                                                    width: 45
-                                                                    height: 18
-                                                                    color: backend.targetBranch === "beta" ? "#FF9800" : ((backend && backend.theme === "dark") ? "#303030" : "#d0d0d0")
-                                                                    radius: 4
-                                                                    Text {
-                                                                        anchors.centerIn: parent
-                                                                        text: "Beta"
-                                                                        color: backend.targetBranch === "beta" ? "white" : ((backend && backend.theme === "dark") ? "#aaa" : "#555")
-                                                                        font.pixelSize: 9
-                                                                        font.bold: backend.targetBranch === "beta"
-                                                                    }
-                                                                    MouseArea {
-                                                                        anchors.fill: parent
-                                                                        onClicked: backend.setTargetBranch("beta")
-                                                                    }
-                                                                }
+                                                                color: (backend && backend.theme === "dark") ? "#9fb1d9" : "#5670a8"
                                                             }
                                                         }
-                                                    }
-                                                }
-                                            }
 
-                                            RowLayout {
-                                                Layout.alignment: Qt.AlignHCenter
-                                                spacing: 12
-
-                                                Button {
-                                                    text: "Update Now"
-                                                    Layout.preferredWidth: 105
-                                                    Layout.preferredHeight: 30
-                                                    visible: {
-                                                        var current = backend.currentVersionInfo.hash
-                                                        var latest = backend.latestVersionInfo.hash
-                                                        return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
-                                                    }
-                                                    onClicked: {
-                                                        backend.runUpdateScript()
-                                                        displaySettingsPopup.close()
-                                                    }
-
-                                                    background: Rectangle {
-                                                        color: "#4CAF50"
-                                                        radius: 3
-                                                    }
-
-                                                    contentItem: Text {
-                                                        text: parent.text
-                                                        color: "white"
-                                                        font.pixelSize: 11
-                                                        font.bold: true
-                                                        horizontalAlignment: Text.AlignHCenter
-                                                        verticalAlignment: Text.AlignVCenter
-                                                    }
-                                                }
-
-                                                Button {
-                                                    text: backend.updateChecking ? "Checking..." : "Check Now"
-                                                    Layout.preferredWidth: 90
-                                                    Layout.preferredHeight: 30
-                                                    enabled: !backend.updateChecking
-                                                    onClicked: backend.checkForUpdatesNow()
-
-                                                    background: Rectangle {
-                                                        color: backend.updateChecking ?
-                                                               ((backend && backend.theme === "dark") ? "#666" : "#ccc") :
-                                                               ((backend && backend.theme === "dark") ? "#303030" : "#e0e0e0")
-                                                        radius: 3
-                                                    }
-
-                                                    contentItem: Text {
-                                                        text: parent.text
-                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                        font.pixelSize: 11
-                                                        horizontalAlignment: Text.AlignHCenter
-                                                        verticalAlignment: Text.AlignVCenter
-                                                    }
-                                                }
-
-                                                Button {
-                                                    text: "Restart"
-                                                    Layout.preferredWidth: 85
-                                                    Layout.preferredHeight: 30
-                                                    onClicked: backend.reboot_device()
-
-                                                    background: Rectangle {
-                                                        color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
-                                                        radius: 3
-                                                    }
-
-                                                    contentItem: Row {
-                                                        spacing: 6
-                                                        anchors.centerIn: parent
                                                         Text {
-                                                            text: "\uf011"
-                                                            font.family: "Font Awesome 5 Free"
-                                                            font.pixelSize: 11
-                                                            font.weight: Font.Black
+                                                            text: backend.updateChecking ? "Checking…" : "Check for Updates"
+                                                            font.pixelSize: 13
+                                                            font.bold: true
                                                             color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            Layout.fillWidth: true
+                                                            wrapMode: Text.WordWrap
+                                                            maximumLineCount: 2
                                                         }
+
+                                                        Text {
+                                                            text: "Poll GitHub for the newest dashboard build"
+                                                            font.pixelSize: 10
+                                                            wrapMode: Text.WordWrap
+                                                            color: (backend && backend.theme === "dark") ? "#a9a9a9" : "#666"
+                                                            Layout.fillWidth: true
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: backend.updateChecking ? Qt.ArrowCursor : Qt.PointingHandCursor
+                                                        enabled: !backend.updateChecking
+                                                        onClicked: backend.checkForUpdatesNow()
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 108
+                                                    color: (backend && backend.updateAvailable)
+                                                           ? ((backend && backend.theme === "dark") ? "#2f4f3a" : "#4CAF50")
+                                                           : displaySettingsPopup.settingsTileColor
+                                                    border.color: (backend && backend.updateAvailable) ? "#4CAF50" : displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 10
+                                                    opacity: {
+                                                        var current = (backend && backend.currentVersionInfo) ? backend.currentVersionInfo.hash : ""
+                                                        var latest = (backend && backend.latestVersionInfo) ? backend.latestVersionInfo.hash : ""
+                                                        var ready = current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
+                                                        return ready ? 1.0 : 0.55
+                                                    }
+
+                                                    ColumnLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 12
+                                                        spacing: 8
+
+                                                        RowLayout {
+                                                            Layout.fillWidth: true
+
+                                                            Text {
+                                                                text: "\uf062"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                font.weight: Font.Black
+                                                                color: "#4CAF50"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: "INSTALL"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "#a6ddb4" : "#4f8e5d"
+                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: "Update Now"
+                                                            font.pixelSize: 13
+                                                            font.bold: true
+                                                            color: (backend && backend.updateAvailable)
+                                                                   ? "white"
+                                                                   : ((backend && backend.theme === "dark") ? "white" : "black")
+                                                            Layout.fillWidth: true
+                                                            wrapMode: Text.WordWrap
+                                                            maximumLineCount: 2
+                                                        }
+
+                                                        Text {
+                                                            text: (backend && backend.updateAvailable)
+                                                                  ? "Install the latest checked build and close settings"
+                                                                  : "Available after a newer build is found"
+                                                            font.pixelSize: 10
+                                                            wrapMode: Text.WordWrap
+                                                            color: (backend && backend.updateAvailable) ? "#d9f2df" : ((backend && backend.theme === "dark") ? "#a9a9a9" : "#666")
+                                                            Layout.fillWidth: true
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: {
+                                                            var current = (backend && backend.currentVersionInfo) ? backend.currentVersionInfo.hash : ""
+                                                            var latest = (backend && backend.latestVersionInfo) ? backend.latestVersionInfo.hash : ""
+                                                            var ready = current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
+                                                            return ready ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                        }
+                                                        enabled: {
+                                                            var current = (backend && backend.currentVersionInfo) ? backend.currentVersionInfo.hash : ""
+                                                            var latest = (backend && backend.latestVersionInfo) ? backend.latestVersionInfo.hash : ""
+                                                            return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
+                                                        }
+                                                        onClicked: {
+                                                            backend.runUpdateScript()
+                                                            displaySettingsPopup.close()
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 108
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 10
+
+                                                    ColumnLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 12
+                                                        spacing: 8
+
+                                                        RowLayout {
+                                                            Layout.fillWidth: true
+
+                                                            Text {
+                                                                text: "\uf011"
+                                                                font.family: "Font Awesome 5 Free"
+                                                                font.pixelSize: 13
+                                                                font.weight: Font.Black
+                                                                color: "#FF7043"
+                                                            }
+
+                                                            Item { Layout.fillWidth: true }
+
+                                                            Text {
+                                                                text: "DEVICE"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "#ddb39f" : "#996651"
+                                                            }
+                                                        }
+
                                                         Text {
                                                             text: "Restart"
+                                                            font.pixelSize: 13
+                                                            font.bold: true
                                                             color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                            font.pixelSize: 11
-                                                            anchors.verticalCenter: parent.verticalCenter
+                                                            Layout.fillWidth: true
+                                                            wrapMode: Text.WordWrap
+                                                            maximumLineCount: 2
                                                         }
+
+                                                        Text {
+                                                            text: "Reboot the device running the dashboard"
+                                                            font.pixelSize: 10
+                                                            wrapMode: Text.WordWrap
+                                                            color: (backend && backend.theme === "dark") ? "#a9a9a9" : "#666"
+                                                            Layout.fillWidth: true
+                                                        }
+                                                    }
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        cursorShape: Qt.PointingHandCursor
+                                                        onClicked: backend.reboot_device()
                                                     }
                                                 }
                                             }
@@ -5653,8 +5745,8 @@ Window {
                     Rectangle {
                         id: themeToggle
                         Layout.preferredWidth: 50
-                        Layout.preferredHeight: 32
-                        radius: 16
+                        Layout.preferredHeight: 28
+                        radius: 14
                         color: backend.theme === "dark" ? "#1a1a1b" : "#f0f0f0"
                         border.color: backend.theme === "dark" ? "#333" : "#e0e0e0"
                         border.width: 1
@@ -6807,63 +6899,79 @@ Window {
                         }
                     }
 
-                    // Always Show Launch Banner (Tesla style toggle box)
+                    // Launch Banner visibility (segmented control)
                     Rectangle {
                         Layout.fillWidth: true
-                        Layout.preferredHeight: 50
+                        Layout.preferredHeight: 74
                         color: (backend && backend.theme === "dark") ? "#111111" : "#e0e0e0"
                         radius: 6
 
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        RowLayout {
+                        ColumnLayout {
                             anchors.fill: parent
                             anchors.margins: 6
-                            spacing: 4
+                            spacing: 5
 
-                            Text {
-                                text: "\uf06e"
-                                font.family: "Font Awesome 5 Free"
-                                font.pixelSize: 11
-                                color: "#FF9800"
-                                Layout.preferredWidth: 14
-                            }
-
-                            ColumnLayout {
+                            RowLayout {
                                 Layout.fillWidth: true
-                                spacing: 0
+                                Text {
+                                    text: "\uf06e"
+                                    font.family: "Font Awesome 5 Free"
+                                    font.pixelSize: 11
+                                    color: "#FF9800"
+                                    Layout.preferredWidth: 14
+                                }
+
                                 Text {
                                     text: "Banner"
                                     font.pixelSize: 9
                                     font.bold: true
                                     color: (backend && backend.theme === "dark") ? "white" : "black"
                                 }
+
+                                Item { Layout.fillWidth: true }
+
                                 Text {
-                                    text: "Always"
+                                    text: backend.launchTrayMode === "always" ? "Always" : (backend.launchTrayMode === "hidden" ? "Hidden" : "Automatic")
                                     font.pixelSize: 8
                                     color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
                                 }
                             }
 
-                            Rectangle {
-                                width: 26
-                                height: 14
-                                radius: 7
-                                color: backend.launchTrayManualMode ? "#4CAF50" : (backend.theme === "dark" ? "#333" : "#ccc")
-                                Behavior on color { ColorAnimation { duration: 200 } }
+                            RowLayout {
+                                Layout.fillWidth: true
+                                spacing: 3
 
-                                Rectangle {
-                                    width: 10
-                                    height: 10
-                                    radius: 5
-                                    x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
-                                    y: 2
-                                    color: "white"
-                                    Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                Repeater {
+                                    model: [
+                                        { label: "Always", value: "always" },
+                                        { label: "Auto", value: "automatic" },
+                                        { label: "Hidden", value: "hidden" }
+                                    ]
+
+                                    delegate: Rectangle {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: 22
+                                        radius: 5
+                                        color: (backend && backend.launchTrayMode === modelData.value)
+                                               ? ((backend && backend.theme === "dark") ? "#3e6ae1" : "#5f87f0")
+                                               : ((backend && backend.theme === "dark") ? "#332e2e2e" : "#26aaaaaa")
+
+                                        Text {
+                                            anchors.centerIn: parent
+                                            text: modelData.label
+                                            font.pixelSize: 8
+                                            font.bold: true
+                                            color: (backend && backend.launchTrayMode === modelData.value)
+                                                   ? "white"
+                                                   : ((backend && backend.theme === "dark") ? "#c7c7c7" : "#555")
+                                        }
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: backend.setLaunchTrayMode(modelData.value)
+                                        }
+                                    }
                                 }
                             }
                         }

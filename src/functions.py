@@ -156,6 +156,8 @@ __all__ = [
     "fetch_narratives",
     "load_theme_settings",
     "save_theme_settings",
+    "load_launch_tray_mode_setting",
+    "save_launch_tray_mode_setting",
     "get_rpi_config_resolution",
     "is_raspberry_pi",
     "check_touch_calibration_exists",
@@ -236,6 +238,7 @@ REMEMBERED_NETWORKS_FILE = os.path.join(CACHE_DIR_F1, 'remembered_networks.json'
 LAST_CONNECTED_NETWORK_FILE = os.path.join(CACHE_DIR_F1, 'last_connected_network.json')
 THEME_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'theme_settings.json')
 BRANCH_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'branch_settings.json')
+LAUNCH_TRAY_SETTINGS_FILE = os.path.join(CACHE_DIR_F1, 'launch_tray_settings.json')
 TOUCH_CALIBRATION_FILE = "/etc/X11/xorg.conf.d/99-calibration.conf"
 
 def check_touch_calibration_exists():
@@ -294,6 +297,32 @@ def save_branch_setting(branch):
         save_cache_to_file(BRANCH_SETTINGS_FILE, data, datetime.now(pytz.UTC))
     except Exception as e:
         logger.error(f"Failed to save branch setting: {e}")
+
+
+def load_launch_tray_mode_setting():
+    """Load launch tray visibility mode from file."""
+    valid_modes = {"always", "automatic", "hidden"}
+    try:
+        data = load_cache_from_file(LAUNCH_TRAY_SETTINGS_FILE)
+        if data and 'mode' in data.get('data', {}):
+            mode = str(data['data']['mode']).strip().lower()
+            if mode in valid_modes:
+                return mode
+    except Exception as e:
+        logger.warning(f"Failed to load launch tray mode setting: {e}")
+    return 'hidden'  # Default fallback requested by UI behavior
+
+
+def save_launch_tray_mode_setting(mode):
+    """Save launch tray visibility mode to file."""
+    normalized = str(mode).strip().lower()
+    if normalized not in {"always", "automatic", "hidden"}:
+        normalized = "hidden"
+    try:
+        data = {'mode': normalized}
+        save_cache_to_file(LAUNCH_TRAY_SETTINGS_FILE, data, datetime.now(pytz.UTC))
+    except Exception as e:
+        logger.error(f"Failed to save launch tray mode setting: {e}")
 
 # F1 Team colors for visualization
 F1_TEAM_COLORS = {

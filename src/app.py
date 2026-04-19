@@ -122,6 +122,8 @@ from functions import (
     save_theme_settings,
     load_branch_setting,
     save_branch_setting,
+    load_launch_tray_mode_setting,
+    save_launch_tray_mode_setting,
     get_rpi_config_resolution,
     is_launch_near,
 )
@@ -451,6 +453,708 @@ class NextLaunchUpdater(QObject):
         if detailed_data:
             self.finished.emit(detailed_data)
 
+class SpotifyWorker(QObject):
+    completed = pyqtSignal(str, object)
+
+    def _snapshot(self, payload):
+        snapshot = dict((payload or {}).get("snapshot") or {})
+        snapshot["player"] = dict(snapshot.get("player") or {})
+        return snapshot
+
+    def _tokens_payload(self, snapshot):
+        return {
+            "access_token": snapshot.get("access_token", "") or "",
+            "refresh_token": snapshot.get("refresh_token", "") or "",
+            "expires_at": float(snapshot.get("expires_at", 0) or 0),
+        }
+
+    def _result(self, snapshot, **updates):
+        result = {"tokens": self._tokens_payload(snapshot)}
+        result.update(updates)
+        return result
+
+    def _token_is_valid(self, snapshot, skew_seconds=30):
+        return bool(snapshot.get("access_token")) and (time.time() + skew_seconds) < float(snapshot.get("expires_at", 0) or 0)
+
+    def _token_request(self, snapshot, payload):
+        data = dict(payload or {})
+        headers = {}
+        client_id = snapshot.get("client_id", "") or ""
+        client_secret = snapshot.get("client_secret", "") or ""
+        if client_secret:
+            raw = f"{client_id}:{client_secret}".encode("utf-8")
+            headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('utf-8')}"
+        else:
+            data["client_id"] = client_id
+        return requests.post(
+            "https://accounts.spotify.com/api/token",
+            data=data,
+            headers=headers if headers else None,
+            timeout=8,
+        )
+
+    def _refresh_access_token(self, snapshot):
+        if not snapshot.get("client_id") or not snapshot.get("refresh_token"):
+            return False, snapshot
+        try:
+            response = self._token_request(snapshot, {
+                "grant_type": "refresh_token",
+                "refresh_token": snapshot.get("refresh_token", "") or "",
+            })
+            if response.status_code != 200:
+                logger.warning(f"Spotify token refresh failed: HTTP {response.status_code}")
+                return False, snapshot
+            token_payload = response.json() if response.content else {}
+            snapshot["access_token"] = token_payload.get("access_token", "") or ""
+            expires_in = int(token_payload.get("expires_in", 3600) or 3600)
+            snapshot["expires_at"] = time.time() + max(60, expires_in - 10)
+            if token_payload.get("refresh_token"):
+                snapshot["refresh_token"] = token_payload.get("refresh_token")
+            return bool(snapshot.get("access_token")), snapshot
+        except Exception as e:
+            logger.warning(f"Spotify token refresh error: {e}")
+            return False, snapshot
+
+    def _ensure_access_token(self, snapshot):
+        if self._token_is_valid(snapshot):
+            return True, snapshot
+        return self._refresh_access_token(snapshot)
+
+    def _api_request(self, snapshot, method, endpoint, params=None, json_data=None):
+        ok, snapshot = self._ensure_access_token(snapshot)
+        if not ok:
+            return False, {}, 401, snapshot
+        headers = {"Authorization": f"Bearer {snapshot.get('access_token', '')}"}
+        if json_data is not None:
+            headers["Content-Type"] = "application/json"
+        url = f"https://api.spotify.com/v1{endpoint}"
+        try:
+            response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
+            if response.status_code == 401:
+                refreshed, snapshot = self._refresh_access_token(snapshot)
+                if refreshed:
+                    headers["Authorization"] = f"Bearer {snapshot.get('access_token', '')}"
+                    response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
+            if response.status_code == 204:
+                return True, {}, 204, snapshot
+            body = response.json() if response.content else {}
+            return (200 <= response.status_code < 300), body, response.status_code, snapshot
+        except Exception as e:
+            logger.warning(f"Spotify API request failed ({endpoint}): {e}")
+            return False, {}, 0, snapshot
+
+    def _pick_image_url(self, images):
+        if not images:
+            return ""
+        try:
+            return images[-1].get("url", "") or images[0].get("url", "") or ""
+        except Exception:
+            return ""
+
+    def _error_message(self, payload, fallback):
+        error = (payload or {}).get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            message = (error.get("message") or "").strip()
+            if message:
+                return message
+        return fallback
+
+    def _format_device(self, device):
+        device = device or {}
+        return {
+            "id": device.get("id", "") or "",
+            "name": device.get("name", "") or "Unknown Device",
+            "type": device.get("type", "") or "",
+            "is_active": bool(device.get("is_active", False)),
+            "is_restricted": bool(device.get("is_restricted", False)),
+        }
+
+    def _fetch_devices(self, snapshot):
+        ok, payload, status_code, snapshot = self._api_request(snapshot, "GET", "/me/player/devices")
+        if not ok:
+            updates = {}
+            if status_code in (401, 403):
+                updates = {"authenticated": False, "status": "Spotify authorization required."}
+            return [], status_code, updates, snapshot
+        return [self._format_device(d) for d in (payload.get("devices") or [])], status_code, {}, snapshot
+
+    def _ensure_current_device_in_list(self, player, devices):
+        items = list(devices or [])
+        current_id = (player.get("current_device_id") or "").strip()
+        current_name = (player.get("current_device_name") or "").strip()
+        if current_id and not any((d.get("id") or "") == current_id for d in items):
+            items.insert(0, {
+                "id": current_id,
+                "name": current_name or "Current Device",
+                "type": "Current",
+                "is_active": True,
+                "is_restricted": False,
+            })
+        return items
+
+    def _join_artists(self, item):
+        return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
+
+    def _format_entity(self, item, entity_type):
+        item = item or {}
+        if entity_type == "track":
+            artists = self._join_artists(item)
+            album = item.get("album") or {}
+            subtitle = artists if artists else (album.get("name", "") or "")
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "track",
+                "title": item.get("name", "") or "Unknown Track",
+                "subtitle": subtitle,
+                "context": album.get("name", "") or "",
+                "image_url": self._pick_image_url(album.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "album":
+            artists = self._join_artists(item)
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "album",
+                "title": item.get("name", "") or "Unknown Album",
+                "subtitle": artists or "Album",
+                "context": "Album",
+                "image_url": self._pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "playlist":
+            owner = (item.get("owner") or {}).get("display_name", "") or ""
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "playlist",
+                "title": item.get("name", "") or "Unknown Playlist",
+                "subtitle": owner or "Playlist",
+                "context": "Playlist",
+                "image_url": self._pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "artist":
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "artist",
+                "title": item.get("name", "") or "Unknown Artist",
+                "subtitle": "Artist",
+                "context": "",
+                "image_url": self._pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "podcast":
+            publisher = item.get("publisher", "") or ""
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "podcast",
+                "title": item.get("name", "") or "Unknown Podcast",
+                "subtitle": publisher or "Podcast",
+                "context": "Podcast",
+                "image_url": self._pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        return {
+            "id": item.get("id", ""),
+            "uri": item.get("uri", ""),
+            "type": entity_type,
+            "title": item.get("name", "") or "Unknown",
+            "subtitle": "",
+            "context": "",
+            "image_url": "",
+            "play_uri": item.get("uri", ""),
+        }
+
+    def _op_refresh_player(self, payload):
+        snapshot = self._snapshot(payload)
+        player = snapshot.get("player") or {}
+        if not snapshot.get("client_id"):
+            return self._result(snapshot, player_updates={"configured": False})
+        if not (snapshot.get("access_token") or snapshot.get("refresh_token")):
+            return self._result(snapshot, player_updates={"configured": True, "authenticated": False, "status": "Login to Spotify."})
+
+        ok, body, status_code, snapshot = self._api_request(snapshot, "GET", "/me/player")
+        devices, _, device_updates, snapshot = self._fetch_devices(snapshot)
+        selected_device_id = (player.get("selected_device_id") or "").strip()
+        current_device_id = (player.get("current_device_id") or "").strip()
+        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+        save_tokens = False
+        if selected_device_id and not selected_device:
+            selected_device_id = ""
+            save_tokens = True
+        current_device = next((d for d in devices if d.get("id") == current_device_id), None)
+
+        if not ok and status_code in (401, 403):
+            return self._result(snapshot, player_updates={
+                "configured": True,
+                "authenticated": False,
+                "has_active_device": False,
+                "status": "Spotify authorization required.",
+            }, save_tokens=save_tokens)
+
+        if not ok and status_code != 204:
+            updates = {
+                "configured": True,
+                "devices": self._ensure_current_device_in_list(player, devices),
+                "selected_device_id": selected_device_id,
+                "selected_device_name": (selected_device or {}).get("name", ""),
+            }
+            updates.update(device_updates)
+            if status_code:
+                updates["status"] = self._error_message(body, f"Spotify player update failed (HTTP {status_code}).")
+            elif "status" not in updates:
+                updates["status"] = "Spotify player update failed."
+            return self._result(snapshot, player_updates=updates, save_tokens=save_tokens)
+
+        if status_code == 204:
+            return self._result(snapshot, player_updates={
+                "configured": True,
+                "authenticated": True,
+                "has_active_device": False,
+                "is_playing": False,
+                "status": "No active Spotify device.",
+                "devices": self._ensure_current_device_in_list(player, devices),
+                "selected_device_id": selected_device_id,
+                "selected_device_name": (selected_device or {}).get("name", ""),
+                "current_device_id": (current_device or {}).get("id", current_device_id),
+                "current_device_name": (current_device or {}).get("name", player.get("current_device_name", "")),
+            }, save_tokens=save_tokens)
+
+        item = body.get("item") or {}
+        artists = self._join_artists(item)
+        images = ((item.get("album") or {}).get("images") or [])
+        album_art_small = images[-1].get("url") if images else ""
+        album_art_large = images[0].get("url") if images else ""
+        device = body.get("device") or {}
+        active_device_id = (device.get("id") or "").strip()
+        active_device_name = (device.get("name") or "").strip()
+        selected_changed = False
+        if not selected_device_id and active_device_id:
+            selected_device_id = active_device_id
+            selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+            selected_changed = True
+        display_selected_name = (selected_device or {}).get("name", "")
+        if not display_selected_name and active_device_id:
+            display_selected_name = active_device_name
+        current_device_id = active_device_id or current_device_id
+        current_device_name = active_device_name or (current_device or {}).get("name", player.get("current_device_name", ""))
+        return self._result(snapshot, player_updates={
+            "configured": True,
+            "authenticated": True,
+            "is_playing": bool(body.get("is_playing")),
+            "track_name": item.get("name", ""),
+            "artist_name": artists,
+            "album_art_url": album_art_small,
+            "album_art_url_large": album_art_large,
+            "volume_percent": int(device.get("volume_percent", player.get("volume_percent", 50)) or 0),
+            "has_active_device": bool(body.get("device")),
+            "status": "",
+            "progress_ms": int(body.get("progress_ms") or 0),
+            "duration_ms": int(item.get("duration_ms") or 0),
+            "shuffle_state": bool(body.get("shuffle_state", False)),
+            "repeat_state": str(body.get("repeat_state") or "off"),
+            "devices": self._ensure_current_device_in_list(player, devices),
+            "selected_device_id": selected_device_id,
+            "selected_device_name": display_selected_name,
+            "current_device_id": current_device_id,
+            "current_device_name": current_device_name,
+        }, save_tokens=save_tokens or selected_changed)
+
+    def _poll_relay_auth_result(self, snapshot):
+        poll_url = snapshot.get("relay_poll_url", "") or ""
+        auth_state = snapshot.get("auth_state", "") or ""
+        relay_key = snapshot.get("relay_key", "") or ""
+        if not poll_url or not auth_state or not relay_key:
+            return None
+        headers = {
+            "X-Relay-Key": relay_key,
+            "X-Device-Id": snapshot.get("device_id", "") or "",
+        }
+        try:
+            response = requests.get(
+                poll_url,
+                params={"state": auth_state},
+                headers=headers,
+                timeout=5,
+            )
+        except Exception as e:
+            logger.debug(f"Spotify relay poll request failed: {e}")
+            return {"pending": True, "relay_backoff_seconds": SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS}
+        if response.status_code == 200:
+            try:
+                relay_payload = response.json() if response.content else {}
+            except ValueError as e:
+                logger.warning(f"Spotify relay poll returned invalid JSON: {e}")
+                return {"error": "relay_invalid_json"}
+            if relay_payload.get("pending"):
+                return None
+            result_state = relay_payload.get("state", "")
+            if result_state and result_state != auth_state:
+                return {"error": "state_mismatch"}
+            return relay_payload
+        if response.status_code == 429:
+            return {"pending": True, "relay_backoff_seconds": SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS}
+        if response.status_code in (202, 204, 404):
+            return None
+        if response.status_code in (400, 401, 403):
+            detail = f"relay_http_{response.status_code}"
+            try:
+                body = response.json() if response.content else {}
+                if isinstance(body, dict) and body.get("detail"):
+                    detail = str(body.get("detail"))
+            except Exception:
+                pass
+            if response.status_code in (401, 403) and not (os.environ.get("SPOTIFY_RELAY_KEY") or "").strip():
+                detail = f"{detail} (check API relay key)"
+            return {"error": detail}
+        logger.warning(f"Spotify relay poll failed with HTTP {response.status_code}")
+        return None
+
+    def _op_poll_auth(self, payload):
+        snapshot = self._snapshot(payload)
+        if snapshot.get("use_relay_auth"):
+            callback = self._poll_relay_auth_result(snapshot)
+        else:
+            callback = funcs.consume_spotify_auth_result(expected_state=snapshot.get("auth_state", "") or None)
+        if not callback:
+            return self._result(snapshot, pending=True)
+        if snapshot.get("use_relay_auth") and callback.get("error") and not callback.get("code"):
+            relay_error = str(callback.get("error") or "")
+            non_terminal_prefixes = (
+                "relay_http_",
+                "unauthorized",
+                "https_required",
+                "rate_limited",
+                "invalid_or_missing_state",
+                "relay_invalid_json",
+            )
+            if relay_error.startswith(non_terminal_prefixes):
+                return self._result(
+                    snapshot,
+                    pending=True,
+                    relay_backoff_seconds=callback.get("relay_backoff_seconds", 0),
+                    player_updates={"authenticated": False, "status": f"Spotify relay waiting: {relay_error}"},
+                )
+        redirect_uri = snapshot.get("auth_redirect_uri", "") or ""
+        code_verifier = snapshot.get("code_verifier", "") or ""
+        if callback.get("error"):
+            return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": f"Spotify login failed: {callback.get('error')}"})
+        code = callback.get("code", "") or ""
+        if not code:
+            return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": "Spotify login cancelled."})
+        if not redirect_uri or not code_verifier:
+            return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": "Spotify login expired. Please try again."})
+        try:
+            response = self._token_request(snapshot, {
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": code_verifier,
+            })
+            if response.status_code != 200:
+                return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": f"Spotify login failed (HTTP {response.status_code})."})
+            token_payload = response.json() if response.content else {}
+            snapshot["access_token"] = token_payload.get("access_token", "") or ""
+            snapshot["refresh_token"] = token_payload.get("refresh_token", snapshot.get("refresh_token", "")) or ""
+            expires_in = int(token_payload.get("expires_in", 3600) or 3600)
+            snapshot["expires_at"] = time.time() + max(60, expires_in - 10)
+            player_result = self._op_refresh_player({"snapshot": snapshot})
+            return self._result(snapshot, auth_terminal=True, auth_connected=True, player_result=player_result)
+        except Exception as e:
+            return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": f"Spotify login error: {e}"})
+
+    def _op_get_devices(self, payload):
+        snapshot = self._snapshot(payload)
+        player = snapshot.get("player") or {}
+        devices, _, updates, snapshot = self._fetch_devices(snapshot)
+        selected_device_id = (player.get("selected_device_id") or "").strip()
+        current_device_id = (player.get("current_device_id") or "").strip()
+        selected_changed = False
+        if not selected_device_id and current_device_id:
+            selected_device_id = current_device_id
+            selected_changed = True
+        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+        player_updates = {
+            "devices": self._ensure_current_device_in_list(player, devices),
+            "selected_device_id": selected_device_id,
+            "selected_device_name": (selected_device or {}).get("name", player.get("selected_device_name", "")),
+        }
+        player_updates.update(updates)
+        return self._result(snapshot, request_id=payload.get("request_id", 0), player_updates=player_updates, save_tokens=selected_changed)
+
+    def _op_select_device(self, payload):
+        snapshot = self._snapshot(payload)
+        device_id = (payload.get("device_id") or "").strip()
+        if not device_id:
+            return self._result(snapshot, player_updates={
+                "selected_device_id": "",
+                "selected_device_name": "",
+                "status": "Spotify device set to Auto.",
+            }, save_tokens=True)
+        devices, _, updates, snapshot = self._fetch_devices(snapshot)
+        if updates.get("status"):
+            return self._result(snapshot, player_updates=updates)
+        target = next((d for d in devices if d.get("id") == device_id), None)
+        if not target:
+            return self._result(snapshot, player_updates={"status": "Selected Spotify device is not available."})
+        ok, body, status_code, snapshot = self._api_request(
+            snapshot,
+            "PUT",
+            "/me/player",
+            json_data={"device_ids": [device_id], "play": False},
+        )
+        if not ok:
+            message = self._error_message(body, f"Failed to switch Spotify device (HTTP {status_code}).")
+            return self._result(snapshot, player_updates={"status": message})
+        return self._result(snapshot, player_updates={
+            "selected_device_id": device_id,
+            "selected_device_name": target.get("name", ""),
+            "has_active_device": True,
+            "status": "",
+        }, save_tokens=True, post_refresh_ms=250)
+
+    def _start_playback(self, snapshot, request_body, source_label):
+        player = snapshot.get("player") or {}
+        selected_device_id = (player.get("selected_device_id") or "").strip()
+        current_device_id = (player.get("current_device_id") or "").strip()
+        preferred_device_id = selected_device_id or current_device_id
+        params = {"device_id": preferred_device_id} if preferred_device_id else None
+        ok, body, status_code, snapshot = self._api_request(snapshot, "PUT", "/me/player/play", params=params, json_data=request_body)
+        if ok:
+            logger.info(f"Spotify: playback started from {source_label}")
+            return self._result(snapshot, player_updates={"status": ""}, post_refresh_ms=300)
+        if status_code in (401, 403):
+            message = self._error_message(body, "Spotify authorization required.")
+            updates = {"status": message}
+            if status_code == 401:
+                updates["authenticated"] = False
+            logger.warning(f"Spotify: playback rejected from {source_label} ({status_code})")
+            return self._result(snapshot, player_updates=updates)
+        if status_code == 404:
+            devices, _, _, snapshot = self._fetch_devices(snapshot)
+            target_device = None
+            if selected_device_id:
+                target_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+            if not target_device and current_device_id:
+                target_device = next((d for d in devices if d.get("id") == current_device_id), None)
+            if not target_device:
+                target_device = next((d for d in devices if d.get("is_active")), None)
+            if not target_device:
+                target_device = next((d for d in devices if not d.get("is_restricted")), None)
+            if not target_device:
+                target_device = devices[0] if devices else None
+            target_device_id = (target_device or {}).get("id", "")
+            if target_device_id:
+                transfer_ok, _, _, snapshot = self._api_request(
+                    snapshot,
+                    "PUT",
+                    "/me/player",
+                    json_data={"device_ids": [target_device_id], "play": False},
+                )
+                if transfer_ok:
+                    retry_ok, _, _, snapshot = self._api_request(
+                        snapshot,
+                        "PUT",
+                        "/me/player/play",
+                        params={"device_id": target_device_id},
+                        json_data=request_body,
+                    )
+                    if retry_ok:
+                        logger.info(f"Spotify: playback started from {source_label} after device transfer")
+                        target_name = (target_device or {}).get("name", "")
+                        updates = {
+                            "has_active_device": True,
+                            "status": "",
+                            "selected_device_name": target_name,
+                        }
+                        save_tokens = False
+                        if selected_device_id != target_device_id:
+                            updates["selected_device_id"] = target_device_id
+                            save_tokens = True
+                        return self._result(snapshot, player_updates=updates, save_tokens=save_tokens, post_refresh_ms=300)
+            logger.warning(f"Spotify: no active device for playback from {source_label}")
+            return self._result(snapshot, player_updates={
+                "has_active_device": False,
+                "status": "No active Spotify device. Open Spotify on a device and try again.",
+            })
+        message = self._error_message(body, f"Spotify playback failed (HTTP {status_code}).")
+        logger.warning(f"Spotify: playback failed from {source_label} ({status_code})")
+        return self._result(snapshot, player_updates={"status": message})
+
+    def _op_playback(self, payload):
+        snapshot = self._snapshot(payload)
+        uri = (payload.get("uri") or "").strip()
+        mode = payload.get("mode", "")
+        if not uri:
+            return self._result(snapshot)
+        if mode == "track":
+            logger.info("Spotify: track tap play requested")
+            return self._start_playback(snapshot, {"uris": [uri]}, "track-tap")
+        logger.info("Spotify: context tap play requested")
+        return self._start_playback(snapshot, {"context_uri": uri}, "context-tap")
+
+    def _op_command(self, payload):
+        snapshot = self._snapshot(payload)
+        command = payload.get("command", "")
+        if command == "previous":
+            ok, _, _, snapshot = self._api_request(snapshot, "POST", "/me/player/previous")
+            return self._result(snapshot, post_refresh_ms=500 if ok else 0)
+        if command == "next":
+            ok, _, _, snapshot = self._api_request(snapshot, "POST", "/me/player/next")
+            return self._result(snapshot, post_refresh_ms=500 if ok else 0)
+        if command == "toggle_play_pause":
+            player = snapshot.get("player") or {}
+            endpoint = "/me/player/pause" if bool(player.get("is_playing")) else "/me/player/play"
+            ok, _, _, snapshot = self._api_request(snapshot, "PUT", endpoint)
+            return self._result(snapshot, post_refresh_ms=300 if ok else 0)
+        if command == "set_volume":
+            volume = max(0, min(100, int(payload.get("volume", 0) or 0)))
+            self._api_request(snapshot, "PUT", "/me/player/volume", params={"volume_percent": volume})
+            return self._result(snapshot)
+        if command == "seek":
+            position_ms = max(0, int(payload.get("position_ms", 0) or 0))
+            self._api_request(snapshot, "PUT", "/me/player/seek", params={"position_ms": position_ms})
+            return self._result(snapshot)
+        if command == "shuffle":
+            state = bool(payload.get("state", False))
+            ok, _, _, snapshot = self._api_request(snapshot, "PUT", "/me/player/shuffle", params={"state": "true" if state else "false"})
+            updates = {"shuffle_state": state} if ok else {}
+            return self._result(snapshot, player_updates=updates)
+        if command == "repeat":
+            state = str(payload.get("state") or "off")
+            ok, _, _, snapshot = self._api_request(snapshot, "PUT", "/me/player/repeat", params={"state": state})
+            updates = {"repeat_state": state} if ok else {}
+            return self._result(snapshot, player_updates=updates)
+        return self._result(snapshot, player_updates={"status": f"Unsupported Spotify command: {command}"})
+
+    def _op_search(self, payload):
+        snapshot = self._snapshot(payload)
+        query = (payload.get("query") or "").strip()
+        request_id = int(payload.get("request_id", 0) or 0)
+        if len(query) < SPOTIFY_MIN_QUERY_LENGTH:
+            return self._result(snapshot, request_id=request_id, query=query, search_results=[])
+        ok, body, status_code, snapshot = self._api_request(
+            snapshot,
+            "GET",
+            "/search",
+            params={
+                "q": query,
+                "type": "track,album,artist,playlist",
+                "limit": SPOTIFY_SEARCH_LIMIT,
+            },
+        )
+        if not ok:
+            updates = {"authenticated": False, "status": "Spotify authorization required."} if status_code in (401, 403) else {}
+            return self._result(snapshot, request_id=request_id, query=query, search_results=[], player_updates=updates)
+        results = []
+        for track in (body.get("tracks") or {}).get("items", []):
+            results.append(self._format_entity(track, "track"))
+        for album in (body.get("albums") or {}).get("items", []):
+            results.append(self._format_entity(album, "album"))
+        for playlist in (body.get("playlists") or {}).get("items", []):
+            results.append(self._format_entity(playlist, "playlist"))
+        for artist in (body.get("artists") or {}).get("items", []):
+            results.append(self._format_entity(artist, "artist"))
+        return self._result(snapshot, request_id=request_id, query=query, search_results=results)
+
+    def _op_library(self, payload):
+        snapshot = self._snapshot(payload)
+        request_id = int(payload.get("request_id", 0) or 0)
+        if not (snapshot.get("access_token") or snapshot.get("refresh_token")):
+            return self._result(snapshot, request_id=request_id, library={"playlists": [], "albums": [], "tracks": [], "podcasts": []})
+        library = {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
+        ok, body, _, snapshot = self._api_request(snapshot, "GET", "/me/playlists", params={"limit": 20})
+        if ok:
+            for playlist in body.get("items", []):
+                library["playlists"].append(self._format_entity(playlist, "playlist"))
+        ok, body, _, snapshot = self._api_request(snapshot, "GET", "/me/albums", params={"limit": 20})
+        if ok:
+            for item in body.get("items", []):
+                library["albums"].append(self._format_entity((item or {}).get("album") or {}, "album"))
+        ok, body, _, snapshot = self._api_request(snapshot, "GET", "/me/tracks", params={"limit": 30})
+        if ok:
+            for item in body.get("items", []):
+                library["tracks"].append(self._format_entity((item or {}).get("track") or {}, "track"))
+        ok, body, _, snapshot = self._api_request(snapshot, "GET", "/me/shows", params={"limit": 20})
+        if ok:
+            for item in body.get("items", []):
+                show = (item or {}).get("show") or {}
+                if show:
+                    library["podcasts"].append(self._format_entity(show, "podcast"))
+        return self._result(snapshot, request_id=request_id, library=library)
+
+    def _op_item_tracks(self, payload):
+        snapshot = self._snapshot(payload)
+        request_id = int(payload.get("request_id", 0) or 0)
+        item_type = payload.get("item_type", "")
+        uri = payload.get("uri", "") or ""
+        item_id = uri.split(":")[-1] if uri else ""
+        if not item_id:
+            return self._result(snapshot, request_id=request_id, item_type=item_type, item_tracks=[])
+        if item_type == "album":
+            ok, body, _, snapshot = self._api_request(snapshot, "GET", f"/albums/{item_id}/tracks", params={"limit": 50})
+            tracks = [self._format_entity(t, "track") for t in body.get("items", []) if t] if ok else []
+            return self._result(snapshot, request_id=request_id, item_type=item_type, item_tracks=tracks)
+        if item_type == "playlist":
+            ok, body, _, snapshot = self._api_request(snapshot, "GET", f"/playlists/{item_id}/tracks", params={"limit": 50})
+            tracks = []
+            if ok:
+                for item in body.get("items", []):
+                    track = (item or {}).get("track") or {}
+                    if track and track.get("id"):
+                        tracks.append(self._format_entity(track, "track"))
+            return self._result(snapshot, request_id=request_id, item_type=item_type, item_tracks=tracks)
+        if item_type == "podcast":
+            ok, body, _, snapshot = self._api_request(snapshot, "GET", f"/shows/{item_id}/episodes", params={"limit": 50})
+            episodes = []
+            if ok:
+                for ep in body.get("items", []):
+                    if not ep:
+                        continue
+                    episodes.append({
+                        "id": ep.get("id", ""),
+                        "uri": ep.get("uri", ""),
+                        "type": "episode",
+                        "title": ep.get("name", "") or "Unknown Episode",
+                        "subtitle": ep.get("description", "")[:80] if ep.get("description") else "",
+                        "image_url": self._pick_image_url(ep.get("images") or []),
+                        "play_uri": ep.get("uri", ""),
+                    })
+            return self._result(snapshot, request_id=request_id, item_type=item_type, item_tracks=episodes)
+        return self._result(snapshot, request_id=request_id, item_type=item_type, item_tracks=[])
+
+    @pyqtSlot(str, object)
+    def execute(self, operation, payload):
+        try:
+            if operation == "refresh_player":
+                result = self._op_refresh_player(payload)
+            elif operation == "poll_auth":
+                result = self._op_poll_auth(payload)
+            elif operation == "get_devices":
+                result = self._op_get_devices(payload)
+            elif operation == "select_device":
+                result = self._op_select_device(payload)
+            elif operation == "playback":
+                result = self._op_playback(payload)
+            elif operation == "command":
+                result = self._op_command(payload)
+            elif operation == "search":
+                result = self._op_search(payload)
+            elif operation == "library":
+                result = self._op_library(payload)
+            elif operation == "item_tracks":
+                result = self._op_item_tracks(payload)
+            else:
+                result = {"error": f"Unsupported Spotify worker operation: {operation}"}
+        except Exception as e:
+            logger.exception(f"Spotify worker failure during {operation}: {e}")
+            result = {"error": str(e)}
+        self.completed.emit(operation, result)
+
 class Backend(QObject):
     modeChanged = pyqtSignal()
     eventTypeChanged = pyqtSignal()
@@ -479,6 +1183,7 @@ class Backend(QObject):
     updateGlobeTrajectory = pyqtSignal()
     reloadWebContent = pyqtSignal()
     launchTrayVisibilityChanged = pyqtSignal()
+    launchTrayModeChanged = pyqtSignal()
     loadingStatusChanged = pyqtSignal()
     updateAvailableChanged = pyqtSignal()
     updateDialogRequested = pyqtSignal()
@@ -520,6 +1225,10 @@ class Backend(QObject):
     spotifyPlayerChanged = pyqtSignal()
     spotifyAuthUrlChanged = pyqtSignal()
     spotifyAuthInProgressChanged = pyqtSignal()
+    spotifyLibraryChanged = pyqtSignal()
+    spotifySearchResultsChanged = pyqtSignal()
+    spotifyLibraryItemTracksChanged = pyqtSignal()
+    spotifyWorkerRequested = pyqtSignal(str, object)
 
     def __init__(self, initial_wifi_connected=False, initial_wifi_ssid=""):
         super().__init__()
@@ -622,6 +1331,22 @@ class Backend(QObject):
             "current_device_id": "",
             "current_device_name": "",
         }
+        self._spotify_library = {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
+        self._spotify_search_results = []
+        self._spotify_library_item_tracks = []
+        self._spotify_refresh_inflight = False
+        self._spotify_refresh_pending = False
+        self._spotify_devices_request_inflight = False
+        self._spotify_library_inflight = False
+        self._spotify_library_pending_refresh = False
+        self._spotify_search_inflight = False
+        self._spotify_pending_search_query = None
+        self._spotify_search_request_id = 0
+        self._spotify_search_expected_request_id = 0
+        self._spotify_item_tracks_inflight = False
+        self._spotify_pending_item_tracks_request = None
+        self._spotify_item_tracks_request_id = 0
+        self._spotify_item_tracks_expected_request_id = 0
 
         self._weather_forecast_model = WeatherForecastModel()
         # Seed the forecast model from cache immediately if available
@@ -728,7 +1453,7 @@ class Backend(QObject):
         self._precomputing_calendar = False
         self._precomputing_trends = False
         self._update_available = False
-        self._launch_tray_manual_override = None  # None = auto, True = show, False = hide
+        self._launch_tray_mode = load_launch_tray_mode_setting()
         self._last_update_check = None  # Track when updates were last checked
         self._current_version_info = None  # Cached current version info
         self._latest_version_info = None  # Cached latest version info
@@ -812,6 +1537,7 @@ class Backend(QObject):
         self._spotify_volume_timer.setInterval(250)
         self._spotify_volume_timer.timeout.connect(self._apply_pending_spotify_volume)
         self._load_spotify_tokens()
+        self._setup_spotify_worker()
 
         def _on_traj_timer():
             try:
@@ -1276,269 +2002,182 @@ class Backend(QObject):
         self._spotify_token_expires_at = 0.0
         self._save_spotify_tokens()
 
-    def _spotify_token_is_valid(self, skew_seconds=30):
-        return bool(self._spotify_access_token) and (time.time() + skew_seconds) < float(self._spotify_token_expires_at or 0)
+    def _setup_spotify_worker(self):
+        self._spotify_worker_thread = QThread(self)
+        self._spotify_worker = SpotifyWorker()
+        self._spotify_worker.moveToThread(self._spotify_worker_thread)
+        self.spotifyWorkerRequested.connect(self._spotify_worker.execute)
+        self._spotify_worker.completed.connect(self._on_spotify_worker_completed)
+        self._spotify_worker_thread.finished.connect(self._spotify_worker.deleteLater)
+        self._spotify_worker_thread.start()
 
-    def _spotify_token_request(self, payload):
-        data = dict(payload or {})
-        headers = {}
-        if self._spotify_client_secret:
-            raw = f"{self._spotify_client_id}:{self._spotify_client_secret}".encode("utf-8")
-            headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('utf-8')}"
-        else:
-            data["client_id"] = self._spotify_client_id
-        return requests.post(
-            "https://accounts.spotify.com/api/token",
-            data=data,
-            headers=headers if headers else None,
-            timeout=8,
-        )
+    def _spotify_worker_snapshot(self):
+        return {
+            "client_id": self._spotify_client_id,
+            "client_secret": self._spotify_client_secret,
+            "access_token": self._spotify_access_token,
+            "refresh_token": self._spotify_refresh_token,
+            "expires_at": self._spotify_token_expires_at,
+            "player": dict(self._spotify_player),
+            "auth_state": self._spotify_auth_state,
+            "code_verifier": self._spotify_code_verifier,
+            "auth_redirect_uri": self._spotify_auth_redirect_uri or self._spotify_redirect_uri(),
+            "use_relay_auth": self._spotify_use_relay_auth(),
+            "relay_poll_url": self._spotify_relay_poll_url(),
+            "relay_key": self._spotify_relay_key,
+            "device_id": self._spotify_device_id,
+        }
 
-    def _refresh_spotify_access_token(self):
-        if not self._spotify_client_id or not self._spotify_refresh_token:
-            return False
-        try:
-            response = self._spotify_token_request({
-                "grant_type": "refresh_token",
-                "refresh_token": self._spotify_refresh_token,
-            })
-            if response.status_code != 200:
-                logger.warning(f"Spotify token refresh failed: HTTP {response.status_code}")
-                return False
-            payload = response.json() if response.content else {}
-            self._spotify_access_token = payload.get("access_token", "") or ""
-            expires_in = int(payload.get("expires_in", 3600) or 3600)
-            self._spotify_token_expires_at = time.time() + max(60, expires_in - 10)
-            if payload.get("refresh_token"):
-                self._spotify_refresh_token = payload.get("refresh_token")
+    def _dispatch_spotify_worker(self, operation, **payload):
+        worker_payload = dict(payload or {})
+        worker_payload["snapshot"] = self._spotify_worker_snapshot()
+        self.spotifyWorkerRequested.emit(operation, worker_payload)
+
+    def _set_spotify_library(self, library):
+        normalized = library or {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
+        for key in ("playlists", "albums", "tracks", "podcasts"):
+            normalized.setdefault(key, [])
+        if self._spotify_library != normalized:
+            self._spotify_library = normalized
+            self.spotifyLibraryChanged.emit()
+
+    def _set_spotify_search_results(self, results):
+        normalized = list(results or [])
+        if self._spotify_search_results != normalized:
+            self._spotify_search_results = normalized
+            self.spotifySearchResultsChanged.emit()
+
+    def _set_spotify_library_item_tracks(self, items):
+        normalized = list(items or [])
+        if self._spotify_library_item_tracks != normalized:
+            self._spotify_library_item_tracks = normalized
+            self.spotifyLibraryItemTracksChanged.emit()
+
+    def _clear_spotify_async_collections(self):
+        self._set_spotify_library({"playlists": [], "albums": [], "tracks": [], "podcasts": []})
+        self._set_spotify_search_results([])
+        self._set_spotify_library_item_tracks([])
+
+    def _apply_spotify_tokens_from_result(self, payload):
+        tokens = (payload or {}).get("tokens") or {}
+        changed = False
+        access_token = tokens.get("access_token", self._spotify_access_token) or ""
+        refresh_token = tokens.get("refresh_token", self._spotify_refresh_token) or ""
+        expires_at = float(tokens.get("expires_at", self._spotify_token_expires_at) or 0)
+        if self._spotify_access_token != access_token:
+            self._spotify_access_token = access_token
+            changed = True
+        if self._spotify_refresh_token != refresh_token:
+            self._spotify_refresh_token = refresh_token
+            changed = True
+        if float(self._spotify_token_expires_at or 0) != expires_at:
+            self._spotify_token_expires_at = expires_at
+            changed = True
+        return changed
+
+    def _apply_spotify_operation_result(self, payload):
+        payload = payload or {}
+        should_save = self._apply_spotify_tokens_from_result(payload)
+        player_updates = payload.get("player_updates") or {}
+        if player_updates:
+            authenticated_value = player_updates.get("authenticated")
+            self._spotify_update_state(**player_updates)
+            if authenticated_value is False:
+                self._clear_spotify_async_collections()
+        if payload.get("save_tokens"):
+            should_save = True
+        if should_save:
             self._save_spotify_tokens()
-            self._spotify_update_state(authenticated=bool(self._spotify_access_token))
-            return bool(self._spotify_access_token)
-        except Exception as e:
-            logger.warning(f"Spotify token refresh error: {e}")
-            return False
+        post_refresh_ms = int(payload.get("post_refresh_ms", 0) or 0)
+        if post_refresh_ms > 0:
+            QTimer.singleShot(post_refresh_ms, self.update_spotify_player)
 
-    def _ensure_spotify_access_token(self):
-        if self._spotify_token_is_valid():
-            return True
-        return self._refresh_spotify_access_token()
+    def _finish_spotify_auth_flow(self):
+        self._spotify_auth_in_progress = False
+        self.spotifyAuthInProgressChanged.emit()
+        self._spotify_auth_state = ""
+        self._spotify_code_verifier = ""
+        self._spotify_auth_redirect_uri = ""
+        self._spotify_auth_url = ""
+        self.spotifyAuthUrlChanged.emit()
 
-    def _spotify_api_request(self, method, endpoint, params=None, json_data=None):
-        if not self._ensure_spotify_access_token():
-            return False, {}, 401
-        headers = {"Authorization": f"Bearer {self._spotify_access_token}"}
-        if json_data is not None:
-            headers["Content-Type"] = "application/json"
-        url = f"https://api.spotify.com/v1{endpoint}"
-        try:
-            response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
-            if response.status_code == 401 and self._refresh_spotify_access_token():
-                headers["Authorization"] = f"Bearer {self._spotify_access_token}"
-                response = requests.request(method, url, headers=headers, params=params, json=json_data, timeout=8)
-            if response.status_code == 204:
-                return True, {}, 204
-            payload = response.json() if response.content else {}
-            return (200 <= response.status_code < 300), payload, response.status_code
-        except Exception as e:
-            logger.warning(f"Spotify API request failed ({endpoint}): {e}")
-            return False, {}, 0
+    def _dispatch_spotify_search(self, query):
+        query = (query or "").strip()
+        self._spotify_search_request_id += 1
+        request_id = self._spotify_search_request_id
+        self._spotify_search_expected_request_id = request_id
+        self._spotify_search_inflight = True
+        self._spotify_pending_search_query = None
+        self._dispatch_spotify_worker("search", request_id=request_id, query=query)
 
-    def _spotify_pick_image_url(self, images):
-        if not images:
-            return ""
-        try:
-            return images[-1].get("url", "") or images[0].get("url", "") or ""
-        except Exception:
-            return ""
+    def _dispatch_spotify_library_item_tracks(self, item_type, uri):
+        self._spotify_item_tracks_request_id += 1
+        request_id = self._spotify_item_tracks_request_id
+        self._spotify_item_tracks_expected_request_id = request_id
+        self._spotify_item_tracks_inflight = True
+        self._spotify_pending_item_tracks_request = None
+        self._dispatch_spotify_worker("item_tracks", request_id=request_id, item_type=item_type, uri=uri)
 
-    def _spotify_error_message(self, payload, fallback):
-        error = (payload or {}).get("error") if isinstance(payload, dict) else None
-        if isinstance(error, dict):
-            message = (error.get("message") or "").strip()
-            if message:
-                return message
-        return fallback
-
-    def _spotify_format_device(self, device):
-        device = device or {}
-        return {
-            "id": device.get("id", "") or "",
-            "name": device.get("name", "") or "Unknown Device",
-            "type": device.get("type", "") or "",
-            "is_active": bool(device.get("is_active", False)),
-            "is_restricted": bool(device.get("is_restricted", False)),
-        }
-
-    def _spotify_fetch_devices(self):
-        ok, payload, status_code = self._spotify_api_request("GET", "/me/player/devices")
-        if not ok:
-            if status_code in (401, 403):
-                self._spotify_update_state(authenticated=False, status="Spotify authorization required.")
-            return []
-        return [self._spotify_format_device(d) for d in (payload.get("devices") or [])]
-
-    def _spotify_ensure_current_device_in_list(self, devices):
-        items = list(devices or [])
-        current_id = (self._spotify_player.get("current_device_id") or "").strip()
-        current_name = (self._spotify_player.get("current_device_name") or "").strip()
-        if current_id and not any((d.get("id") or "") == current_id for d in items):
-            items.insert(0, {
-                "id": current_id,
-                "name": current_name or "Current Device",
-                "type": "Current",
-                "is_active": True,
-                "is_restricted": False,
-            })
-        return items
-
-    def _spotify_start_playback(self, request_body, source_label="tap"):
-        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
-        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
-        preferred_device_id = selected_device_id or current_device_id
-        play_params = {"device_id": preferred_device_id} if preferred_device_id else None
-        ok, payload, status_code = self._spotify_api_request("PUT", "/me/player/play", params=play_params, json_data=request_body)
-        if ok:
-            logger.info(f"Spotify: playback started from {source_label}")
-            self._spotify_update_state(status="")
-            QTimer.singleShot(300, self.update_spotify_player)
+    @pyqtSlot(str, object)
+    def _on_spotify_worker_completed(self, operation, payload):
+        payload = payload or {}
+        if operation == "refresh_player":
+            self._spotify_refresh_inflight = False
+            self._apply_spotify_operation_result(payload)
+            if self._spotify_refresh_pending:
+                self._spotify_refresh_pending = False
+                QTimer.singleShot(0, self.update_spotify_player)
             return
-
-        if status_code in (401, 403):
-            message = self._spotify_error_message(payload, "Spotify authorization required.")
-            if status_code == 401:
-                self._spotify_update_state(authenticated=False, status=message)
-            else:
-                self._spotify_update_state(status=message)
-            logger.warning(f"Spotify: playback rejected from {source_label} ({status_code})")
+        if operation == "poll_auth":
+            self._spotify_auth_poll_inflight = False
+            relay_backoff = float(payload.get("relay_backoff_seconds", 0) or 0)
+            if relay_backoff > 0:
+                self._spotify_relay_backoff_until = time.monotonic() + relay_backoff
+            self._apply_spotify_operation_result(payload)
+            if payload.get("auth_terminal"):
+                self._finish_spotify_auth_flow()
+                nested_player_result = payload.get("player_result") or {}
+                if nested_player_result:
+                    self._apply_spotify_operation_result(nested_player_result)
             return
-
-        if status_code == 404:
-            devices = self._spotify_fetch_devices()
-            target_device = None
-            if selected_device_id:
-                target_device = next((d for d in devices if d.get("id") == selected_device_id), None)
-            if not target_device and current_device_id:
-                target_device = next((d for d in devices if d.get("id") == current_device_id), None)
-            if not target_device:
-                target_device = next((d for d in devices if d.get("is_active")), None)
-            if not target_device:
-                target_device = next((d for d in devices if not d.get("is_restricted")), None)
-            if not target_device:
-                target_device = devices[0] if devices else None
-            target_device_id = (target_device or {}).get("id", "")
-
-            if target_device_id:
-                transfer_ok, _, _ = self._spotify_api_request(
-                    "PUT",
-                    "/me/player",
-                    json_data={"device_ids": [target_device_id], "play": False},
-                )
-                if transfer_ok:
-                    ok_retry, _, _ = self._spotify_api_request(
-                        "PUT",
-                        "/me/player/play",
-                        params={"device_id": target_device_id},
-                        json_data=request_body,
-                    )
-                    if ok_retry:
-                        logger.info(f"Spotify: playback started from {source_label} after device transfer")
-                        target_name = (target_device or {}).get("name", "")
-                        updates = {"has_active_device": True, "status": "", "selected_device_name": target_name}
-                        if selected_device_id != target_device_id:
-                            updates["selected_device_id"] = target_device_id
-                        self._spotify_update_state(**updates)
-                        if selected_device_id != target_device_id:
-                            self._save_spotify_tokens()
-                        QTimer.singleShot(300, self.update_spotify_player)
-                        return
-
-            self._spotify_update_state(
-                has_active_device=False,
-                status="No active Spotify device. Open Spotify on a device and try again.",
-            )
-            logger.warning(f"Spotify: no active device for playback from {source_label}")
+        if operation == "get_devices":
+            self._spotify_devices_request_inflight = False
+            self._apply_spotify_operation_result(payload)
             return
-
-        message = self._spotify_error_message(payload, f"Spotify playback failed (HTTP {status_code}).")
-        self._spotify_update_state(status=message)
-        logger.warning(f"Spotify: playback failed from {source_label} ({status_code})")
-
-    def _spotify_join_artists(self, item):
-        return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
-
-    def _spotify_format_entity(self, item, entity_type):
-        item = item or {}
-        if entity_type == "track":
-            artists = self._spotify_join_artists(item)
-            album = item.get("album") or {}
-            subtitle = artists if artists else (album.get("name", "") or "")
-            return {
-                "id": item.get("id", ""),
-                "uri": item.get("uri", ""),
-                "type": "track",
-                "title": item.get("name", "") or "Unknown Track",
-                "subtitle": subtitle,
-                "context": album.get("name", "") or "",
-                "image_url": self._spotify_pick_image_url(album.get("images") or []),
-                "play_uri": item.get("uri", ""),
-            }
-        if entity_type == "album":
-            artists = self._spotify_join_artists(item)
-            return {
-                "id": item.get("id", ""),
-                "uri": item.get("uri", ""),
-                "type": "album",
-                "title": item.get("name", "") or "Unknown Album",
-                "subtitle": artists or "Album",
-                "context": "Album",
-                "image_url": self._spotify_pick_image_url(item.get("images") or []),
-                "play_uri": item.get("uri", ""),
-            }
-        if entity_type == "playlist":
-            owner = (item.get("owner") or {}).get("display_name", "") or ""
-            return {
-                "id": item.get("id", ""),
-                "uri": item.get("uri", ""),
-                "type": "playlist",
-                "title": item.get("name", "") or "Unknown Playlist",
-                "subtitle": owner or "Playlist",
-                "context": "Playlist",
-                "image_url": self._spotify_pick_image_url(item.get("images") or []),
-                "play_uri": item.get("uri", ""),
-            }
-        if entity_type == "artist":
-            return {
-                "id": item.get("id", ""),
-                "uri": item.get("uri", ""),
-                "type": "artist",
-                "title": item.get("name", "") or "Unknown Artist",
-                "subtitle": "Artist",
-                "context": "",
-                "image_url": self._spotify_pick_image_url(item.get("images") or []),
-                "play_uri": item.get("uri", ""),
-            }
-        if entity_type == "podcast":
-            publisher = item.get("publisher", "") or ""
-            return {
-                "id": item.get("id", ""),
-                "uri": item.get("uri", ""),
-                "type": "podcast",
-                "title": item.get("name", "") or "Unknown Podcast",
-                "subtitle": publisher or "Podcast",
-                "context": "Podcast",
-                "image_url": self._spotify_pick_image_url(item.get("images") or []),
-                "play_uri": item.get("uri", ""),
-            }
-        return {
-            "id": item.get("id", ""),
-            "uri": item.get("uri", ""),
-            "type": entity_type,
-            "title": item.get("name", "") or "Unknown",
-            "subtitle": "",
-            "context": "",
-            "image_url": "",
-            "play_uri": item.get("uri", ""),
-        }
+        if operation == "select_device":
+            self._apply_spotify_operation_result(payload)
+            return
+        if operation in ("playback", "command"):
+            self._apply_spotify_operation_result(payload)
+            return
+        if operation == "search":
+            self._spotify_search_inflight = False
+            self._apply_spotify_operation_result(payload)
+            request_id = int(payload.get("request_id", 0) or 0)
+            if request_id == self._spotify_search_expected_request_id:
+                self._set_spotify_search_results(payload.get("search_results") or [])
+            pending_query = self._spotify_pending_search_query
+            if pending_query is not None:
+                self._dispatch_spotify_search(pending_query)
+            return
+        if operation == "library":
+            self._spotify_library_inflight = False
+            self._apply_spotify_operation_result(payload)
+            self._set_spotify_library(payload.get("library") or {"playlists": [], "albums": [], "tracks": [], "podcasts": []})
+            if self._spotify_library_pending_refresh:
+                self._spotify_library_pending_refresh = False
+                QTimer.singleShot(0, self.spotifyGetLibrary)
+            return
+        if operation == "item_tracks":
+            self._spotify_item_tracks_inflight = False
+            self._apply_spotify_operation_result(payload)
+            request_id = int(payload.get("request_id", 0) or 0)
+            if request_id == self._spotify_item_tracks_expected_request_id:
+                self._set_spotify_library_item_tracks(payload.get("item_tracks") or [])
+            pending_request = self._spotify_pending_item_tracks_request
+            if pending_request:
+                self._dispatch_spotify_library_item_tracks(pending_request[0], pending_request[1])
+            return
 
     @pyqtSlot()
     def startSpotifyLogin(self):
@@ -1603,6 +2242,7 @@ class Backend(QObject):
     def logoutSpotify(self):
         self.cancelSpotifyLogin()
         self._clear_spotify_tokens()
+        self._clear_spotify_async_collections()
         self._spotify_update_state(
             authenticated=False,
             is_playing=False,
@@ -1613,129 +2253,18 @@ class Backend(QObject):
             status="Spotify disconnected.",
         )
 
-    def _poll_spotify_relay_auth_result(self):
-        poll_url = self._spotify_relay_poll_url()
-        if not poll_url or not self._spotify_auth_state or not self._spotify_relay_key:
-            return None
-        now = time.monotonic()
-        if now < self._spotify_relay_backoff_until:
-            return None
-        if (now - self._spotify_relay_last_poll_at) < SPOTIFY_RELAY_MIN_POLL_INTERVAL_SECONDS:
-            return None
-        self._spotify_relay_last_poll_at = now
-        headers = {
-            "X-Relay-Key": self._spotify_relay_key,
-            "X-Device-Id": self._spotify_device_id,
-        }
-        try:
-            response = requests.get(
-                poll_url,
-                params={"state": self._spotify_auth_state},
-                headers=headers,
-                timeout=5,
-            )
-        except Exception as e:
-            logger.debug(f"Spotify relay poll request failed: {e}")
-            self._spotify_relay_backoff_until = time.monotonic() + SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS
-            return None
-        if response.status_code == 200:
-            try:
-                payload = response.json() if response.content else {}
-            except ValueError as e:
-                logger.warning(f"Spotify relay poll returned invalid JSON: {e}")
-                return {"error": "relay_invalid_json"}
-            if payload.get("pending"):
-                return None
-            result_state = payload.get("state", "")
-            if result_state and result_state != self._spotify_auth_state:
-                return {"error": "state_mismatch"}
-            return payload
-        if response.status_code == 429:
-            self._spotify_relay_backoff_until = time.monotonic() + SPOTIFY_RELAY_RATE_LIMIT_BACKOFF_SECONDS
-            return None
-        if response.status_code in (202, 204, 404):
-            return None
-        if response.status_code in (400, 401, 403):
-            detail = f"relay_http_{response.status_code}"
-            try:
-                body = response.json() if response.content else {}
-                if isinstance(body, dict) and body.get("detail"):
-                    detail = str(body.get("detail"))
-            except Exception:
-                pass
-            if response.status_code in (401, 403) and not (os.environ.get("SPOTIFY_RELAY_KEY") or "").strip():
-                detail = f"{detail} (check API relay key)"
-            return {"error": detail}
-        logger.warning(f"Spotify relay poll failed with HTTP {response.status_code}")
-        return None
-
     def _poll_spotify_auth_callback(self):
         if not self._spotify_auth_in_progress or self._spotify_auth_poll_inflight:
             return
+        if self._spotify_use_relay_auth():
+            now = time.monotonic()
+            if now < self._spotify_relay_backoff_until:
+                return
+            if (now - self._spotify_relay_last_poll_at) < SPOTIFY_RELAY_MIN_POLL_INTERVAL_SECONDS:
+                return
+            self._spotify_relay_last_poll_at = now
         self._spotify_auth_poll_inflight = True
-        try:
-            if self._spotify_use_relay_auth():
-                callback = self._poll_spotify_relay_auth_result()
-            else:
-                callback = funcs.consume_spotify_auth_result(expected_state=self._spotify_auth_state)
-        finally:
-            self._spotify_auth_poll_inflight = False
-        if not callback:
-            return
-        # Keep QR auth flow active on relay poll/config errors so the code remains scannable.
-        # Only terminal Spotify OAuth outcomes should close the login flow.
-        if self._spotify_use_relay_auth() and callback.get("error") and not callback.get("code"):
-            relay_error = str(callback.get("error") or "")
-            non_terminal_prefixes = (
-                "relay_http_",
-                "unauthorized",
-                "https_required",
-                "rate_limited",
-                "invalid_or_missing_state",
-                "relay_invalid_json",
-            )
-            if relay_error.startswith(non_terminal_prefixes):
-                self._spotify_update_state(authenticated=False, status=f"Spotify relay waiting: {relay_error}")
-                return
-        redirect_uri = self._spotify_auth_redirect_uri or self._spotify_redirect_uri()
-        code_verifier = self._spotify_code_verifier
-        self._spotify_auth_in_progress = False
-        self.spotifyAuthInProgressChanged.emit()
-        self._spotify_auth_state = ""
-        self._spotify_code_verifier = ""
-        self._spotify_auth_redirect_uri = ""
-        self._spotify_auth_url = ""
-        self.spotifyAuthUrlChanged.emit()
-        if callback.get("error"):
-            self._spotify_update_state(authenticated=False, status=f"Spotify login failed: {callback.get('error')}")
-            return
-        code = callback.get("code", "")
-        if not code:
-            self._spotify_update_state(authenticated=False, status="Spotify login cancelled.")
-            return
-        if not redirect_uri or not code_verifier:
-            self._spotify_update_state(authenticated=False, status="Spotify login expired. Please try again.")
-            return
-        try:
-            response = self._spotify_token_request({
-                "grant_type": "authorization_code",
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "code_verifier": code_verifier,
-            })
-            if response.status_code != 200:
-                self._spotify_update_state(authenticated=False, status=f"Spotify login failed (HTTP {response.status_code}).")
-                return
-            payload = response.json() if response.content else {}
-            self._spotify_access_token = payload.get("access_token", "") or ""
-            self._spotify_refresh_token = payload.get("refresh_token", self._spotify_refresh_token) or ""
-            expires_in = int(payload.get("expires_in", 3600) or 3600)
-            self._spotify_token_expires_at = time.time() + max(60, expires_in - 10)
-            self._save_spotify_tokens()
-            self._spotify_update_state(authenticated=bool(self._spotify_access_token), status="Spotify connected.")
-            self.update_spotify_player()
-        except Exception as e:
-            self._spotify_update_state(authenticated=False, status=f"Spotify login error: {e}")
+        self._dispatch_spotify_worker("poll_auth")
 
     def _tick_spotify_progress(self):
         if not self._spotify_player.get("is_playing"):
@@ -1748,151 +2277,35 @@ class Backend(QObject):
 
     @pyqtSlot()
     def update_spotify_player(self):
-        if not self._spotify_client_id:
-            self._spotify_update_state(configured=False)
+        if self._spotify_refresh_inflight:
+            self._spotify_refresh_pending = True
             return
-        self._spotify_update_state(configured=True)
-        if not (self._spotify_access_token or self._spotify_refresh_token):
-            self._spotify_update_state(authenticated=False, status="Login to Spotify.")
-            return
-        ok, payload, status_code = self._spotify_api_request("GET", "/me/player")
-        devices = self._spotify_fetch_devices()
-        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
-        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
-        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
-        if selected_device_id and not selected_device:
-            selected_device_id = ""
-            self._save_spotify_tokens()
-        current_device = next((d for d in devices if d.get("id") == current_device_id), None)
-        if not ok and status_code in (401, 403):
-            self._spotify_update_state(authenticated=False, has_active_device=False, status="Spotify authorization required.")
-            return
-        if status_code == 204:
-            self._spotify_update_state(
-                authenticated=True,
-                has_active_device=False,
-                is_playing=False,
-                status="No active Spotify device.",
-                devices=self._spotify_ensure_current_device_in_list(devices),
-                selected_device_id=selected_device_id,
-                selected_device_name=(selected_device or {}).get("name", ""),
-                current_device_id=(current_device or {}).get("id", current_device_id),
-                current_device_name=(current_device or {}).get("name", self._spotify_player.get("current_device_name", "")),
-            )
-            return
-        item = payload.get("item") or {}
-        artists = self._spotify_join_artists(item)
-        images = ((item.get("album") or {}).get("images") or [])
-        # Spotify images: largest->smallest. Use last for pill, first for full-screen.
-        album_art_small = images[-1].get("url") if images else ""
-        album_art_large = images[0].get("url") if images else ""
-        device = payload.get("device") or {}
-        active_device_id = (device.get("id") or "").strip()
-        active_device_name = (device.get("name") or "").strip()
-        selected_changed = False
-        if not selected_device_id and active_device_id:
-            selected_device_id = active_device_id
-            selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
-            selected_changed = True
-        display_selected_name = (selected_device or {}).get("name", "")
-        if not display_selected_name and active_device_id:
-            display_selected_name = active_device_name
-        current_device_id = active_device_id or current_device_id
-        if active_device_name:
-            current_device_name = active_device_name
-        else:
-            current_device_name = (current_device or {}).get("name", self._spotify_player.get("current_device_name", ""))
-        self._spotify_update_state(
-            authenticated=True,
-            is_playing=bool(payload.get("is_playing")),
-            track_name=item.get("name", ""),
-            artist_name=artists,
-            album_art_url=album_art_small,
-            album_art_url_large=album_art_large,
-            volume_percent=int(device.get("volume_percent", self._spotify_player.get("volume_percent", 50)) or 0),
-            has_active_device=bool(payload.get("device")),
-            status="",
-            progress_ms=int(payload.get("progress_ms") or 0),
-            duration_ms=int(item.get("duration_ms") or 0),
-            shuffle_state=bool(payload.get("shuffle_state", False)),
-            repeat_state=str(payload.get("repeat_state") or "off"),
-            devices=self._spotify_ensure_current_device_in_list(devices),
-            selected_device_id=selected_device_id,
-            selected_device_name=display_selected_name,
-            current_device_id=current_device_id,
-            current_device_name=current_device_name,
-        )
-        if selected_changed:
-            self._save_spotify_tokens()
+        self._spotify_refresh_inflight = True
+        self._spotify_refresh_pending = False
+        self._dispatch_spotify_worker("refresh_player")
 
     @pyqtSlot(result=QVariant)
     def spotifyGetDevices(self):
-        devices = self._spotify_ensure_current_device_in_list(self._spotify_fetch_devices())
-        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
-        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
-        selected_changed = False
-        if not selected_device_id and current_device_id:
-            selected_device_id = current_device_id
-            selected_changed = True
-        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
-        self._spotify_update_state(
-            devices=devices,
-            selected_device_id=selected_device_id,
-            selected_device_name=(selected_device or {}).get("name", self._spotify_player.get("selected_device_name", "")),
-        )
-        if selected_changed:
-            self._save_spotify_tokens()
-        return devices
+        if not self._spotify_devices_request_inflight:
+            self._spotify_devices_request_inflight = True
+            self._dispatch_spotify_worker("get_devices", request_id=1)
+        return self._spotify_player.get("devices", [])
 
     @pyqtSlot(str)
     def spotifySelectDevice(self, device_id):
-        device_id = (device_id or "").strip()
-        if not device_id:
-            self._spotify_update_state(selected_device_id="", selected_device_name="", status="Spotify device set to Auto.")
-            self._save_spotify_tokens()
-            return
-        devices = self._spotify_fetch_devices()
-        target = next((d for d in devices if d.get("id") == device_id), None)
-        if not target:
-            self._spotify_update_state(status="Selected Spotify device is not available.")
-            return
-        ok, payload, status_code = self._spotify_api_request(
-            "PUT",
-            "/me/player",
-            json_data={"device_ids": [device_id], "play": False},
-        )
-        if not ok:
-            message = self._spotify_error_message(payload, f"Failed to switch Spotify device (HTTP {status_code}).")
-            self._spotify_update_state(status=message)
-            return
-        self._spotify_update_state(
-            selected_device_id=device_id,
-            selected_device_name=target.get("name", ""),
-            has_active_device=True,
-            status="",
-        )
-        self._save_spotify_tokens()
-        QTimer.singleShot(250, self.update_spotify_player)
+        self._dispatch_spotify_worker("select_device", device_id=(device_id or "").strip())
 
     @pyqtSlot()
     def spotifyPreviousTrack(self):
-        ok, _, _ = self._spotify_api_request("POST", "/me/player/previous")
-        if ok:
-            QTimer.singleShot(500, self.update_spotify_player)
+        self._dispatch_spotify_worker("command", command="previous")
 
     @pyqtSlot()
     def spotifyNextTrack(self):
-        ok, _, _ = self._spotify_api_request("POST", "/me/player/next")
-        if ok:
-            QTimer.singleShot(500, self.update_spotify_player)
+        self._dispatch_spotify_worker("command", command="next")
 
     @pyqtSlot()
     def spotifyTogglePlayPause(self):
-        is_playing = bool(self._spotify_player.get("is_playing"))
-        endpoint = "/me/player/pause" if is_playing else "/me/player/play"
-        ok, _, _ = self._spotify_api_request("PUT", endpoint)
-        if ok:
-            QTimer.singleShot(300, self.update_spotify_player)
+        self._dispatch_spotify_worker("command", command="toggle_play_pause")
 
     @pyqtSlot(int)
     def setSpotifyVolume(self, volume):
@@ -1905,148 +2318,101 @@ class Backend(QObject):
             return
         volume = int(self._spotify_pending_volume)
         self._spotify_pending_volume = None
-        self._spotify_api_request("PUT", "/me/player/volume", params={"volume_percent": volume})
+        self._dispatch_spotify_worker("command", command="set_volume", volume=volume)
 
     @pyqtSlot(int)
     def spotifySeek(self, position_ms):
         position_ms = max(0, int(position_ms))
         self._spotify_update_state(progress_ms=position_ms)
-        self._spotify_api_request("PUT", "/me/player/seek", params={"position_ms": position_ms})
+        self._dispatch_spotify_worker("command", command="seek", position_ms=position_ms)
 
     @pyqtSlot(bool)
     def spotifySetShuffle(self, state):
-        ok, _, _ = self._spotify_api_request("PUT", "/me/player/shuffle", params={"state": "true" if state else "false"})
-        if ok:
-            self._spotify_update_state(shuffle_state=state)
+        self._dispatch_spotify_worker("command", command="shuffle", state=bool(state))
 
     @pyqtSlot(str)
     def spotifySetRepeat(self, state):
-        ok, _, _ = self._spotify_api_request("PUT", "/me/player/repeat", params={"state": state})
-        if ok:
-            self._spotify_update_state(repeat_state=state)
+        self._dispatch_spotify_worker("command", command="repeat", state=state)
 
     @pyqtSlot(str, result=QVariant)
     def spotifySearch(self, query):
         query = (query or "").strip()
         if len(query) < SPOTIFY_MIN_QUERY_LENGTH:
-            return []
-        ok, payload, status_code = self._spotify_api_request(
-            "GET",
-            "/search",
-            params={
-                "q": query,
-                "type": "track,album,artist,playlist",
-                "limit": SPOTIFY_SEARCH_LIMIT,
-            },
-        )
-        if not ok:
-            if status_code in (401, 403):
-                self._spotify_update_state(authenticated=False, status="Spotify authorization required.")
-            return []
-        results = []
-        for track in (payload.get("tracks") or {}).get("items", []):
-            results.append(self._spotify_format_entity(track, "track"))
-        for album in (payload.get("albums") or {}).get("items", []):
-            results.append(self._spotify_format_entity(album, "album"))
-        for playlist in (payload.get("playlists") or {}).get("items", []):
-            results.append(self._spotify_format_entity(playlist, "playlist"))
-        for artist in (payload.get("artists") or {}).get("items", []):
-            results.append(self._spotify_format_entity(artist, "artist"))
-        return results
+            self._spotify_pending_search_query = None
+            self._spotify_search_expected_request_id = -1
+            self._set_spotify_search_results([])
+            return self._spotify_search_results
+        if self._spotify_search_inflight:
+            self._spotify_pending_search_query = query
+            return self._spotify_search_results
+        self._dispatch_spotify_search(query)
+        return self._spotify_search_results
 
     @pyqtSlot(result=QVariant)
     def spotifyGetLibrary(self):
         if not (self._spotify_access_token or self._spotify_refresh_token):
-            return {"playlists": [], "albums": [], "tracks": []}
-        library = {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
-
-        ok, payload, _ = self._spotify_api_request("GET", "/me/playlists", params={"limit": 20})
-        if ok:
-            for playlist in payload.get("items", []):
-                library["playlists"].append(self._spotify_format_entity(playlist, "playlist"))
-
-        ok, payload, _ = self._spotify_api_request("GET", "/me/albums", params={"limit": 20})
-        if ok:
-            for item in payload.get("items", []):
-                library["albums"].append(self._spotify_format_entity(item.get("album") or {}, "album"))
-
-        ok, payload, _ = self._spotify_api_request("GET", "/me/tracks", params={"limit": 30})
-        if ok:
-            for item in payload.get("items", []):
-                library["tracks"].append(self._spotify_format_entity(item.get("track") or {}, "track"))
-
-        ok, payload, _ = self._spotify_api_request("GET", "/me/shows", params={"limit": 20})
-        if ok:
-            for item in payload.get("items", []):
-                show = item.get("show") or {}
-                if show:
-                    library["podcasts"].append(self._spotify_format_entity(show, "podcast"))
-
-        return library
+            self._set_spotify_library({"playlists": [], "albums": [], "tracks": [], "podcasts": []})
+            return self._spotify_library
+        if self._spotify_library_inflight:
+            self._spotify_library_pending_refresh = True
+            return self._spotify_library
+        self._spotify_library_inflight = True
+        self._spotify_library_pending_refresh = False
+        self._dispatch_spotify_worker("library", request_id=1)
+        return self._spotify_library
 
     @pyqtSlot(str, result=QVariant)
     def spotifyGetAlbumTracks(self, uri):
-        album_id = (uri or "").split(":")[-1]
-        if not album_id:
-            return []
-        ok, payload, _ = self._spotify_api_request("GET", f"/albums/{album_id}/tracks", params={"limit": 50})
-        if not ok:
-            return []
-        return [self._spotify_format_entity(t, "track") for t in payload.get("items", []) if t]
+        uri = (uri or "").strip()
+        self._set_spotify_library_item_tracks([])
+        if not uri:
+            self._spotify_item_tracks_expected_request_id = -1
+            return self._spotify_library_item_tracks
+        if self._spotify_item_tracks_inflight:
+            self._spotify_pending_item_tracks_request = ("album", uri)
+            return self._spotify_library_item_tracks
+        self._dispatch_spotify_library_item_tracks("album", uri)
+        return self._spotify_library_item_tracks
 
     @pyqtSlot(str, result=QVariant)
     def spotifyGetPlaylistTracks(self, uri):
-        playlist_id = (uri or "").split(":")[-1]
-        if not playlist_id:
-            return []
-        ok, payload, _ = self._spotify_api_request("GET", f"/playlists/{playlist_id}/tracks", params={"limit": 50})
-        if not ok:
-            return []
-        tracks = []
-        for item in payload.get("items", []):
-            track = (item or {}).get("track") or {}
-            if track and track.get("id"):
-                tracks.append(self._spotify_format_entity(track, "track"))
-        return tracks
+        uri = (uri or "").strip()
+        self._set_spotify_library_item_tracks([])
+        if not uri:
+            self._spotify_item_tracks_expected_request_id = -1
+            return self._spotify_library_item_tracks
+        if self._spotify_item_tracks_inflight:
+            self._spotify_pending_item_tracks_request = ("playlist", uri)
+            return self._spotify_library_item_tracks
+        self._dispatch_spotify_library_item_tracks("playlist", uri)
+        return self._spotify_library_item_tracks
 
     @pyqtSlot(str, result=QVariant)
     def spotifyGetPodcastEpisodes(self, uri):
-        show_id = (uri or "").split(":")[-1]
-        if not show_id:
-            return []
-        ok, payload, _ = self._spotify_api_request("GET", f"/shows/{show_id}/episodes", params={"limit": 50})
-        if not ok:
-            return []
-        episodes = []
-        for ep in payload.get("items", []):
-            if not ep:
-                continue
-            episodes.append({
-                "id": ep.get("id", ""),
-                "uri": ep.get("uri", ""),
-                "type": "episode",
-                "title": ep.get("name", "") or "Unknown Episode",
-                "subtitle": ep.get("description", "")[:80] if ep.get("description") else "",
-                "image_url": self._spotify_pick_image_url(ep.get("images") or []),
-                "play_uri": ep.get("uri", ""),
-            })
-        return episodes
+        uri = (uri or "").strip()
+        self._set_spotify_library_item_tracks([])
+        if not uri:
+            self._spotify_item_tracks_expected_request_id = -1
+            return self._spotify_library_item_tracks
+        if self._spotify_item_tracks_inflight:
+            self._spotify_pending_item_tracks_request = ("podcast", uri)
+            return self._spotify_library_item_tracks
+        self._dispatch_spotify_library_item_tracks("podcast", uri)
+        return self._spotify_library_item_tracks
 
     @pyqtSlot(str)
     def spotifyPlayTrackUri(self, uri):
         uri = (uri or "").strip()
         if not uri:
             return
-        logger.info("Spotify: track tap play requested")
-        self._spotify_start_playback({"uris": [uri]}, source_label="track-tap")
+        self._dispatch_spotify_worker("playback", mode="track", uri=uri)
 
     @pyqtSlot(str)
     def spotifyPlayContextUri(self, uri):
         uri = (uri or "").strip()
         if not uri:
             return
-        logger.info("Spotify: context tap play requested")
-        self._spotify_start_playback({"context_uri": uri}, source_label="context-tap")
+        self._dispatch_spotify_worker("playback", mode="context", uri=uri)
 
     @pyqtProperty(str, notify=spotifyAuthUrlChanged)
     def spotifyAuthUrl(self):
@@ -2070,6 +2436,27 @@ class Backend(QObject):
     @pyqtProperty(QVariant, notify=spotifyPlayerChanged)
     def spotifyPlayer(self):
         return self._spotify_player
+
+    @pyqtProperty(QVariant, notify=spotifyLibraryChanged)
+    def spotifyLibrary(self):
+        return self._spotify_library
+
+    @pyqtProperty(QVariant, notify=spotifySearchResultsChanged)
+    def spotifySearchResults(self):
+        return self._spotify_search_results
+
+    @pyqtProperty(QVariant, notify=spotifyLibraryItemTracksChanged)
+    def spotifyLibraryItemTracks(self):
+        return self._spotify_library_item_tracks
+
+    @pyqtSlot()
+    def shutdown(self):
+        try:
+            if hasattr(self, '_spotify_worker_thread') and self._spotify_worker_thread and self._spotify_worker_thread.isRunning():
+                self._spotify_worker_thread.quit()
+                self._spotify_worker_thread.wait(2000)
+        except Exception as e:
+            logger.debug(f"Failed to stop Spotify worker thread cleanly: {e}")
 
     @pyqtProperty(int, notify=modeChanged)
     def httpPort(self):
@@ -2167,21 +2554,36 @@ class Backend(QObject):
 
     @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
     def launchTrayVisible(self):
-        if self._launch_tray_manual_override is not None:
-            return self._launch_tray_manual_override
+        if self._launch_tray_mode == "always":
+            return True
+        if self._launch_tray_mode == "hidden":
+            return False
         return get_launch_tray_visibility_state(self._launch_data, self._mode)
 
-    @pyqtProperty(bool, notify=launchTrayVisibilityChanged)
-    def launchTrayManualMode(self):
-        return self._launch_tray_manual_override is not None
+    @pyqtProperty(str, notify=launchTrayModeChanged)
+    def launchTrayMode(self):
+        return self._launch_tray_mode
 
+    @pyqtSlot(str)
+    def setLaunchTrayMode(self, mode):
+        normalized_mode = str(mode).strip().lower()
+        if normalized_mode not in {"always", "automatic", "hidden"}:
+            normalized_mode = "hidden"
+        if self._launch_tray_mode != normalized_mode:
+            self._launch_tray_mode = normalized_mode
+            save_launch_tray_mode_setting(normalized_mode)
+            self.launchTrayModeChanged.emit()
+            self._emit_tray_visibility_changed()
+
+    # Compatibility shim for older QML bindings still using the previous toggle API.
+    @pyqtProperty(bool, notify=launchTrayModeChanged)
+    def launchTrayManualMode(self):
+        return self._launch_tray_mode == "always"
+
+    # Compatibility shim for older QML bindings still using the previous toggle API.
     @pyqtSlot(bool)
     def setLaunchTrayManualMode(self, enabled):
-        if enabled:
-            self._launch_tray_manual_override = True
-        else:
-            self._launch_tray_manual_override = None
-        self._emit_tray_visibility_changed()
+        self.setLaunchTrayMode("always" if enabled else "automatic")
 
     @pyqtSlot()
     def notifyUiReady(self):
@@ -4790,6 +5192,7 @@ if __name__ == '__main__':
         profiler.mark("Creating Backend")
         logger.info("BOOT: Creating Backend instance...")
         backend = Backend(initial_wifi_connected=False, initial_wifi_ssid="")
+        app.aboutToQuit.connect(backend.shutdown)
         
         # Notify that backend is ready but QML hasn't loaded yet
         backend.setLoadingStatus("Connecting to network...")
@@ -4816,6 +5219,8 @@ if __name__ == '__main__':
         context.setContextProperty("circuitCoords", circuit_coords)
         context.setContextProperty("spacexLogoPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spacex_logo.png').replace('\\', '/'))
         context.setContextProperty("chevronPath", os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'double-chevron.png').replace('\\', '/'))
+        spotify_fallback_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'images', 'spotify.png')
+        context.setContextProperty("spotifyFallbackArtUrl", "file:///" + spotify_fallback_path.replace('\\', '/'))
 
         profiler.mark("Preparing URLs")
         globe_file_path = os.path.join(os.path.dirname(__file__), '..', 'src', 'globe.html')
