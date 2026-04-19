@@ -90,6 +90,14 @@ Window {
         if (s.indexOf('SCRUBBED') !== -1 || s.indexOf('CANCELLED') !== -1) return "#9E9E9E"
         return "#F44336" // Default to red for other unknown statuses
     }
+
+    function openSettingsPopup(categoryIndex) {
+        if (typeof displaySettingsPopup === 'undefined') return
+        if (typeof settingsCategoryStack !== 'undefined') {
+            settingsCategoryStack.currentIndex = categoryIndex
+        }
+        displaySettingsPopup.open()
+    }
     onActiveChanged: {
         if (active) {
             if (typeof plotGlobeView !== 'undefined' && plotGlobeView.runJavaScript) {
@@ -3213,6 +3221,59 @@ Window {
                                         Layout.fillHeight: true
                                         spacing: 0
 
+                                        // Drag-to-close overlay for the entire tray content
+                                        DragHandler {
+                                            id: spotifyTrayDragToClose
+                                            target: null
+                                            xAxis.enabled: false
+
+                                            property real dragStartY: 0
+                                            property real dragDeltaY: 0
+                                            property bool dragDownward: false
+
+                                            onActiveChanged: {
+                                                if (active) {
+                                                    dragStartY = centroid.scenePosition.y
+                                                    dragDeltaY = 0
+                                                    dragDownward = false
+                                                    spotifyFullScreenTray.isDragging = true
+                                                } else {
+                                                    spotifyFullScreenTray.isDragging = false
+                                                    // If dragged down enough and we're at top of lists, close
+                                                    if (dragDownward && dragDeltaY > 60) {
+                                                        var canClose = true
+                                                        // Check if we're in a scrollable list view
+                                                        if (spotifyFullScreenTray.libraryCategory === -1) {
+                                                            // Search results list
+                                                            if (spotifyResultsList && spotifyResultsList.contentY > 0) {
+                                                                canClose = false
+                                                            }
+                                                        } else {
+                                                            // Library grid/list
+                                                            if (spotifyLibraryItemGrid && spotifyLibraryItemGrid.contentY > 0) {
+                                                                canClose = false
+                                                            }
+                                                            if (spotifyTrackListView && spotifyTrackListView.contentY > 0) {
+                                                                canClose = false
+                                                            }
+                                                        }
+                                                        if (canClose) {
+                                                            spotifyFullScreenTray.height = 0
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            onCentroidChanged: {
+                                                if (!active) return
+                                                var delta = centroid.scenePosition.y - dragStartY
+                                                dragDeltaY = delta
+                                                if (delta > 5) {
+                                                    dragDownward = true
+                                                }
+                                            }
+                                        }
+
                                         // Left: Now Playing
                                         Rectangle {
                                             Layout.fillWidth: true
@@ -4672,20 +4733,23 @@ Window {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                displaySettingsPopup.open()
+                                openSettingsPopup(0)
                             }
                         }
 
                         Popup {
                             id: displaySettingsPopup
-                            y: -285
-                            x: -330
-                            width: 620
-                            height: 280
+                            parent: root.contentItem
+                            width: Math.min(760, Math.max(520, root.width - 24))
+                            height: Math.min(420, Math.max(250, root.height - 24))
+                            x: Math.max(12, Math.floor((root.width - width) / 2))
+                            y: Math.max(12, Math.floor((root.height - height) / 2))
                             padding: 0
                             modal: true
                             focus: true
                             closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+                            readonly property color settingsTileColor: (backend && backend.theme === "dark") ? "#aa1a1a1a" : "#ccffffff"
+                            readonly property color settingsTileBorder: (backend && backend.theme === "dark") ? "#44ffffff" : "#33000000"
                             background: Rectangle {
                                 color: (backend && backend.theme === "dark") ? "#111111" : "#f5f5f5"
                                 radius: 20
@@ -4693,336 +4757,545 @@ Window {
                                 border.width: 1
                                 layer.enabled: true
                             }
-                            
+
                             RowLayout {
                                 anchors.fill: parent
                                 spacing: 0
 
-                                // Sidebar
                                 Rectangle {
                                     Layout.fillHeight: true
-                                    Layout.preferredWidth: 70
+                                    Layout.preferredWidth: 180
                                     color: (backend && backend.theme === "dark") ? "#181818" : "#ebebeb"
                                     radius: 20
 
-                                    // Mask the right side of sidebar radius
                                     Rectangle {
                                         anchors.right: parent.right
                                         height: parent.height
                                         width: 20
                                         color: parent.color
-                                        visible: true
                                     }
 
                                     ColumnLayout {
                                         anchors.fill: parent
-                                        anchors.topMargin: 25
-                                        anchors.bottomMargin: 15
-                                        spacing: 20
+                                        anchors.margins: 14
+                                        spacing: 8
+
+                                        Text {
+                                            text: "Settings"
+                                            color: (backend && backend.theme === "dark") ? "#cccccc" : "#444"
+                                            font.pixelSize: 13
+                                            font.bold: true
+                                            Layout.leftMargin: 8
+                                            Layout.topMargin: 6
+                                            Layout.bottomMargin: 8
+                                        }
 
                                         Repeater {
                                             model: [
-                                                { icon: "\uf1de", idx: 0 },
-                                                { icon: "\uf53f", idx: 1 },
-                                                { icon: "\uf05b", idx: 2 }
+                                                { label: "Visual", icon: "\uf53f", idx: 0 },
+                                                { label: "Updates", icon: "\uf062", idx: 1 }
                                             ]
+
                                             delegate: Rectangle {
-                                                Layout.preferredWidth: 45
-                                                Layout.preferredHeight: 45
-                                                Layout.alignment: Qt.AlignHCenter
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: 44
                                                 radius: 10
-                                                color: displayStack.currentIndex === modelData.idx ? (backend.theme === "dark" ? "#2a2a2a" : "#dfdfdf") : "transparent"
-                                                Text {
-                                                    anchors.centerIn: parent
-                                                    text: modelData.icon
-                                                    font.family: "Font Awesome 5 Free"
-                                                    font.pixelSize: 20
-                                                    font.weight: Font.Black
-                                                    color: displayStack.currentIndex === modelData.idx ? "#3e6ae1" : (backend.theme === "dark" ? "#888" : "#666")
-                                                }
-                                                MouseArea { 
+                                                color: settingsCategoryStack.currentIndex === modelData.idx ?
+                                                       ((backend && backend.theme === "dark") ? "#2a2a2a" : "#dcdcdc") : "transparent"
+
+                                                RowLayout {
                                                     anchors.fill: parent
-                                                    onClicked: displayStack.currentIndex = modelData.idx
+                                                    anchors.leftMargin: 12
+                                                    anchors.rightMargin: 12
+                                                    spacing: 10
+
+                                                    Text {
+                                                        text: modelData.icon
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 14
+                                                        font.weight: Font.Black
+                                                        color: settingsCategoryStack.currentIndex === modelData.idx ? "#3e6ae1" : ((backend && backend.theme === "dark") ? "#888" : "#666")
+                                                    }
+                                                    Text {
+                                                        text: modelData.label
+                                                        color: settingsCategoryStack.currentIndex === modelData.idx ? ((backend && backend.theme === "dark") ? "white" : "black") : ((backend && backend.theme === "dark") ? "#bbbbbb" : "#555")
+                                                        font.pixelSize: 13
+                                                        font.bold: true
+                                                    }
+                                                }
+
+                                                MouseArea {
+                                                    anchors.fill: parent
+                                                    onClicked: settingsCategoryStack.currentIndex = modelData.idx
                                                 }
                                             }
                                         }
-                                        
+
                                         Item { Layout.fillHeight: true }
-                                        
+                                    }
+                                }
+
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    Layout.margins: 20
+                                    spacing: 12
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+
+                                        Text {
+                                            text: settingsCategoryStack.currentIndex === 0 ? "Visual" : "Updates"
+                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                            font.pixelSize: 22
+                                            font.bold: true
+                                        }
+
+                                        Item { Layout.fillWidth: true }
+
                                         Rectangle {
-                                            Layout.preferredWidth: 45
-                                            Layout.preferredHeight: 45
-                                            Layout.alignment: Qt.AlignHCenter
-                                            radius: 10
+                                            width: 34
+                                            height: 34
+                                            radius: 17
                                             color: "transparent"
+
                                             Text {
                                                 anchors.centerIn: parent
                                                 text: "\uf00d"
                                                 font.family: "Font Awesome 5 Free"
-                                                font.pixelSize: 20
+                                                font.pixelSize: 16
                                                 font.weight: Font.Black
-                                                color: (backend.theme === "dark" ? "#888" : "#666")
+                                                color: (backend && backend.theme === "dark") ? "#888" : "#666"
                                             }
-                                            MouseArea { 
+
+                                            MouseArea {
                                                 anchors.fill: parent
                                                 onClicked: displaySettingsPopup.close()
                                             }
                                         }
                                     }
-                                }
-
-                                // Main Content
-                                ColumnLayout {
-                                    Layout.fillWidth: true
-                                    Layout.fillHeight: true
-                                    Layout.margins: 20
-                                    Layout.leftMargin: 25
-                                    spacing: 12
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        Text {
-                                            text: {
-                                                if (displayStack.currentIndex === 0) return "Quick Controls"
-                                                if (displayStack.currentIndex === 1) return "Display & Color"
-                                                return "Calibration"
-                                            }
-                                            color: backend.theme === "dark" ? "white" : "black"
-                                            font.pixelSize: 20
-                                            font.bold: true
-                                        }
-                                        Item { Layout.fillWidth: true }
-                                        Text {
-                                            text: "Bus 13 • DFR1125"
-                                            color: "#666"
-                                            font.pixelSize: 11
-                                            font.bold: true
-                                        }
-                                    }
 
                                     StackLayout {
-                                        id: displayStack
+                                        id: settingsCategoryStack
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
 
-                                        // Tab 1: Quick Controls
                                         ColumnLayout {
-                                            spacing: 15
-                                            
-                                            Repeater {
-                                                model: [
-                                                    { label: "Brightness", val: backend.brightness, func: "setBrightness", accent: "#3e6ae1" },
-                                                    { label: "Contrast", val: backend.contrast, func: "setContrast", accent: "#3e6ae1" },
-                                                    { label: "Sharpness", val: backend.sharpness, func: "setSharpness", accent: "#3e6ae1" }
-                                                ]
-                                                delegate: ColumnLayout {
-                                                    Layout.fillWidth: true
-                                                    spacing: 2
-                                                    RowLayout {
-                                                        Layout.fillWidth: true
-                                                        Text { text: modelData.label; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
-                                                        Item { Layout.fillWidth: true }
-                                                        Text { text: Math.round(tSlider.value) + "%"; color: modelData.accent; font.pixelSize: 12; font.bold: true }
-                                                    }
-                                                    Slider {
-                                                        id: tSlider
-                                                        Layout.fillWidth: true
-                                                        from: 0; to: 100
-                                                        value: modelData.val
-                                                        onMoved: backend[modelData.func](value)
-                                                        background: Rectangle {
-                                                            x: tSlider.leftPadding
-                                                            y: tSlider.topPadding + tSlider.availableHeight / 2 - height / 2
-                                                            implicitWidth: 200
-                                                            implicitHeight: 10
-                                                            width: tSlider.availableWidth
-                                                            height: implicitHeight
-                                                            radius: 5
-                                                            color: backend.theme === "dark" ? "#222" : "#ddd"
-                                                            Rectangle {
-                                                                width: tSlider.visualPosition * parent.width
-                                                                height: parent.height
-                                                                color: modelData.accent
-                                                                radius: 5
-                                                            }
-                                                        }
-                                                        handle: Rectangle {
-                                                            x: tSlider.leftPadding + tSlider.visualPosition * (tSlider.availableWidth - width)
-                                                            y: tSlider.topPadding + tSlider.availableHeight / 2 - height / 2
-                                                            implicitWidth: 24
-                                                            implicitHeight: 24
-                                                            radius: 12
-                                                            color: "white"
-                                                            border.color: "#ccc"
-                                                            border.width: 1
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            
-                                            Item { Layout.fillHeight: true }
-                                        }
+                                            spacing: 10
 
-                                        // Tab 2: Display & Color
-                                        ScrollView {
-                                            clip: true
-                                            ScrollBar.vertical.policy: ScrollBar.AlwaysOff
-                                            ColumnLayout {
-                                                width: 480
-                                                spacing: 15
-
-                                                Text { text: "Color Preset"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
-                                                Flow {
-                                                    Layout.fillWidth: true
-                                                    spacing: 8
-                                                    Repeater {
-                                                        model: [
-                                                            {text: "sRGB", val: "01"}, {text: "Native", val: "02"},
-                                                            {text: "5000K", val: "04"}, {text: "6500K", val: "05"},
-                                                            {text: "7500K", val: "06"}, {text: "9300K", val: "08"},
-                                                            {text: "User 1", val: "0b"}
-                                                        ]
-                                                        delegate: Button {
-                                                            id: tBtn
-                                                            text: modelData.text
-                                                            contentItem: Text {
-                                                                text: tBtn.text
-                                                                font: tBtn.font
-                                                                color: tBtn.highlighted ? "white" : (backend.theme === "dark" ? "#aaa" : "#333")
-                                                                horizontalAlignment: Text.AlignHCenter
-                                                                verticalAlignment: Text.AlignVCenter
-                                                            }
-                                                            background: Rectangle {
-                                                                implicitWidth: 80
-                                                                implicitHeight: 34
-                                                                color: tBtn.highlighted ? "#3e6ae1" : (backend.theme === "dark" ? "#222" : "#eee")
-                                                                radius: 8
-                                                                border.color: tBtn.pressed ? "#3e6ae1" : "transparent"
-                                                                border.width: 1
-                                                            }
-                                                            highlighted: backend.colorPreset === modelData.val
-                                                            onClicked: backend.setColorPreset(modelData.val)
-                                                        }
-                                                    }
-                                                }
-
-                                                Text { text: "RGB Video Gains"; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true; Layout.topMargin: 5 }
-                                                
-                                                Repeater {
-                                                    model: [
-                                                        { label: "Red Gain", val: backend.videoGainRed, func: "setVideoGainRed", accent: "#FF5252" },
-                                                        { label: "Green Gain", val: backend.videoGainGreen, func: "setVideoGainGreen", accent: "#4CAF50" },
-                                                        { label: "Blue Gain", val: backend.videoGainBlue, func: "setVideoGainBlue", accent: "#2196F3" }
-                                                    ]
-                                                    delegate: ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 2
-                                                        RowLayout {
-                                                            Layout.fillWidth: true
-                                                            Text { text: modelData.label; color: backend.theme === "dark" ? "#aaa" : "#555"; font.pixelSize: 12; font.bold: true }
-                                                            Item { Layout.fillWidth: true }
-                                                            Text { text: Math.round(rgbSlider.value) + "%"; color: modelData.accent; font.pixelSize: 12; font.bold: true }
-                                                        }
-                                                        Slider {
-                                                            id: rgbSlider
-                                                            Layout.fillWidth: true
-                                                            from: 0; to: 100
-                                                            value: modelData.val
-                                                            onMoved: backend[modelData.func](value)
-                                                            background: Rectangle {
-                                                                x: rgbSlider.leftPadding
-                                                                y: rgbSlider.topPadding + rgbSlider.availableHeight / 2 - height / 2
-                                                                implicitWidth: 200
-                                                                implicitHeight: 10
-                                                                width: rgbSlider.availableWidth
-                                                                height: implicitHeight
-                                                                radius: 5
-                                                                color: backend.theme === "dark" ? "#222" : "#ddd"
-                                                                Rectangle {
-                                                                    width: rgbSlider.visualPosition * parent.width
-                                                                    height: parent.height
-                                                                    color: modelData.accent
-                                                                    radius: 5
-                                                                }
-                                                            }
-                                                            handle: Rectangle {
-                                                                x: rgbSlider.leftPadding + rgbSlider.visualPosition * (rgbSlider.availableWidth - width)
-                                                                y: rgbSlider.topPadding + rgbSlider.availableHeight / 2 - height / 2
-                                                                implicitWidth: 24
-                                                                implicitHeight: 24
-                                                                radius: 12
-                                                                color: "white"
-                                                                border.color: "#ccc"
-                                                                border.width: 1
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-
-                                        // Tab 3: Calibration
-                                        ColumnLayout {
-                                            spacing: 25
-                                            Layout.fillWidth: true
-                                            
                                             Text {
-                                                text: "Touchscreen Calibration"
-                                                color: backend.theme === "dark" ? "#aaa" : "#555"
-                                                font.pixelSize: 13
+                                                text: "Launch Banner"
+                                                color: (backend && backend.theme === "dark") ? "#bfbfbf" : "#666"
+                                                font.pixelSize: 12
                                                 font.bold: true
                                             }
 
-                                            Text {
-                                                text: "If touch inputs are misaligned, use the calibration tool to map the display coordinates correctly. This will require following on-screen prompts."
-                                                color: backend.theme === "dark" ? "#888" : "#666"
-                                                font.pixelSize: 12
+                                            GridLayout {
+                                                columns: 1
                                                 Layout.fillWidth: true
-                                                wrapMode: Text.Wrap
+                                                columnSpacing: 8
+                                                rowSpacing: 8
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 82
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 10
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                                                        cursorShape: Qt.PointingHandCursor
+                                                    }
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 12
+                                                        anchors.rightMargin: 12
+                                                        spacing: 10
+
+                                                        Text {
+                                                            text: "\uf06e"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 15
+                                                            color: "#FF9800"
+                                                            Layout.preferredWidth: 18
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 1
+
+                                                            Text {
+                                                                text: "Always Show Launch Banner"
+                                                                font.pixelSize: 12
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            }
+                                                            Text {
+                                                                text: backend.launchTrayManualMode ? "Manual mode is ON" : "Manual mode is OFF"
+                                                                font.pixelSize: 10
+                                                                color: (backend && backend.theme === "dark") ? "#b3b3b3" : "#666"
+                                                            }
+                                                        }
+
+                                                        Rectangle {
+                                                            width: 30
+                                                            height: 16
+                                                            radius: 8
+                                                            color: backend.launchTrayManualMode ? "#4CAF50" : ((backend && backend.theme === "dark") ? "#3a3a3a" : "#c8c8c8")
+                                                            Behavior on color { ColorAnimation { duration: 200 } }
+
+                                                            Rectangle {
+                                                                width: 12
+                                                                height: 12
+                                                                radius: 6
+                                                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
+                                                                y: 2
+                                                                color: "white"
+                                                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+                                            Item { Layout.fillHeight: true }
+                                        }
+
+                                        ColumnLayout {
+                                            spacing: 8
+
+                                            RowLayout {
+                                                Layout.alignment: Qt.AlignLeft
+                                                spacing: 8
+
+                                                Text {
+                                                    text: (backend && backend.updateAvailable) ? "Update Available" : "Software Update"
+                                                    font.pixelSize: 16
+                                                    font.bold: true
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                }
+
+                                                Text {
+                                                    text: "• Last checked: " + (backend ? backend.lastUpdateCheckTime : "Never")
+                                                    font.pixelSize: 10
+                                                    color: (backend && backend.theme === "dark") ? "#cccccc" : "#666666"
+                                                }
+                                            }
+
+                                            GridLayout {
+                                                columns: 2
+                                                Layout.fillWidth: true
+                                                columnSpacing: 8
+                                                rowSpacing: 6
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 52
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 6
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 6
+                                                        spacing: 6
+
+                                                        Text {
+                                                            text: "\uf126"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 12
+                                                            color: "#2196F3"
+                                                            Layout.preferredWidth: 15
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 0
+                                                            Text {
+                                                                text: "Current"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                                            }
+                                                            Text {
+                                                                text: (backend && backend.currentVersionInfo ? (backend.currentVersionInfo.short_hash || "Unknown") : "Unknown")
+                                                                font.pixelSize: 10
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                elide: Text.ElideRight
+                                                                Layout.fillWidth: true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 52
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 6
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 6
+                                                        spacing: 6
+
+                                                        Text {
+                                                            text: "\uf062"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 12
+                                                            color: "#4CAF50"
+                                                            Layout.preferredWidth: 15
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 0
+                                                            Text {
+                                                                text: "Latest"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                                            }
+                                                            Text {
+                                                                text: (backend && backend.latestVersionInfo ? (backend.latestVersionInfo.short_hash || "Unknown") : "Unknown")
+                                                                font.pixelSize: 10
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                elide: Text.ElideRight
+                                                                Layout.fillWidth: true
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 52
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 6
+
+                                                    MouseArea {
+                                                        anchors.fill: parent
+                                                        onClicked: backend.setLaunchTrayManualMode(!backend.launchTrayManualMode)
+                                                        cursorShape: Qt.PointingHandCursor
+                                                    }
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 6
+                                                        spacing: 4
+
+                                                        Text {
+                                                            text: "\uf06e"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 11
+                                                            color: "#FF9800"
+                                                            Layout.preferredWidth: 14
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 0
+                                                            Text {
+                                                                text: "Banner"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            }
+                                                            Text {
+                                                                text: "Always"
+                                                                font.pixelSize: 8
+                                                                color: (backend && backend.theme === "dark") ? "#aaa" : "#666"
+                                                            }
+                                                        }
+
+                                                        Rectangle {
+                                                            width: 26
+                                                            height: 14
+                                                            radius: 7
+                                                            color: backend.launchTrayManualMode ? "#4CAF50" : ((backend && backend.theme === "dark") ? "#333" : "#ccc")
+                                                            Behavior on color { ColorAnimation { duration: 200 } }
+
+                                                            Rectangle {
+                                                                width: 10
+                                                                height: 10
+                                                                radius: 5
+                                                                x: backend.launchTrayManualMode ? parent.width - width - 2 : 2
+                                                                y: 2
+                                                                color: "white"
+                                                                Behavior on x { NumberAnimation { duration: 200; easing.type: Easing.InOutQuad } }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    Layout.fillWidth: true
+                                                    Layout.preferredHeight: 52
+                                                    color: displaySettingsPopup.settingsTileColor
+                                                    border.color: displaySettingsPopup.settingsTileBorder
+                                                    border.width: 1
+                                                    radius: 6
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.margins: 6
+                                                        spacing: 4
+
+                                                        Text {
+                                                            text: "\uf121"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 11
+                                                            color: backend.targetBranch === "master" ? "#2196F3" : "#FF9800"
+                                                            Layout.preferredWidth: 14
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 1
+                                                            Text {
+                                                                text: "Branch"
+                                                                font.pixelSize: 9
+                                                                font.bold: true
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            }
+                                                            Row {
+                                                                spacing: 0
+                                                                Rectangle {
+                                                                    width: 45
+                                                                    height: 18
+                                                                    color: backend.targetBranch === "master" ? "#2196F3" : ((backend && backend.theme === "dark") ? "#303030" : "#d0d0d0")
+                                                                    radius: 4
+                                                                    Text {
+                                                                        anchors.centerIn: parent
+                                                                        text: "Stable"
+                                                                        color: backend.targetBranch === "master" ? "white" : ((backend && backend.theme === "dark") ? "#aaa" : "#555")
+                                                                        font.pixelSize: 9
+                                                                        font.bold: backend.targetBranch === "master"
+                                                                    }
+                                                                    MouseArea {
+                                                                        anchors.fill: parent
+                                                                        onClicked: backend.setTargetBranch("master")
+                                                                    }
+                                                                }
+                                                                Rectangle {
+                                                                    width: 45
+                                                                    height: 18
+                                                                    color: backend.targetBranch === "beta" ? "#FF9800" : ((backend && backend.theme === "dark") ? "#303030" : "#d0d0d0")
+                                                                    radius: 4
+                                                                    Text {
+                                                                        anchors.centerIn: parent
+                                                                        text: "Beta"
+                                                                        color: backend.targetBranch === "beta" ? "white" : ((backend && backend.theme === "dark") ? "#aaa" : "#555")
+                                                                        font.pixelSize: 9
+                                                                        font.bold: backend.targetBranch === "beta"
+                                                                    }
+                                                                    MouseArea {
+                                                                        anchors.fill: parent
+                                                                        onClicked: backend.setTargetBranch("beta")
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
                                             }
 
                                             RowLayout {
-                                                spacing: 15
-                                                
+                                                Layout.alignment: Qt.AlignHCenter
+                                                spacing: 12
+
                                                 Button {
-                                                    id: calBtn
-                                                    text: "Calibrate Screen"
+                                                    text: "Update Now"
+                                                    Layout.preferredWidth: 105
+                                                    Layout.preferredHeight: 30
+                                                    visible: {
+                                                        var current = backend.currentVersionInfo.hash
+                                                        var latest = backend.latestVersionInfo.hash
+                                                        return current && latest && current !== "Unknown" && latest !== "Unknown" && current !== latest
+                                                    }
+                                                    onClicked: {
+                                                        backend.runUpdateScript()
+                                                        displaySettingsPopup.close()
+                                                    }
+
+                                                    background: Rectangle {
+                                                        color: "#4CAF50"
+                                                        radius: 3
+                                                    }
+
                                                     contentItem: Text {
-                                                        text: calBtn.text
-                                                        font: calBtn.font
+                                                        text: parent.text
                                                         color: "white"
+                                                        font.pixelSize: 11
+                                                        font.bold: true
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                     }
-                                                    background: Rectangle {
-                                                        implicitWidth: 160
-                                                        implicitHeight: 45
-                                                        color: calBtn.pressed ? "#2e5ab1" : "#3e6ae1"
-                                                        radius: 10
-                                                    }
-                                                    onClicked: backend.calibrateTouchscreen()
                                                 }
 
                                                 Button {
-                                                    id: removeCalBtn
-                                                    text: "Remove Calibration"
-                                                    enabled: backend && backend.touchCalibrationExists
+                                                    text: backend.updateChecking ? "Checking..." : "Check Now"
+                                                    Layout.preferredWidth: 90
+                                                    Layout.preferredHeight: 30
+                                                    enabled: !backend.updateChecking
+                                                    onClicked: backend.checkForUpdatesNow()
+
+                                                    background: Rectangle {
+                                                        color: backend.updateChecking ?
+                                                               ((backend && backend.theme === "dark") ? "#666" : "#ccc") :
+                                                               ((backend && backend.theme === "dark") ? "#303030" : "#e0e0e0")
+                                                        radius: 3
+                                                    }
+
                                                     contentItem: Text {
-                                                        text: removeCalBtn.text
-                                                        font: removeCalBtn.font
-                                                        color: removeCalBtn.enabled ? (backend.theme === "dark" ? "white" : "black") : "#666"
+                                                        text: parent.text
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        font.pixelSize: 11
                                                         horizontalAlignment: Text.AlignHCenter
                                                         verticalAlignment: Text.AlignVCenter
                                                     }
+                                                }
+
+                                                Button {
+                                                    text: "Restart"
+                                                    Layout.preferredWidth: 85
+                                                    Layout.preferredHeight: 30
+                                                    onClicked: backend.reboot_device()
+
                                                     background: Rectangle {
-                                                        implicitWidth: 160
-                                                        implicitHeight: 45
-                                                        color: removeCalBtn.enabled ? (backend.theme === "dark" ? "#333" : "#ddd") : (backend.theme === "dark" ? "#222" : "#eee")
-                                                        radius: 10
-                                                        border.color: removeCalBtn.enabled ? (backend.theme === "dark" ? "#444" : "#ccc") : "transparent"
-                                                        border.width: 1
+                                                        color: (backend && backend.theme === "dark") ? "#303030" : "#e0e0e0"
+                                                        radius: 3
                                                     }
-                                                    onClicked: backend.removeTouchCalibration()
+
+                                                    contentItem: Row {
+                                                        spacing: 6
+                                                        anchors.centerIn: parent
+                                                        Text {
+                                                            text: "\uf011"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 11
+                                                            font.weight: Font.Black
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+                                                        Text {
+                                                            text: "Restart"
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            font.pixelSize: 11
+                                                            anchors.verticalCenter: parent.verticalCenter
+                                                        }
+                                                    }
                                                 }
                                             }
 
@@ -6808,7 +7081,7 @@ Window {
         Connections {
             target: backend
             function onUpdateDialogRequested() {
-                updatePopup.open()
+                openSettingsPopup(1)
             }
         }
 
