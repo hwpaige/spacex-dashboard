@@ -459,8 +459,8 @@ Window {
             anchors.left: parent.left
             anchors.top: parent.top
             anchors.bottom: (root.height > root.width) ? undefined : parent.bottom
-            // width property below handles sizing; anchors.right is bound to videoCard.left when applicable
-            anchors.right: (root.height > root.width) ? parent.right : ((typeof videoCard !== 'undefined' && videoCard !== null) ? videoCard.left : parent.right)
+            // Keep right anchor only in portrait; in landscape width binding drives expansion.
+            anchors.right: (root.height > root.width) ? parent.right : undefined
             // Use anchors.rightMargin/bottomMargin to handle the safeArea logic directly on the background
             anchors.rightMargin: (root.height > root.width) ? 0 : ((1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0)
             anchors.bottomMargin: (root.height > root.width) ? ((1.0 - progress) > 0 ? (1.0 - progress) * 12 : 0) : 0
@@ -2485,7 +2485,7 @@ Window {
                                     }
                                 }
                                 delegate: Item {
-                                    width: parent.width
+                                    width: ListView.view ? ListView.view.width : 0
                                     height: 30
                                     RowLayout {
                                         anchors.fill: parent
@@ -2821,6 +2821,20 @@ Window {
                         }
 
                         Text {
+                            id: spotifyPillDeviceIcon
+                            visible: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
+                            text: "\uf108"
+                            font.family: "Font Awesome 5 Free"
+                            font.pixelSize: 10
+                            color: (backend && backend.theme === "dark") ? "#9edfb6" : "#168d41"
+                            Layout.alignment: Qt.AlignVCenter
+                            TapHandler {
+                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                onTapped: spotifyFullScreenTray.openDevicePicker(spotifyPillDeviceIcon, "pill")
+                            }
+                        }
+
+                        Text {
                             text: "\uf062"
                             font.family: "Font Awesome 5 Free"
                             font.pixelSize: 10
@@ -2858,7 +2872,11 @@ Window {
                         property var libraryPlaylists: []
                         property var libraryAlbums: []
                         property var libraryTracks: []
+                        property var libraryPodcasts: []
                         property int activeTab: 0
+                        property int libraryCategory: -1
+                        property var librarySelectedItem: null
+                        property var libraryItemTracks: []
                         property bool spotifyAuthenticated: backend && backend.spotifyPlayer && backend.spotifyPlayer.authenticated
 
                         function _playItem(item) {
@@ -2874,12 +2892,31 @@ Window {
                                 libraryPlaylists = []
                                 libraryAlbums = []
                                 libraryTracks = []
+                                libraryPodcasts = []
                                 return
                             }
                             var data = backend.spotifyGetLibrary()
                             libraryPlaylists = (data && data.playlists) ? data.playlists : []
                             libraryAlbums = (data && data.albums) ? data.albums : []
                             libraryTracks = (data && data.tracks) ? data.tracks : []
+                            libraryPodcasts = (data && data.podcasts) ? data.podcasts : []
+                        }
+
+                        function openLibraryItem(item) {
+                            if (!item) return
+                            var t = item.type || ""
+                            if (t === "album") {
+                                librarySelectedItem = item
+                                libraryItemTracks = backend.spotifyGetAlbumTracks(item.uri || "")
+                            } else if (t === "playlist") {
+                                librarySelectedItem = item
+                                libraryItemTracks = backend.spotifyGetPlaylistTracks(item.uri || "")
+                            } else if (t === "podcast") {
+                                librarySelectedItem = item
+                                libraryItemTracks = backend.spotifyGetPodcastEpisodes(item.uri || "")
+                            } else {
+                                _playItem(item)
+                            }
                         }
 
                         function refreshSearch() {
@@ -2903,6 +2940,33 @@ Window {
                             if (!backend.spotifyAuthInProgress) backend.startSpotifyLogin()
                         }
 
+                        property real devicePickerX: Math.max(10, root.width - 260)
+                        property real devicePickerY: 44
+                        property string devicePickerAnchorKey: ""
+
+                        function openDevicePicker(anchorItem, anchorKey) {
+                            var key = anchorKey || "default"
+                            if (spotifyDevicesPopup.visible && devicePickerAnchorKey === key) {
+                                spotifyDevicesPopup.close()
+                                devicePickerAnchorKey = ""
+                                return
+                            }
+                            if (!backend) return
+                            backend.spotifyGetDevices()
+                            var popupWidth = Math.max(150, Math.min(220, spotifyFullScreenTray.width * 0.24))
+                            var popupHeight = 220
+                            var defaultPoint = Qt.point(root.width - 18, 42)
+                            var point = anchorItem ? anchorItem.mapToItem(root.contentItem, 0, anchorItem.height) : defaultPoint
+                            var anchorWidth = anchorItem ? anchorItem.width : 0
+                            var x = Math.max(10, Math.min(root.width - popupWidth - 10, point.x - popupWidth + anchorWidth + 4))
+                            var y = point.y + 4
+                            if (y + popupHeight > root.height - 6) y = Math.max(8, point.y - popupHeight - 6)
+                            devicePickerX = x
+                            devicePickerY = y
+                            devicePickerAnchorKey = key
+                            spotifyDevicesPopup.open()
+                        }
+
                         opacity: Math.pow(openProgress, fadeCurveExponent)
 
                         Behavior on height {
@@ -2914,8 +2978,6 @@ Window {
                             // Corners square off as the tray approaches full-screen.
                             radius: spotifyFullScreenTray.baseCornerRadius * (1.0 - spotifyFullScreenTray.openProgress)
                             color: (backend && backend.theme === "dark") ? "#151515" : "#f5f5f5"
-                            border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
-                            border.width: 1
                         }
 
                         ColumnLayout {
@@ -2923,21 +2985,21 @@ Window {
                             anchors.margins: 0
                             spacing: 0
 
-                            Rectangle {
+                            Item {
                                 Layout.fillWidth: true
-                                Layout.preferredHeight: 28
-                                color: "transparent"
-                                Text {
+                                Layout.preferredHeight: 20
+
+                                Rectangle {
                                     anchors.centerIn: parent
-                                    text: "\uf077"
-                                    font.family: "Font Awesome 5 Free"
-                                    font.pixelSize: 11
-                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                    width: 36
+                                    height: 4
+                                    radius: 2
+                                    color: (backend && backend.theme === "dark") ? "#444444" : "#cccccc"
                                 }
 
                                 MouseArea {
                                     anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
+                                    cursorShape: Qt.SizeVerCursor
 
                                     property point startGlobalPos: Qt.point(0, 0)
                                     property real startHeight: 0
@@ -2974,425 +3036,986 @@ Window {
                             }
 
                             RowLayout {
-                                visible: spotifyFullScreenTray.spotifyAuthenticated
-                                Layout.fillWidth: true
-                                Layout.leftMargin: 10
-                                Layout.rightMargin: 10
-                                Layout.bottomMargin: 6
-                                spacing: 6
-
-                                Repeater {
-                                    model: [
-                                        {"label": "Now Playing"},
-                                        {"label": "Search"},
-                                        {"label": "Library"}
-                                    ]
-                                    Rectangle {
-                                        Layout.preferredHeight: 26
-                                        Layout.preferredWidth: Math.max(84, tabLabel.implicitWidth + 20)
-                                        radius: 13
-                                        color: spotifyFullScreenTray.activeTab === index
-                                               ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dcdcdc")
-                                               : ((backend && backend.theme === "dark") ? "#1a1a1a" : "#ebebeb")
-                                        border.color: (backend && backend.theme === "dark") ? "#3a3a3a" : "#d2d2d2"
-                                        border.width: spotifyFullScreenTray.activeTab === index ? 2 : 1
-
-                                        Text {
-                                            id: tabLabel
-                                            anchors.centerIn: parent
-                                            text: modelData.label
-                                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                                            font.family: "D-DIN"
-                                            font.pixelSize: 11
-                                            font.bold: spotifyFullScreenTray.activeTab === index
-                                        }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: {
-                                                spotifyFullScreenTray.activeTab = index
-                                                if (index === 1) spotifyFullScreenTray.refreshSearch()
-                                                if (index === 2) spotifyFullScreenTray.refreshLibrary()
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Item { Layout.fillWidth: true }
-
-                                Text {
-                                    text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.status || "") : ""
-                                    color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#555555"
-                                    font.family: "D-DIN"
-                                    font.pixelSize: 10
-                                    Layout.alignment: Qt.AlignVCenter
-                                }
-                            }
-
-                            Rectangle {
                                 Layout.fillWidth: true
                                 Layout.fillHeight: true
-                                Layout.leftMargin: 10
-                                Layout.rightMargin: 10
-                                Layout.bottomMargin: 10
-                                radius: 10
-                                color: (backend && backend.theme === "dark") ? "#101010" : "white"
-                                border.color: (backend && backend.theme === "dark") ? "#2c2c2c" : "#e2e2e2"
-                                border.width: 1
-                                clip: true
+                                spacing: 0
 
-                                StackLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 10
+                                // Left: full-height album art
+                                Item {
+                                    id: spotifyAlbumArtPanel
+                                    Layout.fillHeight: true
+                                    Layout.preferredWidth: spotifyAlbumArtPanel.height
+                                    Layout.maximumWidth: Math.floor(spotifyFullScreenTray.width * 0.42)
                                     visible: spotifyFullScreenTray.spotifyAuthenticated
-                                    currentIndex: spotifyFullScreenTray.activeTab
 
-                                    ColumnLayout {
-                                        spacing: 8
-
-                                        Text {
-                                            text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.track_name || "Nothing playing") : "Spotify"
-                                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                                            font.family: "D-DIN"
-                                            font.pixelSize: 18
-                                            font.bold: true
-                                            elide: Text.ElideRight
-                                            Layout.fillWidth: true
-                                        }
-                                        Text {
-                                            text: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.artist_name || backend.spotifyPlayer.status || "") : ""
-                                            color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
-                                            font.family: "D-DIN"
-                                            font.pixelSize: 13
-                                            Layout.fillWidth: true
-                                        }
-
-                                        RowLayout {
-                                            spacing: 12
-                                            Layout.fillWidth: true
-
-                                            Rectangle {
-                                                Layout.preferredWidth: 130
-                                                Layout.preferredHeight: 130
-                                                radius: 8
-                                                color: (backend && backend.theme === "dark") ? "#202020" : "#efefef"
-                                                border.color: (backend && backend.theme === "dark") ? "#3a3a3a" : "#d0d0d0"
-                                                border.width: 1
-                                                clip: true
-                                                Image {
-                                                    anchors.fill: parent
-                                                    source: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.album_art_url || "") : ""
-                                                    fillMode: Image.PreserveAspectCrop
-                                                    asynchronous: true
-                                                }
-                                            }
-
-                                            ColumnLayout {
-                                                Layout.fillWidth: true
-                                                spacing: 8
-
-                                                RowLayout {
-                                                    spacing: 14
-                                                    Text {
-                                                        text: "\uf048"
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 20
-                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyPreviousTrack() }
-                                                    }
-                                                    Text {
-                                                        text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.is_playing) ? "\uf04c" : "\uf04b"
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 22
-                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyTogglePlayPause() }
-                                                    }
-                                                    Text {
-                                                        text: "\uf051"
-                                                        font.family: "Font Awesome 5 Free"
-                                                        font.pixelSize: 20
-                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                        MouseArea { anchors.fill: parent; onClicked: backend.spotifyNextTrack() }
-                                                    }
-                                                }
-
-                                                Slider {
-                                                    Layout.fillWidth: true
-                                                    from: 0
-                                                    to: 100
-                                                    value: backend && backend.spotifyPlayer ? (backend.spotifyPlayer.volume_percent || 50) : 50
-                                                    onMoved: backend.setSpotifyVolume(Math.round(value))
-                                                }
-                                            }
-                                        }
-                                        Item { Layout.fillHeight: true }
+                                    Rectangle {
+                                        anchors.fill: parent
+                                        color: (backend && backend.theme === "dark") ? "#0a0a0a" : "#e0e0e0"
                                     }
 
-                                    ColumnLayout {
-                                        spacing: 8
+                                    Image {
+                                        anchors.fill: parent
+                                        source: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.album_art_url_large || backend.spotifyPlayer.album_art_url || "") : ""
+                                        fillMode: Image.PreserveAspectCrop
+                                        asynchronous: true
+                                    }
+                                }
 
-                                        TextField {
-                                            id: spotifySearchField
-                                            Layout.fillWidth: true
-                                            placeholderText: "Search songs, albums, artists, playlists"
-                                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                                            placeholderTextColor: (backend && backend.theme === "dark") ? "#7c7c7c" : "#9a9a9a"
-                                            background: Rectangle {
-                                                radius: 8
-                                                color: (backend && backend.theme === "dark") ? "#1e1e1e" : "#f0f0f0"
-                                                border.color: (backend && backend.theme === "dark") ? "#333333" : "#d4d4d4"
-                                                border.width: 1
-                                            }
-                                            onTextChanged: spotifySearchDebounce.restart()
-                                        }
+                                // Right: tab bar + content
+                                ColumnLayout {
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    spacing: 0
 
-                                        Timer {
-                                            id: spotifySearchDebounce
-                                            interval: spotifyFullScreenTray.searchDebounceMs
-                                            repeat: false
-                                            onTriggered: spotifyFullScreenTray.refreshSearch()
-                                        }
+                                    RowLayout {
+                                        visible: spotifyFullScreenTray.spotifyAuthenticated
+                                        Layout.fillWidth: true
+                                        Layout.leftMargin: 10
+                                        Layout.rightMargin: 10
+                                        Layout.topMargin: 8
+                                        Layout.bottomMargin: 6
+                                        spacing: 6
 
-                                        ListView {
-                                            id: spotifyResultsList
-                                            Layout.fillWidth: true
-                                            Layout.fillHeight: true
-                                            clip: true
-                                            spacing: 4
-                                            model: spotifyFullScreenTray.searchResults
-                                            delegate: Rectangle {
-                                                width: ListView.view.width
-                                                height: 48
-                                                radius: 8
-                                                color: (backend && backend.theme === "dark") ? "#1b1b1b" : "#f6f6f6"
-                                                border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
-                                                border.width: 1
+                                        Repeater {
+                                            model: [
+                                                {"label": "Home"},
+                                                {"label": "Search"},
+                                                {"label": "Library"}
+                                            ]
+                                            Rectangle {
+                                                Layout.preferredHeight: 26
+                                                Layout.preferredWidth: Math.max(72, spotifyTabLabel.implicitWidth + 20)
+                                                radius: 13
+                                                color: spotifyFullScreenTray.activeTab === index
+                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dcdcdc")
+                                                       : ((backend && backend.theme === "dark") ? "#1a1a1a" : "#ebebeb")
 
-                                                RowLayout {
-                                                    anchors.fill: parent
-                                                    anchors.leftMargin: 8
-                                                    anchors.rightMargin: 8
-                                                    spacing: 8
-
-                                                    Rectangle {
-                                                        Layout.preferredWidth: 34
-                                                        Layout.preferredHeight: 34
-                                                        radius: 4
-                                                        color: (backend && backend.theme === "dark") ? "#252525" : "#e5e5e5"
-                                                        clip: true
-                                                        Image {
-                                                            anchors.fill: parent
-                                                            source: modelData.image_url || ""
-                                                            fillMode: Image.PreserveAspectCrop
-                                                            asynchronous: true
-                                                        }
-                                                    }
-
-                                                    ColumnLayout {
-                                                        Layout.fillWidth: true
-                                                        spacing: 0
-                                                        Text {
-                                                            text: modelData.title || ""
-                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
-                                                            font.family: "D-DIN"
-                                                            font.pixelSize: 12
-                                                            font.bold: true
-                                                            elide: Text.ElideRight
-                                                            Layout.fillWidth: true
-                                                        }
-                                                        Text {
-                                                            text: ((modelData.type || "").toUpperCase()) + " • " + (modelData.subtitle || "")
-                                                            color: (backend && backend.theme === "dark") ? "#b8b8b8" : "#666666"
-                                                            font.family: "D-DIN"
-                                                            font.pixelSize: 10
-                                                            elide: Text.ElideRight
-                                                            Layout.fillWidth: true
-                                                        }
-                                                    }
+                                                Text {
+                                                    id: spotifyTabLabel
+                                                    anchors.centerIn: parent
+                                                    text: modelData.label
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                    font.family: "D-DIN"
+                                                    font.pixelSize: 11
+                                                    font.bold: spotifyFullScreenTray.activeTab === index
                                                 }
 
                                                 MouseArea {
                                                     anchors.fill: parent
                                                     cursorShape: Qt.PointingHandCursor
-                                                    onClicked: spotifyFullScreenTray._playItem(modelData)
+                                                    onClicked: {
+                                                        spotifyFullScreenTray.activeTab = index
+                                                        if (index === 1) spotifyFullScreenTray.refreshSearch()
+                                                        if (index === 2) {
+                                                            spotifyFullScreenTray.libraryCategory = -1
+                                                            spotifyFullScreenTray.librarySelectedItem = null
+                                                            spotifyFullScreenTray.refreshLibrary()
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
+
+                                        Item { Layout.fillWidth: true }
                                     }
 
-                                    ColumnLayout {
-                                        spacing: 6
-
-                                        RowLayout {
-                                            Layout.fillWidth: true
-                                            spacing: 6
-                                            Rectangle {
-                                                Layout.preferredWidth: 85
-                                                Layout.preferredHeight: 24
-                                                radius: 12
-                                                color: spotifyLibraryTabs.currentIndex === 0
-                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
-                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
-                                                Text { anchors.centerIn: parent; text: "Playlists"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
-                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 0 }
-                                            }
-                                            Rectangle {
-                                                Layout.preferredWidth: 75
-                                                Layout.preferredHeight: 24
-                                                radius: 12
-                                                color: spotifyLibraryTabs.currentIndex === 1
-                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
-                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
-                                                Text { anchors.centerIn: parent; text: "Albums"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
-                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 1 }
-                                            }
-                                            Rectangle {
-                                                Layout.preferredWidth: 75
-                                                Layout.preferredHeight: 24
-                                                radius: 12
-                                                color: spotifyLibraryTabs.currentIndex === 2
-                                                       ? ((backend && backend.theme === "dark") ? "#2f2f2f" : "#dfdfdf")
-                                                       : ((backend && backend.theme === "dark") ? "#1b1b1b" : "#eeeeee")
-                                                Text { anchors.centerIn: parent; text: "Tracks"; font.family: "D-DIN"; font.pixelSize: 10; color: (backend && backend.theme === "dark") ? "white" : "black" }
-                                                MouseArea { anchors.fill: parent; onClicked: spotifyLibraryTabs.currentIndex = 2 }
-                                            }
-                                            Item { Layout.fillWidth: true }
-                                            Button {
-                                                text: "Refresh"
-                                                onClicked: spotifyFullScreenTray.refreshLibrary()
-                                            }
-                                        }
-
-                                        StackLayout {
-                                            id: spotifyLibraryTabs
-                                            Layout.fillWidth: true
-                                            Layout.fillHeight: true
-                                            currentIndex: 0
-
-                                            ListView {
-                                                clip: true
-                                                spacing: 4
-                                                model: spotifyFullScreenTray.libraryPlaylists
-                                                delegate: spotifyLibraryDelegate
-                                            }
-
-                                            ListView {
-                                                clip: true
-                                                spacing: 4
-                                                model: spotifyFullScreenTray.libraryAlbums
-                                                delegate: spotifyLibraryDelegate
-                                            }
-
-                                            ListView {
-                                                clip: true
-                                                spacing: 4
-                                                model: spotifyFullScreenTray.libraryTracks
-                                                delegate: spotifyLibraryDelegate
-                                            }
-                                        }
+                                    MouseArea {
+                                        anchors.fill: root.contentItem
+                                        visible: spotifyDevicesPopup.visible
+                                        z: 2998
+                                        onClicked: spotifyDevicesPopup.close()
                                     }
-                                }
 
-                                Component {
-                                    id: spotifyLibraryDelegate
-                                    Rectangle {
-                                        width: ListView.view.width
-                                        height: 46
-                                        radius: 8
-                                        color: (backend && backend.theme === "dark") ? "#1b1b1b" : "#f6f6f6"
-                                        border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#dfdfdf"
-                                        border.width: 1
+                                    Item {
+                                        id: spotifyDevicesPopup
+                                        parent: root.contentItem
+                                        visible: false
+                                        z: 2999
+                                        width: Math.min(220, Math.max(150, spotifyFullScreenTray.width * 0.24))
+                                        x: spotifyFullScreenTray.devicePickerX
+                                        y: spotifyFullScreenTray.devicePickerY
+                                        height: spotifyDevicesContent.implicitHeight + 14
 
-                                        RowLayout {
+                                        function open() { visible = true }
+                                        function close() {
+                                            visible = false
+                                            spotifyFullScreenTray.devicePickerAnchorKey = ""
+                                        }
+
+                                        Rectangle {
                                             anchors.fill: parent
-                                            anchors.leftMargin: 8
-                                            anchors.rightMargin: 8
-                                            spacing: 8
-                                            Rectangle {
-                                                Layout.preferredWidth: 30
-                                                Layout.preferredHeight: 30
-                                                radius: 4
-                                                color: (backend && backend.theme === "dark") ? "#252525" : "#e5e5e5"
-                                                clip: true
-                                                Image { anchors.fill: parent; source: modelData.image_url || ""; fillMode: Image.PreserveAspectCrop; asynchronous: true }
-                                            }
-                                            ColumnLayout {
+                                            radius: 8
+                                            color: (backend && backend.theme === "dark") ? "#121212" : "#fafafa"
+                                            border.width: 1
+                                            border.color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#d7d7d7"
+                                        }
+
+                                        ColumnLayout {
+                                            id: spotifyDevicesContent
+                                            anchors.fill: parent
+                                            anchors.margins: 7
+                                            spacing: 5
+
+                                            RowLayout {
                                                 Layout.fillWidth: true
-                                                spacing: 0
                                                 Text {
-                                                    text: modelData.title || ""
+                                                    text: "Playback Device"
                                                     color: (backend && backend.theme === "dark") ? "white" : "black"
                                                     font.family: "D-DIN"
                                                     font.pixelSize: 12
                                                     font.bold: true
-                                                    elide: Text.ElideRight
-                                                    Layout.fillWidth: true
                                                 }
+                                                Item { Layout.fillWidth: true }
                                                 Text {
-                                                    text: modelData.subtitle || ""
-                                                    color: (backend && backend.theme === "dark") ? "#b8b8b8" : "#666666"
-                                                    font.family: "D-DIN"
-                                                    font.pixelSize: 10
-                                                    elide: Text.ElideRight
-                                                    Layout.fillWidth: true
+                                                    text: "\uf021"
+                                                    font.family: "Font Awesome 5 Free"
+                                                    font.pixelSize: 11
+                                                    color: (backend && backend.theme === "dark") ? "#b5b5b5" : "#666666"
+                                                    TapHandler {
+                                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                        onTapped: if (backend) backend.spotifyGetDevices()
+                                                    }
+                                                }
+                                            }
+
+                                            ListView {
+                                                Layout.fillWidth: true
+                                                Layout.preferredHeight: Math.min(200, contentHeight)
+                                                clip: true
+                                                spacing: 3
+                                                model: {
+                                                    var base = [{"id": "", "name": "Auto (active device)", "type": "", "is_active": false, "is_restricted": false}]
+                                                    var currentId = (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.current_device_id || "") : ""
+                                                    var currentName = (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.current_device_name || "Current Device") : "Current Device"
+                                                    var items = (backend && backend.spotifyPlayer && backend.spotifyPlayer.devices) ? backend.spotifyPlayer.devices : []
+                                                    if (currentId) {
+                                                        var exists = false
+                                                        for (var i = 0; i < items.length; i++) {
+                                                            if ((items[i].id || "") === currentId) {
+                                                                exists = true
+                                                                break
+                                                            }
+                                                        }
+                                                        if (!exists) {
+                                                            base.push({"id": currentId, "name": "Current: " + currentName, "type": "Current", "is_active": true, "is_restricted": false})
+                                                        }
+                                                    }
+                                                    return base.concat(items)
+                                                }
+
+                                                delegate: Rectangle {
+                                                    width: ListView.view.width
+                                                    height: 30
+                                                    radius: 6
+                                                    property string selectedId: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.selected_device_id || "") : ""
+                                                    property bool isSelected: (modelData.id || "") === selectedId || (!selectedId && !(modelData.id || ""))
+                                                    color: isSelected
+                                                        ? ((backend && backend.theme === "dark") ? "#2a2a2a" : "#dcdcdc")
+                                                        : ((backend && backend.theme === "dark") ? "#181818" : "#f0f0f0")
+
+                                                    RowLayout {
+                                                        anchors.fill: parent
+                                                        anchors.leftMargin: 8
+                                                        anchors.rightMargin: 8
+                                                        spacing: 6
+
+                                                        Text {
+                                                            text: modelData.name || "Unknown Device"
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 11
+                                                            elide: Text.ElideRight
+                                                            Layout.fillWidth: true
+                                                        }
+
+                                                        Text {
+                                                            text: (modelData.is_active ? "Active" : (modelData.type || ""))
+                                                            color: (backend && backend.theme === "dark") ? "#9a9a9a" : "#666666"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 10
+                                                        }
+                                                    }
+
+                                                    TapHandler {
+                                                        gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                        onTapped: {
+                                                            if (!backend) return
+                                                            backend.spotifySelectDevice(modelData.id || "")
+                                                            backend.spotifyGetDevices()
+                                                            spotifyDevicesPopup.close()
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
-
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            cursorShape: Qt.PointingHandCursor
-                                            onClicked: spotifyFullScreenTray._playItem(modelData)
-                                        }
                                     }
-                                }
-
-                                ColumnLayout {
-                                    anchors.fill: parent
-                                    anchors.margins: 12
-                                    spacing: 10
-                                    visible: !spotifyFullScreenTray.spotifyAuthenticated
 
                                     Rectangle {
                                         Layout.fillWidth: true
                                         Layout.fillHeight: true
-                                        radius: 8
-                                        color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
-                                        border.color: (backend && backend.theme === "dark") ? "#2e2e2e" : "#d7d7d7"
-                                        border.width: 1
+                                        color: "transparent"
                                         clip: true
 
-                                        ColumnLayout {
+                                        StackLayout {
                                             anchors.fill: parent
                                             anchors.margins: 10
-                                            spacing: 8
+                                            visible: spotifyFullScreenTray.spotifyAuthenticated
+                                            currentIndex: spotifyFullScreenTray.activeTab
 
-                                            Item { Layout.fillHeight: true }
+                                            // Tab 0: Home
+                                            ColumnLayout {
+                                                spacing: 8
 
-                                            Rectangle {
-                                                Layout.alignment: Qt.AlignHCenter
-                                                Layout.preferredWidth: Math.min(parent.width - 20, 280)
-                                                Layout.preferredHeight: Layout.preferredWidth
-                                                radius: 8
-                                                color: "white"
-                                                border.color: (backend && backend.theme === "dark") ? "#333333" : "#d0d0d0"
-                                                border.width: 1
-                                                clip: true
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 8
 
-                                                Image {
-                                                    anchors.fill: parent
-                                                    anchors.margins: 8
-                                                    source: backend ? backend.spotifyAuthQrUrl : ""
-                                                    fillMode: Image.PreserveAspectFit
-                                                    asynchronous: true
+                                                    Text {
+                                                        text: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.track_name || "Nothing playing") : "Spotify"
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        font.family: "D-DIN"
+                                                        font.pixelSize: 20
+                                                        font.bold: true
+                                                        elide: Text.ElideRight
+                                                        Layout.fillWidth: true
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.artist_name || backend.spotifyPlayer.status || "") : ""
+                                                    color: (backend && backend.theme === "dark") ? "#c0c0c0" : "#666666"
+                                                    font.family: "D-DIN"
+                                                    font.pixelSize: 14
+                                                    elide: Text.ElideRight
+                                                    Layout.fillWidth: true
+                                                }
+
+                                                Item { Layout.fillHeight: true }
+
+                                                // Progress bar + timestamps
+                                                ColumnLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 2
+
+                                                    Slider {
+                                                        id: spotifyProgressSlider
+                                                        Layout.fillWidth: true
+                                                        from: 0
+                                                        to: Math.max(1, (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.duration_ms || 1) : 1)
+
+                                                        Binding {
+                                                            target: spotifyProgressSlider
+                                                            property: "value"
+                                                            value: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.progress_ms || 0) : 0
+                                                            when: !spotifyProgressSlider.pressed
+                                                        }
+
+                                                        onPressedChanged: {
+                                                            if (!pressed) backend.spotifySeek(Math.round(value))
+                                                        }
+
+                                                        background: Rectangle {
+                                                            x: spotifyProgressSlider.leftPadding
+                                                            y: spotifyProgressSlider.topPadding + spotifyProgressSlider.availableHeight / 2 - height / 2
+                                                            width: spotifyProgressSlider.availableWidth
+                                                            height: 4
+                                                            radius: 2
+                                                            color: (backend && backend.theme === "dark") ? "#333333" : "#cccccc"
+
+                                                            Rectangle {
+                                                                width: spotifyProgressSlider.visualPosition * parent.width
+                                                                height: parent.height
+                                                                radius: 2
+                                                                color: "#1DB954"
+                                                            }
+                                                        }
+
+                                                        handle: Rectangle {
+                                                            x: spotifyProgressSlider.leftPadding + spotifyProgressSlider.visualPosition * (spotifyProgressSlider.availableWidth - width)
+                                                            y: spotifyProgressSlider.topPadding + spotifyProgressSlider.availableHeight / 2 - height / 2
+                                                            width: 12; height: 12
+                                                            radius: 6
+                                                            color: spotifyProgressSlider.pressed ? "#1DB954" : "white"
+                                                            border.color: "#1DB954"
+                                                            border.width: 1
+                                                        }
+                                                    }
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        Text {
+                                                            text: {
+                                                                var ms = spotifyProgressSlider.value
+                                                                var s = Math.floor(ms / 1000)
+                                                                var m = Math.floor(s / 60)
+                                                                return m + ":" + (s % 60 < 10 ? "0" : "") + (s % 60)
+                                                            }
+                                                            color: (backend && backend.theme === "dark") ? "#888888" : "#999999"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 10
+                                                        }
+                                                        Item { Layout.fillWidth: true }
+                                                        Text {
+                                                            text: {
+                                                                var ms = (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.duration_ms || 0) : 0
+                                                                var s = Math.floor(ms / 1000)
+                                                                var m = Math.floor(s / 60)
+                                                                return m + ":" + (s % 60 < 10 ? "0" : "") + (s % 60)
+                                                            }
+                                                            color: (backend && backend.theme === "dark") ? "#888888" : "#999999"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 10
+                                                        }
+                                                    }
+                                                }
+
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    Layout.alignment: Qt.AlignLeft
+
+                                                    Rectangle {
+                                                        id: spotifyHomeDeviceButton
+                                                        visible: spotifyFullScreenTray.spotifyAuthenticated
+                                                        Layout.preferredWidth: 40
+                                                        Layout.preferredHeight: 40
+                                                        radius: 20
+                                                        color: (backend && backend.theme === "dark") ? "#1f2b24" : "#d9efe1"
+                                                        border.width: 1
+                                                        border.color: (backend && backend.theme === "dark") ? "#2f7d4c" : "#5aa878"
+
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: "\uf108"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 18
+                                                            color: "#1DB954"
+                                                        }
+
+                                                        TapHandler {
+                                                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                            onTapped: spotifyFullScreenTray.openDevicePicker(spotifyHomeDeviceButton, "home")
+                                                        }
+                                                    }
+
+                                                    Item { Layout.fillWidth: true }
+                                                }
+
+                                                Item { Layout.preferredHeight: 4 }
+
+                                                // Playback controls: shuffle | prev | play/pause | next | repeat
+                                                RowLayout {
+                                                    Layout.alignment: Qt.AlignHCenter
+                                                    spacing: 22
+
+                                                    Text {
+                                                        text: "\uf074"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 16
+                                                        color: (backend && backend.spotifyPlayer && backend.spotifyPlayer.shuffle_state) ? "#1DB954"
+                                                               : (backend && backend.theme === "dark") ? "#666666" : "#aaaaaa"
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: backend.spotifySetShuffle(!(backend.spotifyPlayer && backend.spotifyPlayer.shuffle_state))
+                                                        }
+                                                    }
+
+                                                    Text {
+                                                        text: "\uf048"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 22
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.spotifyPreviousTrack() }
+                                                    }
+
+                                                    Rectangle {
+                                                        width: 48; height: 48
+                                                        radius: 24
+                                                        color: "#1DB954"
+                                                        Text {
+                                                            anchors.centerIn: parent
+                                                            text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.is_playing) ? "\uf04c" : "\uf04b"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 20
+                                                            color: "white"
+                                                        }
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.spotifyTogglePlayPause() }
+                                                    }
+
+                                                    Text {
+                                                        text: "\uf051"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 22
+                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                        MouseArea { anchors.fill: parent; cursorShape: Qt.PointingHandCursor; onClicked: backend.spotifyNextTrack() }
+                                                    }
+
+                                                    Text {
+                                                        text: (backend && backend.spotifyPlayer && backend.spotifyPlayer.repeat_state === "track") ? "\uf01e" : "\uf01e"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 16
+                                                        color: (backend && backend.spotifyPlayer && backend.spotifyPlayer.repeat_state !== "off") ? "#1DB954"
+                                                               : (backend && backend.theme === "dark") ? "#666666" : "#aaaaaa"
+                                                        MouseArea {
+                                                            anchors.fill: parent
+                                                            cursorShape: Qt.PointingHandCursor
+                                                            onClicked: {
+                                                                var cur = (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.repeat_state || "off") : "off"
+                                                                backend.spotifySetRepeat(cur === "off" ? "context" : cur === "context" ? "track" : "off")
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Item { Layout.preferredHeight: 8 }
+
+                                                // Volume
+                                                RowLayout {
+                                                    Layout.fillWidth: true
+                                                    spacing: 8
+                                                    Text {
+                                                        text: "\uf026"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 11
+                                                        color: (backend && backend.theme === "dark") ? "#888888" : "#999999"
+                                                    }
+                                                    Slider {
+                                                        Layout.fillWidth: true
+                                                        from: 0; to: 100
+                                                        value: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.volume_percent || 50) : 50
+                                                        onMoved: backend.setSpotifyVolume(Math.round(value))
+                                                    }
+                                                    Text {
+                                                        text: "\uf028"
+                                                        font.family: "Font Awesome 5 Free"
+                                                        font.pixelSize: 11
+                                                        color: (backend && backend.theme === "dark") ? "#888888" : "#999999"
+                                                    }
+                                                }
+
+                                                Item { Layout.fillHeight: true }
+                                            }
+
+                                            // Tab 1: Search
+                                            ColumnLayout {
+                                                spacing: 8
+
+                                                TextField {
+                                                    id: spotifySearchField
+                                                    Layout.fillWidth: true
+                                                    placeholderText: "Search songs, albums, artists, playlists"
+                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                    placeholderTextColor: (backend && backend.theme === "dark") ? "#7c7c7c" : "#9a9a9a"
+                                                    background: Rectangle {
+                                                        radius: 8
+                                                        color: (backend && backend.theme === "dark") ? "#1e1e1e" : "#f0f0f0"
+                                                    }
+                                                    onTextChanged: spotifySearchDebounce.restart()
+                                                }
+
+                                                Timer {
+                                                    id: spotifySearchDebounce
+                                                    interval: spotifyFullScreenTray.searchDebounceMs
+                                                    repeat: false
+                                                    onTriggered: spotifyFullScreenTray.refreshSearch()
+                                                }
+
+                                                ListView {
+                                                    id: spotifyResultsList
+                                                    Layout.fillWidth: true
+                                                    Layout.fillHeight: true
+                                                    clip: true
+                                                    spacing: 4
+                                                    model: spotifyFullScreenTray.searchResults
+                                                    delegate: Rectangle {
+                                                        width: ListView.view.width
+                                                        height: 48
+                                                        radius: 8
+                                                        color: (backend && backend.theme === "dark") ? "#1b1b1b" : "#f6f6f6"
+
+                                                        RowLayout {
+                                                            anchors.fill: parent
+                                                            anchors.leftMargin: 8
+                                                            anchors.rightMargin: 8
+                                                            spacing: 8
+
+                                                            Rectangle {
+                                                                Layout.preferredWidth: 34
+                                                                Layout.preferredHeight: 34
+                                                                radius: 4
+                                                                color: (backend && backend.theme === "dark") ? "#252525" : "#e5e5e5"
+                                                                clip: true
+                                                                Image {
+                                                                    anchors.fill: parent
+                                                                    source: modelData.image_url || ""
+                                                                    fillMode: Image.PreserveAspectCrop
+                                                                    asynchronous: true
+                                                                }
+                                                            }
+
+                                                            ColumnLayout {
+                                                                Layout.fillWidth: true
+                                                                spacing: 0
+                                                                Text {
+                                                                    text: modelData.title || ""
+                                                                    color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                    font.family: "D-DIN"
+                                                                    font.pixelSize: 12
+                                                                    font.bold: true
+                                                                    elide: Text.ElideRight
+                                                                    Layout.fillWidth: true
+                                                                }
+                                                                Text {
+                                                                    text: ((modelData.type || "").toUpperCase()) + " • " + (modelData.subtitle || "")
+                                                                    color: (backend && backend.theme === "dark") ? "#b8b8b8" : "#666666"
+                                                                    font.family: "D-DIN"
+                                                                    font.pixelSize: 10
+                                                                    elide: Text.ElideRight
+                                                                    Layout.fillWidth: true
+                                                                }
+                                                            }
+                                                        }
+
+                                                        TapHandler {
+                                                            gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                            onTapped: spotifyFullScreenTray._playItem(modelData)
+                                                        }
+                                                    }
                                                 }
                                             }
 
-                                            Item { Layout.fillHeight: true }
+                                            // Tab 2: Library
+                                            Item {
+
+                                                // Category cards (overview, libraryCategory === -1)
+                                                Row {
+                                                    id: spotifyLibraryCategoryRow
+                                                    width: parent.width
+                                                    property real cardWidth: Math.floor((width - 24) / 4)
+                                                    property real cellSize: Math.floor((cardWidth - 20) / 3)
+                                                    height: Math.floor(48 + 3 * cellSize + 4)
+                                                    anchors.top: parent.top
+                                                    spacing: 8
+                                                    visible: spotifyFullScreenTray.libraryCategory === -1
+
+                                                    Repeater {
+                                                        model: [
+                                                            {"label": "Playlists", "index": 0},
+                                                            {"label": "Albums",    "index": 1},
+                                                            {"label": "Songs",     "index": 2},
+                                                            {"label": "Podcasts",  "index": 3}
+                                                        ]
+                                                        Rectangle {
+                                                            property var libItems: modelData.index === 0 ? spotifyFullScreenTray.libraryPlaylists
+                                                                                 : modelData.index === 1 ? spotifyFullScreenTray.libraryAlbums
+                                                                                 : modelData.index === 2 ? spotifyFullScreenTray.libraryTracks
+                                                                                 : spotifyFullScreenTray.libraryPodcasts
+
+                                                            width: spotifyLibraryCategoryRow.cardWidth
+                                                            height: spotifyLibraryCategoryRow.height
+                                                            radius: 12
+                                                            color: (backend && backend.theme === "dark") ? "#1c1c1c" : "#d8d8d8"
+                                                            clip: true
+
+                                                            ColumnLayout {
+                                                                anchors.fill: parent
+                                                                anchors.margins: 8
+                                                                spacing: 6
+
+                                                                RowLayout {
+                                                                    Layout.fillWidth: true
+                                                                    Text {
+                                                                        text: modelData.label
+                                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                        font.family: "D-DIN"
+                                                                        font.pixelSize: 12
+                                                                        font.bold: true
+                                                                    }
+                                                                    Item { Layout.fillWidth: true }
+                                                                    Text {
+                                                                        text: "\uf054"
+                                                                        font.family: "Font Awesome 5 Free"
+                                                                        font.pixelSize: 10
+                                                                        color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#777777"
+                                                                    }
+                                                                }
+
+                                                                Grid {
+                                                                    columns: 3
+                                                                    spacing: 5
+                                                                    Repeater {
+                                                                        model: Math.min(9, libItems.length)
+                                                                        Rectangle {
+                                                                            width: spotifyLibraryCategoryRow.cellSize
+                                                                            height: spotifyLibraryCategoryRow.cellSize
+                                                                            radius: 6
+                                                                            color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#c0c0c0"
+                                                                            clip: true
+                                                                            Image {
+                                                                                anchors.fill: parent
+                                                                                source: libItems[index] ? (libItems[index].image_url || "") : ""
+                                                                                fillMode: Image.PreserveAspectCrop
+                                                                                asynchronous: true
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+
+                                                                Item { Layout.fillHeight: true }
+                                                            }
+
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: spotifyFullScreenTray.libraryCategory = modelData.index
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Category items grid (libraryCategory !== -1, no item selected)
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    spacing: 6
+                                                    visible: spotifyFullScreenTray.libraryCategory !== -1 && !spotifyFullScreenTray.librarySelectedItem
+
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        spacing: 8
+
+                                                        Text {
+                                                            text: "\uf060"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 14
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: spotifyFullScreenTray.libraryCategory = -1
+                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: spotifyFullScreenTray.libraryCategory === 0 ? "Playlists"
+                                                                  : spotifyFullScreenTray.libraryCategory === 1 ? "Albums"
+                                                                  : spotifyFullScreenTray.libraryCategory === 2 ? "Songs" : "Podcasts"
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 15
+                                                            font.bold: true
+                                                        }
+
+                                                        Item { Layout.fillWidth: true }
+
+                                                        Text {
+                                                            text: "\uf021"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 13
+                                                            color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#777777"
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: spotifyFullScreenTray.refreshLibrary()
+                                                            }
+                                                        }
+                                                    }
+
+                                                    GridView {
+                                                        id: spotifyLibraryItemGrid
+                                                        Layout.fillWidth: true
+                                                        Layout.fillHeight: true
+                                                        clip: true
+                                                        property int cols: Math.max(2, Math.floor(width / 130))
+                                                        cellWidth: Math.floor(width / cols)
+                                                        cellHeight: cellWidth + 44
+                                                        model: spotifyFullScreenTray.libraryCategory === 0 ? spotifyFullScreenTray.libraryPlaylists
+                                                               : spotifyFullScreenTray.libraryCategory === 1 ? spotifyFullScreenTray.libraryAlbums
+                                                               : spotifyFullScreenTray.libraryCategory === 2 ? spotifyFullScreenTray.libraryTracks
+                                                               : spotifyFullScreenTray.libraryPodcasts
+
+                                                        delegate: Item {
+                                                            width: spotifyLibraryItemGrid.cellWidth
+                                                            height: spotifyLibraryItemGrid.cellHeight
+
+                                                            Rectangle {
+                                                                anchors.fill: parent
+                                                                anchors.margins: 4
+                                                                radius: 10
+                                                                color: (backend && backend.theme === "dark") ? "#1a1a1a" : "#f0f0f0"
+                                                                clip: true
+
+                                                                ColumnLayout {
+                                                                    anchors.fill: parent
+                                                                    spacing: 0
+
+                                                                    Rectangle {
+                                                                        Layout.fillWidth: true
+                                                                        Layout.preferredHeight: spotifyLibraryItemGrid.cellWidth - 8
+                                                                        color: (backend && backend.theme === "dark") ? "#252525" : "#e0e0e0"
+                                                                        clip: true
+                                                                        radius: 10
+
+                                                                        Image {
+                                                                            anchors.fill: parent
+                                                                            source: modelData.image_url || ""
+                                                                            fillMode: Image.PreserveAspectCrop
+                                                                            asynchronous: true
+                                                                        }
+                                                                    }
+
+                                                                    Text {
+                                                                        text: modelData.title || ""
+                                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                        font.family: "D-DIN"
+                                                                        font.pixelSize: 11
+                                                                        font.bold: true
+                                                                        elide: Text.ElideRight
+                                                                        Layout.fillWidth: true
+                                                                        Layout.leftMargin: 6
+                                                                        Layout.rightMargin: 6
+                                                                        Layout.topMargin: 4
+                                                                    }
+
+                                                                    Text {
+                                                                        text: modelData.subtitle || ""
+                                                                        color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#777777"
+                                                                        font.family: "D-DIN"
+                                                                        font.pixelSize: 9
+                                                                        elide: Text.ElideRight
+                                                                        Layout.fillWidth: true
+                                                                        Layout.leftMargin: 6
+                                                                        Layout.rightMargin: 6
+                                                                        Layout.bottomMargin: 4
+                                                                    }
+                                                                }
+
+                                                                TapHandler {
+                                                                    gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                                    onTapped: spotifyFullScreenTray.openLibraryItem(modelData)
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                // Track list (album or playlist drill-down)
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    spacing: 0
+                                                    visible: !!spotifyFullScreenTray.librarySelectedItem
+
+                                                    // Header: back + art + title
+                                                    RowLayout {
+                                                        Layout.fillWidth: true
+                                                        Layout.bottomMargin: 6
+                                                        spacing: 10
+
+                                                        Text {
+                                                            text: "\uf060"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 14
+                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: spotifyFullScreenTray.librarySelectedItem = null
+                                                            }
+                                                        }
+
+                                                        Rectangle {
+                                                            width: 44; height: 44
+                                                            radius: 6
+                                                            color: (backend && backend.theme === "dark") ? "#252525" : "#e0e0e0"
+                                                            clip: true
+                                                            Image {
+                                                                anchors.fill: parent
+                                                                source: spotifyFullScreenTray.librarySelectedItem ? (spotifyFullScreenTray.librarySelectedItem.image_url || "") : ""
+                                                                fillMode: Image.PreserveAspectCrop
+                                                                asynchronous: true
+                                                            }
+                                                        }
+
+                                                        ColumnLayout {
+                                                            Layout.fillWidth: true
+                                                            spacing: 2
+                                                            Text {
+                                                                text: spotifyFullScreenTray.librarySelectedItem ? (spotifyFullScreenTray.librarySelectedItem.title || "") : ""
+                                                                color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                font.family: "D-DIN"
+                                                                font.pixelSize: 13
+                                                                font.bold: true
+                                                                elide: Text.ElideRight
+                                                                Layout.fillWidth: true
+                                                            }
+                                                            Text {
+                                                                text: spotifyFullScreenTray.librarySelectedItem ? (spotifyFullScreenTray.librarySelectedItem.subtitle || "") : ""
+                                                                color: (backend && backend.theme === "dark") ? "#aaaaaa" : "#777777"
+                                                                font.family: "D-DIN"
+                                                                font.pixelSize: 10
+                                                                elide: Text.ElideRight
+                                                                Layout.fillWidth: true
+                                                            }
+                                                        }
+
+                                                        Text {
+                                                            text: "\uf144"
+                                                            font.family: "Font Awesome 5 Free"
+                                                            font.pixelSize: 22
+                                                            color: "#1DB954"
+                                                            MouseArea {
+                                                                anchors.fill: parent
+                                                                cursorShape: Qt.PointingHandCursor
+                                                                onClicked: spotifyFullScreenTray._playItem(spotifyFullScreenTray.librarySelectedItem)
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // Track list
+                                                    ListView {
+                                                        id: spotifyTrackListView
+                                                        Layout.fillWidth: true
+                                                        Layout.fillHeight: true
+                                                        clip: true
+                                                        spacing: 3
+                                                        model: spotifyFullScreenTray.libraryItemTracks
+
+                                                        delegate: Rectangle {
+                                                            width: ListView.view.width
+                                                            height: 46
+                                                            radius: 8
+                                                            color: (backend && backend.theme === "dark") ? "#181818" : "#f4f4f4"
+
+                                                            RowLayout {
+                                                                anchors.fill: parent
+                                                                anchors.leftMargin: 10
+                                                                anchors.rightMargin: 10
+                                                                spacing: 10
+
+                                                                Text {
+                                                                    text: (index + 1) + "."
+                                                                    color: (backend && backend.theme === "dark") ? "#666666" : "#aaaaaa"
+                                                                    font.family: "D-DIN"
+                                                                    font.pixelSize: 11
+                                                                    Layout.preferredWidth: 24
+                                                                }
+
+                                                                ColumnLayout {
+                                                                    Layout.fillWidth: true
+                                                                    spacing: 1
+                                                                    Text {
+                                                                        text: modelData.title || ""
+                                                                        color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                        font.family: "D-DIN"
+                                                                        font.pixelSize: 12
+                                                                        font.bold: true
+                                                                        elide: Text.ElideRight
+                                                                        Layout.fillWidth: true
+                                                                    }
+                                                                    Text {
+                                                                        text: modelData.subtitle || ""
+                                                                        color: (backend && backend.theme === "dark") ? "#888888" : "#777777"
+                                                                        font.family: "D-DIN"
+                                                                        font.pixelSize: 10
+                                                                        elide: Text.ElideRight
+                                                                        Layout.fillWidth: true
+                                                                    }
+                                                                }
+                                                            }
+
+                                                            TapHandler {
+                                                                gesturePolicy: TapHandler.ReleaseWithinBounds
+                                                                onTapped: spotifyFullScreenTray._playItem(modelData)
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        ColumnLayout {
+                                            anchors.fill: parent
+                                            anchors.margins: 12
+                                            spacing: 10
+                                            visible: !spotifyFullScreenTray.spotifyAuthenticated
+
+                                            Rectangle {
+                                                Layout.fillWidth: true
+                                                Layout.fillHeight: true
+                                                radius: 8
+                                                color: (backend && backend.theme === "dark") ? "#0f0f0f" : "white"
+                                                clip: true
+
+                                                ColumnLayout {
+                                                    anchors.fill: parent
+                                                    anchors.margins: 10
+                                                    spacing: 8
+
+                                                    Item { Layout.fillHeight: true }
+
+                                                    Rectangle {
+                                                        Layout.alignment: Qt.AlignHCenter
+                                                        Layout.preferredWidth: Math.min(parent.width - 20, parent.height - 20, 180)
+                                                        Layout.preferredHeight: Layout.preferredWidth
+                                                        radius: 8
+                                                        color: "white"
+                                                        clip: true
+
+                                                        Image {
+                                                            anchors.fill: parent
+                                                            anchors.margins: 8
+                                                            source: backend ? backend.spotifyAuthQrUrl : ""
+                                                            fillMode: Image.PreserveAspectFit
+                                                            asynchronous: true
+                                                        }
+                                                    }
+
+                                                    Item { Layout.fillHeight: true }
+                                                }
+                                            }
                                         }
                                     }
                                 }
+                            }
+                        }
+
+                        DragHandler {
+                            id: spotifyCloseDragHandler
+                            target: null
+                            // Top handle already provides drag-to-close; this global handler steals taps from lists.
+                            enabled: false
+                            xAxis.enabled: false
+
+                            property real startY: 0
+                            property real startHeight: 0
+                            property bool draggingDown: false
+
+                            onActiveChanged: {
+                                if (active) {
+                                    startY = centroid.scenePosition.y
+                                    startHeight = spotifyFullScreenTray.height
+                                    draggingDown = false
+                                } else {
+                                    if (!draggingDown) return
+                                    spotifyFullScreenTray.isDragging = false
+                                    var threshold = spotifyFullScreenTray.expandedHeight * spotifyFullScreenTray.closeThresholdRatio
+                                    if (spotifyFullScreenTray.height < threshold) spotifyFullScreenTray.height = 0
+                                    else spotifyFullScreenTray.height = spotifyFullScreenTray.expandedHeight
+                                }
+                            }
+
+                            onCentroidChanged: {
+                                if (!active) return
+                                var delta = centroid.scenePosition.y - startY
+                                if (delta > 5 && !draggingDown) {
+                                    draggingDown = true
+                                    spotifyFullScreenTray.isDragging = true
+                                    startHeight = spotifyFullScreenTray.height
+                                    startY = centroid.scenePosition.y - 5
+                                }
+                                if (!draggingDown) return
+                                var newHeight = startHeight - (centroid.scenePosition.y - startY)
+                                newHeight = Math.max(0, Math.min(spotifyFullScreenTray.expandedHeight, newHeight))
+                                spotifyFullScreenTray.height = newHeight
                             }
                         }
 
@@ -3400,6 +4023,7 @@ Window {
                             if (visible) {
                                 if (activeTab === 2) refreshLibrary()
                                 if (activeTab === 1) refreshSearch()
+                                if (backend) backend.spotifyGetDevices()
                             }
                         }
                         onHeightChanged: {
@@ -3412,6 +4036,9 @@ Window {
                     DragHandler {
                         id: spotifyPillDragHandler
                         target: null
+                        // Only needed to drag-open from the collapsed pill.
+                        // When the tray is open, leave taps to list delegates.
+                        enabled: spotifyFullScreenTray.height <= 1
                         xAxis.enabled: false
 
                         property real dragStartY: 0

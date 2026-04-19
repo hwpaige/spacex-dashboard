@@ -608,9 +608,19 @@ class Backend(QObject):
             "track_name": "",
             "artist_name": "",
             "album_art_url": "",
+            "album_art_url_large": "",
             "volume_percent": 50,
             "has_active_device": False,
             "status": "",
+            "progress_ms": 0,
+            "duration_ms": 0,
+            "shuffle_state": False,
+            "repeat_state": "off",
+            "devices": [],
+            "selected_device_id": "",
+            "selected_device_name": "",
+            "current_device_id": "",
+            "current_device_name": "",
         }
 
         self._weather_forecast_model = WeatherForecastModel()
@@ -1157,6 +1167,10 @@ class Backend(QObject):
         self.spotify_timer.timeout.connect(self.update_spotify_player)
         self.spotify_timer.start(5000)
 
+        self.spotify_progress_timer = QTimer(self)
+        self.spotify_progress_timer.timeout.connect(self._tick_spotify_progress)
+        self.spotify_progress_timer.start(1000)
+
         self.spotify_auth_timer = QTimer(self)
         self.spotify_auth_timer.timeout.connect(self._poll_spotify_auth_callback)
         self.spotify_auth_timer.start(1000)
@@ -1237,7 +1251,10 @@ class Backend(QObject):
             self._spotify_access_token = payload.get("access_token", "") or ""
             self._spotify_refresh_token = payload.get("refresh_token", "") or ""
             self._spotify_token_expires_at = float(payload.get("expires_at", 0) or 0)
+            selected_device_id = (payload.get("selected_device_id", "") or "").strip()
             self._spotify_update_state(authenticated=bool(self._spotify_refresh_token or self._spotify_access_token))
+            if selected_device_id:
+                self._spotify_update_state(selected_device_id=selected_device_id)
         except Exception as e:
             logger.debug(f"Failed to load Spotify auth cache: {e}")
 
@@ -1246,9 +1263,10 @@ class Backend(QObject):
             "access_token": self._spotify_access_token,
             "refresh_token": self._spotify_refresh_token,
             "expires_at": self._spotify_token_expires_at,
+            "selected_device_id": self._spotify_player.get("selected_device_id", ""),
         }
         try:
-            save_cache_to_file(self._spotify_auth_cache_file, payload)
+            save_cache_to_file(self._spotify_auth_cache_file, payload, datetime.now(pytz.UTC))
         except Exception as e:
             logger.debug(f"Failed to save Spotify auth cache: {e}")
 
@@ -1333,6 +1351,118 @@ class Backend(QObject):
         except Exception:
             return ""
 
+    def _spotify_error_message(self, payload, fallback):
+        error = (payload or {}).get("error") if isinstance(payload, dict) else None
+        if isinstance(error, dict):
+            message = (error.get("message") or "").strip()
+            if message:
+                return message
+        return fallback
+
+    def _spotify_format_device(self, device):
+        device = device or {}
+        return {
+            "id": device.get("id", "") or "",
+            "name": device.get("name", "") or "Unknown Device",
+            "type": device.get("type", "") or "",
+            "is_active": bool(device.get("is_active", False)),
+            "is_restricted": bool(device.get("is_restricted", False)),
+        }
+
+    def _spotify_fetch_devices(self):
+        ok, payload, status_code = self._spotify_api_request("GET", "/me/player/devices")
+        if not ok:
+            if status_code in (401, 403):
+                self._spotify_update_state(authenticated=False, status="Spotify authorization required.")
+            return []
+        return [self._spotify_format_device(d) for d in (payload.get("devices") or [])]
+
+    def _spotify_ensure_current_device_in_list(self, devices):
+        items = list(devices or [])
+        current_id = (self._spotify_player.get("current_device_id") or "").strip()
+        current_name = (self._spotify_player.get("current_device_name") or "").strip()
+        if current_id and not any((d.get("id") or "") == current_id for d in items):
+            items.insert(0, {
+                "id": current_id,
+                "name": current_name or "Current Device",
+                "type": "Current",
+                "is_active": True,
+                "is_restricted": False,
+            })
+        return items
+
+    def _spotify_start_playback(self, request_body, source_label="tap"):
+        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
+        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
+        preferred_device_id = selected_device_id or current_device_id
+        play_params = {"device_id": preferred_device_id} if preferred_device_id else None
+        ok, payload, status_code = self._spotify_api_request("PUT", "/me/player/play", params=play_params, json_data=request_body)
+        if ok:
+            logger.info(f"Spotify: playback started from {source_label}")
+            self._spotify_update_state(status="")
+            QTimer.singleShot(300, self.update_spotify_player)
+            return
+
+        if status_code in (401, 403):
+            message = self._spotify_error_message(payload, "Spotify authorization required.")
+            if status_code == 401:
+                self._spotify_update_state(authenticated=False, status=message)
+            else:
+                self._spotify_update_state(status=message)
+            logger.warning(f"Spotify: playback rejected from {source_label} ({status_code})")
+            return
+
+        if status_code == 404:
+            devices = self._spotify_fetch_devices()
+            target_device = None
+            if selected_device_id:
+                target_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+            if not target_device and current_device_id:
+                target_device = next((d for d in devices if d.get("id") == current_device_id), None)
+            if not target_device:
+                target_device = next((d for d in devices if d.get("is_active")), None)
+            if not target_device:
+                target_device = next((d for d in devices if not d.get("is_restricted")), None)
+            if not target_device:
+                target_device = devices[0] if devices else None
+            target_device_id = (target_device or {}).get("id", "")
+
+            if target_device_id:
+                transfer_ok, _, _ = self._spotify_api_request(
+                    "PUT",
+                    "/me/player",
+                    json_data={"device_ids": [target_device_id], "play": False},
+                )
+                if transfer_ok:
+                    ok_retry, _, _ = self._spotify_api_request(
+                        "PUT",
+                        "/me/player/play",
+                        params={"device_id": target_device_id},
+                        json_data=request_body,
+                    )
+                    if ok_retry:
+                        logger.info(f"Spotify: playback started from {source_label} after device transfer")
+                        target_name = (target_device or {}).get("name", "")
+                        updates = {"has_active_device": True, "status": "", "selected_device_name": target_name}
+                        if selected_device_id != target_device_id:
+                            updates["selected_device_id"] = target_device_id
+                        self._spotify_update_state(**updates)
+                        if selected_device_id != target_device_id:
+                            self._save_spotify_tokens()
+                        QTimer.singleShot(300, self.update_spotify_player)
+                        return
+
+            self._spotify_update_state(
+                has_active_device=False,
+                status="No active Spotify device. Open Spotify on a device and try again.",
+            )
+            logger.warning(f"Spotify: no active device for playback from {source_label}")
+            return
+
+        message = self._spotify_error_message(payload, f"Spotify playback failed (HTTP {status_code}).")
+        self._spotify_update_state(status=message)
+        logger.warning(f"Spotify: playback failed from {source_label} ({status_code})")
+
     def _spotify_join_artists(self, item):
         return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
 
@@ -1384,6 +1514,18 @@ class Backend(QObject):
                 "title": item.get("name", "") or "Unknown Artist",
                 "subtitle": "Artist",
                 "context": "",
+                "image_url": self._spotify_pick_image_url(item.get("images") or []),
+                "play_uri": item.get("uri", ""),
+            }
+        if entity_type == "podcast":
+            publisher = item.get("publisher", "") or ""
+            return {
+                "id": item.get("id", ""),
+                "uri": item.get("uri", ""),
+                "type": "podcast",
+                "title": item.get("name", "") or "Unknown Podcast",
+                "subtitle": publisher or "Podcast",
+                "context": "Podcast",
                 "image_url": self._spotify_pick_image_url(item.get("images") or []),
                 "play_uri": item.get("uri", ""),
             }
@@ -1595,6 +1737,15 @@ class Backend(QObject):
         except Exception as e:
             self._spotify_update_state(authenticated=False, status=f"Spotify login error: {e}")
 
+    def _tick_spotify_progress(self):
+        if not self._spotify_player.get("is_playing"):
+            return
+        duration = self._spotify_player.get("duration_ms", 0)
+        progress = self._spotify_player.get("progress_ms", 0) + 1000
+        if duration > 0:
+            progress = min(progress, duration)
+        self._spotify_update_state(progress_ms=progress)
+
     @pyqtSlot()
     def update_spotify_player(self):
         if not self._spotify_client_id:
@@ -1605,28 +1756,123 @@ class Backend(QObject):
             self._spotify_update_state(authenticated=False, status="Login to Spotify.")
             return
         ok, payload, status_code = self._spotify_api_request("GET", "/me/player")
+        devices = self._spotify_fetch_devices()
+        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
+        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
+        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+        if selected_device_id and not selected_device:
+            selected_device_id = ""
+            self._save_spotify_tokens()
+        current_device = next((d for d in devices if d.get("id") == current_device_id), None)
         if not ok and status_code in (401, 403):
             self._spotify_update_state(authenticated=False, has_active_device=False, status="Spotify authorization required.")
             return
         if status_code == 204:
-            self._spotify_update_state(authenticated=True, has_active_device=False, is_playing=False, status="No active Spotify device.")
+            self._spotify_update_state(
+                authenticated=True,
+                has_active_device=False,
+                is_playing=False,
+                status="No active Spotify device.",
+                devices=self._spotify_ensure_current_device_in_list(devices),
+                selected_device_id=selected_device_id,
+                selected_device_name=(selected_device or {}).get("name", ""),
+                current_device_id=(current_device or {}).get("id", current_device_id),
+                current_device_name=(current_device or {}).get("name", self._spotify_player.get("current_device_name", "")),
+            )
             return
         item = payload.get("item") or {}
         artists = self._spotify_join_artists(item)
         images = ((item.get("album") or {}).get("images") or [])
-        # Spotify images are ordered largest->smallest; pick the last (smallest) for compact pill rendering.
-        album_art = images[-1].get("url") if images else ""
+        # Spotify images: largest->smallest. Use last for pill, first for full-screen.
+        album_art_small = images[-1].get("url") if images else ""
+        album_art_large = images[0].get("url") if images else ""
         device = payload.get("device") or {}
+        active_device_id = (device.get("id") or "").strip()
+        active_device_name = (device.get("name") or "").strip()
+        selected_changed = False
+        if not selected_device_id and active_device_id:
+            selected_device_id = active_device_id
+            selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+            selected_changed = True
+        display_selected_name = (selected_device or {}).get("name", "")
+        if not display_selected_name and active_device_id:
+            display_selected_name = active_device_name
+        current_device_id = active_device_id or current_device_id
+        if active_device_name:
+            current_device_name = active_device_name
+        else:
+            current_device_name = (current_device or {}).get("name", self._spotify_player.get("current_device_name", ""))
         self._spotify_update_state(
             authenticated=True,
             is_playing=bool(payload.get("is_playing")),
             track_name=item.get("name", ""),
             artist_name=artists,
-            album_art_url=album_art,
+            album_art_url=album_art_small,
+            album_art_url_large=album_art_large,
             volume_percent=int(device.get("volume_percent", self._spotify_player.get("volume_percent", 50)) or 0),
             has_active_device=bool(payload.get("device")),
             status="",
+            progress_ms=int(payload.get("progress_ms") or 0),
+            duration_ms=int(item.get("duration_ms") or 0),
+            shuffle_state=bool(payload.get("shuffle_state", False)),
+            repeat_state=str(payload.get("repeat_state") or "off"),
+            devices=self._spotify_ensure_current_device_in_list(devices),
+            selected_device_id=selected_device_id,
+            selected_device_name=display_selected_name,
+            current_device_id=current_device_id,
+            current_device_name=current_device_name,
         )
+        if selected_changed:
+            self._save_spotify_tokens()
+
+    @pyqtSlot(result=QVariant)
+    def spotifyGetDevices(self):
+        devices = self._spotify_ensure_current_device_in_list(self._spotify_fetch_devices())
+        selected_device_id = (self._spotify_player.get("selected_device_id") or "").strip()
+        current_device_id = (self._spotify_player.get("current_device_id") or "").strip()
+        selected_changed = False
+        if not selected_device_id and current_device_id:
+            selected_device_id = current_device_id
+            selected_changed = True
+        selected_device = next((d for d in devices if d.get("id") == selected_device_id), None)
+        self._spotify_update_state(
+            devices=devices,
+            selected_device_id=selected_device_id,
+            selected_device_name=(selected_device or {}).get("name", self._spotify_player.get("selected_device_name", "")),
+        )
+        if selected_changed:
+            self._save_spotify_tokens()
+        return devices
+
+    @pyqtSlot(str)
+    def spotifySelectDevice(self, device_id):
+        device_id = (device_id or "").strip()
+        if not device_id:
+            self._spotify_update_state(selected_device_id="", selected_device_name="", status="Spotify device set to Auto.")
+            self._save_spotify_tokens()
+            return
+        devices = self._spotify_fetch_devices()
+        target = next((d for d in devices if d.get("id") == device_id), None)
+        if not target:
+            self._spotify_update_state(status="Selected Spotify device is not available.")
+            return
+        ok, payload, status_code = self._spotify_api_request(
+            "PUT",
+            "/me/player",
+            json_data={"device_ids": [device_id], "play": False},
+        )
+        if not ok:
+            message = self._spotify_error_message(payload, f"Failed to switch Spotify device (HTTP {status_code}).")
+            self._spotify_update_state(status=message)
+            return
+        self._spotify_update_state(
+            selected_device_id=device_id,
+            selected_device_name=target.get("name", ""),
+            has_active_device=True,
+            status="",
+        )
+        self._save_spotify_tokens()
+        QTimer.singleShot(250, self.update_spotify_player)
 
     @pyqtSlot()
     def spotifyPreviousTrack(self):
@@ -1661,6 +1907,24 @@ class Backend(QObject):
         self._spotify_pending_volume = None
         self._spotify_api_request("PUT", "/me/player/volume", params={"volume_percent": volume})
 
+    @pyqtSlot(int)
+    def spotifySeek(self, position_ms):
+        position_ms = max(0, int(position_ms))
+        self._spotify_update_state(progress_ms=position_ms)
+        self._spotify_api_request("PUT", "/me/player/seek", params={"position_ms": position_ms})
+
+    @pyqtSlot(bool)
+    def spotifySetShuffle(self, state):
+        ok, _, _ = self._spotify_api_request("PUT", "/me/player/shuffle", params={"state": "true" if state else "false"})
+        if ok:
+            self._spotify_update_state(shuffle_state=state)
+
+    @pyqtSlot(str)
+    def spotifySetRepeat(self, state):
+        ok, _, _ = self._spotify_api_request("PUT", "/me/player/repeat", params={"state": state})
+        if ok:
+            self._spotify_update_state(repeat_state=state)
+
     @pyqtSlot(str, result=QVariant)
     def spotifySearch(self, query):
         query = (query or "").strip()
@@ -1694,7 +1958,7 @@ class Backend(QObject):
     def spotifyGetLibrary(self):
         if not (self._spotify_access_token or self._spotify_refresh_token):
             return {"playlists": [], "albums": [], "tracks": []}
-        library = {"playlists": [], "albums": [], "tracks": []}
+        library = {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
 
         ok, payload, _ = self._spotify_api_request("GET", "/me/playlists", params={"limit": 20})
         if ok:
@@ -1711,25 +1975,78 @@ class Backend(QObject):
             for item in payload.get("items", []):
                 library["tracks"].append(self._spotify_format_entity(item.get("track") or {}, "track"))
 
+        ok, payload, _ = self._spotify_api_request("GET", "/me/shows", params={"limit": 20})
+        if ok:
+            for item in payload.get("items", []):
+                show = item.get("show") or {}
+                if show:
+                    library["podcasts"].append(self._spotify_format_entity(show, "podcast"))
+
         return library
+
+    @pyqtSlot(str, result=QVariant)
+    def spotifyGetAlbumTracks(self, uri):
+        album_id = (uri or "").split(":")[-1]
+        if not album_id:
+            return []
+        ok, payload, _ = self._spotify_api_request("GET", f"/albums/{album_id}/tracks", params={"limit": 50})
+        if not ok:
+            return []
+        return [self._spotify_format_entity(t, "track") for t in payload.get("items", []) if t]
+
+    @pyqtSlot(str, result=QVariant)
+    def spotifyGetPlaylistTracks(self, uri):
+        playlist_id = (uri or "").split(":")[-1]
+        if not playlist_id:
+            return []
+        ok, payload, _ = self._spotify_api_request("GET", f"/playlists/{playlist_id}/tracks", params={"limit": 50})
+        if not ok:
+            return []
+        tracks = []
+        for item in payload.get("items", []):
+            track = (item or {}).get("track") or {}
+            if track and track.get("id"):
+                tracks.append(self._spotify_format_entity(track, "track"))
+        return tracks
+
+    @pyqtSlot(str, result=QVariant)
+    def spotifyGetPodcastEpisodes(self, uri):
+        show_id = (uri or "").split(":")[-1]
+        if not show_id:
+            return []
+        ok, payload, _ = self._spotify_api_request("GET", f"/shows/{show_id}/episodes", params={"limit": 50})
+        if not ok:
+            return []
+        episodes = []
+        for ep in payload.get("items", []):
+            if not ep:
+                continue
+            episodes.append({
+                "id": ep.get("id", ""),
+                "uri": ep.get("uri", ""),
+                "type": "episode",
+                "title": ep.get("name", "") or "Unknown Episode",
+                "subtitle": ep.get("description", "")[:80] if ep.get("description") else "",
+                "image_url": self._spotify_pick_image_url(ep.get("images") or []),
+                "play_uri": ep.get("uri", ""),
+            })
+        return episodes
 
     @pyqtSlot(str)
     def spotifyPlayTrackUri(self, uri):
         uri = (uri or "").strip()
         if not uri:
             return
-        ok, _, _ = self._spotify_api_request("PUT", "/me/player/play", json_data={"uris": [uri]})
-        if ok:
-            QTimer.singleShot(300, self.update_spotify_player)
+        logger.info("Spotify: track tap play requested")
+        self._spotify_start_playback({"uris": [uri]}, source_label="track-tap")
 
     @pyqtSlot(str)
     def spotifyPlayContextUri(self, uri):
         uri = (uri or "").strip()
         if not uri:
             return
-        ok, _, _ = self._spotify_api_request("PUT", "/me/player/play", json_data={"context_uri": uri})
-        if ok:
-            QTimer.singleShot(300, self.update_spotify_player)
+        logger.info("Spotify: context tap play requested")
+        self._spotify_start_playback({"context_uri": uri}, source_label="context-tap")
 
     @pyqtProperty(str, notify=spotifyAuthUrlChanged)
     def spotifyAuthUrl(self):
@@ -1740,7 +2057,7 @@ class Backend(QObject):
         if not self._spotify_auth_url:
             return ""
         encoded = urllib.parse.quote(self._spotify_auth_url, safe="")
-        return f"https://api.qrserver.com/v1/create-qr-code/?size=300x300&margin=0&data={encoded}"
+        return f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=0&data={encoded}"
 
     @pyqtProperty(str, notify=spotifyAuthUrlChanged)
     def spotifyRedirectUri(self):
