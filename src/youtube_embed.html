@@ -36,6 +36,15 @@
         firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
 
         var player;
+        var bufferWatchdog = null;
+
+        function clearBufferWatchdog() {
+            if (bufferWatchdog !== null) {
+                clearTimeout(bufferWatchdog);
+                bufferWatchdog = null;
+            }
+        }
+
         function onYouTubeIframeAPIReady() {
             player = new YT.Player('player', {
                 width: '100%',
@@ -61,8 +70,31 @@
                         // This avoids the memory leak that arises when YouTube's
                         // native looping creates a new <iframe> on every cycle.
                         if (event.data === YT.PlayerState.ENDED) {
+                            clearBufferWatchdog();
                             player.playVideoAt(0);
+                        } else if (event.data === YT.PlayerState.BUFFERING) {
+                            // Guard against a video that stalls in BUFFERING
+                            // indefinitely (deleted/restricted content or a
+                            // network hiccup).  If playback hasn't resumed
+                            // within 30 s, skip to the next video so one bad
+                            // entry cannot pin the CPU at 100% forever.
+                            clearBufferWatchdog();
+                            bufferWatchdog = setTimeout(function() {
+                                bufferWatchdog = null;
+                                player.nextVideo();
+                            }, 30000);
+                        } else {
+                            // Playing, paused, cued, or unstarted — clear any
+                            // pending watchdog since the player is responsive.
+                            clearBufferWatchdog();
                         }
+                    },
+                    onError: function(event) {
+                        // Skip unplayable videos (deleted, private, or
+                        // embed-blocked) so a single bad entry cannot halt
+                        // the entire playlist permanently.
+                        clearBufferWatchdog();
+                        player.nextVideo();
                     }
                 }
             });
