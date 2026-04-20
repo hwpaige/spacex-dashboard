@@ -3084,6 +3084,7 @@ Window {
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
                         property int searchDebounceMs: 350
+                        property int upNextListMaxHeight: 180
                         property real expandedHeight: root.height
                         property real openProgress: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
                         property int activeTab: 0
@@ -3587,7 +3588,6 @@ Window {
                                                     ColumnLayout {
                                                         Layout.fillWidth: true
                                                         spacing: 6
-                                                        property int upNextListMaxHeight: 180
                                                         visible: (backend && backend.spotifyPlayer && backend.spotifyPlayer.up_next_items) ? (backend.spotifyPlayer.up_next_items.length > 0) : false
 
                                                         Text {
@@ -3601,7 +3601,7 @@ Window {
 
                                                         ListView {
                                                             Layout.fillWidth: true
-                                                            Layout.preferredHeight: Math.min(upNextListMaxHeight, Math.max(0, contentHeight))
+                                                            Layout.preferredHeight: Math.min(spotifyFullScreenTray.upNextListMaxHeight, Math.max(0, contentHeight))
                                                             clip: true
                                                             spacing: 5
                                                             model: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.up_next_items || []) : []
