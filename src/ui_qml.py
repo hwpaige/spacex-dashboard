@@ -3587,6 +3587,7 @@ Window {
                                                     ColumnLayout {
                                                         Layout.fillWidth: true
                                                         spacing: 6
+                                                        property int upNextListMaxHeight: 180
                                                         visible: (backend && backend.spotifyPlayer && backend.spotifyPlayer.up_next_items) ? (backend.spotifyPlayer.up_next_items.length > 0) : false
 
                                                         Text {
@@ -3600,7 +3601,7 @@ Window {
 
                                                         ListView {
                                                             Layout.fillWidth: true
-                                                            Layout.preferredHeight: Math.min(180, Math.max(0, contentHeight))
+                                                            Layout.preferredHeight: Math.min(upNextListMaxHeight, Math.max(0, contentHeight))
                                                             clip: true
                                                             spacing: 5
                                                             model: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.up_next_items || []) : []
