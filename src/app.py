@@ -1412,6 +1412,8 @@ class Backend(QObject):
 
         self._spotify_client_id = (os.environ.get("SPOTIFY_CLIENT_ID") or "").strip()
         self._spotify_client_secret = (os.environ.get("SPOTIFY_CLIENT_SECRET") or "").strip()
+        if not self._spotify_client_id:
+            logger.warning("SPOTIFY_CLIENT_ID is not set; Spotify login will remain disabled.")
         self._spotify_access_token = ""
         self._spotify_refresh_token = ""
         self._spotify_token_expires_at = 0.0
