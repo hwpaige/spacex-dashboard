@@ -965,7 +965,9 @@ class SpotifyWorker(QObject):
             return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": f"Spotify login failed: {callback.get('error')}"})
         code = callback.get("code", "") or ""
         if not code:
-            return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": "Spotify login cancelled."})
+            # Keep polling for malformed/empty callback payloads instead of
+            # terminating the login flow and clearing the QR code.
+            return self._result(snapshot, pending=True)
         if not redirect_uri or not code_verifier:
             return self._result(snapshot, auth_terminal=True, player_updates={"authenticated": False, "status": "Spotify login expired. Please try again."})
         try:
@@ -1408,8 +1410,8 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load initial weather cache: {e}")
 
-        self._spotify_client_id = "237156c29da8493e88f4de326f4768f1"
-        self._spotify_client_secret = "ad8b68422b834a12944fa8d3d453bb44"
+        self._spotify_client_id = (os.environ.get("SPOTIFY_CLIENT_ID") or "237156c29da8493e88f4de326f4768f1").strip()
+        self._spotify_client_secret = (os.environ.get("SPOTIFY_CLIENT_SECRET") or "").strip()
         self._spotify_access_token = ""
         self._spotify_refresh_token = ""
         self._spotify_token_expires_at = 0.0
