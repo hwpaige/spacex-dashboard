@@ -631,6 +631,10 @@ class SpotifyWorker(QObject):
         return f"Up next: {' • '.join(entries)}"
 
     def _format_queue_item(self, item):
+        """Normalize a Spotify queue entry (track or episode) for QML list rendering.
+
+        Returns a dict with keys: title, subtitle, image_url, and uri.
+        """
         item = item or {}
         item_type = (item.get("type") or "").strip().lower()
         if item_type == "episode":
@@ -657,7 +661,7 @@ class SpotifyWorker(QObject):
             "uri": (item.get("uri") or "").strip(),
         }
 
-    def _queue_items(self, queue_payload, current_item=None, max_items=6):
+    def _queue_items(self, queue_payload, current_item=None, max_queue_items=6):
         queue_payload = queue_payload or {}
         if not isinstance(queue_payload, dict):
             return []
@@ -678,7 +682,7 @@ class SpotifyWorker(QObject):
                 continue
             items.append(formatted)
             seen_uris.add(queued_uri)
-            if len(items) >= max_items:
+            if len(items) >= max_queue_items:
                 break
         return items
 
