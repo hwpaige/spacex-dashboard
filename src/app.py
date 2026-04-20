@@ -595,7 +595,7 @@ class SpotifyWorker(QObject):
     def _join_artists(self, item):
         return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
 
-    def _queue_item_label(self, item):
+    def _format_queue_item_label(self, item):
         item = item or {}
         title = (item.get("name") or "").strip()
         if not title:
@@ -614,14 +614,16 @@ class SpotifyWorker(QObject):
             return ""
         current_uri = ((current_item or {}).get("uri") or "").strip()
         entries = []
+        seen_labels = set()
         for queued_item in (queue_payload.get("queue") or []):
             queued_item = queued_item or {}
             queued_uri = (queued_item.get("uri") or "").strip()
             if current_uri and queued_uri and queued_uri == current_uri:
                 continue
-            label = self._queue_item_label(queued_item)
-            if label and label not in entries:
+            label = self._format_queue_item_label(queued_item)
+            if label and label not in seen_labels:
                 entries.append(label)
+                seen_labels.add(label)
             if len(entries) >= max_items:
                 break
         if not entries:
