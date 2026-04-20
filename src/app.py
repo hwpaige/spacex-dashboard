@@ -665,6 +665,7 @@ class SpotifyWorker(QObject):
             "uri": (item.get("uri") or "").strip(),
         }
 
+    # Keep this capped for the compact fullscreen tray layout and to avoid over-fetching UI work.
     def _queue_items(self, queue_payload, current_item=None, max_queue_items=6):
         """Build a deduplicated list of upcoming queue entries for UI display.
 

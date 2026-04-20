@@ -3602,6 +3602,8 @@ Window {
                                                         ListView {
                                                             Layout.fillWidth: true
                                                             Layout.preferredHeight: Math.min(spotifyFullScreenTray.upNextListMaxHeight, Math.max(0, contentHeight))
+                                                            focus: true
+                                                            keyNavigationEnabled: true
                                                             clip: true
                                                             spacing: 5
                                                             model: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.up_next_items || []) : []
@@ -3609,10 +3611,21 @@ Window {
                                                             delegate: Rectangle {
                                                                 width: ListView.view.width
                                                                 height: 46
+                                                                focus: ListView.isCurrentItem
                                                                 radius: 8
                                                                 color: (backend && backend.theme === "dark") ? "#171717" : "#f3f3f3"
                                                                 border.width: 1
                                                                 border.color: (backend && backend.theme === "dark") ? "#262626" : "#dddddd"
+
+                                                                function playUpNextItem() {
+                                                                    if (!backend) return
+                                                                    var uri = modelData.uri || ""
+                                                                    if (uri) backend.spotifyPlayTrackUri(uri)
+                                                                }
+
+                                                                Keys.onReturnPressed: playUpNextItem()
+                                                                Keys.onEnterPressed: playUpNextItem()
+                                                                Keys.onSpacePressed: playUpNextItem()
 
                                                                 RowLayout {
                                                                     anchors.fill: parent
@@ -3673,11 +3686,7 @@ Window {
                                                                         MouseArea {
                                                                             anchors.fill: parent
                                                                             cursorShape: Qt.PointingHandCursor
-                                                                            onClicked: {
-                                                                                if (!backend) return
-                                                                                var uri = modelData.uri || ""
-                                                                                if (uri) backend.spotifyPlayTrackUri(uri)
-                                                                            }
+                                                                            onClicked: playUpNextItem()
                                                                         }
                                                                     }
                                                                 }
