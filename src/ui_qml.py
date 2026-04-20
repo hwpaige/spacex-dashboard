@@ -3615,17 +3615,17 @@ Window {
                                                                 radius: 8
                                                                 color: (backend && backend.theme === "dark") ? "#171717" : "#f3f3f3"
                                                                 border.width: 1
-                                                                border.color: (backend && backend.theme === "dark") ? "#262626" : "#dddddd"
+                                                                border.color: activeFocus ? "#1DB954" : ((backend && backend.theme === "dark") ? "#262626" : "#dddddd")
 
-                                                                function playUpNextItem() {
+                                                                function playQueueItem() {
                                                                     if (!backend) return
                                                                     var uri = modelData.uri || ""
                                                                     if (uri) backend.spotifyPlayTrackUri(uri)
                                                                 }
 
-                                                                Keys.onReturnPressed: playUpNextItem()
-                                                                Keys.onEnterPressed: playUpNextItem()
-                                                                Keys.onSpacePressed: playUpNextItem()
+                                                                Keys.onReturnPressed: playQueueItem()
+                                                                Keys.onEnterPressed: playQueueItem()
+                                                                Keys.onSpacePressed: playQueueItem()
 
                                                                 RowLayout {
                                                                     anchors.fill: parent
@@ -3669,24 +3669,26 @@ Window {
                                                                         }
                                                                     }
 
-                                                                    Rectangle {
+                                                                    Button {
                                                                         width: 28
                                                                         height: 28
-                                                                        radius: 14
-                                                                        color: "#1DB954"
+                                                                        focusPolicy: Qt.StrongFocus
+                                                                        onClicked: playQueueItem()
 
-                                                                        Text {
-                                                                            anchors.centerIn: parent
+                                                                        background: Rectangle {
+                                                                            radius: 14
+                                                                            color: "#1DB954"
+                                                                            border.width: parent.activeFocus ? 1 : 0
+                                                                            border.color: "white"
+                                                                        }
+
+                                                                        contentItem: Text {
+                                                                            horizontalAlignment: Text.AlignHCenter
+                                                                            verticalAlignment: Text.AlignVCenter
                                                                             text: "\uf04b"
                                                                             font.family: "Font Awesome 5 Free"
                                                                             font.pixelSize: 10
                                                                             color: "white"
-                                                                        }
-
-                                                                        MouseArea {
-                                                                            anchors.fill: parent
-                                                                            cursorShape: Qt.PointingHandCursor
-                                                                            onClicked: playUpNextItem()
                                                                         }
                                                                     }
                                                                 }

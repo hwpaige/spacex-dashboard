@@ -666,7 +666,7 @@ class SpotifyWorker(QObject):
         }
 
     # Keep this capped for the compact fullscreen tray layout and to avoid over-fetching UI work.
-    def _queue_items(self, queue_payload, current_item=None, max_queue_items=6):
+    def _get_formatted_queue_items(self, queue_payload, current_item=None, max_queue_items=6):
         """Build a deduplicated list of upcoming queue entries for UI display.
 
         Args:
@@ -859,7 +859,7 @@ class SpotifyWorker(QObject):
         queue_ok, queue_body, _, snapshot = self._api_request(snapshot, "GET", "/me/player/queue")
         if queue_ok:
             queue_preview = self._queue_preview_text(queue_body, item)
-            up_next_items = self._queue_items(queue_body, item)
+            up_next_items = self._get_formatted_queue_items(queue_body, item)
         return self._result(snapshot, player_updates={
             "configured": True,
             "authenticated": True,
