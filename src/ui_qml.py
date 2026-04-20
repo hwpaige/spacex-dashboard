@@ -3584,6 +3584,18 @@ Window {
                                                         }
                                                     }
 
+                                                    Text {
+                                                        Layout.fillWidth: true
+                                                        text: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.queue_preview || "") : ""
+                                                        visible: text.length > 0
+                                                        color: (backend && backend.theme === "dark") ? "#9edfb6" : "#2f7d4c"
+                                                        font.family: "D-DIN"
+                                                        font.pixelSize: 12
+                                                        elide: Text.ElideRight
+                                                        maximumLineCount: 2
+                                                        wrapMode: Text.Wrap
+                                                    }
+
                                                     Item { Layout.fillHeight: true }
 
                                                     // Device picker trigger

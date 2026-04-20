@@ -595,6 +595,41 @@ class SpotifyWorker(QObject):
     def _join_artists(self, item):
         return ", ".join([a.get("name", "") for a in (item.get("artists") or []) if a.get("name")])
 
+    def _format_queue_item_label(self, item):
+        item = item or {}
+        title = (item.get("name") or "").strip()
+        if not title:
+            return ""
+        artists = self._join_artists(item)
+        if artists:
+            return f"{title} — {artists}"
+        show_name = ((item.get("show") or {}).get("name") or "").strip()
+        if show_name:
+            return f"{title} — {show_name}"
+        return title
+
+    def _queue_preview_text(self, queue_payload, current_item=None, max_items=3):
+        queue_payload = queue_payload or {}
+        if not isinstance(queue_payload, dict):
+            return ""
+        current_uri = ((current_item or {}).get("uri") or "").strip()
+        entries = []
+        seen_labels = set()
+        for queued_item in (queue_payload.get("queue") or []):
+            queued_item = queued_item or {}
+            queued_uri = (queued_item.get("uri") or "").strip()
+            if current_uri and queued_uri and queued_uri == current_uri:
+                continue
+            label = self._format_queue_item_label(queued_item)
+            if label and label not in seen_labels:
+                entries.append(label)
+                seen_labels.add(label)
+            if len(entries) >= max_items:
+                break
+        if not entries:
+            return ""
+        return f"Up next: {' • '.join(entries)}"
+
     def _format_entity(self, item, entity_type):
         item = item or {}
         if entity_type == "track":
@@ -673,9 +708,9 @@ class SpotifyWorker(QObject):
         snapshot = self._snapshot(payload)
         player = snapshot.get("player") or {}
         if not snapshot.get("client_id"):
-            return self._result(snapshot, player_updates={"configured": False})
+            return self._result(snapshot, player_updates={"configured": False, "queue_preview": ""})
         if not (snapshot.get("access_token") or snapshot.get("refresh_token")):
-            return self._result(snapshot, player_updates={"configured": True, "authenticated": False, "status": "Login to Spotify."})
+            return self._result(snapshot, player_updates={"configured": True, "authenticated": False, "status": "Login to Spotify.", "queue_preview": ""})
 
         ok, body, status_code, snapshot = self._api_request(snapshot, "GET", "/me/player")
         devices, _, device_updates, snapshot = self._fetch_devices(snapshot)
@@ -694,6 +729,7 @@ class SpotifyWorker(QObject):
                 "authenticated": False,
                 "has_active_device": False,
                 "status": "Spotify authorization required.",
+                "queue_preview": "",
             }, save_tokens=save_tokens)
 
         if not ok and status_code != 204:
@@ -702,6 +738,7 @@ class SpotifyWorker(QObject):
                 "devices": self._ensure_current_device_in_list(player, devices),
                 "selected_device_id": selected_device_id,
                 "selected_device_name": (selected_device or {}).get("name", ""),
+                "queue_preview": "",
             }
             updates.update(device_updates)
             if status_code:
@@ -722,6 +759,7 @@ class SpotifyWorker(QObject):
                 "selected_device_name": (selected_device or {}).get("name", ""),
                 "current_device_id": (current_device or {}).get("id", current_device_id),
                 "current_device_name": (current_device or {}).get("name", player.get("current_device_name", "")),
+                "queue_preview": "",
             }, save_tokens=save_tokens)
 
         item = body.get("item") or {}
@@ -742,6 +780,10 @@ class SpotifyWorker(QObject):
             display_selected_name = active_device_name
         current_device_id = active_device_id or current_device_id
         current_device_name = active_device_name or (current_device or {}).get("name", player.get("current_device_name", ""))
+        queue_preview = ""
+        queue_ok, queue_body, _, snapshot = self._api_request(snapshot, "GET", "/me/player/queue")
+        if queue_ok:
+            queue_preview = self._queue_preview_text(queue_body, item)
         return self._result(snapshot, player_updates={
             "configured": True,
             "authenticated": True,
@@ -762,6 +804,7 @@ class SpotifyWorker(QObject):
             "selected_device_name": display_selected_name,
             "current_device_id": current_device_id,
             "current_device_name": current_device_name,
+            "queue_preview": queue_preview,
         }, save_tokens=save_tokens or selected_changed)
 
     def _poll_relay_auth_result(self, snapshot):
@@ -1330,6 +1373,7 @@ class Backend(QObject):
             "selected_device_name": "",
             "current_device_id": "",
             "current_device_name": "",
+            "queue_preview": "",
         }
         self._spotify_library = {"playlists": [], "albums": [], "tracks": [], "podcasts": []}
         self._spotify_search_results = []
@@ -2251,6 +2295,7 @@ class Backend(QObject):
             album_art_url="",
             has_active_device=False,
             status="Spotify disconnected.",
+            queue_preview="",
         )
 
     def _poll_spotify_auth_callback(self):
