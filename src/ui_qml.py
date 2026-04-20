@@ -3584,16 +3584,104 @@ Window {
                                                         }
                                                     }
 
-                                                    Text {
+                                                    ColumnLayout {
                                                         Layout.fillWidth: true
-                                                        text: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.queue_preview || "") : ""
-                                                        visible: text.length > 0
-                                                        color: (backend && backend.theme === "dark") ? "#9edfb6" : "#2f7d4c"
-                                                        font.family: "D-DIN"
-                                                        font.pixelSize: 12
-                                                        elide: Text.ElideRight
-                                                        maximumLineCount: 2
-                                                        wrapMode: Text.Wrap
+                                                        spacing: 6
+                                                        visible: (backend && backend.spotifyPlayer && backend.spotifyPlayer.up_next_items) ? (backend.spotifyPlayer.up_next_items.length > 0) : false
+
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: "UP NEXT"
+                                                            color: "white"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 18
+                                                            font.bold: true
+                                                        }
+
+                                                        ListView {
+                                                            Layout.fillWidth: true
+                                                            Layout.preferredHeight: Math.min(180, Math.max(0, contentHeight))
+                                                            clip: true
+                                                            spacing: 5
+                                                            model: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.up_next_items || []) : []
+
+                                                            delegate: Rectangle {
+                                                                width: ListView.view.width
+                                                                height: 46
+                                                                radius: 8
+                                                                color: (backend && backend.theme === "dark") ? "#171717" : "#f3f3f3"
+                                                                border.width: 1
+                                                                border.color: (backend && backend.theme === "dark") ? "#262626" : "#dddddd"
+
+                                                                RowLayout {
+                                                                    anchors.fill: parent
+                                                                    anchors.leftMargin: 8
+                                                                    anchors.rightMargin: 8
+                                                                    spacing: 8
+
+                                                                    Rectangle {
+                                                                        width: 32
+                                                                        height: 32
+                                                                        radius: 4
+                                                                        color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#d8d8d8"
+                                                                        clip: true
+                                                                        Image {
+                                                                            anchors.fill: parent
+                                                                            source: modelData.image_url || ""
+                                                                            fillMode: Image.PreserveAspectCrop
+                                                                            asynchronous: true
+                                                                        }
+                                                                    }
+
+                                                                    ColumnLayout {
+                                                                        Layout.fillWidth: true
+                                                                        spacing: 1
+                                                                        Text {
+                                                                            text: modelData.title || ""
+                                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                            font.family: "D-DIN"
+                                                                            font.pixelSize: 11
+                                                                            font.bold: true
+                                                                            elide: Text.ElideRight
+                                                                            Layout.fillWidth: true
+                                                                        }
+                                                                        Text {
+                                                                            text: modelData.subtitle || ""
+                                                                            color: (backend && backend.theme === "dark") ? "#9a9a9a" : "#666666"
+                                                                            font.family: "D-DIN"
+                                                                            font.pixelSize: 9
+                                                                            elide: Text.ElideRight
+                                                                            Layout.fillWidth: true
+                                                                        }
+                                                                    }
+
+                                                                    Rectangle {
+                                                                        width: 28
+                                                                        height: 28
+                                                                        radius: 14
+                                                                        color: "#1DB954"
+
+                                                                        Text {
+                                                                            anchors.centerIn: parent
+                                                                            text: "\uf04b"
+                                                                            font.family: "Font Awesome 5 Free"
+                                                                            font.pixelSize: 10
+                                                                            color: "white"
+                                                                        }
+
+                                                                        MouseArea {
+                                                                            anchors.fill: parent
+                                                                            cursorShape: Qt.PointingHandCursor
+                                                                            onClicked: {
+                                                                                if (!backend) return
+                                                                                var uri = modelData.uri || ""
+                                                                                if (uri) backend.spotifyPlayTrackUri(uri)
+                                                                            }
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
 
                                                     Item { Layout.fillHeight: true }
