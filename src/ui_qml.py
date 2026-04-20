@@ -2866,12 +2866,13 @@ Window {
                             Text {
                                 id: spotifyTrackText
                                 Layout.fillWidth: true
-                                text: {
-                                    if (!backend || !backend.spotifyPlayer) return "Spotify"
-                                    if (!backend.spotifyPlayer.configured) return "Set SPOTIFY_CLIENT_ID"
-                                    if (!backend.spotifyPlayer.authenticated) return "Login to Spotify"
-                                    return backend.spotifyPlayer.track_name || "Nothing playing"
-                                }
+                                    text: {
+                                        if (!backend || !backend.spotifyPlayer) return "Spotify"
+                                        if (backend.spotifyPlayer.track_name) return backend.spotifyPlayer.track_name
+                                        if (backend.spotifyPlayer.authenticated) return "Nothing playing"
+                                        if (!backend.spotifyPlayer.configured) return "Set SPOTIFY_CLIENT_ID"
+                                        return "Login to Spotify"
+                                    }
                                 color: (backend && backend.theme === "dark") ? "white" : "black"
                                 font.pixelSize: 11
                                 font.family: "D-DIN"
