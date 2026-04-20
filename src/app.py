@@ -1410,7 +1410,7 @@ class Backend(QObject):
         except Exception as e:
             logger.debug(f"Failed to load initial weather cache: {e}")
 
-        self._spotify_client_id = (os.environ.get("SPOTIFY_CLIENT_ID") or "").strip()
+        self._spotify_client_id = (os.environ.get("SPOTIFY_CLIENT_ID") or "237156c29da8493e88f4de326f4768f1").strip()
         self._spotify_client_secret = (os.environ.get("SPOTIFY_CLIENT_SECRET") or "").strip()
         if not self._spotify_client_id:
             logger.warning("SPOTIFY_CLIENT_ID is not set; Spotify login will remain disabled.")
