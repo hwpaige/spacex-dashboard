@@ -3084,6 +3084,7 @@ Window {
                         property real closeThresholdRatio: 0.2
                         property int minSearchChars: 2
                         property int searchDebounceMs: 350
+                        property int upNextListMaxHeight: 180
                         property real expandedHeight: root.height
                         property real openProgress: Math.max(0.0, Math.min(1.0, height / Math.max(1, expandedHeight)))
                         property int activeTab: 0
@@ -3584,16 +3585,115 @@ Window {
                                                         }
                                                     }
 
-                                                    Text {
+                                                    ColumnLayout {
                                                         Layout.fillWidth: true
-                                                        text: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.queue_preview || "") : ""
-                                                        visible: text.length > 0
-                                                        color: (backend && backend.theme === "dark") ? "#9edfb6" : "#2f7d4c"
-                                                        font.family: "D-DIN"
-                                                        font.pixelSize: 12
-                                                        elide: Text.ElideRight
-                                                        maximumLineCount: 2
-                                                        wrapMode: Text.Wrap
+                                                        spacing: 6
+                                                        visible: (backend && backend.spotifyPlayer && backend.spotifyPlayer.up_next_items) ? (backend.spotifyPlayer.up_next_items.length > 0) : false
+
+                                                        Text {
+                                                            Layout.fillWidth: true
+                                                            text: "UP NEXT"
+                                                            color: "white"
+                                                            font.family: "D-DIN"
+                                                            font.pixelSize: 18
+                                                            font.bold: true
+                                                        }
+
+                                                        ListView {
+                                                            Layout.fillWidth: true
+                                                            Layout.preferredHeight: Math.min(spotifyFullScreenTray.upNextListMaxHeight, Math.max(0, contentHeight))
+                                                            focus: true
+                                                            keyNavigationEnabled: true
+                                                            clip: true
+                                                            spacing: 5
+                                                            model: (backend && backend.spotifyPlayer) ? (backend.spotifyPlayer.up_next_items || []) : []
+
+                                                            delegate: Rectangle {
+                                                                width: ListView.view.width
+                                                                height: 46
+                                                                focus: ListView.isCurrentItem
+                                                                radius: 8
+                                                                color: (backend && backend.theme === "dark") ? "#171717" : "#f3f3f3"
+                                                                border.width: 1
+                                                                border.color: activeFocus ? "#1DB954" : ((backend && backend.theme === "dark") ? "#262626" : "#dddddd")
+
+                                                                function playQueueItem() {
+                                                                    if (!backend) return
+                                                                    var uri = modelData.uri || ""
+                                                                    if (uri) backend.spotifyPlayTrackUri(uri)
+                                                                }
+
+                                                                Keys.onReturnPressed: playQueueItem()
+                                                                Keys.onEnterPressed: playQueueItem()
+                                                                Keys.onSpacePressed: playQueueItem()
+
+                                                                RowLayout {
+                                                                    anchors.fill: parent
+                                                                    anchors.leftMargin: 8
+                                                                    anchors.rightMargin: 8
+                                                                    spacing: 8
+
+                                                                    Rectangle {
+                                                                        width: 32
+                                                                        height: 32
+                                                                        radius: 4
+                                                                        color: (backend && backend.theme === "dark") ? "#2a2a2a" : "#d8d8d8"
+                                                                        clip: true
+                                                                        Image {
+                                                                            anchors.fill: parent
+                                                                            source: modelData.image_url || ""
+                                                                            fillMode: Image.PreserveAspectCrop
+                                                                            asynchronous: true
+                                                                        }
+                                                                    }
+
+                                                                    ColumnLayout {
+                                                                        Layout.fillWidth: true
+                                                                        spacing: 1
+                                                                        Text {
+                                                                            text: modelData.title || ""
+                                                                            color: (backend && backend.theme === "dark") ? "white" : "black"
+                                                                            font.family: "D-DIN"
+                                                                            font.pixelSize: 11
+                                                                            font.bold: true
+                                                                            elide: Text.ElideRight
+                                                                            Layout.fillWidth: true
+                                                                        }
+                                                                        Text {
+                                                                            text: modelData.subtitle || ""
+                                                                            color: (backend && backend.theme === "dark") ? "#9a9a9a" : "#666666"
+                                                                            font.family: "D-DIN"
+                                                                            font.pixelSize: 9
+                                                                            elide: Text.ElideRight
+                                                                            Layout.fillWidth: true
+                                                                        }
+                                                                    }
+
+                                                                    Button {
+                                                                        width: 28
+                                                                        height: 28
+                                                                        focusPolicy: Qt.StrongFocus
+                                                                        onClicked: playQueueItem()
+
+                                                                        background: Rectangle {
+                                                                            radius: 14
+                                                                            color: "#1DB954"
+                                                                            border.width: parent.activeFocus ? 1 : 0
+                                                                            border.color: "white"
+                                                                        }
+
+                                                                        contentItem: Text {
+                                                                            horizontalAlignment: Text.AlignHCenter
+                                                                            verticalAlignment: Text.AlignVCenter
+                                                                            text: "\uf04b"
+                                                                            font.family: "Font Awesome 5 Free"
+                                                                            font.pixelSize: 10
+                                                                            color: "white"
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
                                                     }
 
                                                     Item { Layout.fillHeight: true }
