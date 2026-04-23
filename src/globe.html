@@ -1340,12 +1340,19 @@
             }
         });
         document.addEventListener('visibilitychange', function () {
+            try { console.log('[globe] visibilitychange:', document.visibilityState); } catch (e) { }
             if (document.visibilityState === 'visible') {
                 if (window.globeAutospinGuard) {
                     window.clearInteraction();
                     // If we were pending a resume, complete it now
                     if (pendingSystemResume) { pendingSystemResume = false; systemPaused = false; }
                 }
+                // Allow a small grace period then resume spin if allowed
+                setTimeout(function () {
+                    if (window.globeAutospinGuard !== false) {
+                        window.resumeSpin();
+                    }
+                }, 250);
             }
         });
 
@@ -1378,19 +1385,6 @@
                 }
             } catch (e) { }
         }, 1000);
-
-        // Visibility instrumentation
-        document.addEventListener('visibilitychange', function () {
-            try { console.log('[globe] visibilitychange:', document.visibilityState); } catch (e) { }
-            if (document.visibilityState === 'visible') {
-                // When page becomes visible, allow a small grace then resume if allowed
-                setTimeout(function () {
-                    if (window.globeAutospinGuard !== false) {
-                        window.resumeSpin();
-                    }
-                }, 250);
-            }
-        });
 
         // Connectivity recovery instrumentation:
         // network flaps can coincide with Qt WebEngine throttling/suspending RAF.
