@@ -37,6 +37,7 @@ logger = logging.getLogger(__name__)
 class BootProfiler:
     """Helper to track performance of boot operations."""
     _instance = None
+    _MAX_EVENTS = 200  # Cap to prevent unbounded memory growth during long-running sessions
     
     def __new__(cls):
         if cls._instance is None:
@@ -49,6 +50,9 @@ class BootProfiler:
         """Mark a point in time with a name."""
         elapsed = time.time() - self.start_time
         thread_name = threading.current_thread().name
+        if len(self.events) >= self._MAX_EVENTS:
+            # Drop the oldest entry to keep the list bounded
+            self.events.pop(0)
         self.events.append((event_name, elapsed, thread_name))
         logger.info(f"PROFILER: [{thread_name}] {event_name} at {elapsed:.3f}s")
         

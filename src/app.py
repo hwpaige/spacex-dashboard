@@ -1948,6 +1948,8 @@ class Backend(QObject):
                 self.loader.finished.connect(self.on_data_loaded)
                 self.loader.statusUpdate.connect(self.setLoadingStatus)
                 self.thread.started.connect(self.loader.run)
+                # Quit the thread when the loader finishes so it doesn't stay alive indefinitely
+                self.loader.finished.connect(self.thread.quit)
                 logger.info("BOOT: Starting DataLoader thread...")
                 self.thread.start()
             else:
@@ -3687,6 +3689,10 @@ class Backend(QObject):
         self._weather_updater.moveToThread(self._weather_updater_thread)
         self._weather_updater.finished.connect(self._on_weather_updated)
         self._weather_updater_thread.started.connect(self._weather_updater.run)
+        # Cleanup: stop thread when worker finishes, then delete both objects
+        self._weather_updater.finished.connect(self._weather_updater_thread.quit)
+        self._weather_updater_thread.finished.connect(self._weather_updater.deleteLater)
+        self._weather_updater_thread.finished.connect(self._weather_updater_thread.deleteLater)
         self._weather_updater_thread.start()
 
     def update_launches_periodic(self):
@@ -3699,6 +3705,10 @@ class Backend(QObject):
         self._launch_updater.moveToThread(self._launch_updater_thread)
         self._launch_updater.finished.connect(self._on_launches_updated)
         self._launch_updater_thread.started.connect(self._launch_updater.run)
+        # Cleanup: stop thread when worker finishes, then delete both objects
+        self._launch_updater.finished.connect(self._launch_updater_thread.quit)
+        self._launch_updater_thread.finished.connect(self._launch_updater.deleteLater)
+        self._launch_updater_thread.finished.connect(self._launch_updater_thread.deleteLater)
         self._launch_updater_thread.start()
 
     @pyqtSlot()
@@ -3991,6 +4001,8 @@ class Backend(QObject):
                 self.loader.finished.connect(self.on_data_loaded)
                 self.loader.statusUpdate.connect(self.setLoadingStatus)
                 self.thread.started.connect(self.loader.run)
+                # Quit the thread when the loader finishes so it doesn't stay alive indefinitely
+                self.loader.finished.connect(self.thread.quit)
                 self.thread.start()
             else:
                 logger.info("BOOT: Restarting existing DataLoader thread…")
@@ -4607,6 +4619,8 @@ class Backend(QObject):
                 self.loader.finished.connect(self.on_data_loaded)
                 self.loader.statusUpdate.connect(self.setLoadingStatus)
                 self.thread.started.connect(self.loader.run)
+                # Quit the thread when the loader finishes so it doesn't stay alive indefinitely
+                self.loader.finished.connect(self.thread.quit)
                 self.thread.start()
             else:
                 logger.info("WiFi connected - restart existing DataLoader if needed")
